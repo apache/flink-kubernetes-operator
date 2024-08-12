@@ -22,10 +22,13 @@ import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
@@ -39,9 +42,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -77,11 +82,119 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp);
-        observer.cleanupSavepointHistory(getResourceContext(deployment));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
 
         Assertions.assertNotNull(spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp), spInfo.getSavepointHistory());
+    }
+
+    @Test
+    public void testCountBasedDisposeWithSnapshotResources() {
+        var cr = TestUtils.buildSessionCluster();
+        cr.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(cr.getSpec(), cr);
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
+        configManager.updateDefaultConfig(conf);
+
+        var spInfo = cr.getStatus().getJobStatus().getSavepointInfo();
+        for (var i = 0; i < 5; i++) {
+            var sp =
+                    new Savepoint(
+                            System.currentTimeMillis() * 2,
+                            String.format("sp%d", i),
+                            SnapshotTriggerType.MANUAL,
+                            SavepointFormatType.CANONICAL,
+                            (long) i);
+            spInfo.updateLastSavepoint(sp);
+        }
+
+        assertThat(spInfo.getSavepointHistory()).hasSize(5);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of());
+        assertThat(spInfo.getSavepointHistory()).hasSize(2);
+
+        var snapshot1 =
+                BaseTestUtils.buildFlinkStateSnapshotSavepoint(
+                        "cr_sp1",
+                        cr.getMetadata().getNamespace(),
+                        "cr_sp1",
+                        false,
+                        JobReference.fromFlinkResource(cr));
+        var snapshot2 =
+                BaseTestUtils.buildFlinkStateSnapshotSavepoint(
+                        "cr_sp2",
+                        cr.getMetadata().getNamespace(),
+                        "cr_sp2",
+                        false,
+                        JobReference.fromFlinkResource(cr));
+        snapshot1.setStatus(new FlinkStateSnapshotStatus());
+        snapshot1.getStatus().setState(FlinkStateSnapshotStatus.State.IN_PROGRESS);
+
+        observer.cleanupSavepointHistoryLegacy(
+                getResourceContext(cr), Set.of(snapshot1, snapshot2));
+        assertThat(spInfo.getSavepointHistory()).hasSize(2);
+
+        snapshot1.getStatus().setState(FlinkStateSnapshotStatus.State.COMPLETED);
+
+        observer.cleanupSavepointHistoryLegacy(
+                getResourceContext(cr), Set.of(snapshot1, snapshot2));
+        assertThat(spInfo.getSavepointHistory()).hasSize(1);
+
+        snapshot2.setStatus(new FlinkStateSnapshotStatus());
+        snapshot2.getStatus().setState(FlinkStateSnapshotStatus.State.COMPLETED);
+
+        observer.cleanupSavepointHistoryLegacy(
+                getResourceContext(cr), Set.of(snapshot1, snapshot2));
+        assertThat(spInfo.getSavepointHistory()).hasSize(0);
+    }
+
+    @Test
+    public void testAgeBasedDisposeWithSnapshotResources() {
+        var cr = TestUtils.buildSessionCluster();
+        cr.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(cr.getSpec(), cr);
+        Configuration conf = new Configuration();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                Duration.ofMillis(5));
+        configManager.updateDefaultConfig(conf);
+
+        var spInfo = cr.getStatus().getJobStatus().getSavepointInfo();
+        for (var i = 0; i < 5; i++) {
+            var sp =
+                    new Savepoint(
+                            i,
+                            String.format("sp%d", i),
+                            SnapshotTriggerType.MANUAL,
+                            SavepointFormatType.CANONICAL,
+                            (long) i);
+            spInfo.updateLastSavepoint(sp);
+        }
+
+        assertThat(spInfo.getSavepointHistory()).hasSize(5);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of());
+        assertThat(spInfo.getSavepointHistory()).hasSize(1);
+
+        var snapshot1 =
+                BaseTestUtils.buildFlinkStateSnapshotSavepoint(
+                        "cr_sp1",
+                        cr.getMetadata().getNamespace(),
+                        "cr_sp1",
+                        false,
+                        JobReference.fromFlinkResource(cr));
+        snapshot1.setStatus(new FlinkStateSnapshotStatus());
+        snapshot1.getStatus().setState(FlinkStateSnapshotStatus.State.IN_PROGRESS);
+
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of(snapshot1));
+        assertThat(spInfo.getSavepointHistory()).hasSize(1);
+
+        snapshot1.getStatus().setState(FlinkStateSnapshotStatus.State.COMPLETED);
+
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of(snapshot1));
+        assertThat(spInfo.getSavepointHistory()).hasSize(0);
     }
 
     @Test
@@ -103,7 +216,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(cr));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of());
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -113,7 +226,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                 new Savepoint(
                         2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(cr));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(cr), Set.of());
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -142,7 +255,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(deployment));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -152,7 +265,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                 new Savepoint(
                         2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(deployment));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -188,7 +301,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(deployment));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
 
         Savepoint sp2 =
                 new Savepoint(
@@ -198,7 +311,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(deployment));
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
         Assertions.assertIterableEquals(List.of(sp1, sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
                 Collections.emptyList(), flinkService.getDisposedSavepoints());

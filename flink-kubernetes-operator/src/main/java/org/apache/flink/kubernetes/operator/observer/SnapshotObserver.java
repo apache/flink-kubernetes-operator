@@ -47,10 +47,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -69,9 +72,8 @@ public class SnapshotObserver<
         CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnapshotObserver.class);
-    public static final Comparator<FlinkStateSnapshot> SORT_SNAPSHOTS_BY_TIME =
-            Comparator.comparing(
-                    s -> DateTimeUtils.parseKubernetes(s.getStatus().getResultTimestamp()));
+    public static final Function<FlinkStateSnapshot, Instant> EXTRACT_SNAPSHOT_TIME =
+            s -> DateTimeUtils.parseKubernetes(s.getMetadata().getCreationTimestamp());
     private static final Set<SnapshotTriggerType> CLEAN_UP_SNAPSHOT_TRIGGER_TYPES =
             Set.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE);
 
@@ -239,15 +241,18 @@ public class SnapshotObserver<
     }
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
-    @VisibleForTesting
-    void cleanupSavepointHistory(FlinkResourceContext<CR> ctx) {
-        if (!FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
+    private void cleanupSavepointHistory(FlinkResourceContext<CR> ctx) {
+        Set<FlinkStateSnapshot> snapshots = Collections.emptySet();
+        if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
                 ctx.getOperatorConfig(), ctx.getObserveConfig())) {
-            cleanupSavepointHistoryLegacy(ctx);
-            return;
+            snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
+            if (snapshots == null) {
+                snapshots = Set.of();
+            }
         }
 
-        var snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
+        cleanupSavepointHistoryLegacy(ctx, snapshots);
+
         if (CollectionUtil.isNullOrEmpty(snapshots)) {
             return;
         }
@@ -268,6 +273,16 @@ public class SnapshotObserver<
         }
     }
 
+    /**
+     * Returns a list of FlinkStateSnapshot resources that should be cleaned up based on age/count
+     * policies.
+     *
+     * @param snapshots list of all snapshots
+     * @param observeConfig observe config
+     * @param operatorConfig operator config
+     * @param snapshotType checkpoint or savepoint
+     * @return set of FlinkStateSnapshot resources to delete
+     */
     @VisibleForTesting
     Set<FlinkStateSnapshot> getFlinkStateSnapshotsToCleanUp(
             Collection<FlinkStateSnapshot> snapshots,
@@ -281,16 +296,13 @@ public class SnapshotObserver<
                                         CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
                                                 FlinkStateSnapshotUtils.getSnapshotTriggerType(s)))
                         .filter(s -> (s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT)))
-                        .sorted(SORT_SNAPSHOTS_BY_TIME)
+                        .sorted(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
                         .collect(Collectors.toList());
 
         var lastCompleteSnapshot =
                 snapshotList.stream()
-                        .filter(
-                                s ->
-                                        s.getStatus() != null
-                                                && COMPLETED.equals(s.getStatus().getState()))
-                        .max(SORT_SNAPSHOTS_BY_TIME)
+                        .filter(s -> COMPLETED.equals(s.getStatus().getState()))
+                        .max(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
                         .orElse(null);
 
         var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
@@ -306,9 +318,7 @@ public class SnapshotObserver<
                 continue;
             }
 
-            var ts =
-                    DateTimeUtils.parseKubernetes(snapshot.getStatus().getResultTimestamp())
-                            .toEpochMilli();
+            var ts = EXTRACT_SNAPSHOT_TIME.apply(snapshot).toEpochMilli();
             if (snapshotList.size() - result.size() > maxCount || ts < maxTms) {
                 result.add(snapshot);
             }
@@ -317,13 +327,33 @@ public class SnapshotObserver<
         return result;
     }
 
-    private void cleanupSavepointHistoryLegacy(FlinkResourceContext<CR> ctx) {
+    /**
+     * Cleans up the savepoint history of a Flink resource from the old, deprecated
+     * savepoint-history. Secondary resources of FlinkStateSnapshot are used to determine count of
+     * completed savepoints to be able to properly clean old savepoints based on the count policy.
+     *
+     * @param ctx flink resource context
+     * @param allSecondarySnapshotResources all snapshot resources linked to this Flink resource
+     */
+    @VisibleForTesting
+    void cleanupSavepointHistoryLegacy(
+            FlinkResourceContext<CR> ctx, Set<FlinkStateSnapshot> allSecondarySnapshotResources) {
         var maxTms =
                 getMaxAgeForSnapshotType(
                         ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
         var maxCount =
                 getMaxCountForSnapshotType(
                         ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+
+        var completedSavepointCrs =
+                allSecondarySnapshotResources.stream()
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
+                        .filter(s -> s.getSpec().isSavepoint())
+                        .count();
+        maxCount = Math.max(0, maxCount - completedSavepointCrs);
 
         var savepointHistory =
                 ctx.getResource()
@@ -333,9 +363,11 @@ public class SnapshotObserver<
                         .getSavepointHistory();
 
         var savepointCleanupEnabled =
-                ctx.getObserveConfig().getBoolean(OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
+                ctx.getObserveConfig().get(OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
 
-        if (savepointHistory.size() < 2) {
+        // If we have a single new FlinkStateSnapshot CR, we can clean up the last entry.
+        if (savepointHistory.isEmpty()
+                || (savepointHistory.size() == 1 && completedSavepointCrs == 0)) {
             return;
         }
         var lastSavepoint = savepointHistory.get(savepointHistory.size() - 1);
@@ -351,7 +383,10 @@ public class SnapshotObserver<
         var it = savepointHistory.iterator();
         while (it.hasNext()) {
             var sp = it.next();
-            if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
+            if (sp == lastSavepoint && completedSavepointCrs == 0) {
+                continue;
+            }
+            if (sp.getTimeStamp() < maxTms) {
                 it.remove();
                 if (savepointCleanupEnabled) {
                     disposeSavepointQuietly(ctx, sp.getLocation());
@@ -397,7 +432,7 @@ public class SnapshotObserver<
         return System.currentTimeMillis() - maxAge.toMillis();
     }
 
-    private int getMaxCountForSnapshotType(
+    private long getMaxCountForSnapshotType(
             Configuration observeConfig,
             FlinkOperatorConfiguration operatorConfig,
             SnapshotType snapshotType) {

@@ -253,6 +253,8 @@ public class SnapshotObserverTest extends OperatorTestBase {
                 new ObjectMetaBuilder()
                         .withName(UUID.randomUUID().toString())
                         .withLabels(Map.of(CrdConstants.LABEL_SNAPSHOT_TYPE, triggerType.name()))
+                        .withCreationTimestamp(
+                                DateTimeUtils.kubernetes(Instant.ofEpochMilli(timestamp)))
                         .build();
 
         var spec = new FlinkStateSnapshotSpec();
@@ -262,11 +264,7 @@ public class SnapshotObserverTest extends OperatorTestBase {
             spec.setCheckpoint(new CheckpointSpec());
         }
 
-        var status =
-                FlinkStateSnapshotStatus.builder()
-                        .resultTimestamp(DateTimeUtils.kubernetes(Instant.ofEpochMilli(timestamp)))
-                        .state(snapshotState)
-                        .build();
+        var status = FlinkStateSnapshotStatus.builder().state(snapshotState).build();
 
         var snapshot = new FlinkStateSnapshot();
         snapshot.setMetadata(metadata);

@@ -169,6 +169,8 @@ The operator automatically keeps track of the snapshot history triggered by upgr
 This is necessary so cleanup can be performed by the operator for old snapshots.
 
 Users can control the cleanup behaviour by specifying a maximum age and maximum count for the savepoint and checkpoint resources in the history.
+If a max age is specified for checkpoints/savepoints, FlinkStateSnapshot resources will be cleaned up based on the `metadata.creationTimestamp` field.
+Snapshots will be cleaned up regardless of their status, so with a very low max age/count policy, but the operator will always keep at least 1 completed FlinkStateSnapshot at all time.
 
 ```
 kubernetes.operator.savepoint.history.max.age: 24 h
@@ -179,7 +181,7 @@ kubernetes.operator.checkpoint.history.max.count: 5
 ```
 
 {{< hint warning >}}
-Checkpoint history history cleanup is only supported if FlinkStateSnapshot resources are enabled.
+Checkpoint cleanup is only supported if FlinkStateSnapshot resources are enabled.
 This operation will only delete the FlinkStateSnapshot CR, and will never delete any checkpoint data on the filesystem.
 {{< /hint >}}
 
@@ -189,7 +191,14 @@ It is therefore very likely that savepoints live beyond the max age configuratio
 {{< /hint >}}
 
 To also dispose of savepoint data on savepoint cleanup, set `kubernetes.operator.savepoint.dispose-on-delete: true`. 
-This config will set `spec.savepoint.disposeOnDelete` to true for FlinkStateSnapshot CRs created by periodic savepoints and manual ones created using `savepointTriggerNonce`.
+This config will set `spec.savepoint.disposeOnDelete` to true for FlinkStateSnapshot CRs created by upgrade, periodic and manual savepoints created using `savepointTriggerNonce`.
 
 To disable savepoint/checkpoint cleanup by the operator you can set `kubernetes.operator.savepoint.cleanup.enabled: false` and `kubernetes.operator.checkpoint.cleanup.enabled: false`.
+
+### Snapshot History For Legacy Savepoints
+
+Legacy savepoints found in FlinkDeployment/FlinkSessionJob CRs under the deprecated `status.jobStatus.savepointInfo.savepointHistory` will be cleaned up:
+- For max age, it will be cleaned up when its trigger timestamp exceeds max age
+- For max count and FlinkStateSnapshot resources **disabled**, it will be cleaned up when `savepointHistory` exceeds max count
+- For max count and FlinkStateSnapshot resources **enabled**, it will be cleaned up when `savepointHistory` + number of FlinkStateSnapshot CRs related to the job exceed max count
 
