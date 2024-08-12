@@ -370,15 +370,23 @@ public class SnapshotUtils {
     public static boolean lastSavepointKnown(CommonStatus<?> status) {
         var lastSavepoint = status.getJobStatus().getUpgradeSnapshotReference();
 
-        if (lastSavepoint == null) {
-            return true;
+        if (lastSavepoint != null) {
+            if (StringUtils.isNotBlank(lastSavepoint.getName())) {
+                return true;
+            }
+
+            var location = lastSavepoint.getPath();
+            return location != null
+                    && !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
         }
 
-        if (StringUtils.isNotBlank(lastSavepoint.getName())) {
+        // Check legacy savepoint field too
+        var lastSavepointLegacy = status.getJobStatus().getSavepointInfo().getLastSavepoint();
+        if (lastSavepointLegacy == null) {
             return true;
         }
-
-        var location = lastSavepoint.getPath();
-        return location != null && !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        return !lastSavepointLegacy
+                .getLocation()
+                .equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
     }
 }

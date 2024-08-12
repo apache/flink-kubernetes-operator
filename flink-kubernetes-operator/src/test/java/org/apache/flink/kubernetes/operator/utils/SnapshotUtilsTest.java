@@ -22,11 +22,15 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 
 import org.apache.logging.log4j.core.util.CronExpression;
 import org.junit.jupiter.api.Test;
@@ -275,6 +279,36 @@ public class SnapshotUtilsTest {
                 shouldTriggerAutomaticSnapshot(
                         CHECKPOINT, "0 */10 * * * ?", Instant.now().minus(Duration.ofDays(365)));
         assertTrue(shouldTrigger);
+    }
+
+    @Test
+    public void testLastSavepointKnown() {
+        var status = new FlinkDeploymentStatus();
+
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        var sp = new Savepoint();
+        sp.setLocation("sp1");
+        status.getJobStatus().getSavepointInfo().setLastSavepoint(sp);
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        sp.setLocation(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        assertFalse(SnapshotUtils.lastSavepointKnown(status));
+
+        status.getJobStatus()
+                .setUpgradeSnapshotReference(FlinkStateSnapshotReference.fromPath("sp1"));
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        status.getJobStatus()
+                .setUpgradeSnapshotReference(
+                        FlinkStateSnapshotReference.fromPath(
+                                AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH));
+        assertFalse(SnapshotUtils.lastSavepointKnown(status));
+
+        status.getJobStatus()
+                .setUpgradeSnapshotReference(
+                        new FlinkStateSnapshotReference("namespace", "name", null));
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
     }
 
     private static void resetTrigger(FlinkDeployment deployment, SnapshotType snapshotType) {
