@@ -293,6 +293,16 @@ public abstract class AbstractJobReconciler<
                                             FlinkStateSnapshotUtils
                                                     .getValidatedFlinkStateSnapshotPath(
                                                             ctx.getKubernetesClient(), ref));
+            if (savepointOpt.isEmpty()) {
+                savepointOpt =
+                        Optional.ofNullable(
+                                        ctx.getResource()
+                                                .getStatus()
+                                                .getJobStatus()
+                                                .getSavepointInfo()
+                                                .getLastSavepoint())
+                                .flatMap(s -> Optional.ofNullable(s.getLocation()));
+            }
         }
 
         deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
@@ -445,13 +455,17 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
-        var lastSavepoint =
-                Optional.ofNullable(
-                        ctx.getResource().getStatus().getJobStatus().getUpgradeSnapshotReference());
+
+        var upgradeSnapshotRef =
+                ctx.getResource().getStatus().getJobStatus().getUpgradeSnapshotReference();
+        var savepointLegacy =
+                ctx.getResource().getStatus().getJobStatus().getSavepointInfo().getLastSavepoint();
+        var lastSavepointKnown = upgradeSnapshotRef != null || savepointLegacy != null;
+
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         } else if (ctx.getResource().getSpec().getJob().getUpgradeMode() != UpgradeMode.STATELESS
-                && lastSavepoint.isPresent()) {
+                && lastSavepointKnown) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
         restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);

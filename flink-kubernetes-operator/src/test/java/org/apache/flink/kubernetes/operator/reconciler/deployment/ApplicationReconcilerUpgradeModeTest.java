@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -281,6 +282,56 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
         assertEquals(1, flinkService.getRunningCount());
         assertEquals("finished_sp", runningJobs.get(0).f0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testUpgradeUsesLatestSnapshot(boolean useLegacyFields) throws Exception {
+        var savepointPath = "finished_sp";
+        var deployment = buildApplicationCluster(FlinkVersion.v1_19, UpgradeMode.SAVEPOINT);
+
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        deployment.getSpec().setRestartNonce(100L);
+        flinkService.clear();
+
+        if (useLegacyFields) {
+            deployment
+                    .getStatus()
+                    .getJobStatus()
+                    .getSavepointInfo()
+                    .updateLastSavepoint(
+                            new Savepoint(
+                                    0L,
+                                    savepointPath,
+                                    SnapshotTriggerType.UPGRADE,
+                                    SavepointFormatType.CANONICAL,
+                                    0L));
+        } else {
+            deployment
+                    .getStatus()
+                    .getJobStatus()
+                    .setUpgradeSnapshotReference(
+                            FlinkStateSnapshotReference.fromPath(savepointPath));
+            deployment
+                    .getStatus()
+                    .getJobStatus()
+                    .getSavepointInfo()
+                    .updateLastSavepoint(
+                            new Savepoint(
+                                    0L,
+                                    "wrong_sp",
+                                    SnapshotTriggerType.UPGRADE,
+                                    SavepointFormatType.CANONICAL,
+                                    0L));
+        }
+
+        deployment.getStatus().getJobStatus().setState("FINISHED");
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(1, flinkService.getRunningCount());
+        assertEquals(savepointPath, flinkService.listJobs().get(0).f0);
     }
 
     private FlinkDeployment cloneDeploymentWithUpgradeMode(
