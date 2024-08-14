@@ -22,14 +22,22 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.util.Preconditions;
+
+import org.apache.flink.shaded.guava31.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The event handler which persists its event in JDBC related database.
@@ -38,13 +46,34 @@ import java.util.Objects;
  * @param <Context> The job autoscaler context.
  */
 @Experimental
+@Slf4j
 public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>>
         implements AutoScalerEventHandler<KEY, Context> {
 
     private final JdbcEventInteractor jdbcEventInteractor;
+    private final Duration eventHandlerTtl;
+    @Nullable private final ScheduledExecutorService scheduledEventHandlerCleaner;
 
-    public JdbcAutoScalerEventHandler(JdbcEventInteractor jdbcEventInteractor) {
+    public JdbcAutoScalerEventHandler(
+            JdbcEventInteractor jdbcEventInteractor, Duration eventHandlerTtl) {
         this.jdbcEventInteractor = jdbcEventInteractor;
+        this.eventHandlerTtl = Preconditions.checkNotNull(eventHandlerTtl);
+
+        if (eventHandlerTtl.toMillis() <= 0) {
+            this.scheduledEventHandlerCleaner = null;
+            return;
+        }
+        this.scheduledEventHandlerCleaner =
+                Executors.newSingleThreadScheduledExecutor(
+                        new ThreadFactoryBuilder()
+                                .setNameFormat("jdbc-autoscaler-events-cleaner")
+                                .setDaemon(false)
+                                .build());
+        this.scheduledEventHandlerCleaner.scheduleAtFixedRate(
+                this::cleanExpiredEvents,
+                Duration.ofDays(1).toMillis(),
+                Duration.ofDays(1).toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     @SneakyThrows
@@ -101,6 +130,41 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                     AutoScalerEventHandler.scalingReport(scalingSummaries, message),
                     AutoScalerEventHandler.getParallelismHashCode(scalingSummaries),
                     interval);
+        }
+    }
+
+    @Override
+    public void close() {
+        if (Objects.nonNull(scheduledEventHandlerCleaner)
+                && !scheduledEventHandlerCleaner.isShutdown()) {
+            scheduledEventHandlerCleaner.shutdownNow();
+        }
+    }
+
+    private void cleanExpiredEvents() {
+
+        try {
+            JdbcEventInteractor.ExpiredEventsResult expiredResult =
+                    jdbcEventInteractor.queryExpiredEventsAndMaxId(eventHandlerTtl);
+            if (Objects.isNull(expiredResult)) {
+                log.warn("No expired event handlers queried at {}", new Date());
+                return;
+            }
+            var numToClean = expiredResult.expiredRecords;
+            var batch = 4098;
+            var restInterval = 10L;
+            while (numToClean > 0) {
+                jdbcEventInteractor.deleteExpiredEventsByMaxIdAndBatch(expiredResult.maxId, batch);
+                numToClean -= batch;
+                log.debug("Deleted expired event handler records by batch successfully.");
+                Thread.sleep(restInterval);
+            }
+            log.info(
+                    "Deleted expired {} event handler records successfully whose id is smaller than {}.",
+                    expiredResult.expiredRecords,
+                    expiredResult.maxId);
+        } catch (Exception e) {
+            log.error("Error in cleaning expired event handler records.", e);
         }
     }
 

@@ -113,6 +113,8 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     public void close() {
         scheduledExecutorService.shutdownNow();
         scalingThreadPool.shutdownNow();
+        autoScaler.close();
+        eventHandler.close();
     }
 
     /**

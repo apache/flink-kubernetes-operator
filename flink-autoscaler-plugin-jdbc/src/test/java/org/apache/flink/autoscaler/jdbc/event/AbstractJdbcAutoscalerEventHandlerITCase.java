@@ -69,7 +69,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
     void beforeEach() throws Exception {
         jdbcEventInteractor = new CountableJdbcEventInteractor(getConnection());
         jdbcEventInteractor.setClock(Clock.fixed(createTime, ZoneId.systemDefault()));
-        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor);
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, Duration.ZERO);
         ctx = createDefaultJobAutoScalerContext();
     }
 

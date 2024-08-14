@@ -22,12 +22,14 @@ import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -151,5 +153,50 @@ public class JdbcEventInteractor {
     @VisibleForTesting
     void setClock(@Nonnull Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
+    }
+
+    @Nullable
+    ExpiredEventsResult queryExpiredEventsAndMaxId(Duration eventHandlerTtl) throws Exception {
+        var query =
+                "SELECT COUNT(1) records_num, max(id) max_target_id "
+                        + "FROM t_flink_autoscaler_event_handler "
+                        + "WHERE create_time < ? AND id < ("
+                        + "   SELECT id FROM t_flink_autoscaler_event_handler "
+                        + "   WHERE create_time >= ? ORDER BY id ASC LIMIT 1)";
+        var date = Timestamp.from(clock.instant().minusMillis(eventHandlerTtl.toMillis()));
+        try (var pstmt = conn.prepareStatement(query)) {
+            pstmt.setObject(1, date);
+            pstmt.setObject(2, date);
+            ResultSet resultSet = pstmt.executeQuery();
+            if (!resultSet.next()) {
+                return null;
+            }
+            var result = new ExpiredEventsResult(resultSet.getInt(1), resultSet.getLong(2));
+            resultSet.close();
+            return result;
+        }
+    }
+
+    public void deleteExpiredEventsByMaxIdAndBatch(long maxTargetId, int batch) throws Exception {
+        var query = "delete from t_flink_autoscaler_event_handler where id < ? limit ?";
+        try (var pstmt = conn.prepareStatement(query)) {
+            pstmt.setObject(1, maxTargetId);
+            pstmt.setObject(2, batch);
+            pstmt.execute();
+        }
+    }
+
+    /**
+     * The class to represent the query result of the max id in the expired records and the number
+     * of the expired event handlers.
+     */
+    static class ExpiredEventsResult {
+        int expiredRecords;
+        long maxId;
+
+        public ExpiredEventsResult(int expiredRecords, long maxId) {
+            this.expiredRecords = expiredRecords;
+            this.maxId = maxId;
+        }
     }
 }
