@@ -158,7 +158,7 @@ public class JdbcEventInteractor {
     @Nullable
     ExpiredEventsResult queryExpiredEventsAndMaxId(Duration eventHandlerTtl) throws Exception {
         var query =
-                "SELECT COUNT(1) records_num, max(id) max_target_id "
+                "SELECT min(id) min_id, max(id) max_id "
                         + "FROM t_flink_autoscaler_event_handler "
                         + "WHERE create_time < ? AND id < ("
                         + "   SELECT id FROM t_flink_autoscaler_event_handler "
@@ -171,32 +171,34 @@ public class JdbcEventInteractor {
             if (!resultSet.next()) {
                 return null;
             }
-            var result = new ExpiredEventsResult(resultSet.getInt(1), resultSet.getLong(2));
-            resultSet.close();
-            return result;
+            return new ExpiredEventsResult(resultSet.getLong(1), resultSet.getLong(2));
         }
     }
 
-    public void deleteExpiredEventsByMaxIdAndBatch(long maxTargetId, int batch) throws Exception {
-        var query = "delete from t_flink_autoscaler_event_handler where id < ? limit ?";
+    void deleteExpiredEventsByIdRange(long startId, long endId) throws Exception {
+        var query = "delete from t_flink_autoscaler_event_handler where id >= ? and id <= ?";
         try (var pstmt = conn.prepareStatement(query)) {
-            pstmt.setObject(1, maxTargetId);
-            pstmt.setObject(2, batch);
+            pstmt.setObject(1, startId);
+            pstmt.setObject(2, endId);
             pstmt.execute();
         }
     }
 
     /**
-     * The class to represent the query result of the max id in the expired records and the number
-     * of the expired event handlers.
+     * The class to represent the query result of the min/max id in the expired records of the event
+     * handlers.
      */
     static class ExpiredEventsResult {
-        int expiredRecords;
+        long minId;
         long maxId;
 
-        public ExpiredEventsResult(int expiredRecords, long maxId) {
-            this.expiredRecords = expiredRecords;
+        ExpiredEventsResult(long minId, long maxId) {
+            this.minId = minId;
             this.maxId = maxId;
+        }
+
+        long getExpiredCount() {
+            return (maxId - minId + 1);
         }
     }
 }

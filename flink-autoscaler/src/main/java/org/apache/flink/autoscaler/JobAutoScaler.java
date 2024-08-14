@@ -19,8 +19,6 @@ package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.Internal;
 
-import java.io.Closeable;
-
 /**
  * Flink Job AutoScaler.
  *
@@ -28,7 +26,7 @@ import java.io.Closeable;
  * @param <Context> Instance of {@link JobAutoScalerContext}.
  */
 @Internal
-public interface JobAutoScaler<KEY, Context extends JobAutoScalerContext<KEY>> extends Closeable {
+public interface JobAutoScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     /**
      * Compute and apply new parallelism overrides for the provided job context.
@@ -44,7 +42,4 @@ public interface JobAutoScaler<KEY, Context extends JobAutoScalerContext<KEY>> e
      * @param jobKey Job key.
      */
     void cleanup(KEY jobKey);
-
-    /** Close the related resource. */
-    default void close() {}
 }

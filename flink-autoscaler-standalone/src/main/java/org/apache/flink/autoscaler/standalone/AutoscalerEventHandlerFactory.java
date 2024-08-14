@@ -27,11 +27,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DescribedEnum;
 import org.apache.flink.configuration.description.InlineElement;
 
-import java.time.Duration;
-
 import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.JDBC;
 import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.LOGGING;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.EVENT_HANDLER_TYPE;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_EVENT_HANDLER_TTL;
 import static org.apache.flink.configuration.description.TextElement.text;
 
 /** The factory of {@link AutoScalerEventHandler}. */
@@ -75,6 +74,7 @@ public class AutoscalerEventHandlerFactory {
             AutoScalerEventHandler<KEY, Context> createJdbcEventHandler(Configuration conf)
                     throws Exception {
         var conn = HikariJDBCUtil.getConnection(conf);
-        return new JdbcAutoScalerEventHandler<>(new JdbcEventInteractor(conn), Duration.ZERO);
+        return new JdbcAutoScalerEventHandler<>(
+                new JdbcEventInteractor(conn), conf.get(JDBC_EVENT_HANDLER_TTL));
     }
 }

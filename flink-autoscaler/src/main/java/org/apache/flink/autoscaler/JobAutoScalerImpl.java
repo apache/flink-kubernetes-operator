@@ -126,11 +126,6 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         stateStore.removeInfoFromCache(jobKey);
     }
 
-    @Override
-    public void close() {
-        eventHandler.close();
-    }
-
     @VisibleForTesting
     protected Map<String, String> getParallelismOverrides(Context ctx) throws Exception {
         return stateStore.getParallelismOverrides(ctx);
