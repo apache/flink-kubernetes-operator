@@ -275,46 +275,6 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age threshold for FlinkStateSnapshot resources to retain.");
 
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Boolean> OPERATOR_CHECKPOINT_CLEANUP_ENABLED =
-            operatorConfig("checkpoint.cleanup.enabled")
-                    .booleanType()
-                    .defaultValue(true)
-                    .withDescription(
-                            "Whether to enable clean up of checkpoint FlinkStateSnapshot resources created by the operator automatically. This will only remove the FlinkStateSnapshot CR, and will not remove any data on the filesystem.");
-
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Integer> OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT =
-            operatorConfig("checkpoint.history.max.count")
-                    .intType()
-                    .defaultValue(10)
-                    .withDescription(
-                            "Maximum number of checkpoint FlinkStateSnapshot resources to retain.");
-
-    @Documentation.Section(SECTION_ADVANCED)
-    public static final ConfigOption<Integer> OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT_THRESHOLD =
-            ConfigOptions.key(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
-                    .intType()
-                    .noDefaultValue()
-                    .withDescription(
-                            "Maximum number threshold of checkpoint FlinkStateSnapshot resources to retain.");
-
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Duration> OPERATOR_CHECKPOINT_HISTORY_MAX_AGE =
-            operatorConfig("checkpoint.history.max.age")
-                    .durationType()
-                    .defaultValue(Duration.ofHours(24))
-                    .withDescription(
-                            "Maximum age for checkpoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent checkpoint may live longer than the max age.");
-
-    @Documentation.Section(SECTION_ADVANCED)
-    public static final ConfigOption<Duration> OPERATOR_CHECKPOINT_HISTORY_MAX_AGE_THRESHOLD =
-            ConfigOptions.key(OPERATOR_CHECKPOINT_HISTORY_MAX_AGE.key() + ".threshold")
-                    .durationType()
-                    .noDefaultValue()
-                    .withDescription(
-                            "Maximum age threshold for checkpoint FlinkStateSnapshot resources to retain.");
-
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Boolean> OPERATOR_EXCEPTION_STACK_TRACE_ENABLED =
             operatorConfig("exception.stacktrace.enabled")

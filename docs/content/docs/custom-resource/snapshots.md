@@ -168,32 +168,38 @@ There is no guarantee on the timely execution of the periodic snapshots as they 
 The operator automatically keeps track of the snapshot history triggered by upgrade, manual and periodic snapshot operations.
 This is necessary so cleanup can be performed by the operator for old snapshots.
 
-Users can control the cleanup behaviour by specifying a maximum age and maximum count for the savepoint and checkpoint resources in the history.
-If a max age is specified for checkpoints/savepoints, FlinkStateSnapshot resources will be cleaned up based on the `metadata.creationTimestamp` field.
-Snapshots will be cleaned up regardless of their status, so with a very low max age/count policy, but the operator will always keep at least 1 completed FlinkStateSnapshot at all time.
+{{< hint info >}}
+Snapshot cleanup happens lazily and only when the Flink resource associated with the snapshot is running.
+It is therefore very likely that savepoints live beyond the max age configuration.
+{{< /hint >}}
 
+#### Savepoints
+
+Users can control the cleanup behaviour by specifying maximum age and maximum count for savepoints.
+If a max age is specified, FlinkStateSnapshot resources of savepoint type will be cleaned up based on the `metadata.creationTimestamp` field.
+Snapshots will be cleaned up regardless of their status, but the operator will always keep at least 1 completed FlinkStateSnapshot for every Flink job at all time.
+
+Example configuration:
 ```
 kubernetes.operator.savepoint.history.max.age: 24 h
 kubernetes.operator.savepoint.history.max.count: 5
-
-kubernetes.operator.checkpoint.history.max.age: 24 h
-kubernetes.operator.checkpoint.history.max.count: 5
 ```
+
+To also dispose of savepoint data on savepoint cleanup, set `kubernetes.operator.savepoint.dispose-on-delete: true`.
+This config will set `spec.savepoint.disposeOnDelete` to true for FlinkStateSnapshot CRs created by upgrade, periodic and manual savepoints created using `savepointTriggerNonce`.
+
+To disable automatic savepoint cleanup by the operator you can set `kubernetes.operator.savepoint.cleanup.enabled: false`.
+
+#### Checkpoints
+
+FlinkStateSnapshots of checkpoint type will always be cleaned up. It's not possible to set max age for them.
+The maxmimum amount of checkpoint resources retained will be deteremined by the Flink configuration `state.checkpoints.num-retained`.
 
 {{< hint warning >}}
 Checkpoint cleanup is only supported if FlinkStateSnapshot resources are enabled.
 This operation will only delete the FlinkStateSnapshot CR, and will never delete any checkpoint data on the filesystem.
 {{< /hint >}}
 
-{{< hint info >}}
-Savepoint cleanup happens lazily and only when the Flink resource associated with the snapshot is running.
-It is therefore very likely that savepoints live beyond the max age configuration.  
-{{< /hint >}}
-
-To also dispose of savepoint data on savepoint cleanup, set `kubernetes.operator.savepoint.dispose-on-delete: true`. 
-This config will set `spec.savepoint.disposeOnDelete` to true for FlinkStateSnapshot CRs created by upgrade, periodic and manual savepoints created using `savepointTriggerNonce`.
-
-To disable savepoint/checkpoint cleanup by the operator you can set `kubernetes.operator.savepoint.cleanup.enabled: false` and `kubernetes.operator.checkpoint.cleanup.enabled: false`.
 
 ### Snapshot History For Legacy Savepoints
 

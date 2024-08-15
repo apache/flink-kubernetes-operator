@@ -57,9 +57,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_AGE;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
@@ -306,7 +305,7 @@ public class SnapshotObserver<
                         .orElse(null);
 
         var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
-        var maxTms = getMaxAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        var maxTms = getMinAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
         var result = new HashSet<FlinkStateSnapshot>();
 
         if (snapshotList.size() < 2) {
@@ -339,7 +338,7 @@ public class SnapshotObserver<
     void cleanupSavepointHistoryLegacy(
             FlinkResourceContext<CR> ctx, Set<FlinkStateSnapshot> allSecondarySnapshotResources) {
         var maxTms =
-                getMaxAgeForSnapshotType(
+                getMinAgeForSnapshotType(
                         ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
         var maxCount =
                 getMaxCountForSnapshotType(
@@ -405,31 +404,24 @@ public class SnapshotObserver<
         }
     }
 
-    private long getMaxAgeForSnapshotType(
+    private long getMinAgeForSnapshotType(
             Configuration observeConfig,
             FlinkOperatorConfiguration operatorConfig,
             SnapshotType snapshotType) {
-        Duration maxAge;
         switch (snapshotType) {
             case CHECKPOINT:
-                maxAge =
-                        ConfigOptionUtils.getValueWithThreshold(
-                                observeConfig,
-                                OPERATOR_CHECKPOINT_HISTORY_MAX_AGE,
-                                operatorConfig.getCheckpointHistoryAgeThreshold());
-                break;
+                return 0;
             case SAVEPOINT:
-                maxAge =
+                var maxAge =
                         ConfigOptionUtils.getValueWithThreshold(
                                 observeConfig,
                                 OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                                 operatorConfig.getSavepointHistoryAgeThreshold());
-                break;
+                return System.currentTimeMillis() - maxAge.toMillis();
             default:
                 throw new IllegalArgumentException(
                         String.format("Unknown snapshot type %s", snapshotType.name()));
         }
-        return System.currentTimeMillis() - maxAge.toMillis();
     }
 
     private long getMaxCountForSnapshotType(
@@ -438,10 +430,7 @@ public class SnapshotObserver<
             SnapshotType snapshotType) {
         switch (snapshotType) {
             case CHECKPOINT:
-                return ConfigOptionUtils.getValueWithThreshold(
-                        observeConfig,
-                        OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT,
-                        operatorConfig.getCheckpointHistoryCountThreshold());
+                return observeConfig.get(MAX_RETAINED_CHECKPOINTS);
             case SAVEPOINT:
                 return ConfigOptionUtils.getValueWithThreshold(
                         observeConfig,

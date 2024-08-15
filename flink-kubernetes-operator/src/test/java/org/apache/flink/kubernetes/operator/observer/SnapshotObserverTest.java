@@ -46,16 +46,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.MANUAL;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.UPGRADE;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_AGE;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_AGE_THRESHOLD;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
@@ -78,10 +75,7 @@ public class SnapshotObserverTest extends OperatorTestBase {
 
     @Test
     public void testSnapshotTypeCleanup() {
-        var conf =
-                new Configuration()
-                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1)
-                        .set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT, 1);
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
         var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
         var testData =
@@ -105,10 +99,7 @@ public class SnapshotObserverTest extends OperatorTestBase {
 
     @Test
     public void testSnapshotKeepOneCompleted() {
-        var conf =
-                new Configuration()
-                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1)
-                        .set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT, 1);
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
         var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
         var testData =
@@ -126,24 +117,16 @@ public class SnapshotObserverTest extends OperatorTestBase {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testAgeBasedCleanup(boolean setThreshold) {
-        var conf =
-                new Configuration()
-                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000)
-                        .set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT, 10000);
+    public void testAgeBasedCleanupSavepoint(boolean setThreshold) {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000);
 
         if (setThreshold) {
             conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD, Duration.ofMillis(5));
-            conf.set(OPERATOR_CHECKPOINT_HISTORY_MAX_AGE_THRESHOLD, Duration.ofMillis(5));
             conf.set(
                     OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                     Duration.ofMillis(System.currentTimeMillis() * 2));
-            conf.set(
-                    OPERATOR_CHECKPOINT_HISTORY_MAX_AGE,
-                    Duration.ofMillis(System.currentTimeMillis() * 2));
         } else {
             conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
-            conf.set(OPERATOR_CHECKPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
         }
 
         var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
@@ -157,15 +140,6 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         createSnapshot(SAVEPOINT, 4, UPGRADE, COMPLETED),
                         createSnapshot(SAVEPOINT, Long.MAX_VALUE, PERIODIC, COMPLETED));
 
-        var testDataCheckpoints =
-                List.of(
-                        createSnapshot(CHECKPOINT, 0, MANUAL, COMPLETED),
-                        createSnapshot(CHECKPOINT, 1, PERIODIC, COMPLETED),
-                        createSnapshot(CHECKPOINT, 2, PERIODIC, ABANDONED),
-                        createSnapshot(CHECKPOINT, 3, PERIODIC, COMPLETED),
-                        createSnapshot(CHECKPOINT, 4, UPGRADE, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE, PERIODIC, COMPLETED));
-
         var removedSavepoints =
                 observer.getFlinkStateSnapshotsToCleanUp(
                         testDataSavepoints, conf, operatorConfig, SAVEPOINT);
@@ -175,31 +149,38 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         testDataSavepoints.get(2),
                         testDataSavepoints.get(3),
                         testDataSavepoints.get(4));
+    }
+
+    @Test
+    public void testAgeBasedCleanupCheckpoint() {
+        var conf = new Configuration().set(MAX_RETAINED_CHECKPOINTS, 10000);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var testDataCheckpoints =
+                List.of(
+                        createSnapshot(CHECKPOINT, 0, MANUAL, COMPLETED),
+                        createSnapshot(CHECKPOINT, 1, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 2, PERIODIC, ABANDONED),
+                        createSnapshot(CHECKPOINT, 3, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 4, UPGRADE, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE, PERIODIC, COMPLETED));
 
         var removedCheckpoints =
                 observer.getFlinkStateSnapshotsToCleanUp(
                         testDataCheckpoints, conf, operatorConfig, CHECKPOINT);
-        assertThat(removedCheckpoints)
-                .containsExactlyInAnyOrder(
-                        testDataCheckpoints.get(1),
-                        testDataCheckpoints.get(2),
-                        testDataCheckpoints.get(3),
-                        testDataCheckpoints.get(4));
+        assertThat(removedCheckpoints).isEmpty();
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testCountBasedCleanup(boolean setThreshold) {
+    public void testCountBasedCleanupSavepoint(boolean setThreshold) {
         var conf = new Configuration();
 
         if (setThreshold) {
             conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD, 2);
-            conf.set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT_THRESHOLD, 2);
             conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000);
-            conf.set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT, 10000);
         } else {
             conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
-            conf.set(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT, 2);
         }
         var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
@@ -213,16 +194,6 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         createSnapshot(SAVEPOINT, Long.MAX_VALUE - 6, PERIODIC, COMPLETED),
                         createSnapshot(SAVEPOINT, Long.MAX_VALUE - 7, PERIODIC, COMPLETED));
 
-        var testDataCheckpoints =
-                List.of(
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 1, MANUAL, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 3, PERIODIC, ABANDONED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 4, UPGRADE, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 5, PERIODIC, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 6, PERIODIC, COMPLETED),
-                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 7, PERIODIC, COMPLETED));
-
         var removedSavepoints =
                 observer.getFlinkStateSnapshotsToCleanUp(
                         testDataSavepoints, conf, operatorConfig, SAVEPOINT);
@@ -232,6 +203,22 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         testDataSavepoints.get(5),
                         testDataSavepoints.get(4),
                         testDataSavepoints.get(3));
+    }
+
+    @Test
+    public void testCountBasedCleanupCheckpoint() {
+        var conf = new Configuration().set(MAX_RETAINED_CHECKPOINTS, 2);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var testDataCheckpoints =
+                List.of(
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 1, MANUAL, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 3, PERIODIC, ABANDONED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 4, UPGRADE, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 5, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 6, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 7, PERIODIC, COMPLETED));
 
         var removedCheckpoints =
                 observer.getFlinkStateSnapshotsToCleanUp(

@@ -64,8 +64,6 @@ public class FlinkOperatorConfiguration {
     String artifactsBaseDir;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
-    Integer checkpointHistoryCountThreshold;
-    Duration checkpointHistoryAgeThreshold;
     GenericRetry retryConfiguration;
     RateLimiter<?> rateLimiter;
     boolean exceptionStackTraceEnabled;
@@ -117,15 +115,6 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD);
-
-        Integer checkpointHistoryCountThreshold =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT_THRESHOLD);
-        Duration checkpointHistoryAgeThreshold =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_CHECKPOINT_HISTORY_MAX_AGE_THRESHOLD);
 
         Boolean exceptionStackTraceEnabled =
                 operatorConfig.get(
@@ -219,8 +208,6 @@ public class FlinkOperatorConfiguration {
                 artifactsBaseDir,
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
-                checkpointHistoryCountThreshold,
-                checkpointHistoryAgeThreshold,
                 retryConfiguration,
                 rateLimiter,
                 exceptionStackTraceEnabled,
