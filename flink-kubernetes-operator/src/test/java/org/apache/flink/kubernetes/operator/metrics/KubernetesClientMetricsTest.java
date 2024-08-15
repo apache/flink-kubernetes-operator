@@ -20,19 +20,25 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
+import org.apache.flink.metrics.Counter;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.dsl.NamespaceableResource;
+import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.awaitility.Awaitility;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.COUNTER;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.HISTO;
@@ -41,6 +47,8 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetri
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.HTTP_RESPONSE_GROUP;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.KUBE_CLIENT_GROUP;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.METER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.LONG;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -228,6 +236,70 @@ public class KubernetesClientMetricsTest {
                                                     .getRate()
                                             > 0.01;
                         });
+    }
+
+    @Test
+    void shouldTrackMetricsOnWebsocketRequests() {
+        // Given
+        var configuration = new Configuration();
+        var listener = new TestingMetricListener(configuration);
+        var kubernetesClient =
+                KubernetesClientUtils.getKubernetesClient(
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
+                        listener.getMetricGroup(),
+                        mockServer.createClient().getConfiguration());
+
+        var deployment = TestUtils.buildApplicationCluster();
+        final Counter responseCounter =
+                listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).orElseThrow();
+        final Counter requestCounter =
+                listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).orElseThrow();
+
+        AtomicLong watchEventCount = new AtomicLong(0);
+
+        final NamespaceableResource<FlinkDeployment> deploymentResource =
+                kubernetesClient.resource(deployment);
+        deploymentResource.createOrReplace();
+
+        var initialRequestCount = requestCounter.getCount();
+        var initialResponseCount = responseCounter.getCount();
+        // When
+        try (var ignored =
+                deploymentResource.inform(
+                        new ResourceEventHandler<>() {
+                            @Override
+                            public void onAdd(FlinkDeployment obj) {
+                                watchEventCount.getAndIncrement();
+                            }
+
+                            @Override
+                            public void onUpdate(FlinkDeployment oldObj, FlinkDeployment newObj) {
+                                watchEventCount.getAndIncrement();
+                            }
+
+                            @Override
+                            public void onDelete(
+                                    FlinkDeployment obj, boolean deletedFinalStateUnknown) {
+                                watchEventCount.getAndIncrement();
+                            }
+                        })) {
+
+            // Then
+            Awaitility.await()
+                    .atMost(1, TimeUnit.MINUTES)
+                    .untilAtomic(watchEventCount, Matchers.greaterThanOrEqualTo(1L));
+            assertThat(requestCounter)
+                    .extracting(Counter::getCount)
+                    .asInstanceOf(LONG)
+                    .isGreaterThan(
+                            initialRequestCount
+                                    + 1); // +1 as that is the request to start the watch.
+
+            assertThat(responseCounter)
+                    .extracting(Counter::getCount)
+                    .asInstanceOf(LONG)
+                    .isGreaterThan(initialResponseCount + watchEventCount.get());
+        }
     }
 
     @Test

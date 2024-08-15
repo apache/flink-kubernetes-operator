@@ -90,7 +90,7 @@ class KubernetesClientMetricsFabric8InterceptorTest {
                 builder.post("application/json", "{}").uri("/random").build();
 
         // When
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
 
         // Then
         assertThat(kubernetesClientMetrics.getRequestCounter())
@@ -108,7 +108,7 @@ class KubernetesClientMetricsFabric8InterceptorTest {
                 builder.delete("application/json", "{}").uri("/random").build();
 
         // When
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
 
         // Then
         assertThat(kubernetesClientMetrics.getRequestCounter())
@@ -126,7 +126,7 @@ class KubernetesClientMetricsFabric8InterceptorTest {
                 builder.patch("application/json", "{}").uri("/random").build();
 
         // When
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
 
         // Then
         assertThat(kubernetesClientMetrics.getRequestCounter())
@@ -142,9 +142,9 @@ class KubernetesClientMetricsFabric8InterceptorTest {
         // Given
         final HttpRequest postRequest =
                 builder.patch("application/json", "{}").uri("/random").build();
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
         final OperatorMetricUtils.SynchronizedMeterView requestRateMeter =
                 kubernetesClientMetrics.getRequestRateMeter();
 
@@ -296,7 +296,7 @@ class KubernetesClientMetricsFabric8InterceptorTest {
                         () -> currentTime[0]);
         final HttpRequest postRequest =
                 builder.post("application/json", "{}").uri("/random").build();
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
         final Histogram responseLatency = kubernetesClientMetrics.getResponseLatency();
         assumeThat(responseLatency).extracting(Histogram::getCount).isEqualTo(0L);
         currentTime[0] += 1000L;
@@ -328,7 +328,7 @@ class KubernetesClientMetricsFabric8InterceptorTest {
                         () -> currentTime[0]);
         final HttpRequest postRequest =
                 builder.post("application/json", "{}").uri("/random").build();
-        kubernetesClientMetrics.consumer((value, asyncBody) -> {}, postRequest);
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
         final Histogram responseLatency = kubernetesClientMetrics.getResponseLatency();
         assumeThat(responseLatency).extracting(Histogram::getCount).isEqualTo(0L);
         currentTime[0] += 1000L;

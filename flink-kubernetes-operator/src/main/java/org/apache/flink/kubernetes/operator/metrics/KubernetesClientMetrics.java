@@ -38,11 +38,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.function.LongSupplier;
 
 /** Kubernetes client metrics. */
@@ -60,6 +57,7 @@ public class KubernetesClientMetrics implements Interceptor {
     public static final String COUNTER = "Count";
     public static final String METER = "NumPerSecond";
     public static final String HISTO = "TimeNanos";
+    public static final String REQUEST_START_TIME_HEADER = "requestStartTimeNanos";
     private final Histogram responseLatency;
 
     private final MetricGroup requestMetricGroup;
@@ -80,7 +78,6 @@ public class KubernetesClientMetrics implements Interceptor {
             new ConcurrentHashMap<>();
     private final Map<String, Counter> requestMethodCounter = new ConcurrentHashMap<>();
     private final LongSupplier nanoTimeSource;
-    private final ConcurrentMap<UUID, Long> requestStartTimes;
 
     private final Logger logger = LoggerFactory.getLogger(KubernetesClientMetrics.class);
 
@@ -140,19 +137,17 @@ public class KubernetesClientMetrics implements Interceptor {
                     createMeterViewForMetricsGroup(
                             responseMetricGroup.addGroup(HTTP_RESPONSE_5XX)));
         }
-        this.requestStartTimes = new ConcurrentHashMap<>();
     }
 
     @Override
-    public AsyncBody.Consumer<List<ByteBuffer>> consumer(
-            AsyncBody.Consumer<List<ByteBuffer>> consumer, HttpRequest request) {
-        final Long original = requestStartTimes.put(request.id(), nanoTimeSource.getAsLong());
-        if (original != null) {
-            logger.warn(
-                    "Duplicate request ID's detected. Latency will only be tracked for the latest");
-        }
+    public void before(BasicBuilder builder, HttpRequest request, RequestTags tags) {
+        long requestStartTime = nanoTimeSource.getAsLong();
+        // Attach a header to the request. We don't care if is actually sent or echoed back in the
+        // response.
+        // As the request is included in the after callbacks so we just read the value from the
+        // headers on that.
+        builder.setHeader(REQUEST_START_TIME_HEADER, String.valueOf(requestStartTime));
         updateRequestMetrics(request);
-        return consumer;
     }
 
     @Override
@@ -160,19 +155,20 @@ public class KubernetesClientMetrics implements Interceptor {
             HttpRequest request,
             HttpResponse<?> response,
             AsyncBody.Consumer<List<ByteBuffer>> consumer) {
-        trackRequestLatency(request.id());
+        trackRequestLatency(request);
         updateResponseMetrics(response);
     }
 
     @Override
-    public CompletableFuture<Boolean> afterFailure(BasicBuilder builder, HttpResponse<?> response, RequestTags tags) {
+    public CompletableFuture<Boolean> afterFailure(
+            BasicBuilder builder, HttpResponse<?> response, RequestTags tags) {
         this.requestFailedRateMeter.markEvent();
         return CompletableFuture.completedFuture(false);
     }
 
     @Override
     public void afterConnectionFailure(HttpRequest request, Throwable failure) {
-        trackRequestLatency(request.id());
+        trackRequestLatency(request);
         this.requestFailedRateMeter.markEvent();
     }
 
@@ -233,15 +229,14 @@ public class KubernetesClientMetrics implements Interceptor {
         }
     }
 
-    private void trackRequestLatency(UUID requestId) {
-        final Optional<Long> computedLatency =
-                Optional.ofNullable(
-                        requestStartTimes.computeIfPresent(
-                                requestId,
-                                (uuid, startTime) -> nanoTimeSource.getAsLong() - startTime));
-        final long latency = computedLatency.orElse(0L);
-        this.responseLatency.update(latency);
-        requestStartTimes.remove(requestId);
+    private void trackRequestLatency(HttpRequest request) {
+        final String header = request.header(REQUEST_START_TIME_HEADER);
+        if (header != null) {
+            final long currentNanos = nanoTimeSource.getAsLong();
+            final long requestStartNanos = Long.parseLong(header);
+            final long latency = currentNanos - requestStartNanos;
+            this.responseLatency.update(latency);
+        }
     }
 
     private Counter getCounterByRequestMethod(String method) {
