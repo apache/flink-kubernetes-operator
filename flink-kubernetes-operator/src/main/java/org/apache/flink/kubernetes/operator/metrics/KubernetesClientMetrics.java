@@ -27,6 +27,7 @@ import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.MetricGroup;
 
 import io.fabric8.kubernetes.client.http.AsyncBody;
+import io.fabric8.kubernetes.client.http.BasicBuilder;
 import io.fabric8.kubernetes.client.http.HttpRequest;
 import io.fabric8.kubernetes.client.http.HttpResponse;
 import io.fabric8.kubernetes.client.http.Interceptor;
@@ -164,8 +165,7 @@ public class KubernetesClientMetrics implements Interceptor {
     }
 
     @Override
-    public CompletableFuture<Boolean> afterFailure(
-            HttpRequest.Builder builder, HttpResponse<?> response, RequestTags tags) {
+    public CompletableFuture<Boolean> afterFailure(BasicBuilder builder, HttpResponse<?> response, RequestTags tags) {
         this.requestFailedRateMeter.markEvent();
         return CompletableFuture.completedFuture(false);
     }
