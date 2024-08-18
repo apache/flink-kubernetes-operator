@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -511,7 +510,7 @@ public abstract class AbstractFlinkResourceReconciler<
         boolean nonTerminalApplication =
                 !sessionCluster
                         && deployedJob.getState() == JobState.RUNNING
-                        && !JobStatus.valueOf(jobStatus.getState()).isGloballyTerminalState();
+                        && !jobStatus.getState().isGloballyTerminalState();
         boolean jmShouldBeRunning = sessionCluster || nonTerminalApplication;
         return jmShouldBeRunning
                 && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING);

@@ -343,7 +343,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     deployment.getMetadata(), status, conf, suspendMode.deleteHaMeta());
         }
 
-        status.getJobStatus().setState(JobStatus.FINISHED.name());
+        status.getJobStatus().setState(JobStatus.FINISHED);
         return CancelResult.completed(savepointPath);
     }
 
@@ -366,7 +366,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     break;
             }
         }
-        status.getJobStatus().setState(JobStatus.FINISHED.name());
+        status.getJobStatus().setState(JobStatus.FINISHED);
         status.getJobStatus().setJobId(null);
         return CancelResult.completed(savepointPath);
     }
@@ -404,7 +404,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         "Cancellation Error", EventRecorder.Reason.CleanupFailed.name(), e);
             }
         }
-        status.getJobStatus().setState(JobStatus.CANCELLING.name());
+        status.getJobStatus().setState(JobStatus.CANCELLING);
     }
 
     public String savepointJobOrError(
@@ -1037,9 +1037,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected void updateStatusAfterClusterDeletion(FlinkDeploymentStatus status) {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         var currentJobState = status.getJobStatus().getState();
-        if (currentJobState == null
-                || !JobStatus.valueOf(currentJobState).isGloballyTerminalState()) {
-            status.getJobStatus().setState(JobStatus.FINISHED.name());
+        if (currentJobState == null || !currentJobState.isGloballyTerminalState()) {
+            status.getJobStatus().setState(JobStatus.FINISHED);
         }
     }
 

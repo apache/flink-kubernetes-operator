@@ -135,7 +135,7 @@ public abstract class AbstractFlinkDeploymentObserver
                 checkContainerBackoff(ctx);
             } catch (DeploymentFailedException dfe) {
                 // throw only when not already in error status to allow for spec update
-                deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
+                deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING);
                 if (!JobManagerDeploymentStatus.ERROR.equals(
                         deploymentStatus.getJobManagerDeploymentStatus())) {
                     throw dfe;
@@ -149,7 +149,7 @@ public abstract class AbstractFlinkDeploymentObserver
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
+        deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING);
 
         if (previousJmStatus != JobManagerDeploymentStatus.MISSING
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
@@ -192,7 +192,7 @@ public abstract class AbstractFlinkDeploymentObserver
         FlinkDeploymentStatus status = dep.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
-                && !JobStatus.FAILED.name().equals(dep.getStatus().getJobStatus().getState())
+                && !JobStatus.FAILED.equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
             status.setError(null);
         }

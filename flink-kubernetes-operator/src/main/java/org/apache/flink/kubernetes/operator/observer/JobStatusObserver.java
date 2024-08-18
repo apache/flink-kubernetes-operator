@@ -122,7 +122,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // upgrading state and retry the upgrade (if possible)
             resource.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
         }
-        jobStatus.setState(JobStatus.RECONCILING.name());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         resource.getStatus().setError(JOB_NOT_FOUND_ERR);
     }
 
@@ -135,9 +135,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      */
     private void ifRunningMoveToReconciling(
             org.apache.flink.kubernetes.operator.api.status.JobStatus jobStatus,
-            String previousJobStatus) {
-        if (JobStatus.RUNNING.name().equals(previousJobStatus)) {
-            jobStatus.setState(JobStatus.RECONCILING.name());
+            JobStatus previousJobStatus) {
+        if (JobStatus.RUNNING == previousJobStatus) {
+            jobStatus.setState(JobStatus.RECONCILING);
         }
     }
 
@@ -160,7 +160,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         var previousJobStatus = jobStatus.getState();
         var currentJobStatus = clusterJobStatus.getJobState();
 
-        jobStatus.setState(clusterJobStatus.getJobState().name());
+        jobStatus.setState(currentJobStatus);
         jobStatus.setJobName(clusterJobStatus.getJobName());
         jobStatus.setStartTime(String.valueOf(clusterJobStatus.getStartTime()));
 
@@ -177,7 +177,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
             if (JobStatus.CANCELED == currentJobStatus
                     || (currentJobStatus.isGloballyTerminalState()
-                            && JobStatus.CANCELLING.name().equals(previousJobStatus))) {
+                            && JobStatus.CANCELLING.equals(previousJobStatus))) {
                 // The job was cancelled
                 markSuspended(resource);
             }

@@ -55,7 +55,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.function.BiConsumer;
 
+import static org.apache.flink.api.common.JobStatus.CANCELED;
+import static org.apache.flink.api.common.JobStatus.CANCELLING;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkStateSnapshotException;
@@ -233,7 +236,7 @@ public class ReconciliationUtils {
         }
     }
 
-    public static void updateForReconciliationError(FlinkResourceContext ctx, Throwable error) {
+    public static void updateForReconciliationError(FlinkResourceContext<?> ctx, Throwable error) {
         updateFlinkResourceException(error, ctx.getResource(), ctx.getOperatorConfig());
     }
 
@@ -352,35 +355,23 @@ public class ReconciliationUtils {
 
     public static boolean isJobInTerminalState(CommonStatus<?> status) {
         var jobState = status.getJobStatus().getState();
-        if (jobState == null) {
-            jobState = org.apache.flink.api.common.JobStatus.RECONCILING.name();
-        }
-        return org.apache.flink.api.common.JobStatus.valueOf(jobState).isGloballyTerminalState();
+        return jobState != null && jobState.isGloballyTerminalState();
     }
 
     public static boolean isJobRunning(CommonStatus<?> status) {
-        return org.apache.flink.api.common.JobStatus.RUNNING
-                .name()
-                .equals(status.getJobStatus().getState());
+        return RUNNING == status.getJobStatus().getState();
     }
 
     public static boolean isJobCancelled(CommonStatus<?> status) {
-        return org.apache.flink.api.common.JobStatus.CANCELED
-                .name()
-                .equals(status.getJobStatus().getState());
+        return CANCELED == status.getJobStatus().getState();
     }
 
     public static boolean isJobCancellable(CommonStatus<?> status) {
-        return !org.apache.flink.api.common.JobStatus.RECONCILING
-                .name()
-                .equals(status.getJobStatus().getState());
+        return RECONCILING != status.getJobStatus().getState();
     }
 
     public static boolean isJobCancelling(CommonStatus<?> status) {
-        return status.getJobStatus() != null
-                && org.apache.flink.api.common.JobStatus.CANCELLING
-                        .name()
-                        .equals(status.getJobStatus().getState());
+        return status.getJobStatus() != null && CANCELLING == status.getJobStatus().getState();
     }
 
     /**
@@ -503,8 +494,7 @@ public class ReconciliationUtils {
      * @param status Status to be updated.
      */
     public static void checkAndUpdateStableSpec(CommonStatus<?> status) {
-        var flinkJobStatus =
-                org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
+        var flinkJobStatus = status.getJobStatus().getState();
 
         if (status.getReconciliationStatus().getState() != ReconciliationState.DEPLOYED) {
             return;
@@ -542,8 +532,7 @@ public class ReconciliationUtils {
         var lastJobSpec = lastSpecWithMeta.getSpec().getJob();
         if (lastJobSpec != null) {
             lastJobSpec.setState(JobState.RUNNING);
-            status.getJobStatus()
-                    .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+            status.getJobStatus().setState(RECONCILING);
         }
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
         reconciliationStatus.setLastReconciledSpec(

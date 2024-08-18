@@ -63,6 +63,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import static org.apache.flink.api.common.JobStatus.CANCELLING;
+import static org.apache.flink.api.common.JobStatus.FAILING;
+import static org.apache.flink.api.common.JobStatus.FINISHED;
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
+import static org.apache.flink.api.common.JobStatus.RESTARTING;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -210,7 +216,10 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 .setLastStableSpec(
                         deployment.getStatus().getReconciliationStatus().getLastReconciledSpec());
         flinkService.setHaDataAvailable(false);
-        deployment.getStatus().getJobStatus().setState("RECONCILING");
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RECONCILING);
 
         Assertions.assertThrows(
                 UpgradeFailureException.class,
@@ -236,7 +245,10 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         deployment.getSpec().setRestartNonce(200L);
         flinkService.setHaDataAvailable(false);
         deployment.getStatus().getJobStatus().setUpgradeSavepointPath("finished_sp");
-        deployment.getStatus().getJobStatus().setState("FINISHED");
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FINISHED);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         deployment
                 .getSpec()
@@ -287,7 +299,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                                     0L));
         }
 
-        deployment.getStatus().getJobStatus().setState("FINISHED");
+        deployment.getStatus().getJobStatus().setState(FINISHED);
         reconciler.reconcile(deployment, context);
         reconciler.reconcile(deployment, context);
 
@@ -503,7 +515,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         var jobStatus = deployment.getStatus().getJobStatus();
         long now = System.currentTimeMillis();
 
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING);
         jobStatus.setStartTime(Long.toString(now));
         jobStatus.setJobId(new JobID().toString());
 
@@ -626,7 +638,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         jobStatus.setJobId(new JobID().toString());
 
         // Running state, savepoint if possible
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        jobStatus.setState(RUNNING);
         var ctx = getResourceContext(deployment);
         var deployConf = ctx.getDeployConfig(deployment.getSpec());
 
@@ -637,13 +649,13 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 jobReconciler.getJobUpgrade(ctx, deployConf));
 
         // Not running (but cancellable)
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RESTARTING.name());
+        jobStatus.setState(RESTARTING);
         assertEquals(
                 AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
                 jobReconciler.getJobUpgrade(ctx, deployConf));
 
         // Unknown / reconciling
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        jobStatus.setState(RECONCILING);
         assertEquals(
                 AbstractJobReconciler.JobUpgrade.pendingUpgrade(),
                 jobReconciler.getJobUpgrade(ctx, deployConf));
@@ -690,7 +702,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         jobStatus.setJobId(new JobID().toString());
 
         // Running state, savepoint if possible
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.FAILING.name());
+        jobStatus.setState(FAILING);
         var ctx = getResourceContext(deployment);
         var deployConf = ctx.getDeployConfig(deployment.getSpec());
 
@@ -798,7 +810,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
         assertEquals(0, flinkService.getRunningCount());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                org.apache.flink.api.common.JobStatus.FINISHED,
                 deployment.getStatus().getJobStatus().getState());
 
         var snapshots = TestUtils.getFlinkStateSnapshotsForResource(kubernetesClient, deployment);
@@ -845,11 +857,11 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         // Ready for spec changes, the reconciliation should be performed
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
         reconciler.reconcile(deployment, context);
-        assertEquals("CANCELLING", deployment.getStatus().getJobStatus().getState());
+        assertEquals(CANCELLING, deployment.getStatus().getJobStatus().getState());
 
         String expectedSavepointPath = "savepoint_0";
         var jobStatus = deployment.getStatus().getJobStatus();
-        jobStatus.setState("CANCELED");
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.CANCELED);
         jobStatus
                 .getSavepointInfo()
                 .setLastSavepoint(Savepoint.of(expectedSavepointPath, SnapshotTriggerType.UNKNOWN));
@@ -947,7 +959,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                                         .jobId(runningJobs.get(0).f1.getJobId().toHexString())
                                         .jobName(runningJobs.get(0).f1.getJobName())
                                         .startTime(Long.toString(System.currentTimeMillis()))
-                                        .state("RUNNING")
+                                        .state(org.apache.flink.api.common.JobStatus.RUNNING)
                                         .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }

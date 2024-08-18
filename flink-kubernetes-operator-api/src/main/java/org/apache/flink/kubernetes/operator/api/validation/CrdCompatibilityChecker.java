@@ -160,7 +160,10 @@ public class CrdCompatibilityChecker {
     protected static void checkStringTypeCompatibility(
             String path, JsonNode oldNode, JsonNode newNode) {
         if (!oldNode.has("enum") && newNode.has("enum")) {
-            err("Cannot turn string into enum for " + path);
+            // We make an exception here for jobstatus.state, this is a backward compatible change
+            if (!path.equals(".status.jobStatus.state")) {
+                err("Cannot turn string into enum for " + path);
+            }
         }
 
         if (oldNode.has("enum")) {

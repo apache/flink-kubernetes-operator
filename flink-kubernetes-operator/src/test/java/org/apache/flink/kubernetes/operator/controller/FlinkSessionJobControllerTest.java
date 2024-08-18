@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -51,6 +50,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.api.common.JobStatus.CANCELLING;
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
@@ -119,7 +121,7 @@ class FlinkSessionJobControllerTest {
         sessionJob.getSpec().getJob().setParallelism(-1);
         updateControl = testController.reconcile(sessionJob, context);
 
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
@@ -137,7 +139,7 @@ class FlinkSessionJobControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
 
         // Validate last stable spec is still the old one
         assertEquals(
@@ -271,7 +273,7 @@ class FlinkSessionJobControllerTest {
         testController.reconcile(sessionJob, context);
 
         // Make sure we are cancelling
-        assertEquals("CANCELLING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
 
         // Once cancelling completed make sure that last reconciled spec is correctly upgraded and
         // job was started from cp
@@ -285,7 +287,7 @@ class FlinkSessionJobControllerTest {
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getUpgradeMode());
-        assertEquals("RECONCILING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 sessionJob.getStatus().getReconciliationStatus().getState());
@@ -296,7 +298,7 @@ class FlinkSessionJobControllerTest {
         assertEquals("cp1", jobs.get(0).f0);
 
         testController.reconcile(sessionJob, context);
-        assertEquals("RUNNING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
 
         // Suspend job
         flinkService.setCheckpointInfo(
@@ -330,7 +332,7 @@ class FlinkSessionJobControllerTest {
         testController.reconcile(sessionJob, context);
 
         // Make sure we are cancelling
-        assertEquals("CANCELLING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
         testController.events().poll();
         assertEquals(
                 testController.events().poll().getReason(),
@@ -342,7 +344,7 @@ class FlinkSessionJobControllerTest {
 
         testController.reconcile(sessionJob, context);
         assertEquals(JobStatusObserver.JOB_NOT_FOUND_ERR, sessionJob.getStatus().getError());
-        assertEquals("RECONCILING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 sessionJob.getStatus().getReconciliationStatus().getState());
@@ -496,7 +498,7 @@ class FlinkSessionJobControllerTest {
                 EventRecorder.Reason.JobStatusChanged,
                 EventRecorder.Reason.valueOf(statusEvents.get(2).getReason()));
 
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(
                 JobState.RUNNING,
                 sessionJob
@@ -518,8 +520,7 @@ class FlinkSessionJobControllerTest {
                 .put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "changed");
         updateControl = testController.reconcile(sessionJob, context);
         assertFalse(updateControl.isUpdateStatus());
-        assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         // Check when the bad config is applied, observe() will change the cluster state correctly
         sessionJob.getSpec().getJob().setParallelism(-1);
@@ -531,7 +532,7 @@ class FlinkSessionJobControllerTest {
                         .getError()
                         .contains("Job parallelism must be larger than 0"));
         assertFalse(updateControl.isUpdateStatus());
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
 
         // Make sure we do validation before getting effective config in reconcile().
         // Verify the saved headers in lastReconciledSpec is actually used in observe() by
@@ -547,7 +548,7 @@ class FlinkSessionJobControllerTest {
                                 configuration.get(
                                         KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER)));
         testController.reconcile(sessionJob, context);
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
     }
 
     @Test
@@ -572,7 +573,7 @@ class FlinkSessionJobControllerTest {
         assertNull(sessionJob.getStatus().getReconciliationStatus().getLastStableSpec());
 
         testController.reconcile(sessionJob, context);
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
         assertNull(sessionJob.getStatus().getError());
 
         assertEquals(
@@ -649,7 +650,7 @@ class FlinkSessionJobControllerTest {
 
         var deleteControl = testController.cleanup(sessionJob, context);
 
-        assertEquals("CANCELLING", sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
         assertFalse(deleteControl.isRemoveFinalizer());
         assertEquals(
                 configManager.getOperatorConfiguration().getProgressCheckInterval().toMillis(),
@@ -688,8 +689,7 @@ class FlinkSessionJobControllerTest {
                 testController.reconcile(sessionJob, context);
 
         // Reconciling
-        assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(4, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -706,7 +706,7 @@ class FlinkSessionJobControllerTest {
 
         // Running
         updateControl = testController.reconcile(sessionJob, context);
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(5, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -716,7 +716,7 @@ class FlinkSessionJobControllerTest {
 
         // Stable loop
         updateControl = testController.reconcile(sessionJob, context);
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
         assertEquals(5, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -729,7 +729,7 @@ class FlinkSessionJobControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
         assertEquals(
                 sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 sessionJob.getStatus().getReconciliationStatus().getLastStableSpec());

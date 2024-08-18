@@ -42,7 +42,7 @@ public class JobStatus {
 
     /** Last observed state of the job. */
     @PrinterColumn(name = "Job Status")
-    private String state;
+    private org.apache.flink.api.common.JobStatus state;
 
     /** Start time of the job. */
     private String startTime;

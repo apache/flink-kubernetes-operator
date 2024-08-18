@@ -127,7 +127,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
         FlinkDeploymentSpec spec = flinkApp.getSpec();
         Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
 
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()

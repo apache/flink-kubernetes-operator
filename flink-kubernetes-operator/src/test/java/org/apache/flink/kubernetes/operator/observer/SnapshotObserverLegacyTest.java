@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
@@ -328,7 +329,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
         var jobStatus = status.getJobStatus();
         status.getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(JobStatus.RUNNING);
 
         var savepointInfo = jobStatus.getSavepointInfo();
         flinkService.triggerSavepointLegacy(null, SnapshotTriggerType.PERIODIC, deployment, conf);
@@ -364,7 +365,7 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
         var jobStatus = status.getJobStatus();
         status.getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(JobStatus.RUNNING);
 
         var checkpointInfo = jobStatus.getCheckpointInfo();
         var triggerId = flinkService.triggerCheckpoint(null, CheckpointType.FULL, conf);

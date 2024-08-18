@@ -359,7 +359,7 @@ public class SnapshotUtilsTest {
                 .getMetadata()
                 .setCreationTimestamp(Instant.now().minus(Duration.ofMinutes(15)).toString());
 
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconcileSpec(deployment);
         return deployment;

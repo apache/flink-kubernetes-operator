@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -35,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -101,7 +101,7 @@ public class DeploymentRecoveryTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(JobStatus.RUNNING.name(), appCluster.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
 
         // Remove deployment
         flinkService.setPortReady(false);
@@ -130,7 +130,7 @@ public class DeploymentRecoveryTest {
             assertEquals(
                     JobManagerDeploymentStatus.READY,
                     appCluster.getStatus().getJobManagerDeploymentStatus());
-            assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+            assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
             assertEquals(
                     appCluster.getSpec(),
                     appCluster

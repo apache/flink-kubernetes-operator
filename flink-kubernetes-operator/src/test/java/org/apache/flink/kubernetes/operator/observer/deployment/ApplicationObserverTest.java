@@ -128,7 +128,9 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(JobState.RUNNING.name(), deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                deployment.getStatus().getJobStatus().getState());
         assertEquals(
                 deployment.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 deployment.getStatus().getReconciliationStatus().getLastStableSpec());
@@ -137,7 +139,9 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(JobState.RUNNING.name(), deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                deployment.getStatus().getJobStatus().getState());
 
         assertEquals(
                 deployment.getMetadata().getName(),
@@ -177,7 +181,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                org.apache.flink.api.common.JobStatus.RECONCILING,
                 deployment.getStatus().getJobStatus().getState());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
     }
@@ -488,7 +492,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         observer.observe(deployment, readyContext);
         assertEquals(
-                org.apache.flink.api.common.JobStatus.FAILED.name(),
+                org.apache.flink.api.common.JobStatus.FAILED,
                 deployment.getStatus().getJobStatus().getState());
         assertEquals("last-SP", deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         assertFalse(SnapshotUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
@@ -653,8 +657,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         observer.observe(deployment, readyContext);
         assertEquals(
-                org.apache.flink.api.common.JobStatus.FAILED.name(),
-                getJobStatus(deployment).getState());
+                org.apache.flink.api.common.JobStatus.FAILED, getJobStatus(deployment).getState());
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(deployment)));
     }
 
@@ -745,7 +748,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobName("jobname");
-        jobStatus.setState(JobState.RUNNING.name());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING);
         deployment.getStatus().setJobStatus(jobStatus);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }

@@ -59,6 +59,8 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
+import static org.apache.flink.api.common.JobStatus.CANCELED;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
@@ -176,7 +178,7 @@ public class FlinkStateSnapshotControllerTest {
         controller.reconcile(snapshot, context);
         assertThat(snapshot.getStatus().getState()).isEqualTo(IN_PROGRESS);
 
-        deployment.getStatus().getJobStatus().setState("CANCELED");
+        deployment.getStatus().getJobStatus().setState(CANCELED);
         controller.reconcile(snapshot, context);
         var status = snapshot.getStatus();
         var createdAt = Instant.parse(snapshot.getMetadata().getCreationTimestamp());
@@ -269,14 +271,14 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(flinkService.getDisposedSavepoints()).isEmpty();
 
         // Failed dispose, job not running
-        deployment.getStatus().getJobStatus().setState("CANCELED");
+        deployment.getStatus().getJobStatus().setState(CANCELED);
         snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
         assertDeleteControl(
                 controller.cleanup(snapshot, context),
                 false,
                 configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
         assertThat(flinkService.getDisposedSavepoints()).isEmpty();
-        deployment.getStatus().getJobStatus().setState("RUNNING");
+        deployment.getStatus().getJobStatus().setState(RUNNING);
 
         // Failed dispose, REST error
         snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
@@ -551,7 +553,7 @@ public class FlinkStateSnapshotControllerTest {
     @Test
     public void testReconcileJobNotRunning() {
         var deployment = createDeployment();
-        deployment.getStatus().getJobStatus().setState("CANCELED");
+        deployment.getStatus().getJobStatus().setState(CANCELED);
         context = TestUtils.createSnapshotContext(client, deployment);
         var snapshot = createSavepoint(deployment);
         var errorMessage =
@@ -623,7 +625,7 @@ public class FlinkStateSnapshotControllerTest {
         var deployment = TestUtils.buildApplicationCluster();
         deployment
                 .getStatus()
-                .setJobStatus(JobStatus.builder().state("RUNNING").jobId(JOB_ID).build());
+                .setJobStatus(JobStatus.builder().state(RUNNING).jobId(JOB_ID).build());
         deployment.getSpec().setFlinkVersion(flinkVersion);
         deployment
                 .getSpec()

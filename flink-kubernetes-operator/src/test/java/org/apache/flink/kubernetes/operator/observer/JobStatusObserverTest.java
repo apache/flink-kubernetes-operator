@@ -63,7 +63,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
         job.getSpec().getJob().setUpgradeMode(upgradeMode);
         var status = job.getStatus();
         var jobStatus = status.getJobStatus();
-        jobStatus.setState(fromStatus.name());
+        jobStatus.setState(fromStatus);
         assertEquals(
                 JobState.RUNNING,
                 status.getReconciliationStatus()
@@ -91,7 +91,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
         var deployment = initDeployment();
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
-        jobStatus.setState(fromStatus.name());
+        jobStatus.setState(fromStatus);
         assertEquals(
                 JobState.RUNNING,
                 status.getReconciliationStatus()

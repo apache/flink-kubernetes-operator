@@ -85,12 +85,12 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         // observe with empty context will do nothing
         observer.observe(sessionJob, TestUtils.createEmptyContext());
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         var reconStatus = sessionJob.getStatus().getReconciliationStatus();
         Assertions.assertNotEquals(
@@ -99,22 +99,22 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         // observe with ready context
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
         Assertions.assertEquals(
                 reconStatus.getLastReconciledSpec(), reconStatus.getLastStableSpec());
 
         flinkService.setPortReady(false);
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
-        sessionJob.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        sessionJob.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         // no matched job id, update the state to unknown
         flinkService.setPortReady(true);
         sessionJob.getStatus().getJobStatus().setJobId(new JobID().toHexString());
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         Assertions.assertEquals(
                 JobState.SUSPENDED,
                 sessionJob
@@ -138,13 +138,13 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         Assertions.assertNotNull(jobID);
         Assertions.assertNotEquals(jobID, jobID2);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob2.getStatus().getJobStatus().getState());
+                JobStatus.RUNNING, sessionJob2.getStatus().getJobStatus().getState());
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
 
         // test error behaviour if job not present
         flinkService.clear();
@@ -153,7 +153,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob2.getStatus().getJobStatus().getState());
         Assertions.assertTrue(
                 sessionJob2.getStatus().getError().contains(JobStatusObserver.JOB_NOT_FOUND_ERR));
         Assertions.assertEquals(
@@ -173,14 +173,14 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         flinkService.setListJobConsumer(
                 (configuration) ->
                         Assertions.assertEquals(8088, configuration.getInteger(RestOptions.PORT)));
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
     }
 
     @Test
@@ -192,11 +192,11 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
 
         var savepointInfo = sessionJob.getStatus().getJobStatus().getSavepointInfo();
         Assertions.assertFalse(
@@ -238,10 +238,10 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING, sessionJob.getStatus().getJobStatus().getState());
 
         observer.observe(sessionJob, readyContext);
-        assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
 
         var checkpointInfo = sessionJob.getStatus().getJobStatus().getCheckpointInfo();
         assertFalse(SnapshotUtils.checkpointInProgress(sessionJob.getStatus().getJobStatus()));
@@ -280,7 +280,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     @ValueSource(booleans = {true, false})
     public void testObserveAlreadySubmitted(boolean submitted) {
         var sessionJob = TestUtils.buildSessionJob();
-        sessionJob.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        sessionJob.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
         sessionJob.getMetadata().setGeneration(10L);
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
@@ -305,7 +305,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
                 submitted ? ReconciliationState.DEPLOYED : ReconciliationState.UPGRADING,
                 sessionJob.getStatus().getReconciliationStatus().getState());
         Assertions.assertEquals(
-                submitted ? JobStatus.RUNNING.name() : JobStatus.RECONCILING.name(),
+                submitted ? JobStatus.RUNNING : JobStatus.RECONCILING,
                 sessionJob.getStatus().getJobStatus().getState());
     }
 

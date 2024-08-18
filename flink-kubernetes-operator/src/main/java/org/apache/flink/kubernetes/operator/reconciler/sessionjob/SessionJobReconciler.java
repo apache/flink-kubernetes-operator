@@ -94,7 +94,7 @@ public class SessionJobReconciler
                         savepoint.orElse(null));
 
         var status = ctx.getResource().getStatus();
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
     }
 
     @Override

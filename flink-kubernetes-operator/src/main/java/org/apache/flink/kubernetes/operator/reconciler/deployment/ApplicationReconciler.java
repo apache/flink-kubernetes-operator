@@ -124,7 +124,7 @@ public class ApplicationReconciler
 
     private void deleteJmThatNeverStarted(
             FlinkService flinkService, FlinkDeployment deployment, Configuration deployConfig) {
-        deployment.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
+        deployment.getStatus().getJobStatus().setState(JobStatus.FAILED);
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), deployConfig, false);
         LOG.info("Deleted application cluster that never started.");
@@ -181,7 +181,7 @@ public class ApplicationReconciler
                 MSG_SUBMIT,
                 ctx.getKubernetesClient());
         flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
         IngressUtils.updateIngressRules(

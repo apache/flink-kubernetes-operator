@@ -262,7 +262,7 @@ public class NativeFlinkService extends AbstractFlinkService {
 
         var status = resource.getStatus();
         if (ReconciliationUtils.isJobInTerminalState(status)
-                || JobStatus.RECONCILING.name().equals(status.getJobStatus().getState())) {
+                || JobStatus.RECONCILING.equals(status.getJobStatus().getState())) {
             LOG.info("Job in terminal or reconciling state cannot be scaled in-place");
             return false;
         }
