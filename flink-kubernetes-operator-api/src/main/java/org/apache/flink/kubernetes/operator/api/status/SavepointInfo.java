@@ -88,6 +88,8 @@ public class SavepointInfo implements SnapshotInfo {
      */
     public void updateLastSavepoint(Savepoint savepoint) {
         if (savepoint == null) {
+            // In terminal states we have to handle the case when there is actually no savepoint to
+            // not restore from an old one
             lastSavepoint = null;
         } else if (lastSavepoint == null
                 || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {

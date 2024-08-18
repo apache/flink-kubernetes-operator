@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -288,7 +289,7 @@ public class NativeFlinkServiceTest {
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
         spec.setFlinkConfiguration(appConfig.toMap());
 
-        flinkDep.getStatus().getJobStatus().setState("RUNNING");
+        flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
 
         current.set(
                 Map.of(
@@ -357,16 +358,22 @@ public class NativeFlinkServiceTest {
 
         // Make sure we only try to rescale non-terminal
         testScaleConditionDep(
-                flinkDep, service, d -> d.getStatus().getJobStatus().setState("FAILED"), false);
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState(JobStatus.FAILED),
+                false);
 
         testScaleConditionDep(
                 flinkDep,
                 service,
-                d -> d.getStatus().getJobStatus().setState("RECONCILING"),
+                d -> d.getStatus().getJobStatus().setState(JobStatus.RECONCILING),
                 false);
 
         testScaleConditionDep(
-                flinkDep, service, d -> d.getStatus().getJobStatus().setState("RUNNING"), true);
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState(JobStatus.RUNNING),
+                true);
 
         testScaleConditionDep(flinkDep, service, d -> d.getSpec().setJob(null), false);
 

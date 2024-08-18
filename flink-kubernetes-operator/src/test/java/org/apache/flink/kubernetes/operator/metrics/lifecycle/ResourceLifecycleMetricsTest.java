@@ -77,7 +77,7 @@ public class ResourceLifecycleMetricsTest {
         application.getStatus().setError("errr");
         assertEquals(STABLE, application.getStatus().getLifecycleState());
 
-        application.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
+        application.getStatus().getJobStatus().setState(JobStatus.FAILED);
         assertEquals(FAILED, application.getStatus().getLifecycleState());
 
         application.getStatus().setError(null);
@@ -88,14 +88,14 @@ public class ResourceLifecycleMetricsTest {
                 .setState(ReconciliationState.ROLLING_BACK);
         assertEquals(ROLLING_BACK, application.getStatus().getLifecycleState());
 
-        application.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        application.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
         application.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLED_BACK);
         assertEquals(ROLLED_BACK, application.getStatus().getLifecycleState());
 
-        application.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
+        application.getStatus().getJobStatus().setState(JobStatus.FAILED);
         assertEquals(FAILED, application.getStatus().getLifecycleState());
 
-        application.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        application.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         application.getSpec().getJob().setState(JobState.SUSPENDED);
         ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
         assertEquals(SUSPENDED, application.getStatus().getLifecycleState());

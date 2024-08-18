@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.api.common.JobStatus.FAILED;
 import static org.apache.flink.kubernetes.operator.TestUtils.reconcileSpec;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
@@ -243,7 +244,7 @@ public class FlinkStateSnapshotUtilsTest {
         assertFalse(result);
         assertThat(eventCollector.events).isEmpty();
 
-        deployment.getStatus().getJobStatus().setState("FAILED");
+        deployment.getStatus().getJobStatus().setState(FAILED);
         result =
                 FlinkStateSnapshotUtils.abandonSnapshotIfJobNotRunning(
                         client, snapshot, deployment, eventRecorder);
@@ -262,7 +263,7 @@ public class FlinkStateSnapshotUtilsTest {
     @Test
     public void testAbandonSnapshotIfJobNotRunningJobFailed() {
         var deployment = initDeployment();
-        deployment.getStatus().getJobStatus().setState("FAILED");
+        deployment.getStatus().getJobStatus().setState(FAILED);
         var snapshot = initSavepoint(IN_PROGRESS, null);
         var eventCollector = new FlinkStateSnapshotEventCollector();
         var eventRecorder = new EventRecorder((x, y) -> {}, eventCollector);
@@ -341,7 +342,7 @@ public class FlinkStateSnapshotUtilsTest {
 
     private static FlinkDeployment initDeployment() {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_19);
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconcileSpec(deployment);
         return deployment;

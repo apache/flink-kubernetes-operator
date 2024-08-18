@@ -420,8 +420,7 @@ public abstract class AbstractJobReconciler<
     @Override
     public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception {
         var status = ctx.getResource().getStatus();
-        var jobStatus =
-                org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
+        var jobStatus = status.getJobStatus().getState();
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
                 && ctx.getObserveConfig().getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");

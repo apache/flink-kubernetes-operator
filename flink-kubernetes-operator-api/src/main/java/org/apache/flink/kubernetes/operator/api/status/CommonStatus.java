@@ -81,10 +81,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             return ResourceLifecycleState.SUSPENDED;
         }
 
-        var jobState = getJobStatus().getState();
-        if (jobState != null
-                && org.apache.flink.api.common.JobStatus.valueOf(jobState)
-                        .equals(org.apache.flink.api.common.JobStatus.FAILED)) {
+        if (getJobStatus().getState() == org.apache.flink.api.common.JobStatus.FAILED) {
             return ResourceLifecycleState.FAILED;
         }
 

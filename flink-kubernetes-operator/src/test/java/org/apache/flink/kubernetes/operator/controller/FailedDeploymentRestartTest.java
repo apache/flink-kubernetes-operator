@@ -42,6 +42,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Optional;
 
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -85,7 +86,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
 
         // Make deployment unhealthy
         flinkService.markApplicationJobFailedWithError(
@@ -101,7 +102,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
 
         // We started without savepoint
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
@@ -129,7 +130,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
         assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
 
         // trigger checkpoint
@@ -157,7 +158,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
 
         // check savepoint_path
         if (upgradeMode != UpgradeMode.STATELESS) {

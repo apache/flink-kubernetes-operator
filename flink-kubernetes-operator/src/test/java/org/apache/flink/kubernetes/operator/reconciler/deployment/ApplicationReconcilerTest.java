@@ -109,6 +109,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static org.apache.flink.api.common.JobStatus.FINISHED;
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobSpec;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
@@ -321,7 +324,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .setLastStableSpec(
                         deployment.getStatus().getReconciliationStatus().getLastReconciledSpec());
         flinkService.setHaDataAvailable(false);
-        getJobStatus(deployment).setState("RECONCILING");
+        getJobStatus(deployment).setState(RECONCILING);
 
         try {
             deployment
@@ -343,7 +346,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(200L);
         flinkService.setHaDataAvailable(false);
-        getJobStatus(deployment).setState("FINISHED");
+        getJobStatus(deployment).setState(FINISHED);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler.reconcile(deployment, context);
         reconciler.reconcile(deployment, context);
@@ -693,7 +696,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                         .jobId(runningJobs.get(0).f1.getJobId().toHexString())
                                         .jobName(runningJobs.get(0).f1.getJobName())
                                         .updateTime(Long.toString(System.currentTimeMillis()))
-                                        .state("RUNNING")
+                                        .state(RUNNING)
                                         .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }
@@ -711,7 +714,9 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         getJobSpec(spDeployment).setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
         reconciler.reconcile(spDeployment, context);
         assertEquals("savepoint_trigger_0", getSavepointInfo(spDeployment).getTriggerId());
-        assertEquals(JobState.RUNNING.name(), getJobStatus(spDeployment).getState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                getJobStatus(spDeployment).getState());
 
         // Force upgrade when savepoint is in progress.
         spDeployment
@@ -724,7 +729,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(spDeployment, context);
         assertEquals("savepoint_trigger_0", getSavepointInfo(spDeployment).getTriggerId());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                org.apache.flink.api.common.JobStatus.FINISHED,
                 getJobStatus(spDeployment).getState());
     }
 
@@ -741,7 +746,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         FlinkDeploymentSpec spec = flinkApp.getSpec();
         Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
 
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
@@ -750,7 +755,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
 
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
@@ -775,7 +780,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
 
-        getJobStatus(deployment).setState(JobState.RUNNING.name());
+        getJobStatus(deployment).setState(RUNNING);
         getJobStatus(deployment)
                 .setJobId(flinkService.listJobs().get(0).f1.getJobId().toHexString());
 
@@ -951,7 +956,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals("RUNNING", deployment.getStatus().getJobStatus().getState());
+        assertEquals(RUNNING, deployment.getStatus().getJobStatus().getState());
 
         // Test overrides are applied correctly
         var v1 = new JobVertexID();
@@ -998,7 +1003,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         FlinkDeploymentSpec spec = flinkApp.getSpec();
         Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
 
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
@@ -1022,12 +1027,20 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
     @Test
     public void testTerminalJmTtlOnFinished() throws Throwable {
-        testTerminalJmTtl(dep -> dep.getStatus().getJobStatus().setState("FINISHED"));
+        testTerminalJmTtl(
+                dep ->
+                        dep.getStatus()
+                                .getJobStatus()
+                                .setState(org.apache.flink.api.common.JobStatus.FINISHED));
     }
 
     @Test
     public void testTerminalJmTtlOnFailed() throws Throwable {
-        testTerminalJmTtl(dep -> dep.getStatus().getJobStatus().setState("FAILED"));
+        testTerminalJmTtl(
+                dep ->
+                        dep.getStatus()
+                                .getJobStatus()
+                                .setState(org.apache.flink.api.common.JobStatus.FAILED));
     }
 
     public void testTerminalJmTtl(ThrowingConsumer<FlinkDeployment> deploymentSetup)
@@ -1076,7 +1089,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         status.getReconciliationStatus().serializeAndSetLastReconciledSpec(spec, flinkApp);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
 
         var deleted = new AtomicBoolean(false);
 
@@ -1112,9 +1125,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         flinkService.clear();
         FlinkDeploymentStatus deploymentStatus = deployment.getStatus();
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        deploymentStatus
-                .getJobStatus()
-                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        deploymentStatus.getJobStatus().setState(RECONCILING);
         reconciler.reconcile(deployment, context);
         Assertions.assertEquals(
                 MSG_RECOVERY, flinkResourceEventCollector.events.remove().getMessage());
@@ -1298,7 +1309,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
         assertEquals(1, flinkService.listJobs().size());
-        assertEquals("RECONCILING", deployment.getStatus().getJobStatus().getState());
+        assertEquals(RECONCILING, deployment.getStatus().getJobStatus().getState());
     }
 
     @ParameterizedTest

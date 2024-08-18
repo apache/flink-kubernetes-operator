@@ -22,7 +22,6 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
@@ -73,7 +72,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
         CommonStatus<?> status = getResource().getStatus();
         String jobId = status.getJobStatus().getJobId();
 
-        JobStatus jobStatus = generateJobStatusEnum(status);
+        JobStatus jobStatus = status.getJobStatus().getState();
 
         return new KubernetesJobAutoScalerContext(
                 jobId == null ? null : JobID.fromHexString(jobId),
@@ -82,19 +81,6 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
                 getResourceMetricGroup(),
                 () -> getFlinkService().getClusterClient(conf),
                 this);
-    }
-
-    @Nullable
-    private JobStatus generateJobStatusEnum(CommonStatus<?> status) {
-        if (status.getLifecycleState() != ResourceLifecycleState.STABLE) {
-            return null;
-        }
-
-        String state = status.getJobStatus().getState();
-        if (state == null) {
-            return null;
-        }
-        return JobStatus.valueOf(state);
     }
 
     /**

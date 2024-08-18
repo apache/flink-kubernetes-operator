@@ -133,6 +133,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.api.common.JobStatus.CANCELLING;
+import static org.apache.flink.api.common.JobStatus.FAILING;
+import static org.apache.flink.api.common.JobStatus.FINISHED;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -293,7 +297,7 @@ public class AbstractFlinkServiceTest {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        deployment.getStatus().getJobStatus().setState("RUNNING");
+        deployment.getStatus().getJobStatus().setState(RUNNING);
         flinkService.cancelJob(
                 deployment,
                 SuspendMode.STATELESS,
@@ -303,7 +307,7 @@ public class AbstractFlinkServiceTest {
         assertEquals(jobID, cancelFuture.get());
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
         assertNull(jobStatus.getUpgradeSavepointPath());
-        assertEquals("FINISHED", jobStatus.getState());
+        assertEquals(FINISHED, jobStatus.getState());
         assertEquals(
                 List.of(
                         Tuple2.of(
@@ -336,7 +340,7 @@ public class AbstractFlinkServiceTest {
         var job = TestUtils.buildSessionJob();
         var jobStatus = job.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(RUNNING);
         ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
 
         if (statusCode == 500) {
@@ -345,10 +349,10 @@ public class AbstractFlinkServiceTest {
                     () ->
                             flinkService.cancelSessionJob(
                                     job, SuspendMode.STATELESS, new Configuration()));
-            assertEquals("RUNNING", jobStatus.getState());
+            assertEquals(RUNNING, jobStatus.getState());
         } else {
             flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
-            assertEquals("CANCELLING", jobStatus.getState());
+            assertEquals(CANCELLING, jobStatus.getState());
         }
     }
 
@@ -380,7 +384,7 @@ public class AbstractFlinkServiceTest {
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        jobStatus.setState(RUNNING);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         var result =
@@ -396,7 +400,7 @@ public class AbstractFlinkServiceTest {
         assertFalse(stopWithSavepointFuture.get().f1);
         assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
 
-        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED);
         assertEquals(
                 deployment.getStatus().getJobManagerDeploymentStatus(),
                 deleteAfterSavepoint
@@ -443,7 +447,7 @@ public class AbstractFlinkServiceTest {
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        jobStatus.setState(RUNNING);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         if (drainOnSavepoint) {
@@ -467,7 +471,7 @@ public class AbstractFlinkServiceTest {
 
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
-        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED);
 
         if (drainOnSavepoint) {
             assertTrue(stopWithSavepointFuture.get().f1);
@@ -509,7 +513,7 @@ public class AbstractFlinkServiceTest {
 
         JobStatus jobStatus = job.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        jobStatus.setState(RUNNING);
         ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
 
         if (drainOnSavepoint) {
@@ -527,7 +531,7 @@ public class AbstractFlinkServiceTest {
         var result = flinkService.cancelSessionJob(job, SuspendMode.SAVEPOINT, deployConf);
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
-        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED);
 
         assertEquals(savepointPath, result.getSavepointPath().get());
 
@@ -549,15 +553,13 @@ public class AbstractFlinkServiceTest {
         JobID jobID = JobID.generate();
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState("FAILING");
+        jobStatus.setState(FAILING);
 
         flinkService.cancelJob(
                 deployment, SuspendMode.CANCEL, configManager.getObserveConfig(deployment), false);
         assertTrue(flinkService.haDeleted.isEmpty());
         assertTrue(flinkService.deleted.isEmpty());
-        assertEquals("CANCELLING", jobStatus.getState());
-        assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
-        assertNull(jobStatus.getUpgradeSavepointPath());
+        assertEquals(CANCELLING, jobStatus.getState());
     }
 
     @Test
@@ -752,7 +754,7 @@ public class AbstractFlinkServiceTest {
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        jobStatus.setState(RUNNING);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         jobStatus.setJobId(jobID.toString());

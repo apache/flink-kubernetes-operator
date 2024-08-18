@@ -402,7 +402,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | jobName | java.lang.String | Name of the job. |
 | jobId | java.lang.String | Flink JobId of the Job. |
-| state | java.lang.String | Last observed state of the job. |
+| state | org.apache.flink.api.common.JobStatus | Last observed state of the job. |
 | startTime | java.lang.String | Start time of the job. |
 | updateTime | java.lang.String | Update time of the job. |
 | upgradeSavepointPath | java.lang.String |  |

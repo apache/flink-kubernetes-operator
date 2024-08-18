@@ -176,7 +176,7 @@ public class FlinkDeploymentController
         var flinkApp = ctx.getResource();
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
         ReconciliationUtils.updateForReconciliationError(ctx, dfe);
         eventRecorder.triggerEvent(
                 flinkApp,

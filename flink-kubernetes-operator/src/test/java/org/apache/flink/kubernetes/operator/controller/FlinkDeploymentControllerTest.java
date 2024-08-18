@@ -128,7 +128,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(7, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
@@ -147,7 +147,7 @@ public class FlinkDeploymentControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
 
         // Validate last stable spec is still the old one
         assertEquals(
@@ -350,7 +350,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
 
         // Validate status status
@@ -604,7 +604,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(
                 JobState.RUNNING,
@@ -693,8 +693,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         // jobStatus has not been set at this time
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(), jobStatus.getState());
+        assertEquals(org.apache.flink.api.common.JobStatus.RECONCILING, jobStatus.getState());
 
         // Switches operator mode to SESSION
         appCluster.getSpec().setJob(null);
@@ -716,7 +715,7 @@ public class FlinkDeploymentControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
     }
 
     @Test
@@ -798,11 +797,11 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
         if (appCluster.getSpec().getJob() != null) {
             assertEquals(
-                    org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                    org.apache.flink.api.common.JobStatus.RUNNING,
                     appCluster.getStatus().getJobStatus().getState());
         } else {
             assertEquals(
-                    org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                    org.apache.flink.api.common.JobStatus.FINISHED,
                     appCluster.getStatus().getJobStatus().getState());
         }
         assertEquals(
@@ -866,7 +865,7 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
 
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -894,7 +893,7 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
 
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -1108,7 +1107,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
     }
 
@@ -1154,7 +1153,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(4, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
@@ -1177,7 +1176,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(5, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
@@ -1191,7 +1190,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
@@ -1206,7 +1205,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
@@ -1220,7 +1219,7 @@ public class FlinkDeploymentControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
         assertEquals(
                 appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
