@@ -110,6 +110,7 @@ under the License.
         <surefire.module.config/>
 
         <derby.version>10.15.2.0</derby.version>
+        <jetbrains.annotations.version>24.1.0</jetbrains.annotations.version>
     </properties>
 
     <dependencyManagement>
