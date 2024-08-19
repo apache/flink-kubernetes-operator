@@ -317,6 +317,11 @@ public class SnapshotObserver<
                 continue;
             }
 
+            // We should keep the last snapshot, even if not complete.
+            if (result.size() == snapshotList.size() - 1) {
+                break;
+            }
+
             var ts = EXTRACT_SNAPSHOT_TIME.apply(snapshot).toEpochMilli();
             if (snapshotList.size() - result.size() > maxCount || ts < maxTms) {
                 result.add(snapshot);
@@ -430,12 +435,14 @@ public class SnapshotObserver<
             SnapshotType snapshotType) {
         switch (snapshotType) {
             case CHECKPOINT:
-                return observeConfig.get(MAX_RETAINED_CHECKPOINTS);
+                return Math.max(1, observeConfig.get(MAX_RETAINED_CHECKPOINTS));
             case SAVEPOINT:
-                return ConfigOptionUtils.getValueWithThreshold(
-                        observeConfig,
-                        OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                        operatorConfig.getSavepointHistoryCountThreshold());
+                return Math.max(
+                        1,
+                        ConfigOptionUtils.getValueWithThreshold(
+                                observeConfig,
+                                OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                                operatorConfig.getSavepointHistoryCountThreshold()));
             default:
                 throw new IllegalArgumentException(
                         String.format("Unknown snapshot type %s", snapshotType.name()));

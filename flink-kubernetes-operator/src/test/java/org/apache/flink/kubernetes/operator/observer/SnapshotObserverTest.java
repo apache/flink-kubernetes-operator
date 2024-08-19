@@ -50,6 +50,7 @@ import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_C
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.MANUAL;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.UPGRADE;
@@ -149,6 +150,32 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         testDataSavepoints.get(2),
                         testDataSavepoints.get(3),
                         testDataSavepoints.get(4));
+    }
+
+    @Test
+    public void testAgeBasedCleanupSavepointKeepOne() {
+        var conf =
+                new Configuration()
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000)
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
+
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var testDataSavepoints =
+                List.of(
+                        createSnapshot(SAVEPOINT, 0, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, IN_PROGRESS));
+
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataSavepoints, conf, operatorConfig, SAVEPOINT);
+        assertThat(removedSavepoints)
+                .containsExactlyInAnyOrder(
+                        testDataSavepoints.get(0),
+                        testDataSavepoints.get(1),
+                        testDataSavepoints.get(2));
     }
 
     @Test
