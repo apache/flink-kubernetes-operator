@@ -290,6 +290,7 @@ public class SnapshotObserver<
             SnapshotType snapshotType) {
         var snapshotList =
                 snapshots.stream()
+                        .filter(s -> !s.isMarkedForDeletion())
                         .filter(
                                 s ->
                                         CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
