@@ -96,7 +96,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -505,7 +504,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         final BiConsumer<JobSpec, Long> setTriggerNonce;
         final Function<JobSpec, Long> getTriggerNonce;
         final Consumer<FlinkDeployment> updateLastSnapshot;
-        final BiConsumer<FlinkDeployment, Long> setLastSnapshotTime;
         final ConfigOption<String> triggerSnapshotExpression;
         final String triggerPrefix;
 
@@ -523,16 +521,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                             savepointInfo,
                                             getJobSpec(flinkDeployment).getSavepointTriggerNonce());
                             savepointInfo.updateLastSavepoint(savepoint);
-                        };
-                setLastSnapshotTime =
-                        (flinkDeployment, timestamp) -> {
-                            Savepoint lastSavepoint =
-                                    Savepoint.of("", timestamp, SnapshotTriggerType.PERIODIC);
-                            flinkDeployment
-                                    .getStatus()
-                                    .getJobStatus()
-                                    .getSavepointInfo()
-                                    .updateLastSavepoint(lastSavepoint);
                         };
                 triggerSnapshotExpression =
                         KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL;
@@ -552,16 +540,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                             getJobSpec(flinkDeployment)
                                                     .getCheckpointTriggerNonce());
                             checkpointInfo.updateLastCheckpoint(checkpoint);
-                        };
-                setLastSnapshotTime =
-                        (flinkDeployment, timestamp) -> {
-                            Checkpoint lastCheckpoint =
-                                    Checkpoint.of(timestamp, SnapshotTriggerType.PERIODIC);
-                            flinkDeployment
-                                    .getStatus()
-                                    .getJobStatus()
-                                    .getCheckpointInfo()
-                                    .updateLastCheckpoint(lastCheckpoint);
                         };
                 triggerSnapshotExpression =
                         KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL;
@@ -654,28 +632,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertTrue(isSnapshotInProgress.test(getJobStatus(snDeployment)));
         assertEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
         snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "0");
-
-        // trigger by cron expression
-        updateLastSnapshot.accept(snDeployment); // Ensures no snapshot is considered to be running
-        assertFalse(isSnapshotInProgress.test(getJobStatus(snDeployment)));
-        assertNotEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
-
-        Calendar calendar = Calendar.getInstance();
-        calendar.set(2022, Calendar.JUNE, 5, 11, 0);
-        setLastSnapshotTime.accept(
-                snDeployment, calendar.getTimeInMillis()); // Required for the cron to trigger
-
-        snDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(triggerSnapshotExpression.key(), "0 0 12 5 6 ? 2022");
-        reconciler.reconcile(snDeployment, context);
-        assertTrue(isSnapshotInProgress.test(getJobStatus(snDeployment)));
-        assertEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
-        snDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(triggerSnapshotExpression.key(), triggerSnapshotExpression.defaultValue());
     }
 
     @NotNull

@@ -301,7 +301,10 @@ public class SnapshotObserver<
 
         var lastCompleteSnapshot =
                 snapshotList.stream()
-                        .filter(s -> COMPLETED.equals(s.getStatus().getState()))
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
                         .max(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
                         .orElse(null);
 

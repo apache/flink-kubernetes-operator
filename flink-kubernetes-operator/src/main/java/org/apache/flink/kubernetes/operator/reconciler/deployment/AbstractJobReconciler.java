@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
@@ -37,6 +38,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotTriggerTimestampStore;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -53,6 +55,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
@@ -73,6 +76,11 @@ public abstract class AbstractJobReconciler<
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
 
     public static final String LAST_STATE_DUMMY_SP_PATH = "KUBERNETES_OPERATOR_LAST_STATE";
+
+    private final SnapshotTriggerTimestampStore checkpointTriggerTimestamps =
+            new SnapshotTriggerTimestampStore(CHECKPOINT);
+    private final SnapshotTriggerTimestampStore savepointTriggerTimestamps =
+            new SnapshotTriggerTimestampStore(SAVEPOINT);
 
     public AbstractJobReconciler(
             EventRecorder eventRecorder,
@@ -374,12 +382,26 @@ public abstract class AbstractJobReconciler<
         var resource = ctx.getResource();
         var conf = ctx.getObserveConfig();
 
-        Optional<SnapshotTriggerType> triggerOpt =
-                SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType);
+        var timestampStore =
+                snapshotType == SAVEPOINT
+                        ? savepointTriggerTimestamps
+                        : checkpointTriggerTimestamps;
+        Set<FlinkStateSnapshot> snapshots = Set.of();
+        if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(ctx.getOperatorConfig(), conf)) {
+            snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
+        }
+
+        var lastTrigger = timestampStore.getLastPeriodicTriggerInstant(resource, snapshots);
+        var triggerOpt =
+                SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType, lastTrigger);
         if (triggerOpt.isEmpty()) {
             return false;
         }
         var triggerType = triggerOpt.get();
+
+        if (SnapshotTriggerType.PERIODIC.equals(triggerType)) {
+            timestampStore.updateLastPeriodicTriggerTimestamp(resource, Instant.now());
+        }
 
         var createSnapshotResource =
                 FlinkStateSnapshotUtils.isSnapshotResourceEnabled(ctx.getOperatorConfig(), conf);

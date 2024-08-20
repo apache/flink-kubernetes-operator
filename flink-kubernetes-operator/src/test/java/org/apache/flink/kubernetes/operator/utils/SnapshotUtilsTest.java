@@ -78,7 +78,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
 
         deployment.getSpec().getFlinkConfiguration().put(PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
         reconcileSpec(deployment);
@@ -86,21 +89,30 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
 
         setTriggerNonce(deployment, snapshotType, 123L);
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
 
-        setupCronTrigger(snapshotType, deployment);
+        var instant = setupCronTrigger(snapshotType, deployment);
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        instant));
         resetTrigger(deployment, snapshotType);
     }
 
@@ -112,7 +124,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
 
         deployment
                 .getSpec()
@@ -123,7 +138,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.of(SnapshotTriggerType.PERIODIC),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
         deployment.getSpec().getFlinkConfiguration().put(periodicSnapshotIntervalOption.key(), "0");
         reconcileSpec(deployment);
@@ -132,15 +150,21 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.of(SnapshotTriggerType.MANUAL),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
         reconcileSpec(deployment);
 
-        setupCronTrigger(snapshotType, deployment);
+        var instant = setupCronTrigger(snapshotType, deployment);
         assertEquals(
                 Optional.of(SnapshotTriggerType.PERIODIC),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        instant));
     }
 
     @Test
