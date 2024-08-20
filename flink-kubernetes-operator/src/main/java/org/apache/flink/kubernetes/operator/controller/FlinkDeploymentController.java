@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -31,6 +32,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -49,6 +51,8 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -197,9 +201,19 @@ public class FlinkDeploymentController
     @Override
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkDeployment> context) {
-        return EventSourceInitializer.nameEventSources(
-                EventSourceUtils.getSessionJobInformerEventSource(context),
-                EventSourceUtils.getDeploymentInformerEventSource(context));
+        List<EventSource> eventSources = new ArrayList<>();
+        eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
+        eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
+
+        if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
+            eventSources.add(
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
+        } else {
+            LOG.warn(
+                    "Could not initialize informer for snapshots as the CRD has not been installed!");
+        }
+
+        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
     }
 
     @Override

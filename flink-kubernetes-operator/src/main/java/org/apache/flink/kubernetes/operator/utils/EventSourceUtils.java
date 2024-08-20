@@ -18,10 +18,12 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -39,8 +41,10 @@ import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Utility class to locate secondary resources. */
 public class EventSourceUtils {
@@ -48,6 +52,39 @@ public class EventSourceUtils {
     private static final String FLINK_DEPLOYMENT_IDX = FlinkDeploymentController.class.getName();
     private static final String FLINK_SESSIONJOB_IDX = FlinkSessionJobController.class.getName();
     private static final String FLINK_STATE_SNAPSHOT_IDX = FlinkStateSnapshot.class.getName();
+
+    public static <T extends AbstractFlinkResource<?, ?>>
+            InformerEventSource<FlinkStateSnapshot, T>
+                    getStateSnapshotForFlinkResourceInformerEventSource(
+                            EventSourceContext<T> context) {
+        var labelFilters =
+                Stream.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE)
+                        .map(Enum::name)
+                        .collect(Collectors.joining(","));
+        var labelSelector =
+                String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TYPE, labelFilters);
+        var configuration =
+                InformerConfiguration.from(FlinkStateSnapshot.class, context)
+                        .withLabelSelector(labelSelector)
+                        .withSecondaryToPrimaryMapper(
+                                snapshot -> {
+                                    var jobRef = snapshot.getSpec().getJobReference();
+                                    if (jobRef == null || jobRef.getName() == null) {
+                                        return Collections.emptySet();
+                                    }
+                                    var namespace =
+                                            Optional.ofNullable(jobRef.getNamespace())
+                                                    .orElse(snapshot.getMetadata().getNamespace());
+                                    return Set.of(
+                                            new ResourceID(
+                                                    snapshot.getSpec().getJobReference().getName(),
+                                                    namespace));
+                                })
+                        .withNamespacesInheritedFromController(context)
+                        .followNamespaceChanges(true)
+                        .build();
+        return new InformerEventSource<>(configuration, context);
+    }
 
     public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
             EventSourceContext<FlinkDeployment> context) {

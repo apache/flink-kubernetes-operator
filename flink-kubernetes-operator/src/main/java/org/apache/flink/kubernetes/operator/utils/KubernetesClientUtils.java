@@ -71,6 +71,7 @@ public class KubernetesClientUtils {
 
     /**
      * Checks if the class for a Custom Resource is installed in the current Kubernetes cluster.
+     * TODO: remove method when FlinkStateSnapshot CRD is made mandatory
      *
      * @param clazz class of Custom Resource
      * @return true if the CRD present in the Kubernetes cluster
@@ -80,7 +81,7 @@ public class KubernetesClientUtils {
             client.resources(clazz).list().getItems();
             return true;
         } catch (Throwable t) {
-            LOG.warn("Failed to find CRD {}", clazz.getSimpleName());
+            LOG.debug("Could not find CRD {}", clazz.getSimpleName());
             return false;
         }
     }

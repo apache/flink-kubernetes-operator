@@ -115,6 +115,7 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD);
+
         Boolean exceptionStackTraceEnabled =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_ENABLED);
