@@ -34,7 +34,8 @@ class MySQLExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCa
     private static final String DATABASE_NAME = "flink_autoscaler";
     private static final String USER_NAME = "root";
     private static final String PASSWORD = "123456";
-    private static final List<String> TABLES = List.of("t_flink_autoscaler_state_store");
+    private static final List<String> TABLES =
+            List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
 
     private final MySQLContainer<?> container;
 
