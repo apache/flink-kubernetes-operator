@@ -57,6 +57,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
@@ -77,10 +78,8 @@ public abstract class AbstractJobReconciler<
 
     public static final String LAST_STATE_DUMMY_SP_PATH = "KUBERNETES_OPERATOR_LAST_STATE";
 
-    private final SnapshotTriggerTimestampStore checkpointTriggerTimestamps =
-            new SnapshotTriggerTimestampStore(CHECKPOINT);
-    private final SnapshotTriggerTimestampStore savepointTriggerTimestamps =
-            new SnapshotTriggerTimestampStore(SAVEPOINT);
+    private final SnapshotTriggerTimestampStore snapshotTriggerTimestampStore =
+            new SnapshotTriggerTimestampStore();
 
     public AbstractJobReconciler(
             EventRecorder eventRecorder,
@@ -369,6 +368,25 @@ public abstract class AbstractJobReconciler<
     }
 
     /**
+     * Returns a supplier of all relevant FlinkStateSnapshot resources for a given Flink resource.
+     * If FlinkStateSnapshot resources are disabled, the supplier returns an empty set.
+     *
+     * @param ctx resource context
+     * @return supplier for FlinkStateSnapshot resources
+     */
+    private Supplier<Set<FlinkStateSnapshot>> getFlinkStateSnapshotsSupplier(
+            FlinkResourceContext<CR> ctx) {
+        return () -> {
+            if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
+                    ctx.getOperatorConfig(), ctx.getObserveConfig())) {
+                return ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
+            } else {
+                return Set.of();
+            }
+        };
+    }
+
+    /**
      * Triggers specified snapshot type if needed. When using FlinkStateSnapshot resources this can
      * only be periodic snapshot. If using the legacy snapshot system, this can be manual as well.
      *
@@ -382,16 +400,10 @@ public abstract class AbstractJobReconciler<
         var resource = ctx.getResource();
         var conf = ctx.getObserveConfig();
 
-        var timestampStore =
-                snapshotType == SAVEPOINT
-                        ? savepointTriggerTimestamps
-                        : checkpointTriggerTimestamps;
-        Set<FlinkStateSnapshot> snapshots = Set.of();
-        if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(ctx.getOperatorConfig(), conf)) {
-            snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
-        }
+        var lastTrigger =
+                snapshotTriggerTimestampStore.getLastPeriodicTriggerInstant(
+                        resource, snapshotType, getFlinkStateSnapshotsSupplier(ctx));
 
-        var lastTrigger = timestampStore.getLastPeriodicTriggerInstant(resource, snapshots);
         var triggerOpt =
                 SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType, lastTrigger);
         if (triggerOpt.isEmpty()) {
@@ -400,7 +412,8 @@ public abstract class AbstractJobReconciler<
         var triggerType = triggerOpt.get();
 
         if (SnapshotTriggerType.PERIODIC.equals(triggerType)) {
-            timestampStore.updateLastPeriodicTriggerTimestamp(resource, Instant.now());
+            snapshotTriggerTimestampStore.updateLastPeriodicTriggerTimestamp(
+                    resource, snapshotType, Instant.now());
         }
 
         var createSnapshotResource =

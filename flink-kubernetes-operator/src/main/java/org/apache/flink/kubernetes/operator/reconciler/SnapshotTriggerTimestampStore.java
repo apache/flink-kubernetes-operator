@@ -26,13 +26,13 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import lombok.RequiredArgsConstructor;
 
-import javax.annotation.Nullable;
-
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
@@ -41,8 +41,10 @@ import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEP
 /** Class used to store latest timestamps of periodic checkpoint/savepoint. */
 @RequiredArgsConstructor
 public class SnapshotTriggerTimestampStore {
-    private final SnapshotType snapshotType;
-    private final ConcurrentHashMap<String, Instant> lastTriggered = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Instant> checkpointsLastTriggeredCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Instant> savepointsLastTriggeredCache =
+            new ConcurrentHashMap<>();
 
     /**
      * Returns the time a periodic snapshot was last triggered for this resource. This is stored in
@@ -51,16 +53,20 @@ public class SnapshotTriggerTimestampStore {
      * and the latest triggered legacy snapshot.
      *
      * @param resource Flink resource
-     * @param snapshots related snapshot resources
+     * @param snapshotsSupplier supplies related snapshot resources
      * @return instant of last trigger
      */
     public Instant getLastPeriodicTriggerInstant(
-            AbstractFlinkResource<?, ?> resource, @Nullable Set<FlinkStateSnapshot> snapshots) {
-        if (lastTriggered.containsKey(resource.getMetadata().getUid())) {
-            return lastTriggered.get(resource.getMetadata().getUid());
+            AbstractFlinkResource<?, ?> resource,
+            SnapshotType snapshotType,
+            Supplier<Set<FlinkStateSnapshot>> snapshotsSupplier) {
+        var cache = getCacheForSnapshotType(snapshotType);
+        if (cache.containsKey(resource.getMetadata().getUid())) {
+            return cache.get(resource.getMetadata().getUid());
         }
 
-        return Optional.ofNullable(snapshots).orElse(Set.of()).stream()
+        var snapshots = Optional.ofNullable(snapshotsSupplier.get()).orElse(Set.of());
+        return snapshots.stream()
                 .filter(s -> s.getStatus() != null && COMPLETED.equals(s.getStatus().getState()))
                 .filter(s -> (snapshotType == SAVEPOINT) == s.getSpec().isSavepoint())
                 .filter(
@@ -74,7 +80,7 @@ public class SnapshotTriggerTimestampStore {
                 .max(Comparator.naturalOrder())
                 .orElseGet(
                         () -> {
-                            var legacyTs = getLegacyTimestamp(resource);
+                            var legacyTs = getLegacyTimestamp(resource, snapshotType);
                             var creationTs =
                                     Instant.parse(resource.getMetadata().getCreationTimestamp());
 
@@ -92,11 +98,24 @@ public class SnapshotTriggerTimestampStore {
      * @param resource Kubernetes resource
      * @param instant new timestamp
      */
-    public void updateLastPeriodicTriggerTimestamp(HasMetadata resource, Instant instant) {
-        lastTriggered.put(resource.getMetadata().getUid(), instant);
+    public void updateLastPeriodicTriggerTimestamp(
+            HasMetadata resource, SnapshotType snapshotType, Instant instant) {
+        getCacheForSnapshotType(snapshotType).put(resource.getMetadata().getUid(), instant);
     }
 
-    private Instant getLegacyTimestamp(AbstractFlinkResource<?, ?> resource) {
+    private Map<String, Instant> getCacheForSnapshotType(SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                return savepointsLastTriggeredCache;
+            case CHECKPOINT:
+                return checkpointsLastTriggeredCache;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
+    }
+
+    private Instant getLegacyTimestamp(
+            AbstractFlinkResource<?, ?> resource, SnapshotType snapshotType) {
         SnapshotInfo snapshotInfo;
         switch (snapshotType) {
             case SAVEPOINT:
