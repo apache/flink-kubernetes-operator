@@ -105,7 +105,7 @@ public class NativeFlinkServiceTest {
         configManager = new FlinkConfigManager(configuration);
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
-        configuration.set(FLINK_VERSION, FlinkVersion.v1_19);
+        configuration.set(FLINK_VERSION, FlinkVersion.v1_20);
         eventRecorder =
                 new EventRecorder(flinkResourceEventCollector, flinkStateSnapshotEventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);

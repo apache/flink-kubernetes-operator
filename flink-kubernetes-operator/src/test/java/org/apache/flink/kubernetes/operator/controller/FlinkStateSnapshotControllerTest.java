@@ -620,7 +620,7 @@ public class FlinkStateSnapshotControllerTest {
     }
 
     private FlinkDeployment createDeployment() {
-        return createDeployment(FlinkVersion.v1_19);
+        return createDeployment(FlinkVersion.v1_20);
     }
 
     private FlinkDeployment createDeployment(FlinkVersion flinkVersion) {
