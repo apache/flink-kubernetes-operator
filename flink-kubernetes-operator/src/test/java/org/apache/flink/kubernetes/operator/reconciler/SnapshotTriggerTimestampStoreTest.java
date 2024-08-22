@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler;
 import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
@@ -32,27 +33,28 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Set;
-import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
-import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SnapshotTriggerTimestampStoreTest {
 
-    private Set<FlinkStateSnapshot> snapshots = Set.of();
-    private final Supplier<Set<FlinkStateSnapshot>> snapshotsSupplier = () -> snapshots;
+    private final FlinkDeployment resource = TestUtils.buildApplicationCluster();
 
     @Test
     public void testTimestampStore() {
-        testTimestampStoreForType(SAVEPOINT);
-        testTimestampStoreForType(CHECKPOINT);
+        for (var snapshotType : SnapshotType.values()) {
+            testCreationTimestamp(snapshotType);
+            testLegacySavepoint(snapshotType);
+            testSingleSnapshot(snapshotType);
+            testMultipleSnapshots(snapshotType);
+            testUpdateTimestamp(snapshotType);
+        }
     }
 
-    private void testTimestampStoreForType(SnapshotType snapshotType) {
-        var resource = TestUtils.buildApplicationCluster();
+    private void testCreationTimestamp(SnapshotType snapshotType) {
         var store = new SnapshotTriggerTimestampStore();
 
         var instantCreation = Instant.ofEpochMilli(1);
@@ -60,9 +62,13 @@ class SnapshotTriggerTimestampStoreTest {
 
         assertEquals(
                 instantCreation,
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, Set::of));
+    }
 
+    private void testLegacySavepoint(SnapshotType snapshotType) {
+        var store = new SnapshotTriggerTimestampStore();
         var instantLegacy = Instant.ofEpochMilli(2);
+
         if (snapshotType == SAVEPOINT) {
             resource.getStatus()
                     .getJobStatus()
@@ -74,16 +80,23 @@ class SnapshotTriggerTimestampStoreTest {
                     .getCheckpointInfo()
                     .updateLastCheckpoint(new Checkpoint(2L, PERIODIC, null, null));
         }
+
         assertEquals(
                 instantLegacy,
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, Set::of));
+    }
 
-        snapshots = Set.of(createSnapshot(snapshotType, SnapshotTriggerType.PERIODIC, 3L));
+    private void testSingleSnapshot(SnapshotType snapshotType) {
+        var store = new SnapshotTriggerTimestampStore();
+        var snapshots = Set.of(createSnapshot(snapshotType, SnapshotTriggerType.PERIODIC, 3L));
         assertEquals(
                 Instant.ofEpochMilli(3),
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, () -> snapshots));
+    }
 
-        snapshots =
+    private void testMultipleSnapshots(SnapshotType snapshotType) {
+        var store = new SnapshotTriggerTimestampStore();
+        var snapshots =
                 Set.of(
                         createSnapshot(snapshotType, SnapshotTriggerType.PERIODIC, 200L),
                         createSnapshot(snapshotType, SnapshotTriggerType.PERIODIC, 300L),
@@ -91,19 +104,23 @@ class SnapshotTriggerTimestampStoreTest {
                         createSnapshot(snapshotType, SnapshotTriggerType.PERIODIC, 0L));
         assertEquals(
                 Instant.ofEpochMilli(300),
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, () -> snapshots));
+    }
+
+    private void testUpdateTimestamp(SnapshotType snapshotType) {
+        var store = new SnapshotTriggerTimestampStore();
 
         var instantInMemory = Instant.ofEpochMilli(111L);
         store.updateLastPeriodicTriggerTimestamp(resource, snapshotType, instantInMemory);
         assertEquals(
                 instantInMemory,
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, Set::of));
 
         instantInMemory = Instant.ofEpochMilli(11L);
         store.updateLastPeriodicTriggerTimestamp(resource, snapshotType, instantInMemory);
         assertEquals(
                 instantInMemory,
-                store.getLastPeriodicTriggerInstant(resource, snapshotType, snapshotsSupplier));
+                store.getLastPeriodicTriggerInstant(resource, snapshotType, Set::of));
     }
 
     private FlinkStateSnapshot createSnapshot(

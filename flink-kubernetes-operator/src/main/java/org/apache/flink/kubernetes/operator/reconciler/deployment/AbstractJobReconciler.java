@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
@@ -55,9 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
@@ -368,25 +365,6 @@ public abstract class AbstractJobReconciler<
     }
 
     /**
-     * Returns a supplier of all relevant FlinkStateSnapshot resources for a given Flink resource.
-     * If FlinkStateSnapshot resources are disabled, the supplier returns an empty set.
-     *
-     * @param ctx resource context
-     * @return supplier for FlinkStateSnapshot resources
-     */
-    private Supplier<Set<FlinkStateSnapshot>> getFlinkStateSnapshotsSupplier(
-            FlinkResourceContext<CR> ctx) {
-        return () -> {
-            if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
-                    ctx.getOperatorConfig(), ctx.getObserveConfig())) {
-                return ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
-            } else {
-                return Set.of();
-            }
-        };
-    }
-
-    /**
      * Triggers specified snapshot type if needed. When using FlinkStateSnapshot resources this can
      * only be periodic snapshot. If using the legacy snapshot system, this can be manual as well.
      *
@@ -402,7 +380,9 @@ public abstract class AbstractJobReconciler<
 
         var lastTrigger =
                 snapshotTriggerTimestampStore.getLastPeriodicTriggerInstant(
-                        resource, snapshotType, getFlinkStateSnapshotsSupplier(ctx));
+                        resource,
+                        snapshotType,
+                        FlinkStateSnapshotUtils.getFlinkStateSnapshotsSupplier(ctx));
 
         var triggerOpt =
                 SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType, lastTrigger);

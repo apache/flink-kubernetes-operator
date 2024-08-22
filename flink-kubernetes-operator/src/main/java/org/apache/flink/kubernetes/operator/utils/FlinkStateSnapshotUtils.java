@@ -31,18 +31,22 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
@@ -293,6 +297,27 @@ public class FlinkStateSnapshotUtils {
                         savepointFormatType,
                         disposeOnDelete);
         return FlinkStateSnapshotReference.fromResource(snapshot);
+    }
+
+    /**
+     * Returns a supplier of all relevant FlinkStateSnapshot resources for a given Flink resource.
+     * If FlinkStateSnapshot resources are disabled, the supplier returns an empty set.
+     *
+     * @param ctx resource context
+     * @return supplier for FlinkStateSnapshot resources
+     */
+    public static Supplier<Set<FlinkStateSnapshot>> getFlinkStateSnapshotsSupplier(
+            FlinkResourceContext<?> ctx) {
+        return () -> {
+            if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
+                    ctx.getOperatorConfig(), ctx.getObserveConfig())) {
+                return ObjectUtils.firstNonNull(
+                        ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class),
+                        Set.of());
+            } else {
+                return Set.of();
+            }
+        };
     }
 
     /**

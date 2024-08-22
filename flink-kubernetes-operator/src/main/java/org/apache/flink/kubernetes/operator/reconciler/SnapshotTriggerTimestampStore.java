@@ -29,7 +29,6 @@ import lombok.RequiredArgsConstructor;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -50,7 +49,8 @@ public class SnapshotTriggerTimestampStore {
      * Returns the time a periodic snapshot was last triggered for this resource. This is stored in
      * memory, on operator start it will use the latest completed FlinkStateSnapshot CR creation
      * timestamp. If none found, the return value will be the max of the resource creation timestamp
-     * and the latest triggered legacy snapshot.
+     * and the latest triggered legacy snapshot, and in this case the memory store will also be
+     * updated with this value.
      *
      * @param resource Flink resource
      * @param snapshotsSupplier supplies related snapshot resources
@@ -65,31 +65,38 @@ public class SnapshotTriggerTimestampStore {
             return cache.get(resource.getMetadata().getUid());
         }
 
-        var snapshots = Optional.ofNullable(snapshotsSupplier.get()).orElse(Set.of());
-        return snapshots.stream()
-                .filter(s -> s.getStatus() != null && COMPLETED.equals(s.getStatus().getState()))
-                .filter(s -> (snapshotType == SAVEPOINT) == s.getSpec().isSavepoint())
-                .filter(
-                        s ->
-                                PERIODIC.name()
-                                        .equals(
-                                                s.getMetadata()
-                                                        .getLabels()
-                                                        .get(CrdConstants.LABEL_SNAPSHOT_TYPE)))
-                .map(s -> DateTimeUtils.parseKubernetes(s.getMetadata().getCreationTimestamp()))
-                .max(Comparator.naturalOrder())
-                .orElseGet(
-                        () -> {
-                            var legacyTs = getLegacyTimestamp(resource, snapshotType);
-                            var creationTs =
-                                    Instant.parse(resource.getMetadata().getCreationTimestamp());
+        var instantOpt =
+                snapshotsSupplier.get().stream()
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
+                        .filter(s -> (snapshotType == SAVEPOINT) == s.getSpec().isSavepoint())
+                        .filter(
+                                s ->
+                                        PERIODIC.name()
+                                                .equals(
+                                                        s.getMetadata()
+                                                                .getLabels()
+                                                                .get(
+                                                                        CrdConstants
+                                                                                .LABEL_SNAPSHOT_TYPE)))
+                        .map(
+                                s ->
+                                        DateTimeUtils.parseKubernetes(
+                                                s.getMetadata().getCreationTimestamp()))
+                        .max(Comparator.naturalOrder());
+        if (instantOpt.isPresent()) {
+            return instantOpt.get();
+        }
 
-                            if (legacyTs.compareTo(creationTs) > 0) {
-                                return legacyTs;
-                            } else {
-                                return creationTs;
-                            }
-                        });
+        var legacyInstant = getLegacyTimestamp(resource, snapshotType);
+        var creationInstant = Instant.parse(resource.getMetadata().getCreationTimestamp());
+        var maxInstant =
+                legacyInstant.compareTo(creationInstant) > 0 ? legacyInstant : creationInstant;
+
+        updateLastPeriodicTriggerTimestamp(resource, snapshotType, maxInstant);
+        return maxInstant;
     }
 
     /**
