@@ -29,7 +29,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -156,49 +155,27 @@ public class JdbcEventInteractor {
     }
 
     @Nullable
-    ExpiredEventsResult queryExpiredEventsAndMaxId(Duration eventHandlerTtl) throws Exception {
-        var query =
-                "SELECT min(id) min_id, max(id) max_id "
-                        + "FROM t_flink_autoscaler_event_handler "
-                        + "WHERE create_time < ? AND id < ("
-                        + "   SELECT id FROM t_flink_autoscaler_event_handler "
-                        + "   WHERE create_time >= ? ORDER BY id ASC LIMIT 1)";
-        var date = Timestamp.from(clock.instant().minusMillis(eventHandlerTtl.toMillis()));
-        try (var pstmt = conn.prepareStatement(query)) {
-            pstmt.setObject(1, date);
-            pstmt.setObject(2, date);
+    Long queryMinEventIdByCreateTime(Timestamp timestamp) throws Exception {
+        var sql =
+                "SELECT id from t_flink_autoscaler_event_handler "
+                        + "           where id = (SELECT id FROM t_flink_autoscaler_event_handler order by id asc limit 1) "
+                        + "           and create_time < ?";
+        try (var pstmt = conn.prepareStatement(sql)) {
+            pstmt.setObject(1, timestamp);
             ResultSet resultSet = pstmt.executeQuery();
-            if (!resultSet.next()) {
-                return null;
-            }
-            return new ExpiredEventsResult(resultSet.getLong(1), resultSet.getLong(2));
+            return resultSet.next() ? resultSet.getLong(1) : null;
         }
     }
 
-    void deleteExpiredEventsByIdRange(long startId, long endId) throws Exception {
-        var query = "delete from t_flink_autoscaler_event_handler where id >= ? and id <= ?";
+    int deleteExpiredEventsByIdRangeAndDate(long startId, long endId, Timestamp timestamp)
+            throws Exception {
+        var query =
+                "delete from t_flink_autoscaler_event_handler where id >= ? and id < ? and create_time < ?";
         try (var pstmt = conn.prepareStatement(query)) {
             pstmt.setObject(1, startId);
             pstmt.setObject(2, endId);
-            pstmt.execute();
-        }
-    }
-
-    /**
-     * The class to represent the query result of the min/max id in the expired records of the event
-     * handlers.
-     */
-    static class ExpiredEventsResult {
-        long minId;
-        long maxId;
-
-        ExpiredEventsResult(long minId, long maxId) {
-            this.minId = minId;
-            this.maxId = maxId;
-        }
-
-        long getExpiredCount() {
-            return (maxId - minId + 1);
+            pstmt.setObject(3, timestamp);
+            return pstmt.executeUpdate();
         }
     }
 }

@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.Nullable;
 
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.Date;
 import java.util.Map;
@@ -144,27 +145,34 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
 
     @VisibleForTesting
     void cleanExpiredEvents() {
+        var date =
+                Timestamp.from(
+                        jdbcEventInteractor
+                                .getCurrentInstant()
+                                .minusMillis(eventHandlerTtl.toMillis()));
         try {
-            JdbcEventInteractor.ExpiredEventsResult expiredResult =
-                    jdbcEventInteractor.queryExpiredEventsAndMaxId(eventHandlerTtl);
-            if (Objects.isNull(expiredResult)) {
+            Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+            if (Objects.isNull(minId)) {
                 log.warn("No expired event handlers queried at {}", new Date());
                 return;
             }
-            var batch = 4098;
-            for (var startId = expiredResult.minId;
-                    startId <= expiredResult.maxId;
-                    startId += batch) {
-                jdbcEventInteractor.deleteExpiredEventsByIdRange(
-                        startId, Math.min(startId + batch, expiredResult.maxId));
-                log.debug("Deleted expired event handler records by batch successfully.");
+            int deleted = 0, batch = 4098;
+            var count = 0L;
+            boolean cleanable = true;
+            for (long startId = minId; deleted == batch || cleanable; startId += batch) {
+                var endId = startId + batch;
+                deleted =
+                        jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
+                                startId, endId, date);
+                count += deleted;
+                if (deleted != batch) {
+                    cleanable = jdbcEventInteractor.queryMinEventIdByCreateTime(date) != null;
+                }
+                log.debug(
+                        "Deleted expired {} event handler records by batch successfully.", deleted);
                 Thread.sleep(10L);
             }
-            log.info(
-                    "Deleted expired {} event handler records successfully whose id is between {} and {}.",
-                    expiredResult.getExpiredCount(),
-                    expiredResult.minId,
-                    expiredResult.maxId);
+            log.info("Deleted expired {} event handler records successfully", count);
         } catch (Exception e) {
             log.error("Error in cleaning expired event handler records.", e);
         }

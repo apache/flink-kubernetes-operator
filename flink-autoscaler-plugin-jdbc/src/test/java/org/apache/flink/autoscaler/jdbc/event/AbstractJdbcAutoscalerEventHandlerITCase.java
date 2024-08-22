@@ -46,6 +46,7 @@ import javax.annotation.Nonnull;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -446,11 +447,29 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                         });
     }
 
+    private static Stream<Arguments> getExpiredEventHandlersCaseMatrix() {
+        return Stream.of(
+                Arguments.of(false, 128, Duration.ofMinutes(2), 10),
+                Arguments.of(true, 256, Duration.ofMinutes(2), 0),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(2), 12),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(2), 0),
+                Arguments.of(true, 512, Duration.ofMinutes(100), 3),
+                Arguments.of(false, 64, Duration.ofMinutes(100), 0),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(100), 64),
+                Arguments.of(false, 1024 * 9, Duration.ofMinutes(100), 0),
+                Arguments.of(false, 0, Duration.ofMinutes(100), 128),
+                Arguments.of(false, 0, Duration.ofMinutes(100), 0));
+    }
+
     @MethodSource("getExpiredEventHandlersCaseMatrix")
     @ParameterizedTest(
-            name = "expiredRecordsNum: {0}, eventHandlerTtl: {1}, unexpiredRecordsNum: {2}")
+            name =
+                    "tryIdNotSequential:{0}, expiredRecordsNum: {1}, eventHandlerTtl: {2}, unexpiredRecordsNum: {3}")
     void testCleanExpiredEvents(
-            int expiredRecordsNum, Duration eventHandlerTtl, int unexpiredRecordsNum)
+            boolean tryIdNotSequential,
+            int expiredRecordsNum,
+            Duration eventHandlerTtl,
+            int unexpiredRecordsNum)
             throws Exception {
         // Init the expired records.
         initTestingEventHandlerRecords(
@@ -461,6 +480,18 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                                 createTime.minusMillis(
                                         eventHandlerTtl.toMillis() + index * 1000L + 1L),
                                 ZoneId.systemDefault()));
+        // To simulate non-sequential IDs in expired records.
+        Timestamp date = Timestamp.from(createTime.minusMillis(eventHandlerTtl.toMillis()));
+        Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+        if (tryIdNotSequential && minId != null) {
+            try (Connection connection = getConnection();
+                    PreparedStatement ps =
+                            connection.prepareStatement(
+                                    "delete from t_flink_autoscaler_event_handler where id = ?")) {
+                ps.setObject(1, (minId + expiredRecordsNum) / 2);
+                ps.execute();
+            }
+        }
         // Init the unexpired records.
         initTestingEventHandlerRecords(
                 eventHandlerTtl,
@@ -490,26 +521,12 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
             eventHandler.handleEvent(
                     ctx,
                     AutoScalerEventHandler.Type.Normal,
-                    "reason",
-                    "message",
-                    "messageKey",
+                    "reason-" + i,
+                    "message-" + i,
+                    "messageKey-" + i,
                     null);
         }
         jdbcEventInteractor.setClock(defaultClock);
-    }
-
-    private static Stream<Arguments> getExpiredEventHandlersCaseMatrix() {
-        return Stream.of(
-                Arguments.of(1024, Duration.ofMinutes(2), 1),
-                Arguments.of(1024, Duration.ofMinutes(2), 0),
-                Arguments.of(1024 * 5, Duration.ofMinutes(2), 2),
-                Arguments.of(1024 * 5, Duration.ofMinutes(2), 0),
-                Arguments.of(1024, Duration.ofMinutes(100), 3),
-                Arguments.of(1024, Duration.ofMinutes(100), 0),
-                Arguments.of(1024 * 5, Duration.ofMinutes(100), 100),
-                Arguments.of(1024 * 5, Duration.ofMinutes(100), 0),
-                Arguments.of(0, Duration.ofMinutes(100), 1024 * 5),
-                Arguments.of(0, Duration.ofMinutes(100), 0));
     }
 
     private void createFirstScalingEvent() throws Exception {
@@ -618,7 +635,10 @@ class DerbyJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventH
     @Disabled("Closed due to the 'LIMIT' clause is not supported in Derby.")
     @Override
     void testCleanExpiredEvents(
-            int expiredRecordsNum, Duration eventHandlerTtl, int unexpiredRecordsNum)
+            boolean tryIdNotSequential,
+            int expiredRecordsNum,
+            Duration eventHandlerTtl,
+            int unexpiredRecordsNum)
             throws Exception {}
 }
 
