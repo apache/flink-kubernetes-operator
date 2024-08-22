@@ -74,6 +74,6 @@ public enum FlinkMetric {
     }
 
     private static AggregatedMetric zero() {
-        return new AggregatedMetric("", 0., 0., 0., 0.);
+        return new AggregatedMetric("", 0., 0., 0., 0., 0.);
     }
 }

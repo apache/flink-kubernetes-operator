@@ -61,7 +61,8 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, 900., Double.NaN, Double.NaN),
+                        new AggregatedMetric(
+                                "", Double.NaN, 900., Double.NaN, Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC,
                         aggSum(1000.)),
                 scalingMetrics,
@@ -84,7 +85,8 @@ public class ScalingMetricsTest {
                 op,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
+                        new AggregatedMetric(
+                                "", Double.NaN, 100., Double.NaN, Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC,
                         aggSum(1000.)),
                 scalingMetrics,
@@ -141,7 +143,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN, Double.NaN)),
                 scalingMetrics,
                 ioMetrics,
                 conf);
@@ -155,7 +157,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN, Double.NaN)),
                 scalingMetrics,
                 ioMetrics,
                 conf);
@@ -169,7 +171,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN, Double.NaN)),
                 scalingMetrics,
                 ioMetrics,
                 conf);
@@ -232,12 +234,19 @@ public class ScalingMetricsTest {
                 SOURCE,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
+                        new AggregatedMetric(
+                                "", Double.NaN, busyness, Double.NaN, Double.NaN, Double.NaN),
                         FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, backpressure, Double.NaN),
+                        new AggregatedMetric(
+                                "", Double.NaN, Double.NaN, backpressure, Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric(
-                                "", Double.NaN, Double.NaN, Double.NaN, processingRate)),
+                                "",
+                                Double.NaN,
+                                Double.NaN,
+                                Double.NaN,
+                                processingRate,
+                                Double.NaN)),
                 scalingMetrics,
                 topology,
                 conf,
@@ -279,14 +288,14 @@ public class ScalingMetricsTest {
     }
 
     private static AggregatedMetric aggSum(double sum) {
-        return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, sum);
+        return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, sum, Double.NaN);
     }
 
     private static AggregatedMetric aggMax(double max) {
-        return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN);
+        return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN, Double.NaN);
     }
 
     private static AggregatedMetric aggAvgMax(double avg, double max) {
-        return new AggregatedMetric("", Double.NaN, max, avg, Double.NaN);
+        return new AggregatedMetric("", Double.NaN, max, avg, Double.NaN, Double.NaN);
     }
 }

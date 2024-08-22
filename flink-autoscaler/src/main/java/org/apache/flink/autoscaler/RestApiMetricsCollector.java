@@ -230,6 +230,9 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                                                 null,
                                                 m1.getSum() != null
                                                         ? m1.getSum() + m2.getSum()
+                                                        : null,
+                                                m1.getSkew() != null
+                                                        ? Math.max(m1.getSkew(), m2.getSkew())
                                                         : null)));
     }
 }
