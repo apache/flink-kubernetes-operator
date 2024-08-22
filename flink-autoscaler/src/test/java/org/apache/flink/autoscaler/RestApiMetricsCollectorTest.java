@@ -77,11 +77,26 @@ public class RestApiMetricsCollectorTest {
         var aggregatedMetricsResponse =
                 List.of(
                         new AggregatedMetric(
-                                "a.pendingRecords", Double.NaN, Double.NaN, Double.NaN, 100.),
+                                "a.pendingRecords",
+                                Double.NaN,
+                                Double.NaN,
+                                Double.NaN,
+                                100.,
+                                Double.NaN),
                         new AggregatedMetric(
-                                "b.pendingRecords", Double.NaN, Double.NaN, Double.NaN, 100.),
+                                "b.pendingRecords",
+                                Double.NaN,
+                                Double.NaN,
+                                Double.NaN,
+                                100.,
+                                Double.NaN),
                         new AggregatedMetric(
-                                "c.unrelated", Double.NaN, Double.NaN, Double.NaN, 100.));
+                                "c.unrelated",
+                                Double.NaN,
+                                Double.NaN,
+                                Double.NaN,
+                                100.,
+                                Double.NaN));
 
         var conf = new Configuration();
         var restClusterClient =
@@ -233,10 +248,12 @@ public class RestApiMetricsCollectorTest {
         assertThrows(RuntimeException.class, () -> collector.queryTmMetrics(context));
 
         // Test only heap metrics available
-        var heapMax = new AggregatedMetric(HEAP_MAX_NAME, null, 100., null, null);
-        var heapUsed = new AggregatedMetric(HEAP_USED_NAME, null, 50., null, null);
-        var managedUsed = new AggregatedMetric(MANAGED_MEMORY_NAME, null, 42., null, null);
-        var metaspaceUsed = new AggregatedMetric(METASPACE_MEMORY_NAME, null, 11., null, null);
+        var heapMax = new AggregatedMetric(HEAP_MAX_NAME, null, 100., null, null, Double.NaN);
+        var heapUsed = new AggregatedMetric(HEAP_USED_NAME, null, 50., null, null, Double.NaN);
+        var managedUsed =
+                new AggregatedMetric(MANAGED_MEMORY_NAME, null, 42., null, null, Double.NaN);
+        var metaspaceUsed =
+                new AggregatedMetric(METASPACE_MEMORY_NAME, null, 11., null, null, Double.NaN);
         metricValues.put(HEAP_MAX_NAME, heapMax);
         metricValues.put(HEAP_USED_NAME, heapUsed);
         metricValues.put(MANAGED_MEMORY_NAME, managedUsed);
@@ -256,7 +273,7 @@ public class RestApiMetricsCollectorTest {
         collector.cleanup(context.getJobKey());
 
         // Test all metrics available
-        var gcTime = new AggregatedMetric(GC_METRIC_NAME, null, 150., null, null);
+        var gcTime = new AggregatedMetric(GC_METRIC_NAME, null, 150., null, null, Double.NaN);
         metricValues.put(GC_METRIC_NAME, gcTime);
 
         assertMetricsEquals(

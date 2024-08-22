@@ -230,7 +230,8 @@ public class ScalingMetrics {
                                 Double.NaN,
                                 Double.NaN,
                                 Double.NaN,
-                                (double) ioMetrics.getNumRecordsIn());
+                                (double) ioMetrics.getNumRecordsIn(),
+                                Double.NaN);
 
         // 2. If the former is unavailable and the vertex contains a source operator, use the
         // corresponding source operator metric.

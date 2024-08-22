@@ -58,14 +58,14 @@ public class TestMetrics {
     }
 
     private AggregatedMetric sum(double d) {
-        return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, d);
+        return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, d, Double.NaN);
     }
 
     private AggregatedMetric max(double d) {
-        return new AggregatedMetric("", Double.NaN, d, Double.NaN, Double.NaN);
+        return new AggregatedMetric("", Double.NaN, d, Double.NaN, Double.NaN, Double.NaN);
     }
 
     private AggregatedMetric avg(double d) {
-        return new AggregatedMetric("", Double.NaN, Double.NaN, d, Double.NaN);
+        return new AggregatedMetric("", Double.NaN, Double.NaN, d, Double.NaN, Double.NaN);
     }
 }
