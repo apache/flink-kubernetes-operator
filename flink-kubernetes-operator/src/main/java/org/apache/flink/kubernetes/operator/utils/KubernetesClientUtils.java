@@ -27,8 +27,6 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
-import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory;
-import okhttp3.OkHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +34,8 @@ import org.slf4j.LoggerFactory;
 public class KubernetesClientUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesClientUtils.class);
+
+    private static final String METRICS_INTERCEPTOR_NAME = "KubernetesClientMetrics";
 
     public static KubernetesClient getKubernetesClient(
             FlinkOperatorConfiguration operatorConfig, MetricGroup metricGroup) {
@@ -51,19 +51,11 @@ public class KubernetesClientUtils {
         var clientBuilder = new KubernetesClientBuilder().withConfig(kubernetesClientConfig);
 
         if (operatorConfig.isKubernetesClientMetricsEnabled()) {
-            clientBuilder =
-                    clientBuilder.withHttpClientFactory(
-                            // This logic should be replaced with a more generic solution once the
-                            // fabric8 Interceptor class is improved to the point where this can be
-                            // implemented.
-                            new OkHttpClientFactory() {
-                                @Override
-                                protected void additionalConfig(OkHttpClient.Builder builder) {
-                                    builder.addInterceptor(
-                                            new KubernetesClientMetrics(
-                                                    metricGroup, operatorConfig));
-                                }
-                            });
+            clientBuilder.withHttpClientBuilderConsumer(
+                    httpCLientBuilder ->
+                            httpCLientBuilder.addOrReplaceInterceptor(
+                                    METRICS_INTERCEPTOR_NAME,
+                                    new KubernetesClientMetrics(metricGroup, operatorConfig)));
         }
 
         return clientBuilder.build();
