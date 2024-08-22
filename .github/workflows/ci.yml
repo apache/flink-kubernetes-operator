@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_19","v1_18","v1_17","v1_16","v1_15"]
+        version: ["v1_20","v1_19","v1_18","v1_17","v1_16"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
         java-version: [ 11, 17, 21 ]
@@ -90,6 +90,8 @@ jobs:
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
+          - version: v1_20
+            image: flink:1.20
           - version: v1_19
             image: flink:1.19
           - version: v1_18
@@ -98,8 +100,6 @@ jobs:
             image: flink:1.17
           - version: v1_16
             image: flink:1.16
-          - version: v1_15
-            image: flink:1.15
         exclude:
           - namespace: default
             test: test_multi_sessionjob.sh
@@ -111,12 +111,6 @@ jobs:
             test: test_autoscaler.sh
           - mode: standalone
             test: test_dynamic_config.sh
-          - version: v1_15
-            test: test_autoscaler.sh
-          - version: v1_15
-            test: test_dynamic_config.sh
-          - version: v1_15
-            test: test_flink_operator_ha.sh
           - version: v1_16
             test: test_autoscaler.sh
           - version: v1_16
@@ -131,14 +125,10 @@ jobs:
             test: test_dynamic_config.sh
           - version: v1_18
             test: test_flink_operator_ha.sh
-          - version: v1_15
-            java-version: 17
           - version: v1_16
             java-version: 17
           - version: v1_17
             java-version: 17
-          - version: v1_15
-            java-version: 21
           - version: v1_16
             java-version: 21
           - version: v1_17

@@ -85,6 +85,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | v1_17 |  |
 | v1_18 |  |
 | v1_19 |  |
+| v1_20 |  |
 
 ### IngressSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.IngressSpec
