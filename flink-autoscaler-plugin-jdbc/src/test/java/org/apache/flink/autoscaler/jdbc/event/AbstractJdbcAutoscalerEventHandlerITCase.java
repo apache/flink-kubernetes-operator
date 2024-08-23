@@ -446,6 +446,41 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                         });
     }
 
+    @Test
+    void testQuickCleanExpiredEvents() throws Exception {
+        // Simulate the no-seq ids that is lacking of most of continuous ids.
+        final Duration ttl = Duration.ofDays(1L);
+        final int expiredNum = 2;
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, ttl);
+        // Init expired records.
+        initTestingEventHandlerRecords(expiredNum);
+
+        var expiredInstant = jdbcEventInteractor.getCurrentInstant();
+        // The clock to clean all expired data.
+        Clock fixedClock =
+                Clock.fixed(
+                        expiredInstant.plus(ttl).plus(Duration.ofMillis(1)),
+                        ZoneId.systemDefault());
+        jdbcEventInteractor.setClock(fixedClock);
+
+        long maxId =
+                jdbcEventInteractor.queryMinEventIdByCreateTime(
+                                Timestamp.from(fixedClock.instant()))
+                        + expiredNum
+                        - 1;
+        try (Connection connection = getConnection();
+                PreparedStatement ps =
+                        connection.prepareStatement(
+                                "update t_flink_autoscaler_event_handler set id = ? where id = ?")) {
+            ps.setLong(1, Long.MAX_VALUE / 2);
+            ps.setLong(2, maxId);
+            ps.execute();
+        }
+
+        eventHandler.cleanExpiredEvents();
+        jdbcEventInteractor.assertDeleteExpiredCounter(2L);
+    }
+
     private static Stream<Arguments> getExpiredEventHandlersCaseMatrix() {
         return Stream.of(
                 Arguments.of(false, 128, Duration.ofMinutes(2), 10),
@@ -635,7 +670,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 class DerbyJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventHandlerITCase
         implements DerbyTestBase {
 
-    @Disabled("Closed due to the 'LIMIT' clause is not supported in Derby.")
+    @Disabled("Disabled due to the 'LIMIT' clause is not supported in Derby.")
     @Override
     void testCleanExpiredEvents(
             boolean tryIdNotSequential,
@@ -643,6 +678,10 @@ class DerbyJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventH
             Duration eventHandlerTtl,
             int unexpiredRecordsNum)
             throws Exception {}
+
+    @Disabled("Disabled due to the 'LIMIT' clause is not supported in Derby.")
+    @Override
+    void testQuickCleanExpiredEvents() throws Exception {}
 }
 
 /** Test {@link JdbcAutoScalerEventHandler} via MySQL 5.6.x. */
@@ -659,4 +698,9 @@ class MySQL8JdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEvent
 
 /** Test {@link JdbcAutoScalerEventHandler} via Postgre SQL. */
 class PostgreSQLJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventHandlerITCase
-        implements PostgreSQLTestBase {}
+        implements PostgreSQLTestBase {
+
+    @Disabled("Disabled due to the column 'id' can only be updated to DEFAULT.")
+    @Override
+    void testQuickCleanExpiredEvents() throws Exception {}
+}
