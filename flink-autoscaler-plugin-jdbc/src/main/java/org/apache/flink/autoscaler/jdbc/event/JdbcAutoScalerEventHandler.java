@@ -34,12 +34,14 @@ import javax.annotation.Nullable;
 
 import java.sql.Timestamp;
 import java.time.Duration;
-import java.util.Date;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
 
 /**
  * The event handler which persists its event in JDBC related database.
@@ -145,34 +147,32 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
 
     @VisibleForTesting
     void cleanExpiredEvents() {
+        final var batchSize = 2000;
+        final var sleepMs = 1000;
+
         var date =
                 Timestamp.from(
                         jdbcEventInteractor
                                 .getCurrentInstant()
                                 .minusMillis(eventHandlerTtl.toMillis()));
         try {
-            Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
-            if (Objects.isNull(minId)) {
-                log.warn("No expired event handlers queried at {}", new Date());
-                return;
-            }
-            int deleted = 0, batch = 4098;
-            var count = 0L;
-            boolean cleanable = true;
-            for (long startId = minId; deleted == batch || cleanable; startId += batch) {
-                var endId = startId + batch;
-                deleted =
-                        jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
-                                startId, endId, date);
-                count += deleted;
-                if (deleted != batch) {
-                    cleanable = jdbcEventInteractor.queryMinEventIdByCreateTime(date) != null;
+            var deletedTotalCount = 0L;
+            while (true) {
+                Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+                if (Objects.isNull(minId)) {
+                    log.info("No expired event handlers queried at {}", readable(Instant.now()));
+                    break;
                 }
-                log.debug(
-                        "Deleted expired {} event handler records by batch successfully.", deleted);
-                Thread.sleep(10L);
+
+                for (long startId = minId;
+                        batchSize
+                                == jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
+                                        startId, startId + batchSize, date);
+                        startId += batchSize) {
+                    Thread.sleep(sleepMs);
+                }
             }
-            log.info("Deleted expired {} event handler records successfully", count);
+            log.info("Deleted expired {} event handler records successfully", deletedTotalCount);
         } catch (Exception e) {
             log.error("Error in cleaning expired event handler records.", e);
         }
