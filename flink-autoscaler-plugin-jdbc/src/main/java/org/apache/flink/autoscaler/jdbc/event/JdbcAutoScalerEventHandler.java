@@ -160,19 +160,18 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
             while (true) {
                 Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
                 if (Objects.isNull(minId)) {
-                    log.info("No expired event handlers queried at {}", readable(Instant.now()));
+                    log.info("Deleted expired {} event handler records successfully", deletedTotalCount);
                     break;
                 }
 
                 for (long startId = minId;
-                        batchSize
-                                == jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
-                                        startId, startId + batchSize, date);
+                        jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
+                                        startId, startId + batchSize, date)
+                                == batchSize;
                         startId += batchSize) {
                     Thread.sleep(sleepMs);
                 }
             }
-            log.info("Deleted expired {} event handler records successfully", deletedTotalCount);
         } catch (Exception e) {
             log.error("Error in cleaning expired event handler records.", e);
         }
