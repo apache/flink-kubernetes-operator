@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotTriggerTimestampStore;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -73,6 +74,9 @@ public abstract class AbstractJobReconciler<
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
 
     public static final String LAST_STATE_DUMMY_SP_PATH = "KUBERNETES_OPERATOR_LAST_STATE";
+
+    private final SnapshotTriggerTimestampStore snapshotTriggerTimestampStore =
+            new SnapshotTriggerTimestampStore();
 
     public AbstractJobReconciler(
             EventRecorder eventRecorder,
@@ -374,12 +378,23 @@ public abstract class AbstractJobReconciler<
         var resource = ctx.getResource();
         var conf = ctx.getObserveConfig();
 
-        Optional<SnapshotTriggerType> triggerOpt =
-                SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType);
+        var lastTrigger =
+                snapshotTriggerTimestampStore.getLastPeriodicTriggerInstant(
+                        resource,
+                        snapshotType,
+                        FlinkStateSnapshotUtils.getFlinkStateSnapshotsSupplier(ctx));
+
+        var triggerOpt =
+                SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType, lastTrigger);
         if (triggerOpt.isEmpty()) {
             return false;
         }
         var triggerType = triggerOpt.get();
+
+        if (SnapshotTriggerType.PERIODIC.equals(triggerType)) {
+            snapshotTriggerTimestampStore.updateLastPeriodicTriggerTimestamp(
+                    resource, snapshotType, Instant.now());
+        }
 
         var createSnapshotResource =
                 FlinkStateSnapshotUtils.isSnapshotResourceEnabled(ctx.getOperatorConfig(), conf);

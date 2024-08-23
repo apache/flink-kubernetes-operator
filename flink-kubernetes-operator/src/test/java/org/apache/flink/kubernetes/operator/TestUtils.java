@@ -25,10 +25,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -408,33 +405,17 @@ public class TestUtils extends BaseTestUtils {
      * Sets up an active cron trigger by ensuring that the latest successful snapshot happened
      * earlier than the scheduled trigger.
      */
-    public static void setupCronTrigger(SnapshotType snapshotType, FlinkDeployment deployment) {
+    public static Instant setupCronTrigger(SnapshotType snapshotType, FlinkDeployment deployment) {
 
         Calendar calendar = Calendar.getInstance();
         calendar.set(2022, Calendar.JUNE, 5, 11, 0);
-        long lastCheckpointTimestamp = calendar.getTimeInMillis();
 
         String cronOptionKey;
-
         switch (snapshotType) {
             case SAVEPOINT:
-                Savepoint lastSavepoint =
-                        Savepoint.of("", lastCheckpointTimestamp, SnapshotTriggerType.PERIODIC);
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .updateLastSavepoint(lastSavepoint);
                 cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key();
                 break;
             case CHECKPOINT:
-                Checkpoint lastCheckpoint =
-                        Checkpoint.of(lastCheckpointTimestamp, SnapshotTriggerType.PERIODIC);
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getCheckpointInfo()
-                        .updateLastCheckpoint(lastCheckpoint);
                 cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL.key();
                 break;
             default:
@@ -443,6 +424,7 @@ public class TestUtils extends BaseTestUtils {
 
         deployment.getSpec().getFlinkConfiguration().put(cronOptionKey, "0 0 12 5 6 ? 2022");
         reconcileSpec(deployment);
+        return calendar.toInstant();
     }
 
     /** Testing ResponseProvider. */

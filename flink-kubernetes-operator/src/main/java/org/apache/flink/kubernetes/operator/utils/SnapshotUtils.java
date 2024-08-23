@@ -136,7 +136,10 @@ public class SnapshotUtils {
      */
     @VisibleForTesting
     public static Optional<SnapshotTriggerType> shouldTriggerSnapshot(
-            AbstractFlinkResource<?, ?> resource, Configuration conf, SnapshotType snapshotType) {
+            AbstractFlinkResource<?, ?> resource,
+            Configuration conf,
+            SnapshotType snapshotType,
+            Instant lastTrigger) {
 
         var status = resource.getStatus();
         var jobStatus = status.getJobStatus();
@@ -153,7 +156,6 @@ public class SnapshotUtils {
         Long triggerNonce;
         Long reconciledTriggerNonce;
         boolean inProgress;
-        SnapshotInfo snapshotInfo;
         String automaticTriggerExpression;
 
         switch (snapshotType) {
@@ -161,7 +163,6 @@ public class SnapshotUtils {
                 triggerNonce = jobSpec.getSavepointTriggerNonce();
                 reconciledTriggerNonce = reconciledJobSpec.getSavepointTriggerNonce();
                 inProgress = savepointInProgress(jobStatus);
-                snapshotInfo = jobStatus.getSavepointInfo();
                 automaticTriggerExpression =
                         conf.get(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL);
                 break;
@@ -169,7 +170,6 @@ public class SnapshotUtils {
                 triggerNonce = jobSpec.getCheckpointTriggerNonce();
                 reconciledTriggerNonce = reconciledJobSpec.getCheckpointTriggerNonce();
                 inProgress = checkpointInProgress(jobStatus);
-                snapshotInfo = jobStatus.getCheckpointInfo();
                 automaticTriggerExpression =
                         conf.get(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL);
                 break;
@@ -192,14 +192,6 @@ public class SnapshotUtils {
                 return Optional.of(SnapshotTriggerType.MANUAL);
             }
         }
-
-        var lastTriggerTs = snapshotInfo.getLastPeriodicTriggerTimestamp();
-        // When the resource is first created/periodic snapshotting enabled we have to compare
-        // against the creation timestamp for triggering the first periodic savepoint
-        var lastTrigger =
-                lastTriggerTs == 0
-                        ? Instant.parse(resource.getMetadata().getCreationTimestamp())
-                        : Instant.ofEpochMilli(lastTriggerTs);
 
         if (shouldTriggerAutomaticSnapshot(snapshotType, automaticTriggerExpression, lastTrigger)) {
             if (snapshotType == CHECKPOINT && !isSnapshotTriggeringSupported(conf)) {

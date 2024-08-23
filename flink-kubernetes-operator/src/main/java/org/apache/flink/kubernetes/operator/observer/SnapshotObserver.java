@@ -49,7 +49,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
@@ -241,14 +240,7 @@ public class SnapshotObserver<
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
     private void cleanupSavepointHistory(FlinkResourceContext<CR> ctx) {
-        Set<FlinkStateSnapshot> snapshots = Collections.emptySet();
-        if (FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
-                ctx.getOperatorConfig(), ctx.getObserveConfig())) {
-            snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
-            if (snapshots == null) {
-                snapshots = Set.of();
-            }
-        }
+        var snapshots = FlinkStateSnapshotUtils.getFlinkStateSnapshotsSupplier(ctx).get();
 
         cleanupSavepointHistoryLegacy(ctx, snapshots);
 
@@ -301,7 +293,10 @@ public class SnapshotObserver<
 
         var lastCompleteSnapshot =
                 snapshotList.stream()
-                        .filter(s -> COMPLETED.equals(s.getStatus().getState()))
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
                         .max(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
                         .orElse(null);
 
