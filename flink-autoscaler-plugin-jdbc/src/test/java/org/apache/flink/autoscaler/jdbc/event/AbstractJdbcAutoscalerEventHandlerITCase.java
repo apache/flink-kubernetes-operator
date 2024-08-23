@@ -53,7 +53,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -471,33 +470,23 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
             Duration eventHandlerTtl,
             int unexpiredRecordsNum)
             throws Exception {
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, eventHandlerTtl);
+
         // Init the expired records.
-        initTestingEventHandlerRecords(
-                eventHandlerTtl,
-                expiredRecordsNum,
-                (duration, index) ->
-                        Clock.fixed(
-                                createTime.minusMillis(
-                                        eventHandlerTtl.toMillis() + index * 1000L + 1L),
-                                ZoneId.systemDefault()));
-        // To simulate non-sequential IDs in expired records.
-        Timestamp date = Timestamp.from(createTime.minusMillis(eventHandlerTtl.toMillis()));
-        Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
-        if (tryIdNotSequential && minId != null) {
-            try (Connection connection = getConnection();
-                    PreparedStatement ps =
-                            connection.prepareStatement(
-                                    "delete from t_flink_autoscaler_event_handler where id = ?")) {
-                ps.setObject(1, (minId + expiredRecordsNum) / 2);
-                ps.execute();
-            }
+        initTestingEventHandlerRecords(expiredRecordsNum);
+        if (tryIdNotSequential) {
+            tryDeleteOneRecord(expiredRecordsNum);
         }
+        var expiredInstant = jdbcEventInteractor.getCurrentInstant();
+
         // Init the unexpired records.
-        initTestingEventHandlerRecords(
-                eventHandlerTtl,
-                unexpiredRecordsNum,
-                (duration, index) ->
-                        Clock.fixed(createTime.plusMillis(index), ZoneId.systemDefault()));
+        initTestingEventHandlerRecords(unexpiredRecordsNum);
+
+        // Reset the clock to clean all expired data.
+        jdbcEventInteractor.setClock(
+                Clock.fixed(
+                        expiredInstant.plus(eventHandlerTtl).plus(Duration.ofMillis(1)),
+                        ZoneId.systemDefault()));
 
         eventHandler.cleanExpiredEvents();
 
@@ -511,13 +500,28 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
         }
     }
 
-    private void initTestingEventHandlerRecords(
-            Duration eventHandlerTtl,
-            int recordsNum,
-            BiFunction<Duration, Integer, Clock> clockGetter) {
+    private void tryDeleteOneRecord(int expiredRecordsNum) throws Exception {
+        // To simulate non-sequential IDs in expired records.
+        Timestamp date = Timestamp.from(createTime);
+        Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+        if (minId == null) {
+            return;
+        }
+        try (Connection connection = getConnection();
+                PreparedStatement ps =
+                        connection.prepareStatement(
+                                "delete from t_flink_autoscaler_event_handler where id = ?")) {
+            ps.setObject(1, (minId + expiredRecordsNum) / 2);
+            ps.execute();
+        }
+    }
 
+    private void initTestingEventHandlerRecords(int recordsNum) {
         for (int i = 0; i < recordsNum; i++) {
-            jdbcEventInteractor.setClock(clockGetter.apply(eventHandlerTtl, i));
+            jdbcEventInteractor.setClock(
+                    Clock.fixed(
+                            jdbcEventInteractor.getCurrentInstant().plusSeconds(1),
+                            ZoneId.systemDefault()));
             eventHandler.handleEvent(
                     ctx,
                     AutoScalerEventHandler.Type.Normal,
@@ -526,7 +530,6 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                     "messageKey-" + i,
                     null);
         }
-        jdbcEventInteractor.setClock(defaultClock);
     }
 
     private void createFirstScalingEvent() throws Exception {

@@ -34,14 +34,11 @@ import javax.annotation.Nullable;
 
 import java.sql.Timestamp;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
 
 /**
  * The event handler which persists its event in JDBC related database.
@@ -160,7 +157,9 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
             while (true) {
                 Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
                 if (Objects.isNull(minId)) {
-                    log.info("Deleted expired {} event handler records successfully", deletedTotalCount);
+                    log.info(
+                            "Deleted expired {} event handler records successfully",
+                            deletedTotalCount);
                     break;
                 }
 
