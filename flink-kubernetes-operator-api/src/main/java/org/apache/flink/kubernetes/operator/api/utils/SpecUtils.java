@@ -50,12 +50,12 @@ public class SpecUtils {
         try {
             ObjectNode wrapper = (ObjectNode) objectMapper.readTree(specWithMetaString);
             ObjectNode internalMeta = (ObjectNode) wrapper.remove(INTERNAL_METADATA_JSON_KEY);
-
             if (internalMeta == null) {
                 // migrating from old format
                 wrapper.remove("apiVersion");
                 return new SpecWithMeta<>(objectMapper.treeToValue(wrapper, specClass), null);
             } else {
+                internalMeta.remove("metadata");
                 return new SpecWithMeta<>(
                         objectMapper.treeToValue(wrapper.get("spec"), specClass),
                         objectMapper.convertValue(internalMeta, ReconciliationMetadata.class));

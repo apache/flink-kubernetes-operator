@@ -35,13 +35,11 @@ public class SpecUtilsTest {
     @Test
     public void testSpecSerializationWithVersion() throws JsonProcessingException {
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
-        app.getMetadata().setGeneration(12L);
         String serialized = SpecUtils.writeSpecWithMeta(app.getSpec(), app);
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
 
         ObjectNode internalMeta = (ObjectNode) node.get(SpecUtils.INTERNAL_METADATA_JSON_KEY);
         assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
-        assertEquals(12L, internalMeta.get("metadata").get("generation").asLong());
         assertEquals(
                 app.getSpec(),
                 SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec());
@@ -54,6 +52,28 @@ public class SpecUtilsTest {
         assertEquals(
                 "local:///opt/flink/examples/streaming/StateMachineExample.jar",
                 migrated.getSpec().getJob().getJarURI());
+        assertNull(migrated.getMeta());
+    }
+
+    @Test
+    public void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
+        // with regards to ReconcialiationMetadata & SpecWithMeta
+        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
+        app.getMetadata().setGeneration(12L);
+        String serialized = SpecUtils.writeSpecWithMeta(app.getSpec(), app);
+        ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
+
+        ObjectNode internalMeta = (ObjectNode) node.get(SpecUtils.INTERNAL_METADATA_JSON_KEY);
+        assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
+        assertEquals(
+                app.getSpec(),
+                SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec());
+        assertNull(app.getStatus().getObservedGeneration());
+
+        // test backward compatibility
+        String oldSerialized =
+                "{\"apiVersion\":\"flink.apache.org/v1beta1\",\"metadata\":{\"generation\":5},\"firstDeployment\":false}";
+        var migrated = SpecUtils.deserializeSpecWithMeta(oldSerialized, FlinkDeploymentSpec.class);
         assertNull(migrated.getMeta());
     }
 }

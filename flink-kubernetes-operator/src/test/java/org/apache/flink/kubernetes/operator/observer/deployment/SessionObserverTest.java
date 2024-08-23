@@ -152,7 +152,7 @@ public class SessionObserverTest extends OperatorTestBase {
                 status.getJobManagerDeploymentStatus());
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
-        assertEquals(321L, specWithMeta.getMeta().getMetadata().getGeneration());
+        assertEquals(321L, status.getObservedGeneration());
         assertEquals("1", specWithMeta.getSpec().getFlinkConfiguration().get("k"));
     }
 }
