@@ -147,16 +147,16 @@
             <td>Maximum cap for the observed restart time when 'job.autoscaler.restart.time-tracking.enabled' is set to true.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scale-down.interval</h5></td>
+            <td style="word-wrap: break-word;">1 h</td>
+            <td>Duration</td>
+            <td>The delay time for scale down to be executed. If it is greater than 0, the scale down will be delayed. Delayed rescale can merge multiple scale downs within `scale-down.interval` into a scale down, thereby reducing the number of rescales. Reducing the frequency of job restarts can improve job availability. Scale down can be executed directly if it's less than or equal 0.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.scale-down.max-factor</h5></td>
             <td style="word-wrap: break-word;">0.6</td>
             <td>Double</td>
             <td>Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.</td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.scale-up.grace-period</h5></td>
-            <td style="word-wrap: break-word;">1 h</td>
-            <td>Duration</td>
-            <td>Duration in which no scale down of a vertex is allowed after it has been scaled up.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.scale-up.max-factor</h5></td>

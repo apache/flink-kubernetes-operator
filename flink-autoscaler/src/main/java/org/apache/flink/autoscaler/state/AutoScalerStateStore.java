@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.state;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.autoscaler.DelayedScaleDown;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.ScalingTracking;
@@ -76,6 +77,12 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
     ConfigChanges getConfigChanges(Context jobContext) throws Exception;
 
     void removeConfigChanges(Context jobContext) throws Exception;
+
+    void storeDelayedScaleDown(Context jobContext, DelayedScaleDown delayedScaleDown)
+            throws Exception;
+
+    @Nonnull
+    DelayedScaleDown getDelayedScaleDown(Context jobContext) throws Exception;
 
     /** Removes all data from this context. Flush stil needs to be called. */
     void clearAll(Context jobContext) throws Exception;

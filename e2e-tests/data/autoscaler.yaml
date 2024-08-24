@@ -40,6 +40,7 @@ spec:
     job.autoscaler.scaling.enabled: "true"
     job.autoscaler.stabilization.interval: "5s"
     job.autoscaler.metrics.window: "1m"
+    job.autoscaler.scale-down.interval: "0m"
 
 #    Invalid Validations for testing autoscaler configurations
 #    kubernetes.operator.job.autoscaler.scale-down.max-factor: "-0.6"

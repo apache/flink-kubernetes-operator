@@ -187,7 +187,8 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                topology);
+                topology,
+                new DelayedScaleDown());
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.size());
@@ -364,7 +365,7 @@ public class MetricsCollectionAndEvaluationTest {
     public void testTolerateAbsenceOfPendingRecordsMetric() throws Exception {
         var topology = new JobTopology(new VertexInfo(source1, Map.of(), 5, 720));
 
-        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector = new TestingMetricsCollector<>(topology);
         metricsCollector.setJobUpdateTs(startTime);
 
         metricsCollector.updateMetrics(
@@ -378,6 +379,7 @@ public class MetricsCollectionAndEvaluationTest {
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(2));
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofSeconds(0));
 
         metricsCollector.setClock(clock);
 
@@ -424,7 +426,8 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                topology);
+                topology,
+                new DelayedScaleDown());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -634,6 +637,9 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector = new TestingMetricsCollector<>(topology);
         metricsCollector.setJobUpdateTs(startTime);
 
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofSeconds(0));
+
         metricsCollector.updateMetrics(
                 source1,
                 TestMetrics.builder()
@@ -681,7 +687,8 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                topology);
+                topology,
+                new DelayedScaleDown());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
 

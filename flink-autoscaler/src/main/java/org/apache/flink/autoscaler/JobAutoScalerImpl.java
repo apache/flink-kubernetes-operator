@@ -214,9 +214,20 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             return;
         }
 
+        var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
         var parallelismChanged =
                 scalingExecutor.scaleResource(
-                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now, jobTopology);
+                        ctx,
+                        evaluatedMetrics,
+                        scalingHistory,
+                        scalingTracking,
+                        now,
+                        jobTopology,
+                        delayedScaleDown);
+
+        if (delayedScaleDown.isUpdated()) {
+            stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
+        }
 
         if (parallelismChanged) {
             autoscalerMetrics.incrementScaling();
