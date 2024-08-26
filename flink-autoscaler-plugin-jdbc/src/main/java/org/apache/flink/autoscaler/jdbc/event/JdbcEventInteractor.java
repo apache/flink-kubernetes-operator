@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -151,5 +152,30 @@ public class JdbcEventInteractor {
     @VisibleForTesting
     void setClock(@Nonnull Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
+    }
+
+    @Nullable
+    Long queryMinEventIdByCreateTime(Timestamp timestamp) throws Exception {
+        var sql =
+                "SELECT id from t_flink_autoscaler_event_handler "
+                        + "           where id = (SELECT id FROM t_flink_autoscaler_event_handler order by id asc limit 1) "
+                        + "           and create_time < ?";
+        try (var pstmt = conn.prepareStatement(sql)) {
+            pstmt.setObject(1, timestamp);
+            ResultSet resultSet = pstmt.executeQuery();
+            return resultSet.next() ? resultSet.getLong(1) : null;
+        }
+    }
+
+    int deleteExpiredEventsByIdRangeAndDate(long startId, long endId, Timestamp timestamp)
+            throws Exception {
+        var query =
+                "delete from t_flink_autoscaler_event_handler where id >= ? and id < ? and create_time < ?";
+        try (var pstmt = conn.prepareStatement(query)) {
+            pstmt.setObject(1, startId);
+            pstmt.setObject(2, endId);
+            pstmt.setObject(3, timestamp);
+            return pstmt.executeUpdate();
+        }
     }
 }

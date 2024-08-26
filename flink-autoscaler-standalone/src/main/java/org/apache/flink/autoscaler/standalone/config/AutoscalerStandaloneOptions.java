@@ -121,4 +121,12 @@ public class AutoscalerStandaloneOptions {
                                             code(EVENT_HANDLER_TYPE.key()),
                                             code("JDBC"))
                                     .build());
+
+    public static final ConfigOption<Duration> JDBC_EVENT_HANDLER_TTL =
+            autoscalerStandaloneConfig("jdbc.event-handler.ttl")
+                    .durationType()
+                    .defaultValue(Duration.ofDays(90))
+                    .withDescription(
+                            "The time to live based on create time for the JDBC event handler records. "
+                                    + "When the config is set as '0', the ttl strategy for the records would be disabled.");
 }

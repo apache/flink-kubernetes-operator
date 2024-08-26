@@ -33,19 +33,30 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.annotation.Nonnull;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The abstract IT case for {@link JdbcAutoScalerEventHandler}. */
@@ -60,6 +71,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
     private final Instant createTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     private final Map<JobVertexID, ScalingSummary> scalingSummaries =
             generateScalingSummaries(currentParallelism, newParallelism, metricAvg, metricCurrent);
+    private final Clock defaultClock = Clock.fixed(createTime, ZoneId.systemDefault());
 
     private CountableJdbcEventInteractor jdbcEventInteractor;
     private JdbcAutoScalerEventHandler<JobID, JobAutoScalerContext<JobID>> eventHandler;
@@ -68,9 +80,14 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
     @BeforeEach
     void beforeEach() throws Exception {
         jdbcEventInteractor = new CountableJdbcEventInteractor(getConnection());
-        jdbcEventInteractor.setClock(Clock.fixed(createTime, ZoneId.systemDefault()));
-        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor);
+        jdbcEventInteractor.setClock(defaultClock);
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, Duration.ZERO);
         ctx = createDefaultJobAutoScalerContext();
+    }
+
+    @AfterEach
+    void tearDown() {
+        eventHandler.close();
     }
 
     /** All events shouldn't be deduplicated when interval is null. */
@@ -254,8 +271,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .singleElement()
                 .satisfies(
                         event -> {
@@ -283,8 +299,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .as("All scaling events shouldn't be deduplicated when scaling happens.")
                 .hasSize(2)
                 .satisfiesExactlyInAnyOrder(
@@ -322,8 +337,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .as(
                         "The event should be deduplicated when parallelism is not changed and within the interval.")
                 .singleElement()
@@ -360,8 +374,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .as("We should create a new event when the old event is too early.")
                 .hasSize(2)
                 .satisfiesExactlyInAnyOrder(
@@ -401,8 +414,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .as("We should create a new event when the old event is too early.")
                 .hasSize(2)
                 .satisfiesExactlyInAnyOrder(
@@ -430,6 +442,131 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                         });
     }
 
+    @Test
+    void testDeleteCounterWhenIdNotConsecutive() throws Exception {
+        // Create 2 events.
+        final Duration ttl = Duration.ofDays(1L);
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, ttl);
+        initTestingEventHandlerRecords(2);
+
+        // Simulate ids are not consecutive.
+        var events =
+                jdbcEventInteractor.queryEvents(ctx.getJobKey().toString(), SCALING_REPORT_REASON);
+        assertThat(events).hasSize(2);
+        var maxId =
+                events.stream()
+                        .map(AutoScalerEvent::getId)
+                        .max(Comparable::compareTo)
+                        .orElseThrow();
+
+        try (Connection connection = getConnection();
+                PreparedStatement ps =
+                        connection.prepareStatement(
+                                "update t_flink_autoscaler_event_handler set id = ? where id = ?")) {
+            ps.setLong(1, maxId + 1_000_000);
+            ps.setLong(2, maxId);
+            ps.execute();
+        }
+
+        // Reset the clock to clean all expired data.
+        jdbcEventInteractor.setClock(
+                Clock.fixed(
+                        jdbcEventInteractor
+                                .getCurrentInstant()
+                                .plus(ttl)
+                                .plus(Duration.ofMillis(1)),
+                        ZoneId.systemDefault()));
+
+        eventHandler.cleanExpiredEvents();
+        jdbcEventInteractor.assertDeleteExpiredCounter(2L);
+    }
+
+    private static Stream<Arguments> getExpiredEventHandlersCaseMatrix() {
+        return Stream.of(
+                Arguments.of(false, 128, Duration.ofMinutes(2), 10),
+                Arguments.of(true, 256, Duration.ofMinutes(2), 0),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(2), 12),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(2), 0),
+                Arguments.of(true, 512, Duration.ofMinutes(100), 3),
+                Arguments.of(false, 64, Duration.ofMinutes(100), 0),
+                Arguments.of(true, 1024 * 9, Duration.ofMinutes(100), 64),
+                Arguments.of(false, 1024 * 9, Duration.ofMinutes(100), 0),
+                Arguments.of(false, 0, Duration.ofMinutes(100), 128),
+                Arguments.of(false, 0, Duration.ofMinutes(100), 0));
+    }
+
+    @MethodSource("getExpiredEventHandlersCaseMatrix")
+    @ParameterizedTest(
+            name =
+                    "tryIdNotSequential:{0}, expiredRecordsNum: {1}, eventHandlerTtl: {2}, unexpiredRecordsNum: {3}")
+    void testCleanExpiredEvents(
+            boolean tryIdNotSequential,
+            int expiredRecordsNum,
+            Duration eventHandlerTtl,
+            int unexpiredRecordsNum)
+            throws Exception {
+        eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, eventHandlerTtl);
+
+        // Init the expired records.
+        initTestingEventHandlerRecords(expiredRecordsNum);
+        if (tryIdNotSequential) {
+            tryDeleteOneRecord(expiredRecordsNum);
+        }
+        var expiredInstant = jdbcEventInteractor.getCurrentInstant();
+
+        // Init the unexpired records.
+        initTestingEventHandlerRecords(unexpiredRecordsNum);
+
+        // Reset the clock to clean all expired data.
+        jdbcEventInteractor.setClock(
+                Clock.fixed(
+                        expiredInstant.plus(eventHandlerTtl).plus(Duration.ofMillis(1)),
+                        ZoneId.systemDefault()));
+
+        eventHandler.cleanExpiredEvents();
+
+        try (Connection connection = getConnection();
+                PreparedStatement ps =
+                        connection.prepareStatement(
+                                "select count(1) from t_flink_autoscaler_event_handler");
+                ResultSet countResultSet = ps.executeQuery()) {
+            countResultSet.next();
+            assertThat(countResultSet.getInt(1)).isEqualTo(unexpiredRecordsNum);
+        }
+    }
+
+    private void tryDeleteOneRecord(int expiredRecordsNum) throws Exception {
+        // To simulate non-sequential IDs in expired records.
+        Timestamp date = Timestamp.from(createTime);
+        Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+        if (minId == null) {
+            return;
+        }
+        try (Connection connection = getConnection();
+                PreparedStatement ps =
+                        connection.prepareStatement(
+                                "delete from t_flink_autoscaler_event_handler where id = ?")) {
+            ps.setObject(1, (minId + expiredRecordsNum) / 2);
+            ps.execute();
+        }
+    }
+
+    private void initTestingEventHandlerRecords(int recordsNum) {
+        for (int i = 0; i < recordsNum; i++) {
+            jdbcEventInteractor.setClock(
+                    Clock.fixed(
+                            jdbcEventInteractor.getCurrentInstant().plusSeconds(1),
+                            ZoneId.systemDefault()));
+            eventHandler.handleEvent(
+                    ctx,
+                    AutoScalerEventHandler.Type.Normal,
+                    SCALING_REPORT_REASON,
+                    "message-" + i,
+                    "messageKey-" + i,
+                    null);
+        }
+    }
+
     private void createFirstScalingEvent() throws Exception {
         jdbcEventInteractor.assertCounters(0, 0, 0);
         eventHandler.handleScalingEvent(
@@ -441,8 +578,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         assertThat(
                         jdbcEventInteractor.queryEvents(
-                                ctx.getJobKey().toString(),
-                                AutoScalerEventHandler.SCALING_REPORT_REASON))
+                                ctx.getJobKey().toString(), SCALING_REPORT_REASON))
                 .singleElement()
                 .satisfies(
                         event -> {
@@ -523,7 +659,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
         assertThat(event.getCreateTime()).isEqualTo(expectedCreateTime);
         assertThat(event.getUpdateTime()).isEqualTo(expectedUpdateTime);
         assertThat(event.getJobKey()).isEqualTo(ctx.getJobKey().toString());
-        assertThat(event.getReason()).isEqualTo(AutoScalerEventHandler.SCALING_REPORT_REASON);
+        assertThat(event.getReason()).isEqualTo(SCALING_REPORT_REASON);
         assertThat(event.getEventType()).isEqualTo(AutoScalerEventHandler.Type.Normal.toString());
         assertThat(event.getCount()).isEqualTo(expectedCount);
     }
@@ -531,7 +667,20 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
 /** Test {@link JdbcAutoScalerEventHandler} via Derby. */
 class DerbyJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventHandlerITCase
-        implements DerbyTestBase {}
+        implements DerbyTestBase {
+
+    @Disabled("Disabled due to the 'LIMIT' clause is not supported in Derby.")
+    @Override
+    void testCleanExpiredEvents(
+            boolean tryIdNotSequential,
+            int expiredRecordsNum,
+            Duration eventHandlerTtl,
+            int unexpiredRecordsNum) {}
+
+    @Disabled("Disabled due to the 'LIMIT' clause is not supported in Derby.")
+    @Override
+    void testDeleteCounterWhenIdNotConsecutive() {}
+}
 
 /** Test {@link JdbcAutoScalerEventHandler} via MySQL 5.6.x. */
 class MySQL56JdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventHandlerITCase
@@ -547,4 +696,9 @@ class MySQL8JdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEvent
 
 /** Test {@link JdbcAutoScalerEventHandler} via Postgre SQL. */
 class PostgreSQLJdbcAutoscalerEventHandlerITCase extends AbstractJdbcAutoscalerEventHandlerITCase
-        implements PostgreSQLTestBase {}
+        implements PostgreSQLTestBase {
+
+    @Disabled("Disabled due to the column 'id' can only be updated to DEFAULT.")
+    @Override
+    void testDeleteCounterWhenIdNotConsecutive() {}
+}
