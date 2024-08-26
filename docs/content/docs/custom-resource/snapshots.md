@@ -38,7 +38,7 @@ If you set this to false, the operator will keep using the deprecated status fie
 To create a savepoint or checkpoint, exactly one of the spec fields `savepoint` or `checkpoint` must present. 
 Furthermore, in case of a savepoint you can signal to the operator that the savepoint already exists using the `alreadyExists` field, and the operator will mark it as a successful snapshot in the next reconciliation phase.
 
-You can also instruct the Operator to start a new FlinkDeployment/FlinkSessionJob from an existing snapshot CR by using `flinkStateSnapshotReference` in the job spec.
+You can also instruct the Operator to start a new FlinkDeployment/FlinkSessionJob from an existing snapshot CR by using `initialStateReference` in the job spec.
 
 ## Examples
 
@@ -80,7 +80,7 @@ spec:
 
 ```yaml
  job:
-   flinkStateSnapshotReference:
+   initialStateReference:
      namespace: flink  # not required if it's in the same namespace
      name: example-savepoint
 ```

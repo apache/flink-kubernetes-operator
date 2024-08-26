@@ -184,11 +184,10 @@ public abstract class AbstractFlinkResourceReconciler<
             return Optional.empty();
         }
 
-        if (spec.getJob().getFlinkStateSnapshotReference() != null) {
+        if (spec.getJob().getInitialStateReference() != null) {
             return Optional.of(
                     FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(
-                            ctx.getKubernetesClient(),
-                            spec.getJob().getFlinkStateSnapshotReference()));
+                            ctx.getKubernetesClient(), spec.getJob().getInitialStateReference()));
         }
 
         return Optional.ofNullable(spec.getJob().getInitialSavepointPath());
@@ -233,7 +232,7 @@ public abstract class AbstractFlinkResourceReconciler<
             CR cr, SPEC spec, Configuration deployConfig, STATUS status, KubernetesClient client) {
         if (spec.getJob() != null) {
             var initialUpgradeMode = UpgradeMode.STATELESS;
-            var snapshotRef = spec.getJob().getFlinkStateSnapshotReference();
+            var snapshotRef = spec.getJob().getInitialStateReference();
             var initialSp = spec.getJob().getInitialSavepointPath();
 
             if (snapshotRef != null) {

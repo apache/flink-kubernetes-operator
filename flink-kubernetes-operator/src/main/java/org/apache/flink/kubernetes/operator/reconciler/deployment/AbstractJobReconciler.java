@@ -498,7 +498,7 @@ public abstract class AbstractJobReconciler<
         cancelJob(ctx, UpgradeMode.STATELESS);
         currentDeploySpec.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
 
-        var snapshotRef = currentDeploySpec.getJob().getFlinkStateSnapshotReference();
+        var snapshotRef = currentDeploySpec.getJob().getInitialStateReference();
         var initialSavepointPath = currentDeploySpec.getJob().getInitialSavepointPath();
 
         if (snapshotRef == null && initialSavepointPath != null) {

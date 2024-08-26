@@ -148,20 +148,20 @@ Here is a reference example of upgrading a `basic-checkpoint-ha-example` deploym
     ```
 5. Restore the job:
 
-   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.flinkStateSnapshotReference.path` to the savepoint location obtained from the step 1.
+   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialStateReference.path` to the savepoint location obtained from the step 1.
 
     ```
     spec:
       ...
       job:
-        flinkStateSnapshotReference: 
+        initialStateReference: 
           path: /flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata
         upgradeMode: savepoint
       ...
     ```
     Alternatively, we may use this command to edit and deploy the manifest:
     ```sh
-    wget -qO - https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml| yq w - "spec.job.flinkStateSnapshotReference.path" "/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata"| kubectl apply -f -
+    wget -qO - https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml| yq w - "spec.job.initialStateReference.path" "/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata"| kubectl apply -f -
     ```
    Finally, verify that `deploy/basic-checkpoint-ha-example` log has:
     ```
