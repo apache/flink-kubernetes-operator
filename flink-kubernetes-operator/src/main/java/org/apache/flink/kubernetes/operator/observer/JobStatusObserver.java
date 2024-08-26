@@ -18,14 +18,16 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
-import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
-import org.apache.flink.runtime.rest.NotFoundException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,19 +100,30 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      * @param ctx The Flink resource context.
      */
     protected void onTargetJobNotFound(FlinkResourceContext<R> ctx) {
-        ctx.getResource()
-                .getStatus()
-                .getJobStatus()
-                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-        ReconciliationUtils.updateForReconciliationError(
-                ctx, new NotFoundException(JOB_NOT_FOUND_ERR));
+        var resource = ctx.getResource();
+        var jobStatus = resource.getStatus().getJobStatus();
+
         eventRecorder.triggerEvent(
-                ctx.getResource(),
+                resource,
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.Missing,
                 EventRecorder.Component.Job,
                 JOB_NOT_FOUND_ERR,
                 ctx.getKubernetesClient());
+
+        if (resource instanceof FlinkSessionJob
+                && !ReconciliationUtils.isJobInTerminalState(resource.getStatus())
+                && resource.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+            // We also mark jobs that were previously not terminated as suspended if
+            // stateless upgrade mode is used. In these cases we want to simply restart the job.
+            markSuspended(resource);
+        } else {
+            // We could not suspend the job as it was lost during a stateless upgrade, cancel
+            // upgrading state and retry the upgrade (if possible)
+            resource.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        }
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        resource.getStatus().setError(JOB_NOT_FOUND_ERR);
     }
 
     /**
@@ -120,9 +133,11 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      * @param jobStatus JobStatus object.
      * @param previousJobStatus Last observed job state.
      */
-    private void ifRunningMoveToReconciling(JobStatus jobStatus, String previousJobStatus) {
-        if (org.apache.flink.api.common.JobStatus.RUNNING.name().equals(previousJobStatus)) {
-            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+    private void ifRunningMoveToReconciling(
+            org.apache.flink.kubernetes.operator.api.status.JobStatus jobStatus,
+            String previousJobStatus) {
+        if (JobStatus.RUNNING.name().equals(previousJobStatus)) {
+            jobStatus.setState(JobStatus.RECONCILING.name());
         }
     }
 
@@ -143,6 +158,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         var previousJobStatus = jobStatus.getState();
+        var currentJobStatus = clusterJobStatus.getJobState();
 
         jobStatus.setState(clusterJobStatus.getJobState().name());
         jobStatus.setJobName(clusterJobStatus.getJobName());
@@ -159,6 +175,13 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                     "Job status changed from %s to %s",
                                     previousJobStatus, jobStatus.getState());
 
+            if (JobStatus.CANCELED == currentJobStatus
+                    || (currentJobStatus.isGloballyTerminalState()
+                            && JobStatus.CANCELLING.name().equals(previousJobStatus))) {
+                // The job was cancelled
+                markSuspended(resource);
+            }
+
             setErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
                     resource,
@@ -170,8 +193,18 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         }
     }
 
+    private static void markSuspended(AbstractFlinkResource<?, ?> resource) {
+        LOG.info("Marking suspended");
+        ReconciliationUtils.updateLastReconciledSpec(
+                resource,
+                (s, m) -> {
+                    s.getJob().setState(JobState.SUSPENDED);
+                    m.setFirstDeployment(false);
+                });
+    }
+
     private void setErrorIfPresent(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
-        if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
+        if (clusterJobStatus.getJobState() == JobStatus.FAILED) {
             try {
                 var result =
                         ctx.getFlinkService()

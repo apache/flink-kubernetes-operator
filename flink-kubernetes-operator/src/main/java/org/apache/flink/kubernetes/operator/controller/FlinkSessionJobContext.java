@@ -53,7 +53,10 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
         var session = getJosdkContext().getSecondaryResource(FlinkDeployment.class);
 
         if (sessionClusterReady(session)) {
-            return configManager.getSessionJobConfig(session.get(), (FlinkSessionJobSpec) spec);
+            return configManager.getSessionJobConfig(
+                    getResource().getMetadata().getName(),
+                    session.get(),
+                    (FlinkSessionJobSpec) spec);
         }
         return null;
     }

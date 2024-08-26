@@ -24,6 +24,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +42,9 @@ public class SavepointInfo implements SnapshotInfo {
      * Last completed savepoint by the operator for manual and periodic snapshots. Only used if
      * FlinkStateSnapshot resources are disabled.
      */
+    private static final Logger LOG = LoggerFactory.getLogger(SavepointInfo.class);
+
+    /** Last completed savepoint by the operator. */
     private Savepoint lastSavepoint;
 
     /** Trigger id of a pending savepoint operation. */
@@ -82,7 +87,11 @@ public class SavepointInfo implements SnapshotInfo {
      * @param savepoint Savepoint to be added.
      */
     public void updateLastSavepoint(Savepoint savepoint) {
-        if (lastSavepoint == null || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {
+        if (savepoint == null) {
+            lastSavepoint = null;
+        } else if (lastSavepoint == null
+                || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {
+            LOG.debug("Updating last savepoint to {}", savepoint);
             lastSavepoint = savepoint;
             savepointHistory.add(savepoint);
             if (savepoint.getTriggerType() == SnapshotTriggerType.PERIODIC) {

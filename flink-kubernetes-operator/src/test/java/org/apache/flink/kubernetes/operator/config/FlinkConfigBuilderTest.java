@@ -23,7 +23,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
-import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -31,7 +30,6 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.WebOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
-import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -56,8 +54,6 @@ import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -126,8 +122,6 @@ public class FlinkConfigBuilderTest {
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
         assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
-        assertEquals(
-                flinkDeployment.getMetadata().getName(), configuration.get(PipelineOptions.NAME));
 
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
         deployment
@@ -145,39 +139,12 @@ public class FlinkConfigBuilderTest {
                 KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
 
-        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        configuration =
-                new FlinkConfigBuilder(
-                                deployment,
-                                new Configuration()
-                                        .set(
-                                                HighAvailabilityOptions.HA_MODE,
-                                                KubernetesHaServicesFactory.class
-                                                        .getCanonicalName()))
-                        .applyFlinkConfiguration()
-                        .build();
-        assertEquals(
-                DEFAULT_CHECKPOINTING_INTERVAL,
-                configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
-
         deployment = TestUtils.buildSessionCluster();
         configuration =
                 new FlinkConfigBuilder(deployment, new Configuration())
                         .applyFlinkConfiguration()
                         .build();
         assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
-    }
-
-    @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void testApplyFlinkConfigurationShouldSetShutdownOnFinishBasedOnFlinkVersion(
-            FlinkVersion flinkVersion) {
-        flinkDeployment.getSpec().setFlinkVersion(flinkVersion);
-        Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
-                        .applyFlinkConfiguration()
-                        .build();
-        Assertions.assertFalse(configuration.getBoolean(SHUTDOWN_ON_APPLICATION_FINISH));
     }
 
     @Test
@@ -767,6 +734,22 @@ public class FlinkConfigBuilderTest {
                         .build();
 
         assertEquals(12, configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+        assertEquals(
+                true, configuration.get(DeploymentOptions.SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR));
+        Assertions.assertFalse(configuration.getBoolean(SHUTDOWN_ON_APPLICATION_FINISH));
+        assertEquals(
+                flinkDeployment.getMetadata().getName(), configuration.get(PipelineOptions.NAME));
+
+        dep = ReconciliationUtils.clone(deploymentClone);
+        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertEquals(
+                DEFAULT_CHECKPOINTING_INTERVAL,
+                configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
     }
 
     @Test

@@ -35,7 +35,6 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -67,7 +66,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -118,10 +116,10 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Optional<String> cancelJob(
-            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
+    public CancelResult cancelJob(
+            FlinkDeployment deployment, SuspendMode suspendMode, Configuration configuration)
             throws Exception {
-        return cancelJob(deployment, upgradeMode, configuration, false);
+        return cancelJob(deployment, suspendMode, configuration, false);
     }
 
     @Override
@@ -131,12 +129,6 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .inNamespace(namespace)
                 .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
                 .list();
-    }
-
-    @Override
-    protected PodList getTmPodList(String namespace, String clusterId) {
-        // Native mode does not manage TaskManager
-        return new PodList();
     }
 
     protected void submitClusterInternal(Configuration conf) throws Exception {

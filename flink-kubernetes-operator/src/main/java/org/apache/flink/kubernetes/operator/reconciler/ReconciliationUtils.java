@@ -55,6 +55,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.BiConsumer;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
@@ -272,10 +273,12 @@ public class ReconciliationUtils {
             return updateControl;
         }
 
+        if (isJobCancelling(status)) {
+            return updateControl.rescheduleAfter(operatorConfiguration.getProgressCheckInterval());
+        }
+
         if (upgradeStarted(
-                        status.getReconciliationStatus(),
-                        previous.getStatus().getReconciliationStatus())
-                || current.getStatus().isImmediateReconciliationNeeded()) {
+                status.getReconciliationStatus(), previous.getStatus().getReconciliationStatus())) {
             return updateControl.rescheduleAfter(0);
         }
 
@@ -305,6 +308,7 @@ public class ReconciliationUtils {
             case READY:
                 rescheduleAfter =
                         savepointInProgress(flinkDeployment.getStatus().getJobStatus())
+                                        || isJobCancelling(flinkDeployment.getStatus())
                                 ? operatorConfiguration.getProgressCheckInterval()
                                 : operatorConfiguration.getReconcileInterval();
                 break;
@@ -356,15 +360,15 @@ public class ReconciliationUtils {
         if (currentReconState == previousReconState) {
             return false;
         }
-        if (currentStatus.scalingInProgress()) {
-            return false;
-        }
         return currentReconState == ReconciliationState.ROLLING_BACK
                 || currentReconState == ReconciliationState.UPGRADING;
     }
 
     public static boolean isJobInTerminalState(CommonStatus<?> status) {
         var jobState = status.getJobStatus().getState();
+        if (jobState == null) {
+            jobState = org.apache.flink.api.common.JobStatus.RECONCILING.name();
+        }
         return org.apache.flink.api.common.JobStatus.valueOf(jobState).isGloballyTerminalState();
     }
 
@@ -372,6 +376,25 @@ public class ReconciliationUtils {
         return org.apache.flink.api.common.JobStatus.RUNNING
                 .name()
                 .equals(status.getJobStatus().getState());
+    }
+
+    public static boolean isJobCancelled(CommonStatus<?> status) {
+        return org.apache.flink.api.common.JobStatus.CANCELED
+                .name()
+                .equals(status.getJobStatus().getState());
+    }
+
+    public static boolean isJobCancellable(CommonStatus<?> status) {
+        return !org.apache.flink.api.common.JobStatus.RECONCILING
+                .name()
+                .equals(status.getJobStatus().getState());
+    }
+
+    public static boolean isJobCancelling(CommonStatus<?> status) {
+        return status.getJobStatus() != null
+                && org.apache.flink.api.common.JobStatus.CANCELLING
+                        .name()
+                        .equals(status.getJobStatus().getState());
     }
 
     /**
@@ -396,7 +419,6 @@ public class ReconciliationUtils {
         var deployment = ctx.getResource();
         var status = deployment.getStatus();
         if (!validationError.equals(status.getError())) {
-            LOG.error("Validation failed: " + validationError);
             ReconciliationUtils.updateForReconciliationError(
                     ctx, new ValidationException(validationError));
         }
@@ -482,6 +504,7 @@ public class ReconciliationUtils {
         }
 
         if (lastSpecWithMeta.getMeta().isFirstDeployment()) {
+            LOG.info("Clearing last reconciled spec after initial deploy failure");
             reconStatus.setLastReconciledSpec(null);
             reconStatus.setState(ReconciliationState.UPGRADING);
         }
@@ -556,5 +579,15 @@ public class ReconciliationUtils {
         reconciliationStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecWithMeta(lastSpecWithMeta.getSpec(), newMeta));
         resource.getStatus().setObservedGeneration(resource.getMetadata().getGeneration());
+    }
+
+    public static <T extends AbstractFlinkSpec> void updateLastReconciledSpec(
+            AbstractFlinkResource<T, ?> resource, BiConsumer<T, ReconciliationMetadata> update) {
+        var reconStatus = resource.getStatus().getReconciliationStatus();
+        var specWithMeta = reconStatus.deserializeLastReconciledSpecWithMeta();
+        var spec = specWithMeta.getSpec();
+        var meta = specWithMeta.getMeta();
+        update.accept(spec, meta);
+        reconStatus.setLastReconciledSpec(SpecUtils.writeSpecWithMeta(spec, meta));
     }
 }

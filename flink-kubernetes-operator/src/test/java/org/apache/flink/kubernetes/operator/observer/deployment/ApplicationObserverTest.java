@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
@@ -41,7 +40,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -51,7 +49,6 @@ import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -857,35 +854,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(321L, status.getObservedGeneration());
         assertEquals(JobState.RUNNING, specWithMeta.getSpec().getJob().getState());
         assertEquals(5, specWithMeta.getSpec().getJob().getParallelism());
-    }
-
-    @Test
-    public void observeAlreadyScaled() {
-        // Update status for for running job
-        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
-                deployment,
-                new FlinkConfigManager(new Configuration())
-                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-
-        var conf = new Configuration();
-        var v1 = new JobVertexID();
-        conf.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "2"));
-        deployment.getSpec().setFlinkConfiguration(conf.toMap());
-
-        // Assert that we move to deployed when in deprecated scaling UPGRADING state
-        ReconciliationUtils.updateStatusForSpecReconciliation(
-                deployment, JobState.RUNNING, conf, true, Clock.systemDefaultZone());
-        assertEquals(
-                ReconciliationState.UPGRADING,
-                deployment.getStatus().getReconciliationStatus().getState());
-        observer.observe(deployment, context);
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
     }
 
     @Test

@@ -18,11 +18,16 @@
 package org.apache.flink.kubernetes.operator.exception;
 
 /** Exception to signal non-terminal deployment failure. */
-public class RecoveryFailureException extends RuntimeException {
+public class UpgradeFailureException extends RuntimeException {
     private final String reason;
 
-    public RecoveryFailureException(String message, String reason) {
+    public UpgradeFailureException(String message, String reason) {
         super(message);
+        this.reason = reason;
+    }
+
+    public UpgradeFailureException(String message, String reason, Throwable throwable) {
+        super(message, throwable);
         this.reason = reason;
     }
 

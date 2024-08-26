@@ -26,16 +26,13 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
@@ -81,7 +78,7 @@ public class SnapshotObserver<
     }
 
     public void observeSavepointStatus(FlinkResourceContext<CR> ctx) {
-
+        LOG.debug("Observing savepoint status");
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         var jobId = jobStatus.getJobId();
@@ -93,8 +90,7 @@ public class SnapshotObserver<
 
         // If job is in globally terminal state, observe last savepoint
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
-            observeLatestCheckpoint(
-                    ctx.getFlinkService(), jobStatus, jobId, ctx.getObserveConfig());
+            observeLatestCheckpoint(ctx, jobId);
         }
 
         cleanupSavepointHistory(ctx);
@@ -119,7 +115,7 @@ public class SnapshotObserver<
 
         var savepointInfo = resource.getStatus().getJobStatus().getSavepointInfo();
 
-        LOG.info("Observing savepoint status.");
+        LOG.debug("Observing in-progress savepoint");
         var savepointFetchResult =
                 ctx.getFlinkService()
                         .fetchSavepointInfo(
@@ -444,19 +440,22 @@ public class SnapshotObserver<
         }
     }
 
-    private void observeLatestCheckpoint(
-            FlinkService flinkService,
-            JobStatus jobStatus,
-            String jobID,
-            Configuration observeConfig) {
-        try {
-            flinkService
-                    .getLastCheckpoint(JobID.fromHexString(jobID), observeConfig)
-                    .ifPresent(
-                            snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()));
-        } catch (Exception e) {
-            LOG.error("Could not observe latest checkpoint information.", e);
-            throw new ReconciliationException(e);
-        }
+    private void observeLatestCheckpoint(FlinkResourceContext<CR> ctx, String jobId) {
+
+        var status = ctx.getResource().getStatus();
+        var jobStatus = status.getJobStatus();
+
+        ctx.getFlinkService()
+                .getLastCheckpoint(JobID.fromHexString(jobId), ctx.getObserveConfig())
+                .ifPresentOrElse(
+                        snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()),
+                        () -> {
+                            if (ReconciliationUtils.isJobCancelled(status)) {
+                                // For cancelled jobs the observed savepoint is always definite,
+                                // so if empty we know the job doesn't have any
+                                // checkpoints/savepoints
+                                jobStatus.setUpgradeSavepointPath(null);
+                            }
+                        });
     }
 }

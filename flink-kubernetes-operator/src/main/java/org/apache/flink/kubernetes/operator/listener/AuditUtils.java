@@ -44,6 +44,10 @@ public class AuditUtils {
 
     public static <R extends AbstractFlinkResource<?, S>, S extends CommonStatus<?>>
             void logContext(FlinkResourceListener.StatusUpdateContext<R, S> ctx) {
+        if (ctx.getPreviousStatus().getLifecycleState() == ctx.getNewStatus().getLifecycleState()) {
+            // Unchanged state, nothing to log
+            return;
+        }
         LOG.info(format(ctx.getNewStatus()));
     }
 

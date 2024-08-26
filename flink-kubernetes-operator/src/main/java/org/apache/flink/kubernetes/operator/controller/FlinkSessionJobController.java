@@ -138,20 +138,28 @@ public class FlinkSessionJobController
         if (canaryResourceManager.handleCanaryResourceDeletion(sessionJob)) {
             return DeleteControl.defaultDelete();
         }
-
-        String msg = "Cleaning up " + FlinkSessionJob.class.getSimpleName();
-
-        LOG.info(msg);
         eventRecorder.triggerEvent(
                 sessionJob,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg,
+                "Cleaning up FlinkSessionJob",
                 josdkContext.getClient());
-        statusRecorder.removeCachedStatus(sessionJob);
         var ctx = ctxFactory.getResourceContext(sessionJob, josdkContext);
-        return reconciler.cleanup(ctx);
+        try {
+            observer.observe(ctx);
+        } catch (Exception err) {
+            LOG.error("Error while observing for cleanup", err);
+        }
+
+        var deleteControl = reconciler.cleanup(ctx);
+        if (deleteControl.isRemoveFinalizer()) {
+            ctxFactory.cleanup(sessionJob);
+            statusRecorder.removeCachedStatus(sessionJob);
+        } else {
+            statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
+        }
+        return deleteControl;
     }
 
     @Override

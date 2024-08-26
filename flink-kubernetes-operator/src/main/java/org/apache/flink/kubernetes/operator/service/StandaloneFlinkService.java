@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
@@ -46,7 +45,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -81,10 +79,10 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Optional<String> cancelJob(
-            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    public CancelResult cancelJob(
+            FlinkDeployment deployment, SuspendMode suspendMode, Configuration conf)
             throws Exception {
-        return cancelJob(deployment, upgradeMode, conf, true);
+        return cancelJob(deployment, suspendMode, conf, true);
     }
 
     @Override
@@ -93,15 +91,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .pods()
                 .inNamespace(namespace)
                 .withLabels(StandaloneKubernetesUtils.getJobManagerSelectors(clusterId))
-                .list();
-    }
-
-    @Override
-    protected PodList getTmPodList(String namespace, String clusterId) {
-        return kubernetesClient
-                .pods()
-                .inNamespace(namespace)
-                .withLabels(StandaloneKubernetesUtils.getTaskManagerSelectors(clusterId))
                 .list();
     }
 

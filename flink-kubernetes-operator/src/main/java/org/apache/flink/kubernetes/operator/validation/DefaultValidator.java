@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
@@ -42,12 +41,10 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -242,10 +239,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
 
         Configuration configuration = Configuration.fromMap(confMap);
-        if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(configuration)) {
-            return Optional.of("Job could not be upgraded with last-state while HA disabled");
-        }
 
         if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
             if (StringUtils.isNullOrWhitespaceOnly(
@@ -453,18 +446,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         JobSpec oldJob = oldSpec.getJob();
         JobSpec newJob = newSpec.getJob();
         if (oldJob != null && newJob != null) {
-            if (StringUtils.isNullOrWhitespaceOnly(
-                            effectiveConfig.get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
-                    && deployment.getStatus().getJobManagerDeploymentStatus()
-                            != JobManagerDeploymentStatus.MISSING
-                    && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            deployment, configManager.getObserveConfig(deployment))) {
-                return Optional.of(
-                        String.format(
-                                "Job could not be upgraded to last-state while config key[%s] is not set",
-                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
-            }
-
             if (newJob.getSavepointRedeployNonce() != null
                     && !newJob.getSavepointRedeployNonce()
                             .equals(oldJob.getSavepointRedeployNonce())) {
@@ -533,7 +514,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateDeploymentName(sessionJob.getSpec().getDeploymentName()),
                 validateJobNotEmpty(sessionJob),
-                validateNotLastStateUpgradeMode(sessionJob),
                 validateSpecChange(sessionJob));
     }
 
@@ -586,19 +566,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
     }
 
-    private Optional<String> validateNotLastStateUpgradeMode(FlinkSessionJob sessionJob) {
-        if (sessionJob.getSpec().getJob().getUpgradeMode() == UpgradeMode.LAST_STATE) {
-            return Optional.of(
-                    String.format(
-                            "The %s upgrade mode is not supported in session job now.",
-                            UpgradeMode.LAST_STATE));
-        }
-        return Optional.empty();
-    }
-
     private Optional<String> validateSpecChange(FlinkSessionJob sessionJob) {
-        FlinkSessionJobSpec newSpec = sessionJob.getSpec();
-
         if (sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
             return Optional.empty();
         } else {

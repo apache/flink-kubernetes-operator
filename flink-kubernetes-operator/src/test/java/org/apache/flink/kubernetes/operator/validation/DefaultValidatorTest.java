@@ -43,7 +43,6 @@ import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
@@ -111,13 +110,6 @@ public class DefaultValidatorTest {
                     dep.getSpec().getTaskManager().setReplicas(1);
                     dep.getSpec().getJob().setParallelism(0);
                 });
-
-        testError(
-                dep -> {
-                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
-                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-                },
-                "Job could not be upgraded with last-state while HA disabled");
 
         testError(
                 dep -> {
@@ -462,31 +454,6 @@ public class DefaultValidatorTest {
                 },
                 "Cannot switch from standalone kubernetes to native kubernetes cluster");
 
-        // Test upgrade mode change validation
-        testError(
-                dep -> {
-                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-                    dep.getSpec()
-                            .getFlinkConfiguration()
-                            .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
-                    dep.setStatus(new FlinkDeploymentStatus());
-                    dep.getStatus().setJobStatus(new JobStatus());
-
-                    dep.getStatus()
-                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
-                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
-                    spec.getJob().setUpgradeMode(UpgradeMode.STATELESS);
-                    spec.getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());
-
-                    dep.getStatus()
-                            .getReconciliationStatus()
-                            .serializeAndSetLastReconciledSpec(spec, dep);
-                    dep.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-                },
-                String.format(
-                        "Job could not be upgraded to last-state while config key[%s] is not set",
-                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
-
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
         testError(
@@ -719,7 +686,7 @@ public class DefaultValidatorTest {
         testSessionJobValidateWithModifier(
                 sessionJob -> sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE),
                 flinkDeployment -> {},
-                "The LAST_STATE upgrade mode is not supported in session job now.");
+                null);
 
         testSessionJobValidateWithModifier(
                 sessionJob ->
