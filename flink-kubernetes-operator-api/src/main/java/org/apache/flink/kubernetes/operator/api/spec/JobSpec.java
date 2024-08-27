@@ -80,7 +80,7 @@ public class JobSpec implements Diffable<JobSpec> {
      * redeployments (triggered by changing the savepointRedeployNonce).
      */
     @SpecDiff(DiffType.IGNORE)
-    private FlinkStateSnapshotReference flinkStateSnapshotReference;
+    private FlinkStateSnapshotReference initialState;
 
     /**
      * Nonce used to manually trigger checkpoint for the running job. In order to trigger a

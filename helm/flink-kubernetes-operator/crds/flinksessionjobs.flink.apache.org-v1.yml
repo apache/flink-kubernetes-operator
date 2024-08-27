@@ -49,7 +49,9 @@ spec:
                     type: integer
                   entryClass:
                     type: string
-                  flinkStateSnapshotReference:
+                  initialSavepointPath:
+                    type: string
+                  initialState:
                     properties:
                       name:
                         type: string
@@ -58,8 +60,6 @@ spec:
                       path:
                         type: string
                     type: object
-                  initialSavepointPath:
-                    type: string
                   jarURI:
                     type: string
                   parallelism:

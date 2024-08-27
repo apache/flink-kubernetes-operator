@@ -532,11 +532,11 @@ public class DefaultValidatorTest {
                 dep -> {
                     dep.getSpec()
                             .getJob()
-                            .setFlinkStateSnapshotReference(
+                            .setInitialState(
                                     FlinkStateSnapshotReference.builder().name("snapshot").build());
                     dep.getSpec().getJob().setInitialSavepointPath("s0");
                 },
-                "Cannot set both initialSavepointPath and flinkStateSnapshotReference in the job spec");
+                "Cannot set both initialSavepointPath and initialState in the job spec");
     }
 
     @Test
@@ -615,9 +615,9 @@ public class DefaultValidatorTest {
                             .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(null);
-                    job.setFlinkStateSnapshotReference(null);
+                    job.setInitialState(null);
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeployment");
+                "InitialSavepointPath and initialState must not be empty for savepoint redeployment");
 
         testError(
                 dep -> {
@@ -628,7 +628,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(" ");
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
+                "InitialSavepointPath and initialState must not be empty for savepoint redeploymen");
 
         testError(
                 dep -> {
@@ -642,7 +642,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(2L);
                     job.setInitialSavepointPath(null);
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
+                "InitialSavepointPath and initialState must not be empty for savepoint redeploymen");
     }
 
     @ParameterizedTest
