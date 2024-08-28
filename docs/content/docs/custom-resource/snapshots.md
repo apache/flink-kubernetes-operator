@@ -38,7 +38,7 @@ If you set this to false, the operator will keep using the deprecated status fie
 To create a savepoint or checkpoint, exactly one of the spec fields `savepoint` or `checkpoint` must present. 
 Furthermore, in case of a savepoint you can signal to the operator that the savepoint already exists using the `alreadyExists` field, and the operator will mark it as a successful snapshot in the next reconciliation phase.
 
-You can also instruct the Operator to start a new FlinkDeployment/FlinkSessionJob from an existing snapshot CR by using `flinkStateSnapshotReference` in the job spec.
+You can also instruct the Operator to start a new FlinkDeployment/FlinkSessionJob from an existing snapshot by using `initialSavepointPath` in the job spec.
 
 ## Examples
 
@@ -78,11 +78,11 @@ spec:
 
 ### Start job from existing snapshot
 
+To start a job from an existing snapshot, you need to extract the path then use:
+
 ```yaml
  job:
-   flinkStateSnapshotReference:
-     namespace: flink  # not required if it's in the same namespace
-     name: example-savepoint
+   initialSavepointPath: [savepoint_path]
 ```
 
 {{< hint warning >}}
@@ -131,7 +131,7 @@ This feature is not available for checkpoints.
 ## Triggering snapshots
 
 Upgrade savepoints are triggered automatically by the system during the upgrade process as we have seen in the previous sections.
-In this case, the savepoint path will also be recorded in the `upgradeSnapshotReference` job status field, which the operator will use when restarting the job.
+In this case, the savepoint path will also be recorded in the `upgradeSavepointPath` job status field, which the operator will use when restarting the job.
 
 For backup, job forking and other purposes savepoint and checkpoints can be triggered manually or periodically by the operator, however generally speaking these will not be used during upgrades and are not required for the correct operation.
 

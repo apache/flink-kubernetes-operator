@@ -40,7 +40,6 @@ import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -174,7 +173,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // clean up
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
-        assertNull(deployment.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertNull(deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         reconciler.cleanup(
                 deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
 
@@ -185,11 +184,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                             assertThat(snapshot.getSpec().getSavepoint().getPath())
                                     .isEqualTo("savepoint_0");
                             assertEquals(
-                                    FlinkStateSnapshotReference.fromResource(snapshot),
+                                    "savepoint_0",
                                     deployment
                                             .getStatus()
                                             .getJobStatus()
-                                            .getUpgradeSnapshotReference());
+                                            .getUpgradeSavepointPath());
                         });
     }
 
@@ -209,7 +208,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // clean up
-        assertNull(deployment.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertNull(deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         reconciler.cleanup(
                 deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
 
@@ -220,11 +219,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                             assertThat(snapshot.getSpec().getSavepoint().getPath())
                                     .isEqualTo("savepoint_0");
                             assertEquals(
-                                    FlinkStateSnapshotReference.fromResource(snapshot),
+                                    "savepoint_0",
                                     deployment
                                             .getStatus()
                                             .getJobStatus()
-                                            .getUpgradeSnapshotReference());
+                                            .getUpgradeSavepointPath());
                         });
     }
 
@@ -554,7 +553,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
         assertFalse(isSnapshotInProgress.test(getJobStatus(deployment)));
         assertNull(getSnapshotInfo.apply(deployment).getLastSnapshot());
-        assertNull(deployment.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertNull(deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         assertNull(getLastSnapshotStatus(deployment, snapshotType));
 
         FlinkDeployment snDeployment = ReconciliationUtils.clone(deployment);
@@ -563,7 +562,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(snDeployment, context);
         assertFalse(isSnapshotInProgress.test((getJobStatus(snDeployment))));
         assertNull(getSnapshotInfo.apply(deployment).getLastSnapshot());
-        assertNull(deployment.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertNull(deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         assertNull(getLastSnapshotStatus(snDeployment, snapshotType));
 
         // trigger when nonce is defined
@@ -1199,11 +1198,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                             assertThat(snapshot.getSpec().getSavepoint().getPath())
                                     .isEqualTo("savepoint_0");
                             assertEquals(
-                                    FlinkStateSnapshotReference.fromResource(snapshot),
+                                    "savepoint_0",
                                     deployment
                                             .getStatus()
                                             .getJobStatus()
-                                            .getUpgradeSnapshotReference());
+                                            .getUpgradeSavepointPath());
                         });
     }
 
@@ -1376,7 +1375,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 status.getJobManagerDeploymentStatus());
 
         // Verify that savepoint and upgrade mode is recorded correctly in reconciled spec
-        assertEquals(savepoint, status.getJobStatus().getUpgradeSnapshotReference().getPath());
+        assertEquals(savepoint, status.getJobStatus().getUpgradeSavepointPath());
         assertEquals(
                 UpgradeMode.SAVEPOINT,
                 status.getReconciliationStatus()

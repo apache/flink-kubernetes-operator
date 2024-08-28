@@ -294,12 +294,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Job parallelism must be larger than 0");
         }
 
-        if (!StringUtils.isNullOrWhitespaceOnly(job.getInitialSavepointPath())
-                && job.getFlinkStateSnapshotReference() != null) {
-            return Optional.of(
-                    "Cannot set both initialSavepointPath and flinkStateSnapshotReference in the job spec");
-        }
-
         return Optional.empty();
     }
 
@@ -474,10 +468,9 @@ public class DefaultValidator implements FlinkResourceValidator {
             if (newJob.getSavepointRedeployNonce() != null
                     && !newJob.getSavepointRedeployNonce()
                             .equals(oldJob.getSavepointRedeployNonce())) {
-                if (StringUtils.isNullOrWhitespaceOnly(newJob.getInitialSavepointPath())
-                        && newJob.getFlinkStateSnapshotReference() == null) {
+                if (StringUtils.isNullOrWhitespaceOnly(newJob.getInitialSavepointPath())) {
                     return Optional.of(
-                            "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeployment");
+                            "InitialSavepointPath must not be empty for savepoint redeployment");
                 }
             }
         }

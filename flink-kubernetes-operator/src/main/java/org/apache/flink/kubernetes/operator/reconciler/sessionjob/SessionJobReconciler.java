@@ -104,7 +104,7 @@ public class SessionJobReconciler
 
         ctx.getFlinkService()
                 .cancelSessionJob(ctx.getResource(), upgradeMode, conf)
-                .ifPresent(location -> setUpgradeSnapshotReferenceFromSavepoint(ctx, location));
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location));
         ctx.getResource().getStatus().getJobStatus().setJobId(null);
     }
 

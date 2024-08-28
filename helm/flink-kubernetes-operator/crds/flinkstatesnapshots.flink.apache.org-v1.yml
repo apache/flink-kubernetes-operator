@@ -48,8 +48,6 @@ spec:
                     type: string
                   name:
                     type: string
-                  namespace:
-                    type: string
                 type: object
               savepoint:
                 properties:

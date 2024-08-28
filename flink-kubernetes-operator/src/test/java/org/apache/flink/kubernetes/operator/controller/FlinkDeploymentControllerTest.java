@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -397,9 +396,7 @@ public class FlinkDeploymentControllerTest {
                 new TaskManagerInfo(
                         "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
                 appCluster.getStatus().getTaskManager());
-        assertEquals(
-                FlinkStateSnapshotReference.fromPath("s0"),
-                appCluster.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertEquals("s0", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         var previousJobs = new ArrayList<>(jobs);
         appCluster.getSpec().getJob().setInitialSavepointPath("s1");
@@ -407,9 +404,7 @@ public class FlinkDeploymentControllerTest {
         // Send in a no-op change
         testController.reconcile(appCluster, context);
         assertEquals(previousJobs, new ArrayList<>(flinkService.listJobs()));
-        assertEquals(
-                FlinkStateSnapshotReference.fromPath("s0"),
-                appCluster.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertEquals("s0", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         // Upgrade job
         appCluster.getSpec().getJob().setParallelism(100);
@@ -425,8 +420,7 @@ public class FlinkDeploymentControllerTest {
                         .getState());
         assertEquals(new TaskManagerInfo("", 0), appCluster.getStatus().getTaskManager());
         assertEquals(
-                FlinkStateSnapshotReference.fromPath("savepoint_0"),
-                appCluster.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                "savepoint_0", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
@@ -441,8 +435,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                FlinkStateSnapshotReference.fromPath("savepoint_1"),
-                appCluster.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                "savepoint_1", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         // Resume from last savepoint
         appCluster.getSpec().getJob().setState(JobState.RUNNING);

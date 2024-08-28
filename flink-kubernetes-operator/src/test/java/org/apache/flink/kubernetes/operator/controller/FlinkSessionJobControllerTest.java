@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -193,9 +192,7 @@ class FlinkSessionJobControllerTest {
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
-        assertEquals(
-                FlinkStateSnapshotReference.fromPath("s0"),
-                sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertEquals("s0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         var previousJobs = new ArrayList<>(jobs);
         sessionJob.getSpec().getJob().setInitialSavepointPath("s1");
@@ -203,16 +200,13 @@ class FlinkSessionJobControllerTest {
         // Send in a no-op change
         testController.reconcile(sessionJob, context);
         assertEquals(previousJobs, new ArrayList<>(flinkService.listJobs()));
-        assertEquals(
-                FlinkStateSnapshotReference.fromPath("s0"),
-                sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+        assertEquals("s0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         // Upgrade job
         sessionJob.getSpec().getJob().setParallelism(100);
         updateControl = testController.reconcile(sessionJob, context);
         assertEquals(
-                FlinkStateSnapshotReference.fromPath("savepoint_0"),
-                sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         assertEquals(0L, updateControl.getScheduleDelay().get());
         assertEquals(
@@ -232,8 +226,7 @@ class FlinkSessionJobControllerTest {
         assertEquals("savepoint_0", jobs.get(0).f0);
         testController.reconcile(sessionJob, context);
         assertEquals(
-                FlinkStateSnapshotReference.fromPath("savepoint_0"),
-                sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         // Suspend job
         sessionJob.getSpec().getJob().setState(JobState.SUSPENDED);
@@ -247,8 +240,7 @@ class FlinkSessionJobControllerTest {
         assertEquals(1, jobs.size());
         assertEquals("savepoint_1", jobs.get(0).f0);
         assertEquals(
-                FlinkStateSnapshotReference.fromPath("savepoint_1"),
-                sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                "savepoint_1", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
 
         testController.reconcile(sessionJob, context);
         testController.cleanup(sessionJob, context);

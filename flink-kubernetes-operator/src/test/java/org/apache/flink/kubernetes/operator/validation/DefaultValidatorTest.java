@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -527,16 +526,6 @@ public class DefaultValidatorTest {
                     dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc");
                 },
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
-
-        testError(
-                dep -> {
-                    dep.getSpec()
-                            .getJob()
-                            .setFlinkStateSnapshotReference(
-                                    FlinkStateSnapshotReference.builder().name("snapshot").build());
-                    dep.getSpec().getJob().setInitialSavepointPath("s0");
-                },
-                "Cannot set both initialSavepointPath and flinkStateSnapshotReference in the job spec");
     }
 
     @Test
@@ -615,9 +604,8 @@ public class DefaultValidatorTest {
                             .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(null);
-                    job.setFlinkStateSnapshotReference(null);
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeployment");
+                "InitialSavepointPath must not be empty for savepoint redeployment");
 
         testError(
                 dep -> {
@@ -628,7 +616,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(" ");
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
+                "InitialSavepointPath must not be empty for savepoint redeploymen");
 
         testError(
                 dep -> {
@@ -642,7 +630,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(2L);
                     job.setInitialSavepointPath(null);
                 },
-                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
+                "InitialSavepointPath must not be empty for savepoint redeploymen");
     }
 
     @ParameterizedTest
@@ -1072,19 +1060,17 @@ public class DefaultValidatorTest {
                 null);
 
         var refName = "does-not-exist";
-        var namespace = "default";
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotSavepoint(
                         false,
                         JobReference.builder()
                                 .kind(JobKind.FLINK_DEPLOYMENT)
                                 .name(refName)
-                                .namespace(namespace)
                                 .build());
         testStateSnapshotValidate(
                 snapshot,
                 Optional.empty(),
-                String.format("Target for snapshot %s/%s was not found", namespace, refName));
+                String.format("Target for snapshot test/%s was not found", refName));
     }
 
     private void testStateSnapshotValidateWithModifier(

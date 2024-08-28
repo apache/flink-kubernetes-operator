@@ -56,10 +56,10 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIME
 kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job":{"state": "suspended"}}}'
 wait_for_status $APPLICATION_IDENTIFIER '.status.lifecycleState' "SUSPENDED" ${TIMEOUT} || exit 1
 
-location=$(kubectl get $APPLICATION_IDENTIFIER -o yaml | yq '.status.jobStatus.upgradeSnapshotReference.path')
+location=$(kubectl get $APPLICATION_IDENTIFIER -o yaml | yq '.status.jobStatus.upgradeSavepointPath')
 if [ "$location" == "" ]; then echo "Legacy savepoint location was empty"; exit 1; fi
-echo "Removing upgradeSnapshotReference and setting lastSavepoint"
-kubectl patch flinkdep ${CLUSTER_ID} --type=merge --subresource status --patch '{"status":{"jobStatus":{"upgradeSnapshotReference":null,"savepointInfo":{"lastSavepoint":{"timeStamp": 0, "location": "'$location'", "triggerNonce": 0}}}}}'
+echo "Removing upgradeSavepointPath and setting lastSavepoint"
+kubectl patch flinkdep ${CLUSTER_ID} --type=merge --subresource status --patch '{"status":{"jobStatus":{"upgradeSavepointPath":null,"savepointInfo":{"lastSavepoint":{"timeStamp": 0, "location": "'$location'", "triggerNonce": 0}}}}}'
 
 # Delete operator Pod to clear CR state cache
 kubectl delete pod -n $(get_operator_pod_namespace) $(get_operator_pod_name)
@@ -151,13 +151,11 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.lifecycleState' "SUSPENDED" ${T
 echo "Waiting for upgrade savepoint..."
 snapshot=$(wait_for_snapshot $CLUSTER_ID "savepoint" "upgrade" ${TIMEOUT})
 if [ "$snapshot" == "" ]; then echo "Could not find snapshot"; exit 1; fi
-echo "Found upgrade snapshot: $snapshot"
-wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.upgradeSnapshotReference.name' "$snapshot" ${TIMEOUT} || exit 1
 
 location=$(kubectl get flinksnp/$snapshot -o yaml | yq '.status.path')
 if [ "$location" == "" ]; then echo "Upgrade savepoint location was empty"; exit 1; fi
 
-
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.upgradeSavepointPath' "$location" ${TIMEOUT} || exit 1
 
 echo "Restarting deployment..."
 kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"state": "running" } } }'

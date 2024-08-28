@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
@@ -454,10 +453,7 @@ public class SnapshotObserver<
             flinkService
                     .getLastCheckpoint(JobID.fromHexString(jobID), observeConfig)
                     .ifPresent(
-                            snapshot ->
-                                    jobStatus.setUpgradeSnapshotReference(
-                                            FlinkStateSnapshotReference.fromPath(
-                                                    snapshot.getLocation())));
+                            snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()));
         } catch (Exception e) {
             LOG.error("Could not observe latest checkpoint information.", e);
             throw new ReconciliationException(e);
