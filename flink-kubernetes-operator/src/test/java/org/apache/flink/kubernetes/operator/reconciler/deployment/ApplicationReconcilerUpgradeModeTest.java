@@ -396,6 +396,16 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         }
     }
 
+    private static Stream<Arguments> testInitialJmDeployCannotStartParams() {
+        return Stream.of(
+                Arguments.of(UpgradeMode.LAST_STATE, true),
+                Arguments.of(UpgradeMode.LAST_STATE, false),
+                Arguments.of(UpgradeMode.SAVEPOINT, true),
+                Arguments.of(UpgradeMode.SAVEPOINT, false),
+                Arguments.of(UpgradeMode.STATELESS, true),
+                Arguments.of(UpgradeMode.STATELESS, false));
+    }
+
     @ParameterizedTest
     @MethodSource("testInitialJmDeployCannotStartParams")
     public void testInitialJmDeployCannotStartLegacy(UpgradeMode upgradeMode, boolean initSavepoint)
@@ -573,14 +583,128 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 jobReconciler.getJobUpgrade(ctx, deployConf));
     }
 
-    private static Stream<Arguments> testInitialJmDeployCannotStartParams() {
+    private static Stream<Arguments> testVersionUpgradeTestParams() {
+        return Stream.of(
+                Arguments.of(UpgradeMode.LAST_STATE, true, true),
+                Arguments.of(UpgradeMode.LAST_STATE, true, false),
+                Arguments.of(UpgradeMode.LAST_STATE, false, true),
+                Arguments.of(UpgradeMode.LAST_STATE, false, false),
+                Arguments.of(UpgradeMode.SAVEPOINT, true, true),
+                Arguments.of(UpgradeMode.SAVEPOINT, true, false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testVersionUpgradeTestParams")
+    public void testFlinkVersionSwitching(
+            UpgradeMode upgradeMode, boolean savepointsEnabled, boolean allowFallback)
+            throws Exception {
+        var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_18);
+        if (!savepointsEnabled) {
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
+        }
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                .key(),
+                        Boolean.toString(allowFallback));
+        deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_19);
+
+        // Set job status to running
+        var jobStatus = deployment.getStatus().getJobStatus();
+        long now = System.currentTimeMillis();
+
+        jobStatus.setStartTime(Long.toString(now));
+        jobStatus.setJobId(new JobID().toString());
+
+        // Running state, savepoint if possible
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        var ctx = getResourceContext(deployment);
+        var deployConf = ctx.getDeployConfig(deployment.getSpec());
+
+        assertEquals(
+                savepointsEnabled
+                        ? AbstractJobReconciler.JobUpgrade.savepoint(false)
+                        : AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
+                jobReconciler.getJobUpgrade(ctx, deployConf));
+
+        // Not running (but cancellable)
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RESTARTING.name());
+        assertEquals(
+                AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
+                jobReconciler.getJobUpgrade(ctx, deployConf));
+
+        // Unknown / reconciling
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        assertEquals(
+                AbstractJobReconciler.JobUpgrade.pendingUpgrade(),
+                jobReconciler.getJobUpgrade(ctx, deployConf));
+    }
+
+    private static Stream<Arguments> testLastStateCancelParams() {
         return Stream.of(
                 Arguments.of(UpgradeMode.LAST_STATE, true),
                 Arguments.of(UpgradeMode.LAST_STATE, false),
                 Arguments.of(UpgradeMode.SAVEPOINT, true),
-                Arguments.of(UpgradeMode.SAVEPOINT, false),
-                Arguments.of(UpgradeMode.STATELESS, true),
-                Arguments.of(UpgradeMode.STATELESS, false));
+                Arguments.of(UpgradeMode.SAVEPOINT, false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testLastStateCancelParams")
+    public void testLastStateNoHaMeta(UpgradeMode upgradeMode, boolean allowFallback)
+            throws Exception {
+        var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                .key(),
+                        Boolean.toString(allowFallback));
+        deployment.getSpec().getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB
+                                .key(),
+                        Boolean.toString(false));
+        deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        // Set job status to running
+        var jobStatus = deployment.getStatus().getJobStatus();
+        long now = System.currentTimeMillis();
+
+        jobStatus.setStartTime(Long.toString(now));
+        jobStatus.setJobId(new JobID().toString());
+
+        // Running state, savepoint if possible
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.FAILING.name());
+        var ctx = getResourceContext(deployment);
+        var deployConf = ctx.getDeployConfig(deployment.getSpec());
+
+        if (upgradeMode == UpgradeMode.LAST_STATE) {
+            assertEquals(
+                    AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
+                    jobReconciler.getJobUpgrade(ctx, deployConf));
+        } else {
+            assertEquals(
+                    allowFallback
+                            ? AbstractJobReconciler.JobUpgrade.lastStateUsingCancel()
+                            : AbstractJobReconciler.JobUpgrade.pendingUpgrade(),
+                    jobReconciler.getJobUpgrade(ctx, deployConf));
+        }
     }
 
     private static Stream<Arguments> testUpgradeJmDeployCannotStartParams() {
