@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
@@ -31,7 +30,6 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -47,14 +45,10 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.TestUtils.reconcileSpec;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
-import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE;
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkStateSnapshotUtils}. */
@@ -62,8 +56,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FlinkStateSnapshotUtilsTest {
 
     private KubernetesClient client;
-
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private static final String NAMESPACE = "test";
     private static final String SAVEPOINT_NAME = "savepoint-01";
     private static final String SAVEPOINT_PATH = "/tmp/savepoint-01";
@@ -96,87 +88,6 @@ public class FlinkStateSnapshotUtilsTest {
                 .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.PERIODIC.name());
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.PERIODIC);
-    }
-
-    @Test
-    public void testGetValidatedFlinkStateSnapshotPathPathGiven() {
-        var snapshotRef = FlinkStateSnapshotReference.builder().path(SAVEPOINT_PATH).build();
-        var snapshotResult =
-                FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(client, snapshotRef);
-        assertEquals(SAVEPOINT_PATH, snapshotResult);
-    }
-
-    @Test
-    public void testGetValidatedFlinkStateSnapshotPathFoundResource() {
-        var snapshot = initSavepoint(COMPLETED, null);
-        client.resource(snapshot).create();
-
-        var snapshotRef =
-                FlinkStateSnapshotReference.builder()
-                        .namespace(NAMESPACE)
-                        .name(SAVEPOINT_NAME)
-                        .build();
-        var snapshotResult =
-                FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(client, snapshotRef);
-        assertEquals(SAVEPOINT_PATH, snapshotResult);
-    }
-
-    @Test
-    public void testGetValidatedFlinkStateSnapshotPathInvalidName() {
-        var snapshotRef =
-                FlinkStateSnapshotReference.builder().namespace(NAMESPACE).name("  ").build();
-        assertThrows(
-                IllegalArgumentException.class,
-                () ->
-                        FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(
-                                client, snapshotRef));
-    }
-
-    @Test
-    public void testGetValidatedFlinkStateSnapshotPathNotFound() {
-        var snapshotRef =
-                FlinkStateSnapshotReference.builder()
-                        .namespace("not-exists")
-                        .name("not-exists")
-                        .build();
-        assertThrows(
-                IllegalStateException.class,
-                () ->
-                        FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(
-                                client, snapshotRef));
-    }
-
-    @Test
-    public void testGetAndValidateFlinkStateSnapshotAlreadyExists() {
-        var snapshot = initSavepoint(TRIGGER_PENDING, null);
-        snapshot.getSpec().getSavepoint().setAlreadyExists(true);
-        client.resource(snapshot).create();
-
-        var snapshotRef =
-                FlinkStateSnapshotReference.builder()
-                        .namespace(NAMESPACE)
-                        .name(SAVEPOINT_NAME)
-                        .build();
-        var snapshotResult =
-                FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(client, snapshotRef);
-        assertEquals(SAVEPOINT_PATH, snapshotResult);
-    }
-
-    @Test
-    public void testGetValidatedFlinkStateSnapshotPathNotCompleted() {
-        var snapshot = initSavepoint(IN_PROGRESS, null);
-        client.resource(snapshot).create();
-
-        var snapshotRef =
-                FlinkStateSnapshotReference.builder()
-                        .namespace(NAMESPACE)
-                        .name(SAVEPOINT_NAME)
-                        .build();
-        assertThrows(
-                IllegalStateException.class,
-                () ->
-                        FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(
-                                client, snapshotRef));
     }
 
     @Test
@@ -298,45 +209,25 @@ public class FlinkStateSnapshotUtilsTest {
         var conf = new Configuration();
         conf.set(OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE, disposeOnDelete);
         var operatorConf = FlinkOperatorConfiguration.fromConfiguration(conf);
-        var result =
-                FlinkStateSnapshotUtils.createReferenceForUpgradeSavepoint(
-                        conf,
-                        operatorConf,
-                        client,
-                        deployment,
-                        SavepointFormatType.CANONICAL,
-                        SAVEPOINT_PATH);
+        FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
+                conf,
+                operatorConf,
+                client,
+                deployment,
+                SavepointFormatType.CANONICAL,
+                SAVEPOINT_PATH);
         var snapshots = TestUtils.getFlinkStateSnapshotsForResource(client, deployment);
         assertThat(snapshots)
                 .hasSize(1)
                 .allSatisfy(
                         snapshot -> {
-                            assertEquals(snapshot.getMetadata().getName(), result.getName());
-                            assertEquals(
-                                    snapshot.getMetadata().getNamespace(), result.getNamespace());
                             assertEquals(
                                     disposeOnDelete,
                                     snapshot.getSpec().getSavepoint().getDisposeOnDelete());
+                            assertEquals(
+                                    SAVEPOINT_PATH, snapshot.getSpec().getSavepoint().getPath());
+                            assertTrue(snapshot.getSpec().getSavepoint().getAlreadyExists());
                         });
-        assertNull(result.getPath());
-    }
-
-    @Test
-    public void testCreateReferenceForUpgradeSavepointWithPath() {
-        var deployment = initDeployment();
-        var conf = new Configuration().set(SNAPSHOT_RESOURCE_ENABLED, false);
-        var operatorConf = FlinkOperatorConfiguration.fromConfiguration(conf);
-        var result =
-                FlinkStateSnapshotUtils.createReferenceForUpgradeSavepoint(
-                        conf,
-                        operatorConf,
-                        client,
-                        deployment,
-                        SavepointFormatType.CANONICAL,
-                        SAVEPOINT_PATH);
-        assertEquals(SAVEPOINT_PATH, result.getPath());
-        assertNull(result.getNamespace());
-        assertNull(result.getName());
     }
 
     @Test

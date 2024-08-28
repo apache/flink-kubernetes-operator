@@ -41,7 +41,6 @@ import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -72,13 +71,10 @@ public class EventSourceUtils {
                                     if (jobRef == null || jobRef.getName() == null) {
                                         return Collections.emptySet();
                                     }
-                                    var namespace =
-                                            Optional.ofNullable(jobRef.getNamespace())
-                                                    .orElse(snapshot.getMetadata().getNamespace());
                                     return Set.of(
                                             new ResourceID(
                                                     snapshot.getSpec().getJobReference().getName(),
-                                                    namespace));
+                                                    snapshot.getMetadata().getNamespace()));
                                 })
                         .withNamespacesInheritedFromController(context)
                         .followNamespaceChanges(true)

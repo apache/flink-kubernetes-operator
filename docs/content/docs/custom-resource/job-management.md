@@ -247,17 +247,16 @@ Users have two options to restore a job from a target savepoint / checkpoint
 
 ### Redeploy using the savepointRedeployNonce
 
-It is possible to redeploy a `FlinkDeployment` or `FlinkSessionJob` resource from a target savepoint by using the combination of `savepointRedeployNonce` and `flinkStateSnapshotReference` in the job spec:
+It is possible to redeploy a `FlinkDeployment` or `FlinkSessionJob` resource from a target savepoint by using the combination of `savepointRedeployNonce` and `initialSavepointPath` in the job spec:
 
 ```yaml
  job:
-   flinkStateSnapshotReference:
-     path: file://redeploy-target-savepoint
+   initialSavepointPath: file://redeploy-target-savepoint
    # If not set previously, set to 1, otherwise increment, e.g. 2
    savepointRedeployNonce: 1
 ```
 
-When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `flinkStateSnapshotReference`. The savepoint path must not be empty. 
+When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `initialSavepointPath`. The savepoint path must not be empty. 
 
 {{< hint warning >}}
 Rollbacks are not supported after redeployments.
@@ -271,7 +270,7 @@ However, this also means that savepoint history is lost and the operator won't c
  1. Locate the latest checkpoint/savepoint metafile in your configured checkpoint/savepoint directory.
  2. Delete the `FlinkDeployment` resource for your application
  3. Check that you have the current savepoint, and that your `FlinkDeployment` is deleted completely
- 4. Modify your `FlinkDeployment` JobSpec and set `flinkStateSnapshotReference.path` to your last checkpoint location
+ 4. Modify your `FlinkDeployment` JobSpec and set `initialSavepointPath` to your last checkpoint location
  5. Recreate the deployment
 
 These steps ensure that the operator will start completely fresh from the user defined savepoint path and can hopefully fully recover.

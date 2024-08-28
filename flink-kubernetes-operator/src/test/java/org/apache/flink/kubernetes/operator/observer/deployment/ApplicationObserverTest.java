@@ -493,9 +493,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.FAILED.name(),
                 deployment.getStatus().getJobStatus().getState());
-        assertEquals(
-                "last-SP",
-                deployment.getStatus().getJobStatus().getUpgradeSnapshotReference().getPath());
+        assertEquals("last-SP", deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
         assertFalse(SnapshotUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         observer.observe(deployment, readyContext);

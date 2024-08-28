@@ -25,7 +25,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
@@ -48,7 +47,6 @@ import org.apache.flink.util.Preconditions;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Value;
-import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -288,15 +286,7 @@ public abstract class AbstractJobReconciler<
         if (spec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT) {
             savepointOpt =
                     Optional.ofNullable(
-                                    ctx.getResource()
-                                            .getStatus()
-                                            .getJobStatus()
-                                            .getUpgradeSnapshotReference())
-                            .map(
-                                    ref ->
-                                            FlinkStateSnapshotUtils
-                                                    .getValidatedFlinkStateSnapshotPath(
-                                                            ctx.getKubernetesClient(), ref));
+                            ctx.getResource().getStatus().getJobStatus().getUpgradeSavepointPath());
             if (savepointOpt.isEmpty()) {
                 savepointOpt =
                         Optional.ofNullable(
@@ -313,28 +303,26 @@ public abstract class AbstractJobReconciler<
     }
 
     /**
-     * Updates the upgrade snapshot reference field in the JobSpec of the current Flink resource. If
-     * snapshot resources are enabled, a new FlinkStateSnapshot will be created, else it will only
-     * set the path field of the snapshot reference.
+     * Updates the upgrade savepoint field in the JobSpec of the current Flink resource and if
+     * snapshot resources are enabled, a new FlinkStateSnapshot will be created.
      *
      * @param ctx context
      * @param savepointLocation location of savepoint taken
      */
-    protected void setUpgradeSnapshotReferenceFromSavepoint(
-            FlinkResourceContext<?> ctx, String savepointLocation) {
-        var conf = ObjectUtils.firstNonNull(ctx.getObserveConfig(), new Configuration());
+    protected void setUpgradeSavepointPath(FlinkResourceContext<?> ctx, String savepointLocation) {
+        var conf = ctx.getObserveConfig();
         var savepointFormatType =
-                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+                ctx.getObserveConfig()
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
 
-        var snapshotRef =
-                FlinkStateSnapshotUtils.createReferenceForUpgradeSavepoint(
-                        conf,
-                        ctx.getOperatorConfig(),
-                        ctx.getKubernetesClient(),
-                        ctx.getResource(),
-                        SavepointFormatType.valueOf(savepointFormatType.name()),
-                        savepointLocation);
-        ctx.getResource().getStatus().getJobStatus().setUpgradeSnapshotReference(snapshotRef);
+        FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
+                conf,
+                ctx.getOperatorConfig(),
+                ctx.getKubernetesClient(),
+                ctx.getResource(),
+                SavepointFormatType.valueOf(savepointFormatType.name()),
+                savepointLocation);
+        ctx.getResource().getStatus().getJobStatus().setUpgradeSavepointPath(savepointLocation);
     }
 
     /**
@@ -471,11 +459,11 @@ public abstract class AbstractJobReconciler<
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
 
-        var upgradeSnapshotRef =
-                ctx.getResource().getStatus().getJobStatus().getUpgradeSnapshotReference();
+        var upgradeStatePath =
+                ctx.getResource().getStatus().getJobStatus().getUpgradeSavepointPath();
         var savepointLegacy =
                 ctx.getResource().getStatus().getJobStatus().getSavepointInfo().getLastSavepoint();
-        var lastSavepointKnown = upgradeSnapshotRef != null || savepointLegacy != null;
+        var lastSavepointKnown = upgradeStatePath != null || savepointLegacy != null;
 
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -498,21 +486,9 @@ public abstract class AbstractJobReconciler<
         cancelJob(ctx, UpgradeMode.STATELESS);
         currentDeploySpec.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
 
-        var snapshotRef = currentDeploySpec.getJob().getFlinkStateSnapshotReference();
-        var initialSavepointPath = currentDeploySpec.getJob().getInitialSavepointPath();
-
-        if (snapshotRef == null && initialSavepointPath != null) {
-            snapshotRef = FlinkStateSnapshotReference.fromPath(initialSavepointPath);
-        }
-
-        Optional<String> savepointPath = Optional.empty();
-        if (snapshotRef != null) {
-            savepointPath =
-                    Optional.of(
-                            FlinkStateSnapshotUtils.getValidatedFlinkStateSnapshotPath(
-                                    ctx.getKubernetesClient(), snapshotRef));
-            status.getJobStatus().setUpgradeSnapshotReference(snapshotRef);
-        }
+        Optional<String> savepointPath =
+                Optional.ofNullable(currentDeploySpec.getJob().getInitialSavepointPath());
+        status.getJobStatus().setUpgradeSavepointPath(savepointPath.orElse(null));
 
         if (desiredJobState == JobState.RUNNING) {
             deploy(

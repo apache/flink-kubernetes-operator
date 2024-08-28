@@ -64,6 +64,4 @@ spec:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
     upgradeMode: savepoint
-    flinkStateSnapshotReference:
-      name: example-savepoint
-      namespace: flink
+    initialSavepointPath: file:///flink-data/savepoints/savepoint-45305c-d867504446e0

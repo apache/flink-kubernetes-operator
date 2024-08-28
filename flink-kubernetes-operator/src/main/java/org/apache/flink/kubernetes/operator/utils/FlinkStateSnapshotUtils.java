@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
@@ -39,7 +38,6 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.apache.commons.lang3.ObjectUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 
@@ -58,71 +56,6 @@ import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEP
 
 /** Utilities class for FlinkStateSnapshot resources. */
 public class FlinkStateSnapshotUtils {
-
-    /**
-     * From a snapshot reference, return its snapshot path. If a {@link FlinkStateSnapshot} is
-     * referenced, it will be retrieved from Kubernetes.
-     *
-     * @param kubernetesClient kubernetes client
-     * @param snapshotRef snapshot reference
-     * @return found savepoint path
-     */
-    public static String getValidatedFlinkStateSnapshotPath(
-            KubernetesClient kubernetesClient, FlinkStateSnapshotReference snapshotRef) {
-        if (StringUtils.isNotBlank(snapshotRef.getPath())) {
-            return snapshotRef.getPath();
-        }
-
-        if (StringUtils.isBlank(snapshotRef.getName())) {
-            throw new IllegalArgumentException(
-                    String.format("Invalid snapshot name: %s", snapshotRef.getName()));
-        }
-
-        var result =
-                snapshotRef.getNamespace() == null
-                        ? kubernetesClient
-                                .resources(FlinkStateSnapshot.class)
-                                .withName(snapshotRef.getName())
-                                .get()
-                        : kubernetesClient
-                                .resources(FlinkStateSnapshot.class)
-                                .inNamespace(snapshotRef.getNamespace())
-                                .withName(snapshotRef.getName())
-                                .get();
-
-        if (result == null) {
-            throw new IllegalStateException(
-                    String.format(
-                            "Cannot find snapshot %s in namespace %s.",
-                            snapshotRef.getNamespace(), snapshotRef.getName()));
-        }
-
-        // We can return the savepoint path if it's marked as completed without waiting for the
-        // reconciler to update its status.
-        if (result.getSpec().isSavepoint() && result.getSpec().getSavepoint().getAlreadyExists()) {
-            var path = result.getSpec().getSavepoint().getPath();
-            if (!StringUtils.isBlank(path)) {
-                return path;
-            }
-        }
-
-        if (COMPLETED != result.getStatus().getState()) {
-            throw new IllegalStateException(
-                    String.format(
-                            "Snapshot %s/%s is not complete yet.",
-                            snapshotRef.getNamespace(), snapshotRef.getName()));
-        }
-
-        var path = result.getStatus().getPath();
-        if (StringUtils.isBlank(path)) {
-            throw new IllegalStateException(
-                    String.format(
-                            "Snapshot %s/%s path is incorrect: %s.",
-                            snapshotRef.getNamespace(), snapshotRef.getName(), path));
-        }
-
-        return path;
-    }
 
     protected static FlinkStateSnapshot createFlinkStateSnapshot(
             KubernetesClient kubernetesClient,
@@ -263,9 +196,7 @@ public class FlinkStateSnapshotUtils {
     }
 
     /**
-     * For an upgrade savepoint, create a {@link FlinkStateSnapshot} on the Kubernetes cluster and
-     * return its reference if snapshot resources are enabled. In other case return a reference
-     * containing only the path.
+     * For an upgrade savepoint, create a {@link FlinkStateSnapshot} on the Kubernetes cluster.
      *
      * @param conf job configuration
      * @param operatorConf operator configuration
@@ -273,9 +204,9 @@ public class FlinkStateSnapshotUtils {
      * @param flinkResource referenced Flink resource
      * @param savepointFormatType savepoint format type
      * @param savepointPath path of savepoint
-     * @return reference for snapshot
+     * @return State snapshot resource
      */
-    public static FlinkStateSnapshotReference createReferenceForUpgradeSavepoint(
+    public static Optional<FlinkStateSnapshot> createUpgradeSnapshotResource(
             Configuration conf,
             FlinkOperatorConfiguration operatorConf,
             KubernetesClient kubernetesClient,
@@ -283,12 +214,12 @@ public class FlinkStateSnapshotUtils {
             SavepointFormatType savepointFormatType,
             String savepointPath) {
         if (!isSnapshotResourceEnabled(operatorConf, conf)) {
-            return FlinkStateSnapshotReference.fromPath(savepointPath);
+            return Optional.empty();
         }
 
         var disposeOnDelete =
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE);
-        var snapshot =
+        var savepointResource =
                 createSavepointResource(
                         kubernetesClient,
                         flinkResource,
@@ -296,7 +227,7 @@ public class FlinkStateSnapshotUtils {
                         SnapshotTriggerType.UPGRADE,
                         savepointFormatType,
                         disposeOnDelete);
-        return FlinkStateSnapshotReference.fromResource(snapshot);
+        return Optional.of(savepointResource);
     }
 
     /**
@@ -439,9 +370,8 @@ public class FlinkStateSnapshotUtils {
      * @return namespace with the job reference to be found in
      */
     public static ResourceID getSnapshotJobReferenceResourceId(FlinkStateSnapshot snapshot) {
-        var namespace =
-                Optional.ofNullable(snapshot.getSpec().getJobReference().getNamespace())
-                        .orElse(snapshot.getMetadata().getNamespace());
-        return new ResourceID(snapshot.getSpec().getJobReference().getName(), namespace);
+        return new ResourceID(
+                snapshot.getSpec().getJobReference().getName(),
+                snapshot.getMetadata().getNamespace());
     }
 }

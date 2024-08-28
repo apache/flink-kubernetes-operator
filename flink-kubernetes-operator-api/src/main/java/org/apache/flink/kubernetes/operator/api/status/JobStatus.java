@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
@@ -51,7 +50,7 @@ public class JobStatus {
     /** Update time of the job. */
     private String updateTime;
 
-    private FlinkStateSnapshotReference upgradeSnapshotReference;
+    private String upgradeSavepointPath;
 
     /** Information about pending and last savepoint for the job. */
     @Deprecated private SavepointInfo savepointInfo = new SavepointInfo();

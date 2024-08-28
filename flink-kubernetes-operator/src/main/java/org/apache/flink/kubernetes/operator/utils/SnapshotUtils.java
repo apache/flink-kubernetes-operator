@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -32,6 +33,7 @@ import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.core.util.CronExpression;
 import org.slf4j.Logger;
@@ -360,25 +362,17 @@ public class SnapshotUtils {
      * @return True if last savepoint is known
      */
     public static boolean lastSavepointKnown(CommonStatus<?> status) {
-        var lastSavepoint = status.getJobStatus().getUpgradeSnapshotReference();
+        var location =
+                ObjectUtils.firstNonNull(
+                        status.getJobStatus().getUpgradeSavepointPath(),
+                        Optional.ofNullable(
+                                        status.getJobStatus().getSavepointInfo().getLastSavepoint())
+                                .map(Savepoint::getLocation)
+                                .orElse(null));
 
-        if (lastSavepoint != null) {
-            if (StringUtils.isNotBlank(lastSavepoint.getName())) {
-                return true;
-            }
-
-            var location = lastSavepoint.getPath();
-            return location != null
-                    && !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
-        }
-
-        // Check legacy savepoint field too
-        var lastSavepointLegacy = status.getJobStatus().getSavepointInfo().getLastSavepoint();
-        if (lastSavepointLegacy == null) {
+        if (location == null) {
             return true;
         }
-        return !lastSavepointLegacy
-                .getLocation()
-                .equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        return !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
     }
 }

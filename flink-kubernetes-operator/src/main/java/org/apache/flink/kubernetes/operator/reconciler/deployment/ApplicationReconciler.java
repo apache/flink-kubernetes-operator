@@ -26,7 +26,6 @@ import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
@@ -167,9 +166,7 @@ public class ApplicationReconciler
             // Last state deployment, explicitly set a dummy savepoint path to avoid accidental
             // incorrect state restore in case the HA metadata is deleted by the user
             deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, LAST_STATE_DUMMY_SP_PATH);
-            status.getJobStatus()
-                    .setUpgradeSnapshotReference(
-                            FlinkStateSnapshotReference.fromPath(LAST_STATE_DUMMY_SP_PATH));
+            status.getJobStatus().setUpgradeSavepointPath(LAST_STATE_DUMMY_SP_PATH);
         } else {
             // Stateless deployment, remove any user configured savepoint path
             deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
@@ -242,7 +239,7 @@ public class ApplicationReconciler
         var conf = ObjectUtils.firstNonNull(ctx.getObserveConfig(), new Configuration());
         ctx.getFlinkService()
                 .cancelJob(ctx.getResource(), upgradeMode, conf)
-                .ifPresent(location -> setUpgradeSnapshotReferenceFromSavepoint(ctx, location));
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location));
     }
 
     @Override

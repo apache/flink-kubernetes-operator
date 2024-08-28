@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
@@ -130,8 +129,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
 
         if (legacySnapshots) {
             assertEquals(
-                    "savepoint_0",
-                    sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference().getPath());
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         } else {
             var snapshots =
                     TestUtils.getFlinkStateSnapshotsForResource(
@@ -139,8 +137,8 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
             assertThat(snapshots).isNotEmpty();
             assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
             assertEquals(
-                    FlinkStateSnapshotReference.fromResource(snapshots.get(0)),
-                    sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                    snapshots.get(0).getSpec().getSavepoint().getPath(),
+                    sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         }
     }
 
@@ -173,8 +171,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         if (legacySnapshots) {
             assertEquals(
-                    "savepoint_0",
-                    sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference().getPath());
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         } else {
             var snapshots =
                     TestUtils.getFlinkStateSnapshotsForResource(
@@ -182,8 +179,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
             assertThat(snapshots).isNotEmpty();
             assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
             assertEquals(
-                    FlinkStateSnapshotReference.fromResource(snapshots.get(0)),
-                    sessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         }
     }
 
@@ -412,11 +408,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         if (legacySnapshots) {
             assertEquals(
                     "savepoint_0",
-                    statefulSessionJob
-                            .getStatus()
-                            .getJobStatus()
-                            .getUpgradeSnapshotReference()
-                            .getPath());
+                    statefulSessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         } else {
             var snapshots =
                     TestUtils.getFlinkStateSnapshotsForResource(
@@ -430,8 +422,8 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                             .getLabels()
                             .get(CrdConstants.LABEL_SNAPSHOT_TYPE));
             assertEquals(
-                    FlinkStateSnapshotReference.fromResource(snapshots.get(0)),
-                    statefulSessionJob.getStatus().getJobStatus().getUpgradeSnapshotReference());
+                    snapshots.get(0).getSpec().getSavepoint().getPath(),
+                    statefulSessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
         }
 
         flinkService.clear();

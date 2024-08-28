@@ -88,15 +88,6 @@ spec:
                     type: integer
                   entryClass:
                     type: string
-                  flinkStateSnapshotReference:
-                    properties:
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                      path:
-                        type: string
-                    type: object
                   initialSavepointPath:
                     type: string
                   jarURI:
@@ -10367,15 +10358,8 @@ spec:
                     type: string
                   updateTime:
                     type: string
-                  upgradeSnapshotReference:
-                    properties:
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                      path:
-                        type: string
-                    type: object
+                  upgradeSavepointPath:
+                    type: string
                 type: object
               lifecycleState:
                 enum:

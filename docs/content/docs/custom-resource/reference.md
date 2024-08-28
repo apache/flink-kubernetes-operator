@@ -90,17 +90,6 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
-### FlinkStateSnapshotReference
-**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference
-
-**Description**: Reference for a FlinkStateSnapshot.
-
-| Parameter | Type | Docs |
-| ----------| ---- | ---- |
-| namespace | java.lang.String | Namespace of the snapshot resource. |
-| name | java.lang.String | Name of the snapshot resource. |
-| path | java.lang.String | If a path is given, all other fields will be ignored, and this will be used as the initial savepoint path. |
-
 ### FlinkStateSnapshotSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec
 
@@ -172,7 +161,6 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | kind | org.apache.flink.kubernetes.operator.api.spec.JobKind | Kind of the Flink resource, FlinkDeployment or FlinkSessionJob. |
 | name | java.lang.String | Name of the Flink resource. |
-| namespace | java.lang.String | Namespace of the Flink resource. If empty, the operator will use the namespace of the snapshot. |
 
 ### JobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobSpec
@@ -188,11 +176,10 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | state | org.apache.flink.kubernetes.operator.api.spec.JobState | Desired state for the job. |
 | savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a savepoint, change the number to a different non-null value. |
 | initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed or during savepoint redeployments (triggered by changing the savepointRedeployNonce). |
-| flinkStateSnapshotReference | org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference | Snapshot reference used by the job the first time it is deployed or during savepoint redeployments (triggered by changing the savepointRedeployNonce). |
 | checkpointTriggerNonce | java.lang.Long | Nonce used to manually trigger checkpoint for the running job. In order to trigger a checkpoint, change the number to a different non-null value. |
 | upgradeMode | org.apache.flink.kubernetes.operator.api.spec.UpgradeMode | Upgrade mode of the Flink job. |
 | allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
-| savepointRedeployNonce | java.lang.Long | Nonce used to trigger a full redeployment of the job from the savepoint path specified in initialSavepointPath or the path/FlinkStateSnapshot reference in flinkStateSnapshotReference. In order to trigger redeployment, change the number to a different non-null value. Rollback is not possible after redeployment. |
+| savepointRedeployNonce | java.lang.Long | Nonce used to trigger a full redeployment of the job from the savepoint path specified in initialSavepointPath. In order to trigger redeployment, change the number to a different non-null value. Rollback is not possible after redeployment. |
 
 ### JobState
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobState
@@ -418,7 +405,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | state | java.lang.String | Last observed state of the job. |
 | startTime | java.lang.String | Start time of the job. |
 | updateTime | java.lang.String | Update time of the job. |
-| upgradeSnapshotReference | org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference |  |
+| upgradeSavepointPath | java.lang.String |  |
 | savepointInfo | org.apache.flink.kubernetes.operator.api.status.SavepointInfo | Information about pending and last savepoint for the job. |
 | checkpointInfo | org.apache.flink.kubernetes.operator.api.status.CheckpointInfo | Information about pending and last checkpoint for the job. |
 
