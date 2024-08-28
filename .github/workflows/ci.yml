@@ -87,6 +87,7 @@ jobs:
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_flink_operator_ha.sh
+          - test_snapshot.sh
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
@@ -111,20 +112,30 @@ jobs:
             test: test_autoscaler.sh
           - mode: standalone
             test: test_dynamic_config.sh
+          - mode: standalone
+            test: test_snapshot.sh
           - version: v1_16
             test: test_autoscaler.sh
           - version: v1_16
             test: test_dynamic_config.sh
           - version: v1_16
             test: test_flink_operator_ha.sh
+          - version: v1_16
+            test: test_snapshot.sh
           - version: v1_17
             test: test_dynamic_config.sh
           - version: v1_17
             test: test_flink_operator_ha.sh
+          - version: v1_17
+            test: test_snapshot.sh
           - version: v1_18
             test: test_dynamic_config.sh
           - version: v1_18
             test: test_flink_operator_ha.sh
+          - version: v1_18
+            test: test_snapshot.sh
+          - version: v1_19
+            test: test_snapshot.sh
           - version: v1_16
             java-version: 17
           - version: v1_17
