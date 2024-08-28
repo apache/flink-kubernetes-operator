@@ -89,23 +89,12 @@ public class ApplicationReconciler
         }
         var flinkService = ctx.getFlinkService();
 
-        boolean lastStateAllowed =
-                deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
-                        || deployConfig.getBoolean(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED);
-
-        if (lastStateAllowed
-                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+        if (HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
                 && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
-                && !flinkVersionChanged(
-                        ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
-
-            if (flinkService.isHaMetadataAvailable(deployConfig)) {
-                LOG.info(
-                        "Job is not running but HA metadata is available for last state restore, ready for upgrade");
-                return JobUpgrade.lastStateUsingHaMeta();
-            }
+                && flinkService.isHaMetadataAvailable(deployConfig)) {
+            LOG.info(
+                    "Job is not running but HA metadata is available for last state restore, ready for upgrade");
+            return JobUpgrade.lastStateUsingHaMeta();
         }
 
         var jmDeployStatus = status.getJobManagerDeploymentStatus();

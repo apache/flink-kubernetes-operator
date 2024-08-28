@@ -239,31 +239,52 @@ public abstract class AbstractJobReconciler<
         }
 
         boolean running = ReconciliationUtils.isJobRunning(status);
+        boolean versionChanged =
+                flinkVersionChanged(
+                        ReconciliationUtils.getDeployedSpec(resource), resource.getSpec());
+
         if (upgradeMode == UpgradeMode.SAVEPOINT) {
             if (running) {
                 LOG.info("Job is in running state, ready for upgrade with savepoint");
                 return JobUpgrade.savepoint(false);
+            } else if (versionChanged
+                    || deployConfig.get(
+                            KubernetesOperatorConfigOptions
+                                    .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)) {
+                LOG.info("Falling back to last-state upgrade mode from savepoint");
+                ctx.getResource()
+                        .getSpec()
+                        .getJob()
+                        .setUpgradeMode(upgradeMode = UpgradeMode.LAST_STATE);
+            } else {
+                LOG.info("Last-state fallback is disabled, waiting for upgradable state");
+                return JobUpgrade.pendingUpgrade();
             }
-        } else {
-            // Last state upgrade
+        }
+
+        if (upgradeMode == UpgradeMode.LAST_STATE) {
+            if (versionChanged) {
+                // We need some special handling in case of version upgrades where HA based
+                // last-state upgrade is not possible
+                boolean savepointPossible =
+                        !StringUtils.isNullOrWhitespaceOnly(
+                                ctx.getObserveConfig()
+                                        .getString(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+                if (running && savepointPossible) {
+                    LOG.info("Using savepoint to upgrade Flink version");
+                    return JobUpgrade.savepoint(false);
+                } else if (ReconciliationUtils.isJobCancellable(resource.getStatus())) {
+                    LOG.info("Using last-state upgrade with cancellation to upgrade Flink version");
+                    return JobUpgrade.lastStateUsingCancel();
+                } else {
+                    LOG.info(
+                            "Neither savepoint nor cancellation is possible, cannot perform stateful version upgrade");
+                    return JobUpgrade.pendingUpgrade();
+                }
+            }
+
             boolean cancellable = allowLastStateCancel(ctx);
             if (running) {
-                if (flinkVersionChanged(
-                        ReconciliationUtils.getDeployedSpec(resource), resource.getSpec())) {
-                    // We need some special handling in case of version upgrades, where we prefer
-                    // savepoints if possible conditional that savepoint directory is set
-                    boolean savepointPossible =
-                            !StringUtils.isNullOrWhitespaceOnly(
-                                    ctx.getObserveConfig()
-                                            .getString(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                    if (savepointPossible) {
-                        LOG.info("Using savepoint upgrade mode to upgrade Flink version");
-                        return JobUpgrade.savepoint(false);
-                    } else if (cancellable) {
-                        LOG.info("Using cancel upgrade mode to upgrade Flink version");
-                        return JobUpgrade.lastStateUsingCancel();
-                    }
-                }
                 return getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
             }
 
