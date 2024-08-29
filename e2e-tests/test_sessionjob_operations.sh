@@ -54,6 +54,7 @@ if [ "$location" == "" ];then
   exit 1
 fi
 
+echo "Starting sessionjob savepoint upgrade test"
 # Testing savepoint mode upgrade
 # Update the FlinkSessionJob and trigger the savepoint upgrade
 kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
@@ -67,15 +68,17 @@ assert_available_slots 1 $CLUSTER_ID
 
 echo "Successfully run the sessionjob savepoint upgrade test"
 
+echo "Starting sessionjob last-state upgrade test"
 # Testing last-state mode upgrade
 # Update the FlinkSessionJob and trigger the last-state upgrade
-kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"parallelism": 2, "upgradeMode": last-state } } }'
+kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"parallelism": 2, "upgradeMode": "last-state" } } }'
 
 # Check the job was restarted with the new parallelism
+wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' CANCELLING ${TIMEOUT} || exit 1
 wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 assert_available_slots 0 $CLUSTER_ID
 
-echo "Successfully run the sessionjob savepoint upgrade test"
+echo "Successfully run the sessionjob last-state upgrade test"
 
 # Test Operator restart
 echo "Delete session job " + $SESSION_JOB_NAME

@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -47,10 +48,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class JobStatusObserverTest extends OperatorTestBase {
 
     @Getter private KubernetesClient kubernetesClient;
-    private JobStatusObserver<FlinkDeployment> observer;
+    private JobStatusObserver<AbstractFlinkResource<?, ?>> observer;
 
     @Override
-    public void setup() {
+    protected void setup() {
         observer = new JobStatusObserver<>(eventRecorder);
     }
 
@@ -70,10 +71,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .getJob()
                         .getState());
         observer.observe(
-                (FlinkResourceContext)
-                        getResourceContext(
-                                job,
-                                TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient)));
+                getResourceContext(
+                        job, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient)));
         assertEquals(
                 JobStatusObserver.JOB_NOT_FOUND_ERR,
                 flinkResourceEventCollector.events.poll().getMessage());
@@ -88,6 +87,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
     @ParameterizedTest
     @EnumSource(value = JobStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "CANCELED")
     void testCancellingToTerminal(JobStatus fromStatus) throws Exception {
+        var observer = new JobStatusObserver<>(eventRecorder);
         var deployment = initDeployment();
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
@@ -98,7 +98,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
-        var ctx = getResourceContext(deployment);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
         flinkService.cancelJob(JobID.fromHexString(jobStatus.getJobId()), false);
