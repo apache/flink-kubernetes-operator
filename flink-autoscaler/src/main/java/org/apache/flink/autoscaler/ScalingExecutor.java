@@ -50,6 +50,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.NO_CHANGE;
+import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.REQUIRED_CHANGE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
@@ -182,7 +184,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     static boolean allRequiredVerticesWithinUtilizationTarget(
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Set<JobVertexID> requiredVertices) {
-        // All vertices' ParallelismResult is optional, rescaling will be ignored.
+        // All vertices' ParallelismChange is optional, rescaling will be ignored.
         if (requiredVertices.isEmpty()) {
             return true;
         }
@@ -248,7 +250,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                 var currentParallelism =
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
 
-                                var parallelismResult =
+                                var parallelismChange =
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,
                                                 v,
@@ -258,17 +260,16 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                         v, Collections.emptySortedMap()),
                                                 restartTime,
                                                 delayedScaleDown);
-                                if (currentParallelism == parallelismResult.getNewParallelism()) {
+                                if (NO_CHANGE == parallelismChange.getChangeType()) {
                                     return;
-                                }
-                                if (parallelismResult.isRequired()) {
+                                } else if (REQUIRED_CHANGE == parallelismChange.getChangeType()) {
                                     requiredVertices.add(v);
                                 }
                                 out.put(
                                         v,
                                         new ScalingSummary(
                                                 currentParallelism,
-                                                parallelismResult.getNewParallelism(),
+                                                parallelismChange.getNewParallelism(),
                                                 metrics));
                             }
                         });
