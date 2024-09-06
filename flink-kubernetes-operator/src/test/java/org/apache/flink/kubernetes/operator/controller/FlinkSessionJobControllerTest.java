@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -653,6 +654,14 @@ class FlinkSessionJobControllerTest {
         assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
         assertFalse(deleteControl.isRemoveFinalizer());
         assertEquals(
+                ResourceLifecycleState.DELETING,
+                testController
+                        .getStatusUpdateCounter()
+                        .currentResource
+                        .getStatus()
+                        .getLifecycleState());
+        assertEquals(ResourceLifecycleState.DELETING, sessionJob.getStatus().getLifecycleState());
+        assertEquals(
                 configManager.getOperatorConfiguration().getProgressCheckInterval().toMillis(),
                 deleteControl.getScheduleDelay().get());
 
@@ -660,6 +669,14 @@ class FlinkSessionJobControllerTest {
         flinkService.setFlinkJobNotFound(true);
         deleteControl = testController.cleanup(sessionJob, context);
         assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(
+                ResourceLifecycleState.DELETED,
+                testController
+                        .getStatusUpdateCounter()
+                        .currentResource
+                        .getStatus()
+                        .getLifecycleState());
+        assertEquals(ResourceLifecycleState.DELETED, sessionJob.getStatus().getLifecycleState());
     }
 
     private void verifyReconcileInitialSuspendedDeployment(FlinkSessionJob sessionJob)

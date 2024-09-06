@@ -69,7 +69,7 @@ public class TestingFlinkDeploymentController
 
     @Getter private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
-    private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
+    @Getter private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
     private FlinkResourceEventCollector flinkResourceEventCollector =
             new FlinkResourceEventCollector();
 
@@ -174,11 +174,12 @@ public class TestingFlinkDeploymentController
         return flinkResourceEventCollector.events;
     }
 
-    private static class StatusUpdateCounter
+    /** Test status consumer. */
+    protected static class StatusUpdateCounter
             implements BiConsumer<FlinkDeployment, FlinkDeploymentStatus> {
 
-        private FlinkDeployment currentResource;
-        private int counter;
+        FlinkDeployment currentResource;
+        int counter;
 
         @Override
         public void accept(

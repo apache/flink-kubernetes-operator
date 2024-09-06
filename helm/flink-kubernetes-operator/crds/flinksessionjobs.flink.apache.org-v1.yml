@@ -220,6 +220,8 @@ spec:
               lifecycleState:
                 enum:
                 - CREATED
+                - DELETED
+                - DELETING
                 - DEPLOYED
                 - FAILED
                 - ROLLED_BACK

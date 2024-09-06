@@ -60,6 +60,11 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 
     public ResourceLifecycleState getLifecycleState() {
+        if (ResourceLifecycleState.DELETING == lifecycleState
+                || ResourceLifecycleState.DELETED == lifecycleState) {
+            return lifecycleState;
+        }
+
         var reconciliationStatus = getReconciliationStatus();
 
         if (reconciliationStatus.isBeforeFirstDeployment()) {
