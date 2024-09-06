@@ -45,9 +45,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.NO_CHANGE;
+import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.REQUIRED_CHANGE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
@@ -100,22 +104,23 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
             ScalingTracking scalingTracking,
             Instant now,
-            JobTopology jobTopology)
+            JobTopology jobTopology,
+            DelayedScaleDown delayedScaleDown)
             throws Exception {
         var conf = context.getConfiguration();
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         var scalingSummaries =
                 computeScalingSummary(
-                        context, evaluatedMetrics, scalingHistory, restartTime, jobTopology);
+                        context,
+                        evaluatedMetrics,
+                        scalingHistory,
+                        restartTime,
+                        jobTopology,
+                        delayedScaleDown);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
-            return false;
-        }
-
-        if (allVerticesWithinUtilizationTarget(
-                evaluatedMetrics.getVertexMetrics(), scalingSummaries)) {
             return false;
         }
 
@@ -156,6 +161,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         autoScalerStateStore.storeConfigChanges(context, configOverrides);
 
+        // Try to clear all delayed scale down requests after scaling.
+        delayedScaleDown.clearAll();
+
         return true;
     }
 
@@ -172,12 +180,16 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                 scalingSummary.getNewParallelism())));
     }
 
-    protected static boolean allVerticesWithinUtilizationTarget(
+    @VisibleForTesting
+    static boolean allRequiredVerticesWithinUtilizationTarget(
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+            Set<JobVertexID> requiredVertices) {
+        // All vertices' ParallelismChange is optional, rescaling will be ignored.
+        if (requiredVertices.isEmpty()) {
+            return true;
+        }
 
-        for (Map.Entry<JobVertexID, ScalingSummary> entry : scalingSummaries.entrySet()) {
-            var vertex = entry.getKey();
+        for (JobVertexID vertex : requiredVertices) {
             var metrics = evaluatedMetrics.get(vertex);
 
             double trueProcessingRate = metrics.get(TRUE_PROCESSING_RATE).getAverage();
@@ -212,7 +224,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
             Duration restartTime,
-            JobTopology jobTopology) {
+            JobTopology jobTopology,
+            DelayedScaleDown delayedScaleDown) {
         LOG.debug("Restart time used in scaling summary computation: {}", restartTime);
 
         if (isJobUnderMemoryPressure(context, evaluatedMetrics.getGlobalMetrics())) {
@@ -221,6 +234,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
+        var requiredVertices = new HashSet<JobVertexID>();
+
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
         evaluatedMetrics
@@ -235,7 +250,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                 var currentParallelism =
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
 
-                                var newParallelism =
+                                var parallelismChange =
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,
                                                 v,
@@ -243,15 +258,29 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),
-                                                restartTime);
-                                if (currentParallelism != newParallelism) {
-                                    out.put(
-                                            v,
-                                            new ScalingSummary(
-                                                    currentParallelism, newParallelism, metrics));
+                                                restartTime,
+                                                delayedScaleDown);
+                                if (NO_CHANGE == parallelismChange.getChangeType()) {
+                                    return;
+                                } else if (REQUIRED_CHANGE == parallelismChange.getChangeType()) {
+                                    requiredVertices.add(v);
                                 }
+                                out.put(
+                                        v,
+                                        new ScalingSummary(
+                                                currentParallelism,
+                                                parallelismChange.getNewParallelism(),
+                                                metrics));
                             }
                         });
+
+        // If the Utilization of all required tasks is within range, we can skip scaling.
+        // It means that if only optional tasks are out of scope, we still need to ignore scale.
+        if (allRequiredVerticesWithinUtilizationTarget(
+                evaluatedMetrics.getVertexMetrics(), requiredVertices)) {
+            return Map.of();
+        }
+
         return out;
     }
 

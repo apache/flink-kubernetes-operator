@@ -102,13 +102,20 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("target.utilization.boundary"))
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
-    public static final ConfigOption<Duration> SCALE_UP_GRACE_PERIOD =
-            autoScalerConfig("scale-up.grace-period")
+
+    public static final ConfigOption<Duration> SCALE_DOWN_INTERVAL =
+            autoScalerConfig("scale-down.interval")
                     .durationType()
                     .defaultValue(Duration.ofHours(1))
-                    .withFallbackKeys(oldOperatorConfigKey("scale-up.grace-period"))
+                    .withDeprecatedKeys(autoScalerConfigKey("scale-up.grace-period"))
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("scale-up.grace-period"),
+                            oldOperatorConfigKey("scale-down.interval"))
                     .withDescription(
-                            "Duration in which no scale down of a vertex is allowed after it has been scaled up.");
+                            "The delay time for scale down to be executed. If it is greater than 0, the scale down will be delayed. "
+                                    + "Delayed rescale can merge multiple scale downs within `scale-down.interval` into a scale down, thereby reducing the number of rescales. "
+                                    + "Reducing the frequency of job restarts can improve job availability. "
+                                    + "Scale down can be executed directly if it's less than or equal 0.");
 
     public static final ConfigOption<Integer> VERTEX_MIN_PARALLELISM =
             autoScalerConfig("vertex.min-parallelism")
