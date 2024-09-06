@@ -63,7 +63,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.IMAGE;
@@ -933,14 +932,5 @@ public class FlinkConfigBuilderTest {
         var pod =
                 TestUtils.getTestPodTemplate("hostname", List.of(mainContainer, sideCarContainer));
         return pod;
-    }
-
-    private static Stream<KubernetesConfigOptions.ServiceExposedType> serviceExposedTypes() {
-        return Stream.of(
-                null,
-                KubernetesConfigOptions.ServiceExposedType.ClusterIP,
-                KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
-                KubernetesConfigOptions.ServiceExposedType.Headless_ClusterIP,
-                KubernetesConfigOptions.ServiceExposedType.NodePort);
     }
 }

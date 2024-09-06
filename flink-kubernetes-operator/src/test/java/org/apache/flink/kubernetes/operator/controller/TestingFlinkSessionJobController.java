@@ -65,8 +65,11 @@ public class TestingFlinkSessionJobController
 
     @Getter private CanaryResourceManager<FlinkSessionJob> canaryResourceManager;
     private FlinkSessionJobController flinkSessionJobController;
+
+    @Getter
     private TestingFlinkSessionJobController.StatusUpdateCounter statusUpdateCounter =
             new TestingFlinkSessionJobController.StatusUpdateCounter();
+
     private FlinkResourceEventCollector flinkResourceEventCollector =
             new FlinkResourceEventCollector();
     private EventRecorder eventRecorder;
@@ -161,10 +164,11 @@ public class TestingFlinkSessionJobController
         return flinkResourceEventCollector.events;
     }
 
-    private static class StatusUpdateCounter
+    /** Test status consumer. */
+    protected static class StatusUpdateCounter
             implements BiConsumer<FlinkSessionJob, FlinkSessionJobStatus> {
 
-        private FlinkSessionJob currentResource;
+        FlinkSessionJob currentResource;
         private int counter;
 
         @Override
