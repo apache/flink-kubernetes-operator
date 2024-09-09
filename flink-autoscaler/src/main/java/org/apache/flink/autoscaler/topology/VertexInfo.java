@@ -46,6 +46,8 @@ public class VertexInfo {
     @Setter(AccessLevel.NONE)
     private int maxParallelism;
 
+    @Setter private int numPartitions;
+
     private final int originalMaxParallelism;
 
     private final boolean finished;
@@ -98,9 +100,5 @@ public class VertexInfo {
             int parallelism,
             int maxParallelism) {
         this(id, inputs, parallelism, maxParallelism, null);
-    }
-
-    public void updateMaxParallelism(int maxParallelism) {
-        this.maxParallelism = Math.min(originalMaxParallelism, maxParallelism);
     }
 }
