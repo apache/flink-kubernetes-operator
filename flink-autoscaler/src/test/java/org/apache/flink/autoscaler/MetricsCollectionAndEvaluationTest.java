@@ -233,7 +233,7 @@ public class MetricsCollectionAndEvaluationTest {
     }
 
     @Test
-    public void testKafkaPulsarPartitionMaxParallelism() throws Exception {
+    public void testKafkaPulsarNumPartitions() throws Exception {
         setDefaultMetrics(metricsCollector);
         metricsCollector.updateMetrics(context, stateStore);
 
@@ -241,13 +241,8 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(clock);
 
         var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-
-        assertEquals(720, collectedMetrics.getJobTopology().get(source1).getMaxParallelism());
-        assertEquals(720, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
-
         clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-
         metricsCollector.setMetricNames(
                 Map.of(
                         source1,
@@ -260,8 +255,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(5, collectedMetrics.getJobTopology().get(source1).getMaxParallelism());
-        assertEquals(720, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
+        assertEquals(5, collectedMetrics.getJobTopology().get(source1).getNumPartitions());
 
         metricsCollector.setMetricNames(
                 Map.of(
@@ -280,7 +274,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "0.Source__pulsar_source[1].PulsarConsumer"
                                         + ".persistent_//public/default/testTopic-partition-4.m962n.numMsgsReceived")));
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(5, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
+        assertEquals(5, collectedMetrics.getJobTopology().get(source2).getNumPartitions());
     }
 
     @Test

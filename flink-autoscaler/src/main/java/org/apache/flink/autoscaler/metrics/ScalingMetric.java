@@ -104,6 +104,7 @@ public enum ScalingMetric {
                     PARALLELISM,
                     RECOMMENDED_PARALLELISM,
                     MAX_PARALLELISM,
+                    NUM_PARTITIONS,
                     SCALE_UP_RATE_THRESHOLD,
                     SCALE_DOWN_RATE_THRESHOLD,
                     EXPECTED_PROCESSING_RATE);
