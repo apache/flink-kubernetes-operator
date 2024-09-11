@@ -44,11 +44,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
-import static org.apache.flink.autoscaler.JobVertexScaler.SCALE_LIMITED;
 import static org.apache.flink.autoscaler.JobVertexScaler.SCALE_LIMITED_MESSAGE_FORMAT;
+import static org.apache.flink.autoscaler.JobVertexScaler.SCALING_LIMITED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +62,8 @@ public class JobVertexScalerTest {
             List.of(ShipStrategy.REBALANCE, ShipStrategy.RESCALE);
 
     private final JobVertexID vertex = new JobVertexID();
+
+    private final Consumer<String> scalingLimitedMessageConsumer = message -> {};
 
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
     private JobVertexScaler<JobID, JobAutoScalerContext<JobID>> vertexScaler;
@@ -247,75 +250,75 @@ public class JobVertexScalerTest {
         assertEquals(
                 1,
                 JobVertexScaler.scale(
-                                vertex,
-                                1,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                720,
-                                0.0001,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        1,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        720,
+                        0.0001,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 1,
                 JobVertexScaler.scale(
-                                vertex,
-                                2,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                720,
-                                0.1,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        2,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        720,
+                        0.1,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 5,
                 JobVertexScaler.scale(
-                                vertex,
-                                6,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                720,
-                                0.8,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        6,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        720,
+                        0.8,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 24,
                 JobVertexScaler.scale(
-                                vertex,
-                                16,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                128,
-                                1.5,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        16,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        128,
+                        1.5,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 400,
                 JobVertexScaler.scale(
-                                vertex,
-                                200,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                720,
-                                2,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        200,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        720,
+                        2,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 720,
                 JobVertexScaler.scale(
-                                vertex,
-                                200,
-                                NOT_ADJUST_INPUTS,
-                                0,
-                                720,
-                                Integer.MAX_VALUE,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        200,
+                        NOT_ADJUST_INPUTS,
+                        0,
+                        720,
+                        Integer.MAX_VALUE,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
     }
 
     @ParameterizedTest
@@ -329,51 +332,51 @@ public class JobVertexScalerTest {
         assertEquals(
                 6,
                 JobVertexScaler.scale(
-                                vertex,
-                                6,
-                                inputShipStrategies,
-                                0,
-                                36,
-                                0.8,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        6,
+                        inputShipStrategies,
+                        0,
+                        36,
+                        0.8,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 32,
                 JobVertexScaler.scale(
-                                vertex,
-                                16,
-                                inputShipStrategies,
-                                0,
-                                128,
-                                1.5,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        16,
+                        inputShipStrategies,
+                        0,
+                        128,
+                        1.5,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 360,
                 JobVertexScaler.scale(
-                                vertex,
-                                200,
-                                inputShipStrategies,
-                                0,
-                                720,
-                                1.3,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        200,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        1.3,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 720,
                 JobVertexScaler.scale(
-                                vertex,
-                                200,
-                                inputShipStrategies,
-                                0,
-                                720,
-                                Integer.MAX_VALUE,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        200,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        Integer.MAX_VALUE,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
     }
 
     @ParameterizedTest
@@ -382,27 +385,78 @@ public class JobVertexScalerTest {
         final var vertex = new JobVertexID();
 
         assertEquals(
-                5, JobVertexScaler.scale(vertex, 6, inputShipStrategies, 0, 720, 0.8, 1, 700).f0);
+                5,
+                JobVertexScaler.scale(
+                        vertex,
+                        6,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        0.8,
+                        1,
+                        700,
+                        scalingLimitedMessageConsumer));
         assertEquals(
-                8, JobVertexScaler.scale(vertex, 8, inputShipStrategies, 0, 720, 0.8, 8, 700).f0);
+                8,
+                JobVertexScaler.scale(
+                        vertex,
+                        8,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        0.8,
+                        8,
+                        700,
+                        scalingLimitedMessageConsumer));
 
         assertEquals(
                 32,
                 JobVertexScaler.scale(
-                                vertex, 16, inputShipStrategies, 0, 128, 1.5, 1, Integer.MAX_VALUE)
-                        .f0);
+                        vertex,
+                        16,
+                        inputShipStrategies,
+                        0,
+                        128,
+                        1.5,
+                        1,
+                        Integer.MAX_VALUE,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 64,
                 JobVertexScaler.scale(
-                                vertex, 16, inputShipStrategies, 0, 128, 1.5, 60, Integer.MAX_VALUE)
-                        .f0);
+                        vertex,
+                        16,
+                        inputShipStrategies,
+                        0,
+                        128,
+                        1.5,
+                        60,
+                        Integer.MAX_VALUE,
+                        scalingLimitedMessageConsumer));
         assertEquals(
-                300, JobVertexScaler.scale(vertex, 200, inputShipStrategies, 0, 720, 2, 1, 300).f0);
+                300,
+                JobVertexScaler.scale(
+                        vertex,
+                        200,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        2,
+                        1,
+                        300,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 600,
                 JobVertexScaler.scale(
-                                vertex, 200, inputShipStrategies, 0, 720, Integer.MAX_VALUE, 1, 600)
-                        .f0);
+                        vertex,
+                        200,
+                        inputShipStrategies,
+                        0,
+                        720,
+                        Integer.MAX_VALUE,
+                        1,
+                        600,
+                        scalingLimitedMessageConsumer));
     }
 
     @Test
@@ -413,15 +467,15 @@ public class JobVertexScalerTest {
                                 assertEquals(
                                         600,
                                         JobVertexScaler.scale(
-                                                        new JobVertexID(),
-                                                        200,
-                                                        NOT_ADJUST_INPUTS,
-                                                        0,
-                                                        720,
-                                                        Integer.MAX_VALUE,
-                                                        500,
-                                                        499)
-                                                .f0));
+                                                new JobVertexID(),
+                                                200,
+                                                NOT_ADJUST_INPUTS,
+                                                0,
+                                                720,
+                                                Integer.MAX_VALUE,
+                                                500,
+                                                499,
+                                                scalingLimitedMessageConsumer)));
     }
 
     @Test
@@ -878,110 +932,105 @@ public class JobVertexScalerTest {
         assertEquals(
                 3,
                 JobVertexScaler.scale(
-                                vertex,
-                                6,
-                                inputShipStrategies,
-                                15,
-                                128,
-                                0.4,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        6,
+                        inputShipStrategies,
+                        15,
+                        128,
+                        0.4,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 15,
                 JobVertexScaler.scale(
-                                vertex,
-                                7,
-                                inputShipStrategies,
-                                15,
-                                128,
-                                0.8,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        7,
+                        inputShipStrategies,
+                        15,
+                        128,
+                        0.8,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 11,
                 JobVertexScaler.scale(
-                                vertex,
-                                7,
-                                inputShipStrategies,
-                                21,
-                                20,
-                                2.1,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        7,
+                        inputShipStrategies,
+                        21,
+                        20,
+                        2.1,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
         assertEquals(
                 18,
                 JobVertexScaler.scale(
-                                vertex, 24, inputShipStrategies, 35, 24, 0.8, 18, maxParallelism)
-                        .f0);
-
-        assertTrue(
-                JobVertexScaler.scale(
-                                vertex,
-                                7,
-                                inputShipStrategies,
-                                15,
-                                128,
-                                3,
-                                minParallelism,
-                                maxParallelism)
-                        .f1
-                        .isPresent());
+                        vertex,
+                        24,
+                        inputShipStrategies,
+                        35,
+                        24,
+                        0.8,
+                        18,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
 
         // numPartition > upperBound
         assertEquals(
                 100,
                 JobVertexScaler.scale(
-                                vertex,
-                                80,
-                                inputShipStrategies,
-                                200,
-                                128,
-                                1.4,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
-
-        assertTrue(
-                JobVertexScaler.scale(
-                                vertex,
-                                80,
-                                inputShipStrategies,
-                                200,
-                                128,
-                                1.4,
-                                minParallelism,
-                                maxParallelism)
-                        .f1
-                        .isPresent());
+                        vertex,
+                        80,
+                        inputShipStrategies,
+                        200,
+                        128,
+                        1.4,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
 
         assertEquals(
                 20,
                 JobVertexScaler.scale(
-                                vertex,
-                                15,
-                                inputShipStrategies,
-                                200,
-                                128,
-                                1.2,
-                                minParallelism,
-                                maxParallelism)
-                        .f0);
+                        vertex,
+                        15,
+                        inputShipStrategies,
+                        200,
+                        128,
+                        1.2,
+                        minParallelism,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
 
         // minParallelism limited
         assertEquals(
                 5,
                 JobVertexScaler.scale(
-                                vertex, 6, inputShipStrategies, 15, 128, 0.5, 4, maxParallelism)
-                        .f0);
+                        vertex,
+                        6,
+                        inputShipStrategies,
+                        15,
+                        128,
+                        0.5,
+                        4,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
 
         assertEquals(
                 16,
                 JobVertexScaler.scale(
-                                vertex, 6, inputShipStrategies, 15, 128, 0.5, 16, maxParallelism)
-                        .f0);
+                        vertex,
+                        6,
+                        inputShipStrategies,
+                        15,
+                        128,
+                        0.5,
+                        16,
+                        maxParallelism,
+                        scalingLimitedMessageConsumer));
     }
 
     @ParameterizedTest
@@ -1011,7 +1060,7 @@ public class JobVertexScalerTest {
         TestingEventCollector.Event<JobID, JobAutoScalerContext<JobID>> partitionLimitedEvent =
                 eventCollector.events.poll();
         assertThat(partitionLimitedEvent).isNotNull();
-        assertEquals(SCALE_LIMITED, partitionLimitedEvent.getReason());
+        assertEquals(SCALING_LIMITED, partitionLimitedEvent.getReason());
         assertThat(partitionLimitedEvent.getMessage())
                 .isEqualTo(
                         String.format(
