@@ -44,7 +44,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Consumer;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
@@ -62,8 +61,6 @@ public class JobVertexScalerTest {
             List.of(ShipStrategy.REBALANCE, ShipStrategy.RESCALE);
 
     private final JobVertexID vertex = new JobVertexID();
-
-    private final Consumer<String> scalingLimitedMessageConsumer = message -> {};
 
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
     private JobVertexScaler<JobID, JobAutoScalerContext<JobID>> vertexScaler;
@@ -258,7 +255,8 @@ public class JobVertexScalerTest {
                         0.0001,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 1,
                 JobVertexScaler.scale(
@@ -270,7 +268,8 @@ public class JobVertexScalerTest {
                         0.1,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 5,
                 JobVertexScaler.scale(
@@ -282,7 +281,8 @@ public class JobVertexScalerTest {
                         0.8,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 24,
                 JobVertexScaler.scale(
@@ -294,7 +294,8 @@ public class JobVertexScalerTest {
                         1.5,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 400,
                 JobVertexScaler.scale(
@@ -306,7 +307,8 @@ public class JobVertexScalerTest {
                         2,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 720,
                 JobVertexScaler.scale(
@@ -318,7 +320,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
     }
 
     @ParameterizedTest
@@ -340,7 +343,8 @@ public class JobVertexScalerTest {
                         0.8,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 32,
                 JobVertexScaler.scale(
@@ -352,7 +356,8 @@ public class JobVertexScalerTest {
                         1.5,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 360,
                 JobVertexScaler.scale(
@@ -364,7 +369,8 @@ public class JobVertexScalerTest {
                         1.3,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 720,
                 JobVertexScaler.scale(
@@ -376,7 +382,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
     }
 
     @ParameterizedTest
@@ -395,7 +402,8 @@ public class JobVertexScalerTest {
                         0.8,
                         1,
                         700,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 8,
                 JobVertexScaler.scale(
@@ -407,7 +415,8 @@ public class JobVertexScalerTest {
                         0.8,
                         8,
                         700,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
 
         assertEquals(
                 32,
@@ -420,7 +429,8 @@ public class JobVertexScalerTest {
                         1.5,
                         1,
                         Integer.MAX_VALUE,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 64,
                 JobVertexScaler.scale(
@@ -432,7 +442,8 @@ public class JobVertexScalerTest {
                         1.5,
                         60,
                         Integer.MAX_VALUE,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 300,
                 JobVertexScaler.scale(
@@ -444,7 +455,8 @@ public class JobVertexScalerTest {
                         2,
                         1,
                         300,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 600,
                 JobVertexScaler.scale(
@@ -456,7 +468,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         1,
                         600,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
     }
 
     @Test
@@ -475,7 +488,8 @@ public class JobVertexScalerTest {
                                                 Integer.MAX_VALUE,
                                                 500,
                                                 499,
-                                                scalingLimitedMessageConsumer)));
+                                                eventCollector,
+                                                context)));
     }
 
     @Test
@@ -940,7 +954,8 @@ public class JobVertexScalerTest {
                         0.4,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 15,
                 JobVertexScaler.scale(
@@ -952,7 +967,8 @@ public class JobVertexScalerTest {
                         0.8,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 11,
                 JobVertexScaler.scale(
@@ -964,7 +980,8 @@ public class JobVertexScalerTest {
                         2.1,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
         assertEquals(
                 18,
                 JobVertexScaler.scale(
@@ -976,7 +993,22 @@ public class JobVertexScalerTest {
                         0.8,
                         18,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
+
+        assertEquals(
+                18,
+                JobVertexScaler.scale(
+                        vertex,
+                        24,
+                        inputShipStrategies,
+                        35,
+                        24,
+                        0.8,
+                        17,
+                        maxParallelism,
+                        eventCollector,
+                        context));
 
         // numPartition > upperBound
         assertEquals(
@@ -990,7 +1022,8 @@ public class JobVertexScalerTest {
                         1.4,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
 
         assertEquals(
                 20,
@@ -1003,7 +1036,8 @@ public class JobVertexScalerTest {
                         1.2,
                         minParallelism,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
 
         // minParallelism limited
         assertEquals(
@@ -1017,7 +1051,8 @@ public class JobVertexScalerTest {
                         0.5,
                         4,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
 
         assertEquals(
                 16,
@@ -1030,7 +1065,8 @@ public class JobVertexScalerTest {
                         0.5,
                         16,
                         maxParallelism,
-                        scalingLimitedMessageConsumer));
+                        eventCollector,
+                        context));
     }
 
     @ParameterizedTest
@@ -1044,7 +1080,6 @@ public class JobVertexScalerTest {
         evaluated.put(ScalingMetric.NUM_PARTITIONS, EvaluatedScalingMetric.of(15));
         var history = new TreeMap<Instant, ScalingSummary>();
         var delayedScaleDown = new DelayedScaleDown();
-
         // partition limited
         assertEquals(
                 ParallelismChange.required(15),
@@ -1069,8 +1104,9 @@ public class JobVertexScalerTest {
                                 20,
                                 15,
                                 String.format(
-                                        "numPartitions : %s，upperBound(maxParallelism or parallelismUpperLimit): %s",
-                                        15, 200)));
+                                        "numPartitions : %s，upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, "
+                                                + "parallelismLowerLimit: %s.",
+                                        15, 200, 1)));
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
