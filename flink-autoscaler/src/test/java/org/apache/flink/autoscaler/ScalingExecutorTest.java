@@ -475,9 +475,9 @@ public class ScalingExecutorTest {
                             TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                             "0.652",
                             TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
-                            "24320 kb",
+                            "23040 kb",
                             TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
-                            "24320 kb",
+                            "23040 kb",
                             TaskManagerOptions.JVM_METASPACE.key(),
                             "360 mb",
                             TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
@@ -485,7 +485,7 @@ public class ScalingExecutorTest {
                             TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                             "0 bytes",
                             TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                            "20400832696 bytes");
+                            "20399521976 bytes");
         } else {
             assertEquals(context.getConfiguration(), capturedConfForMaxResources);
             expected = Map.of();
@@ -752,7 +752,7 @@ public class ScalingExecutorTest {
                 .containsAllEntriesOf(
                         Map.of(
                                 "0bfd135746ac8efb3cce668b12e16d3a",
-                                "8",
+                                "7",
                                 "869fb403873411306404e9f2e4438c0e",
                                 "7",
                                 "a6b7102b8d3e3a9564998c1ffeb5e2b7",
