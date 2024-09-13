@@ -404,7 +404,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
         var adjustByMaxParallelismOrPartitions =
-                inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
+                numSourcePartitions > 0 || inputShipStrategies.contains(HASH);
         if (!adjustByMaxParallelismOrPartitions) {
             return newParallelism;
         }
