@@ -55,7 +55,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.METASPACE_MEMORY_USED;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_PARTITIONS;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_SOURCE_PARTITIONS;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TASK_SLOTS_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.OBSERVED_TPR;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
@@ -169,7 +169,8 @@ public class ScalingMetricEvaluator {
                 MAX_PARALLELISM, EvaluatedScalingMetric.of(vertexInfo.getMaxParallelism()));
 
         evaluatedMetrics.put(
-                NUM_PARTITIONS, EvaluatedScalingMetric.of(vertexInfo.getNumPartitions()));
+                NUM_SOURCE_PARTITIONS,
+                EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()));
 
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
         return evaluatedMetrics;

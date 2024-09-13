@@ -50,7 +50,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PA
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_PARTITIONS;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_SOURCE_PARTITIONS;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
@@ -71,7 +71,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     @VisibleForTesting
     protected static final String SCALE_LIMITED_MESSAGE_FORMAT =
-            "Scaling limited detected for %s (expected parallelism: %s, actual parallelism %s). Scaling limited due to %s";
+            "Scaling limited detected for %s (expected parallelism: %s, actual parallelism %s). "
+                    + "Scaling limited due to source partitions : %s，"
+                    + "upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, parallelismLowerLimit: %s.";
 
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
@@ -203,7 +205,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         vertex,
                         currentParallelism,
                         inputShipStrategies,
-                        (int) evaluatedMetrics.get(NUM_PARTITIONS).getCurrent(),
+                        (int) evaluatedMetrics.get(NUM_SOURCE_PARTITIONS).getCurrent(),
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
@@ -358,14 +360,14 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * remainder.
      *
      * <p>This method also attempts to adjust the parallelism to ensure it aligns well with the
-     * number of partitions if a vertex has a known partition count.
+     * number of source partitions if a vertex has a known source partition count.
      */
     @VisibleForTesting
     protected static <KEY, Context extends JobAutoScalerContext<KEY>> int scale(
             JobVertexID vertex,
             int currentParallelism,
             Collection<ShipStrategy> inputShipStrategies,
-            int numPartitions,
+            int numSourcePartitions,
             int maxParallelism,
             double scaleFactor,
             int parallelismLowerLimit,
@@ -401,19 +403,19 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Apply min/max parallelism
         newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
-        var adjustByMaxParallelism =
+        var adjustByMaxParallelismOrPartitions =
                 inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
-        if (!adjustByMaxParallelism) {
+        if (!adjustByMaxParallelismOrPartitions) {
             return newParallelism;
         }
 
         int numKeyGroupsOrPartitions = maxParallelism;
         int upperBoundForAlignment;
-        if (numPartitions <= 0) {
+        if (numSourcePartitions <= 0) {
             upperBoundForAlignment = Math.min(maxParallelism / 2, upperBound);
         } else {
-            upperBoundForAlignment = Math.min(numPartitions, upperBound);
-            numKeyGroupsOrPartitions = numPartitions;
+            upperBoundForAlignment = Math.min(numSourcePartitions, upperBound);
+            numKeyGroupsOrPartitions = numSourcePartitions;
         }
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
@@ -425,15 +427,16 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             }
         }
 
-        if (numPartitions > 0) {
+        if (numSourcePartitions > 0) {
 
             // When adjust the parallelism after rounding up cannot be evenly divided by source
-            // numPartitions, Try to find the smallest parallelism that can satisfy the current
+            // numSourcePartitions, Try to find the smallest parallelism that can satisfy the
+            // current
             // consumption rate.
             int p = newParallelism;
             for (; p > 0; p--) {
-                if (numPartitions / p > numPartitions / newParallelism) {
-                    if (numPartitions % p != 0) {
+                if (numSourcePartitions / p > numSourcePartitions / newParallelism) {
+                    if (numSourcePartitions % p != 0) {
                         p++;
                     }
                     break;
@@ -441,17 +444,15 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             }
 
             p = Math.max(p, parallelismLowerLimit);
-
             var message =
                     String.format(
                             SCALE_LIMITED_MESSAGE_FORMAT,
                             vertex,
                             newParallelism,
                             p,
-                            String.format(
-                                    "numPartitions : %s，upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, "
-                                            + "parallelismLowerLimit: %s.",
-                                    numPartitions, upperBound, parallelismLowerLimit));
+                            numSourcePartitions,
+                            upperBound,
+                            parallelismLowerLimit);
             eventHandler.handleEvent(
                     context,
                     AutoScalerEventHandler.Type.Warning,

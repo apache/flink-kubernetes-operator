@@ -255,7 +255,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(5, collectedMetrics.getJobTopology().get(source1).getNumPartitions());
+        assertEquals(5, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
 
         metricsCollector.setMetricNames(
                 Map.of(
@@ -274,7 +274,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "0.Source__pulsar_source[1].PulsarConsumer"
                                         + ".persistent_//public/default/testTopic-partition-4.m962n.numMsgsReceived")));
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(5, collectedMetrics.getJobTopology().get(source2).getNumPartitions());
+        assertEquals(5, collectedMetrics.getJobTopology().get(source2).getNumSourcePartitions());
     }
 
     @Test

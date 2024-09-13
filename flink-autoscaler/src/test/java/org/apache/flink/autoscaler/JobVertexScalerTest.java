@@ -1010,7 +1010,7 @@ public class JobVertexScalerTest {
                         eventCollector,
                         context));
 
-        // numPartition > upperBound
+        // numSourcePartition > upperBound
         assertEquals(
                 100,
                 JobVertexScaler.scale(
@@ -1077,7 +1077,7 @@ public class JobVertexScalerTest {
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ZERO);
         var evaluated = evaluated(10, 200, 100);
-        evaluated.put(ScalingMetric.NUM_PARTITIONS, EvaluatedScalingMetric.of(15));
+        evaluated.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(15));
         var history = new TreeMap<Instant, ScalingSummary>();
         var delayedScaleDown = new DelayedScaleDown();
         // partition limited
@@ -1114,7 +1114,7 @@ public class JobVertexScalerTest {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
         metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
-        metrics.put(ScalingMetric.NUM_PARTITIONS, EvaluatedScalingMetric.of(0));
+        metrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(0));
         metrics.put(
                 ScalingMetric.TARGET_DATA_RATE,
                 new EvaluatedScalingMetric(targetDataRate, targetDataRate));

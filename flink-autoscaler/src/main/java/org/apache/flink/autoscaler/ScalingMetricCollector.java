@@ -284,7 +284,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                 "Updating source {} max parallelism based on available partitions to {}",
                                 sourceVertex,
                                 numPartitions);
-                        topology.get(sourceVertex).setNumPartitions((int) numPartitions);
+                        topology.get(sourceVertex).setNumSourcePartitions((int) numPartitions);
                     }
                 }
             }
