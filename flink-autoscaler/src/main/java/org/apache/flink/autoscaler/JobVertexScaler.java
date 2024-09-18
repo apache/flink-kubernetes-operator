@@ -409,13 +409,20 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return newParallelism;
         }
 
-        int numKeyGroupsOrPartitions = maxParallelism;
-        int upperBoundForAlignment;
+        final int numKeyGroupsOrPartitions;
+        final int upperBoundForAlignment;
         if (numSourcePartitions <= 0) {
-            upperBoundForAlignment = Math.min(maxParallelism / 2, upperBound);
+            numKeyGroupsOrPartitions = maxParallelism;
+            upperBoundForAlignment =
+                    Math.min(
+                            // Optimize the case where newParallelism <= maxParallelism / 2
+                            newParallelism > maxParallelism / 2
+                                    ? maxParallelism
+                                    : maxParallelism / 2,
+                            upperBound);
         } else {
-            upperBoundForAlignment = Math.min(numSourcePartitions, upperBound);
             numKeyGroupsOrPartitions = numSourcePartitions;
+            upperBoundForAlignment = Math.min(numSourcePartitions, upperBound);
         }
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
@@ -427,44 +434,37 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             }
         }
 
-        if (numSourcePartitions > 0) {
-
-            // When adjust the parallelism after rounding up cannot be evenly divided by source
-            // numSourcePartitions, Try to find the smallest parallelism that can satisfy the
-            // current
-            // consumption rate.
-            int p = newParallelism;
-            for (; p > 0; p--) {
-                if (numSourcePartitions / p > numSourcePartitions / newParallelism) {
-                    if (numSourcePartitions % p != 0) {
-                        p++;
-                    }
-                    break;
+        // When adjust the parallelism after rounding up cannot be evenly divided by
+        // numKeyGroupsOrPartitions, Try to find the smallest parallelism that can satisfy the
+        // current consumption rate.
+        int p = newParallelism;
+        for (; p > 0; p--) {
+            if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
+                if (numKeyGroupsOrPartitions % p != 0) {
+                    p++;
                 }
+                break;
             }
-
-            p = Math.max(p, parallelismLowerLimit);
-            var message =
-                    String.format(
-                            SCALE_LIMITED_MESSAGE_FORMAT,
-                            vertex,
-                            newParallelism,
-                            p,
-                            numSourcePartitions,
-                            upperBound,
-                            parallelismLowerLimit);
-            eventHandler.handleEvent(
-                    context,
-                    AutoScalerEventHandler.Type.Warning,
-                    SCALING_LIMITED,
-                    message,
-                    SCALING_LIMITED + vertex + (scaleFactor * currentParallelism),
-                    context.getConfiguration().get(SCALING_EVENT_INTERVAL));
-            return p;
         }
 
-        // If parallelism adjustment fails, use originally computed parallelism
-        return newParallelism;
+        p = Math.max(p, parallelismLowerLimit);
+        var message =
+                String.format(
+                        SCALE_LIMITED_MESSAGE_FORMAT,
+                        vertex,
+                        newParallelism,
+                        p,
+                        numSourcePartitions,
+                        upperBound,
+                        parallelismLowerLimit);
+        eventHandler.handleEvent(
+                context,
+                AutoScalerEventHandler.Type.Warning,
+                SCALING_LIMITED,
+                message,
+                SCALING_LIMITED + vertex + (scaleFactor * currentParallelism),
+                context.getConfiguration().get(SCALING_EVENT_INTERVAL));
+        return p;
     }
 
     @VisibleForTesting

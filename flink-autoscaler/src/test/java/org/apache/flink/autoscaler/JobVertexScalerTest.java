@@ -74,10 +74,6 @@ public class JobVertexScalerTest {
                 List.of(ShipStrategy.REBALANCE, ShipStrategy.HASH, ShipStrategy.RESCALE));
     }
 
-    private static List<Collection<ShipStrategy>> sourceInputsProvider() {
-        return List.of(List.of());
-    }
-
     @BeforeEach
     public void setup() {
         eventCollector = new TestingEventCollector<>();
@@ -444,7 +440,7 @@ public class JobVertexScalerTest {
                         eventCollector,
                         context));
         assertEquals(
-                300,
+                240,
                 JobVertexScaler.scale(
                         vertex,
                         200,
@@ -457,7 +453,7 @@ public class JobVertexScalerTest {
                         eventCollector,
                         context));
         assertEquals(
-                600,
+                360,
                 JobVertexScaler.scale(
                         vertex,
                         200,
