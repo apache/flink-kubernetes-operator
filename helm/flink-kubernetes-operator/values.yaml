@@ -72,12 +72,14 @@ operatorPod:
   #       key: ""
   # dnsPolicy: ""
   # dnsConfig: {}
-  # Node labels for operator pod assignment
+  # Node labels and affinity for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
   envFrom:
   # - configMapRef:
   #     name: ""
   nodeSelector: {}
+
+  affinity: {}
   # Node tolerations for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
