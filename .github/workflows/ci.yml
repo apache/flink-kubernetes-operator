@@ -34,6 +34,7 @@ jobs:
     strategy:
       matrix:
         java-version: [ 11, 17, 21 ]
+        http-client: ["okhttp", "vertx", "jetty",  "jdk"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -44,7 +45,7 @@ jobs:
           cache: 'maven'
       - name: Build with Maven
         run: |
-          mvn -B clean install javadoc:javadoc -Pgenerate-docs
+          mvn -B clean install javadoc:javadoc -Pgenerate-docs -Dfabric8.httpclinent.impl=${{ matrix.httpclient }}
           if [[ $(git diff HEAD | wc -l) -gt 0 ]]; then
             echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
             exit 1
