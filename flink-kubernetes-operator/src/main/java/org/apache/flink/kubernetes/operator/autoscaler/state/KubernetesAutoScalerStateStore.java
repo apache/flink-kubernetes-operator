@@ -40,7 +40,6 @@ import org.apache.flink.shaded.jackson2.org.yaml.snakeyaml.LoaderOptions;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -202,7 +201,7 @@ public class KubernetesAutoScalerStateStore
                 .orElse(new HashMap<>());
     }
 
-    @NotNull
+    @Nonnull
     @Override
     public ConfigChanges getConfigChanges(KubernetesJobAutoScalerContext jobContext) {
         return configMapStore
