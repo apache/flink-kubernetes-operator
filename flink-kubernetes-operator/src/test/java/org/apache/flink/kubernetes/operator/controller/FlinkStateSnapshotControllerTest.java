@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.kubernetes.operator.metrics.TestingMetricListener;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
@@ -56,6 +57,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import javax.annotation.Nullable;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
@@ -64,13 +66,15 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshot
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkStateSnapshotMetricsUtils.assertSnapshotMetrics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Test class for {@link FlinkStateSnapshotController}. */
 @EnableKubernetesMockClient(crud = true)
 public class FlinkStateSnapshotControllerTest {
-    private static final String SNAPSHOT_NAME = "snapshot-test";
+    private static final String SAVEPOINT_NAME = "savepoint-test";
+    private static final String CHECKPOINT_NAME = "checkpoint-test";
     private static final String SAVEPOINT_PATH = "/tmp/asd";
     private static final String JOB_ID = "fd72014d4c864993a2e5a9287b4a9c5d";
 
@@ -81,6 +85,8 @@ public class FlinkStateSnapshotControllerTest {
     private FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector;
     private EventRecorder eventRecorder;
     private TestingFlinkResourceContextFactory ctxFactory;
+    private TestingMetricListener listener;
+    private MetricManager<FlinkStateSnapshot> metricManager;
     private StatusRecorder<FlinkStateSnapshot, FlinkStateSnapshotStatus> statusRecorder;
     private FlinkStateSnapshotController controller;
     private Context<FlinkStateSnapshot> context;
@@ -97,7 +103,12 @@ public class FlinkStateSnapshotControllerTest {
                         TestUtils.createTestMetricGroup(new Configuration()),
                         flinkService,
                         eventRecorder);
-        statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
+
+        listener = new TestingMetricListener(new Configuration());
+        metricManager =
+                MetricManager.createFlinkStateSnapshotMetricManager(
+                        new Configuration(), listener.getMetricGroup());
+        statusRecorder = new StatusRecorder<>(metricManager, statusUpdateCounter);
         controller =
                 new FlinkStateSnapshotController(
                         ValidatorUtils.discoverValidators(configManager),
@@ -105,6 +116,7 @@ public class FlinkStateSnapshotControllerTest {
                         new StateSnapshotReconciler(ctxFactory, eventRecorder),
                         new StateSnapshotObserver(ctxFactory, eventRecorder),
                         eventRecorder,
+                        metricManager,
                         statusRecorder);
     }
 
@@ -514,8 +526,10 @@ public class FlinkStateSnapshotControllerTest {
         var snapshot = createSavepoint(deployment);
         var errorMessage =
                 String.format(
-                        "Secondary resource %s (%s) for savepoint snapshot-test was not found",
-                        deployment.getMetadata().getName(), CrdConstants.KIND_FLINK_DEPLOYMENT);
+                        "Secondary resource %s (%s) for savepoint %s was not found",
+                        deployment.getMetadata().getName(),
+                        CrdConstants.KIND_FLINK_DEPLOYMENT,
+                        SAVEPOINT_NAME);
 
         // First reconcile will trigger the snapshot.
         controller.reconcile(snapshot, TestUtils.createSnapshotContext(client, deployment));
@@ -556,8 +570,10 @@ public class FlinkStateSnapshotControllerTest {
         var snapshot = createSavepoint(deployment);
         var errorMessage =
                 String.format(
-                        "Secondary resource %s (%s) for savepoint snapshot-test is not running",
-                        deployment.getMetadata().getName(), CrdConstants.KIND_FLINK_DEPLOYMENT);
+                        "Secondary resource %s (%s) for savepoint %s is not running",
+                        deployment.getMetadata().getName(),
+                        CrdConstants.KIND_FLINK_DEPLOYMENT,
+                        SAVEPOINT_NAME);
 
         controller.reconcile(snapshot, context);
 
@@ -579,6 +595,37 @@ public class FlinkStateSnapshotControllerTest {
                         });
     }
 
+    @Test
+    public void testMetrics() {
+        var deployment = createDeployment();
+        var savepoint = createSavepoint(deployment);
+        savepoint.getSpec().getSavepoint().setDisposeOnDelete(false);
+        var checkpoint = createCheckpoint(deployment, CheckpointType.FULL, 1);
+
+        context = TestUtils.createSnapshotContext(client, deployment);
+
+        controller.reconcile(savepoint, context);
+        controller.reconcile(savepoint, context);
+        controller.reconcile(savepoint, context);
+        assertThat(savepoint.getStatus().getState()).isEqualTo(COMPLETED);
+
+        controller.reconcile(checkpoint, context);
+        controller.reconcile(checkpoint, context);
+        controller.reconcile(checkpoint, context);
+        assertThat(checkpoint.getStatus().getState()).isEqualTo(COMPLETED);
+
+        assertSnapshotMetrics(
+                listener, TestUtils.TEST_NAMESPACE, Map.of(COMPLETED, 1), Map.of(COMPLETED, 1));
+
+        // Remove savepoint
+        assertDeleteControl(controller.cleanup(savepoint, context), true, null);
+        assertSnapshotMetrics(listener, TestUtils.TEST_NAMESPACE, Map.of(), Map.of(COMPLETED, 1));
+
+        // Remove checkpoint
+        assertDeleteControl(controller.cleanup(checkpoint, context), true, null);
+        assertSnapshotMetrics(listener, TestUtils.TEST_NAMESPACE, Map.of(), Map.of());
+    }
+
     private FlinkStateSnapshot createSavepoint(FlinkDeployment deployment) {
         return createSavepoint(deployment, false, 7);
     }
@@ -591,8 +638,8 @@ public class FlinkStateSnapshotControllerTest {
             FlinkDeployment deployment, boolean alreadyExists, int backoffLimit) {
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotSavepoint(
-                        SNAPSHOT_NAME,
-                        "test",
+                        SAVEPOINT_NAME,
+                        TestUtils.TEST_NAMESPACE,
                         SAVEPOINT_PATH,
                         alreadyExists,
                         deployment == null ? null : JobReference.fromFlinkResource(deployment));
@@ -606,8 +653,8 @@ public class FlinkStateSnapshotControllerTest {
             FlinkDeployment deployment, CheckpointType checkpointType, int backoffLimit) {
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotCheckpoint(
-                        SNAPSHOT_NAME,
-                        "test",
+                        CHECKPOINT_NAME,
+                        TestUtils.TEST_NAMESPACE,
                         checkpointType,
                         JobReference.fromFlinkResource(deployment));
         snapshot.getSpec().setBackoffLimit(backoffLimit);

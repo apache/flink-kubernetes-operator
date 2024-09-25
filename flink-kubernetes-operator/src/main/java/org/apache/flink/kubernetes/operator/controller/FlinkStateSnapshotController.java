@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
@@ -65,6 +66,7 @@ public class FlinkStateSnapshotController
     private final StateSnapshotReconciler reconciler;
     private final StateSnapshotObserver observer;
     private final EventRecorder eventRecorder;
+    private final MetricManager<FlinkStateSnapshot> metricManager;
     private final StatusRecorder<FlinkStateSnapshot, FlinkStateSnapshotStatus> statusRecorder;
 
     @Override
@@ -82,7 +84,7 @@ public class FlinkStateSnapshotController
             reconciler.reconcile(ctx);
         }
 
-        notifyListeners(ctx);
+        notifyListenersAndMetricManager(ctx);
         return getUpdateControl(ctx);
     }
 
@@ -91,6 +93,7 @@ public class FlinkStateSnapshotController
             FlinkStateSnapshot flinkStateSnapshot, Context<FlinkStateSnapshot> josdkContext) {
         var ctx = ctxFactory.getFlinkStateSnapshotContext(flinkStateSnapshot, josdkContext);
         try {
+            metricManager.onRemove(flinkStateSnapshot);
             return reconciler.cleanup(ctx);
         } catch (Exception e) {
             eventRecorder.triggerSnapshotEvent(
@@ -131,7 +134,7 @@ public class FlinkStateSnapshotController
             LOG.info(
                     "Snapshot {} failed and won't be retried as failure count exceeded the backoff limit",
                     resource.getMetadata().getName());
-            notifyListeners(ctx);
+            notifyListenersAndMetricManager(ctx);
             return ErrorStatusUpdateControl.patchStatus(resource).withNoRetry();
         }
 
@@ -142,7 +145,7 @@ public class FlinkStateSnapshotController
                 retrySeconds);
         FlinkStateSnapshotUtils.snapshotTriggerPending(resource);
 
-        notifyListeners(ctx);
+        notifyListenersAndMetricManager(ctx);
         return ErrorStatusUpdateControl.patchStatus(resource)
                 .rescheduleAfter(Duration.ofSeconds(retrySeconds));
     }
@@ -173,10 +176,11 @@ public class FlinkStateSnapshotController
         }
     }
 
-    private void notifyListeners(FlinkStateSnapshotContext ctx) {
+    private void notifyListenersAndMetricManager(FlinkStateSnapshotContext ctx) {
         if (!ctx.getOriginalStatus().equals(ctx.getResource().getStatus())) {
             statusRecorder.notifyListeners(ctx.getResource(), ctx.getOriginalStatus());
         }
+        metricManager.onUpdate(ctx.getResource());
     }
 
     private boolean validateSnapshot(FlinkStateSnapshotContext ctx) {

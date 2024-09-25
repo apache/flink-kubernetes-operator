@@ -237,6 +237,7 @@ public class FlinkOperator {
                         reconciler,
                         observer,
                         eventRecorder,
+                        metricManager,
                         statusRecorder);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }

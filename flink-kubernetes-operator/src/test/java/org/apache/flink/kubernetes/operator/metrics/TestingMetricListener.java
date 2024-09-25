@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Histogram;
@@ -28,6 +27,8 @@ import org.apache.flink.metrics.View;
 import org.apache.flink.runtime.metrics.ViewUpdater;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
+
+import io.fabric8.kubernetes.client.CustomResource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -101,7 +102,7 @@ public class TestingMetricListener {
     }
 
     public String getNamespaceMetricId(
-            Class<? extends AbstractFlinkResource<?, ?>> resourceClass,
+            Class<? extends CustomResource<?, ?>> resourceClass,
             String resourceNs,
             String... identifiers) {
         return metricGroup
@@ -110,7 +111,7 @@ public class TestingMetricListener {
     }
 
     public String getResourceMetricId(
-            Class<? extends AbstractFlinkResource<?, ?>> resourceClass,
+            Class<? extends CustomResource<?, ?>> resourceClass,
             String resourceNs,
             String resourceName,
             String... identifiers) {
