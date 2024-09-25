@@ -19,8 +19,10 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,8 +31,14 @@ public class FlinkStateSnapshotMetrics implements CustomResourceMetrics<FlinkSta
 
     private final KubernetesOperatorMetricGroup parentMetricGroup;
     private final Configuration configuration;
-    private final Map<String, Set<String>> snapshots = new ConcurrentHashMap<>();
-    public static final String COUNTER_NAME = "Count";
+    private final Map<String, Map<FlinkStateSnapshotStatus.State, Set<String>>> checkpointStatuses =
+            new ConcurrentHashMap<>();
+    private final Map<String, Map<FlinkStateSnapshotStatus.State, Set<String>>> savepointStatuses =
+            new ConcurrentHashMap<>();
+    public static final String COUNTER_GROUP_NAME = "Count";
+    public static final String STATE_GROUP_NAME = "State";
+    public static final String CHECKPOINT_GROUP_NAME = "Checkpoint";
+    public static final String SAVEPOINT_GROUP_NAME = "Savepoint";
 
     public FlinkStateSnapshotMetrics(
             KubernetesOperatorMetricGroup parentMetricGroup, Configuration configuration) {
@@ -39,29 +47,107 @@ public class FlinkStateSnapshotMetrics implements CustomResourceMetrics<FlinkSta
     }
 
     public void onUpdate(FlinkStateSnapshot snapshot) {
+        if (snapshot.getStatus() == null || snapshot.getStatus().getState() == null) {
+            return;
+        }
+
         onRemove(snapshot);
-        snapshots
+        getSnapshotMap(snapshot)
                 .computeIfAbsent(
                         snapshot.getMetadata().getNamespace(),
                         ns -> {
+                            initNamespaceSnapshotStates(ns);
                             initNamespaceSnapshotCounts(ns);
-                            return ConcurrentHashMap.newKeySet();
+                            return createSnapshotStateMap();
                         })
+                .get(snapshot.getStatus().getState())
                 .add(snapshot.getMetadata().getName());
     }
 
     public void onRemove(FlinkStateSnapshot snapshot) {
-        if (!snapshots.containsKey(snapshot.getMetadata().getNamespace())) {
-            return;
+        var namespace = snapshot.getMetadata().getNamespace();
+        var name = snapshot.getMetadata().getName();
+        var snapshotMap = getSnapshotMap(snapshot);
+
+        if (snapshotMap.containsKey(namespace)) {
+            snapshotMap.get(namespace).values().forEach(names -> names.remove(name));
         }
-        snapshots
-                .get(snapshot.getMetadata().getNamespace())
-                .remove(snapshot.getMetadata().getName());
+    }
+
+    private Map<String, Map<FlinkStateSnapshotStatus.State, Set<String>>> getSnapshotMap(
+            FlinkStateSnapshot snapshot) {
+        if (snapshot.getSpec().isSavepoint()) {
+            return savepointStatuses;
+        } else {
+            return checkpointStatuses;
+        }
     }
 
     private void initNamespaceSnapshotCounts(String ns) {
-        parentMetricGroup
-                .createResourceNamespaceGroup(configuration, FlinkStateSnapshot.class, ns)
-                .gauge(COUNTER_NAME, () -> snapshots.get(ns).size());
+        var mainGroup =
+                parentMetricGroup.createResourceNamespaceGroup(
+                        configuration, FlinkStateSnapshot.class, ns);
+
+        mainGroup
+                .addGroup(CHECKPOINT_GROUP_NAME)
+                .gauge(
+                        COUNTER_GROUP_NAME,
+                        () -> {
+                            if (!checkpointStatuses.containsKey(ns)) {
+                                return 0;
+                            }
+                            return checkpointStatuses.get(ns).values().stream()
+                                    .mapToInt(Set::size)
+                                    .sum();
+                        });
+        mainGroup
+                .addGroup(SAVEPOINT_GROUP_NAME)
+                .gauge(
+                        COUNTER_GROUP_NAME,
+                        () -> {
+                            if (!savepointStatuses.containsKey(ns)) {
+                                return 0;
+                            }
+                            return savepointStatuses.get(ns).values().stream()
+                                    .mapToInt(Set::size)
+                                    .sum();
+                        });
+    }
+
+    private void initNamespaceSnapshotStates(String ns) {
+        var mainGroup =
+                parentMetricGroup.createResourceNamespaceGroup(
+                        configuration, FlinkStateSnapshot.class, ns);
+
+        for (var state : FlinkStateSnapshotStatus.State.values()) {
+            mainGroup
+                    .addGroup(CHECKPOINT_GROUP_NAME)
+                    .addGroup(STATE_GROUP_NAME)
+                    .addGroup(state.toString())
+                    .gauge(
+                            COUNTER_GROUP_NAME,
+                            () ->
+                                    Optional.ofNullable(checkpointStatuses.get(ns))
+                                            .map(s -> s.get(state).size())
+                                            .orElse(0));
+            mainGroup
+                    .addGroup(SAVEPOINT_GROUP_NAME)
+                    .addGroup(STATE_GROUP_NAME)
+                    .addGroup(state.toString())
+                    .gauge(
+                            COUNTER_GROUP_NAME,
+                            () ->
+                                    Optional.ofNullable(savepointStatuses.get(ns))
+                                            .map(s -> s.get(state).size())
+                                            .orElse(0));
+        }
+    }
+
+    private Map<FlinkStateSnapshotStatus.State, Set<String>> createSnapshotStateMap() {
+        Map<FlinkStateSnapshotStatus.State, Set<String>> statuses = new ConcurrentHashMap<>();
+        for (var state : FlinkStateSnapshotStatus.State.values()) {
+            statuses.put(state, ConcurrentHashMap.newKeySet());
+        }
+        return statuses;
     }
 }

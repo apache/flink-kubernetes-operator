@@ -68,6 +68,12 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
         this.metricManager = metricManager;
     }
 
+    /**
+     * Notifies status update listeners of changes made to a resource.
+     *
+     * @param resource resource that has been updated
+     * @param prevStatus previous status of resource
+     */
     public void notifyListeners(CR resource, STATUS prevStatus) {
         statusUpdateListener.accept(resource, prevStatus);
     }
