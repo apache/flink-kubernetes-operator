@@ -75,6 +75,7 @@ jobs:
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
         java-version: [ 11, 17, 21 ]
+        http-client: [ "okhttp", "vertx", "jetty",  "jdk" ]
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
@@ -167,7 +168,7 @@ jobs:
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
           export JAVA_VERSION=${{ matrix.java-version }}
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" .
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT=${{ matrix.http-client }} .
           docker images
       - name: Start the operator
         run: |
