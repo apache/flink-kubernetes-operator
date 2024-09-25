@@ -99,6 +99,34 @@ jobs:
             image: flink:1.17
           - version: v1_16
             image: flink:1.16
+          - version: v1_20
+            # Version isn't critical but should ideally be latest.
+            mode: "native"
+            namespace: "default"
+            test: test_application_operations.sh
+            http-client: "okhttp"
+            java-version: 21
+          - version: v1_20
+            # Version isn't critical but should ideally be latest.
+            mode: "native"
+            namespace: "default"
+            test: test_application_operations.sh
+            http-client: "vertx"
+            java-version: 21
+          - version: v1_20
+            # Version isn't critical but should ideally be latest.
+            mode: "native"
+            namespace: "default"
+            test: test_application_operations.sh
+            http-client: "jetty"
+            java-version: 21
+          - version: v1_20
+            # Version isn't critical but should ideally be latest.
+            mode: "native"
+            namespace: "default"
+            test: test_application_operations.sh
+            http-client: "jdk"
+            java-version: 21
         exclude:
           - namespace: default
             test: test_multi_sessionjob.sh
@@ -168,7 +196,8 @@ jobs:
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
           export JAVA_VERSION=${{ matrix.java-version }}
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT=${{ matrix.http-client }} .
+          export HTTP_CLIENT=${{ matrix.http-client }}
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT="${HTTP_CLIENT:-okhttp}" .
           docker images
       - name: Start the operator
         run: |
@@ -177,7 +206,7 @@ jobs:
             sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
             sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
           fi
-          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
+          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-${{ matrix.http-client }}-latest ${{ matrix.extraArgs }}
           kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
