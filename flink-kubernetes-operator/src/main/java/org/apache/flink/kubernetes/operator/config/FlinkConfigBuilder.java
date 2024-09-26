@@ -251,7 +251,8 @@ public class FlinkConfigBuilder {
 
     protected FlinkConfigBuilder applyIngressDomain() {
         // Web UI
-        if (spec.getIngress() != null) {
+        if (spec.getIngress() != null
+                && effectiveConfig.getOptional(REST_SERVICE_EXPOSED_TYPE).isEmpty()) {
             effectiveConfig.set(
                     REST_SERVICE_EXPOSED_TYPE,
                     KubernetesConfigOptions.ServiceExposedType.ClusterIP);
