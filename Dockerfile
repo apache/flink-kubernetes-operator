@@ -16,7 +16,8 @@
 # limitations under the License.
 ################################################################################
 # Build
-FROM maven:3.8.4-eclipse-temurin-11 AS build
+ARG JAVA_VERSION=11
+FROM maven:3.8.8-eclipse-temurin-${JAVA_VERSION} AS build
 ARG SKIP_TESTS=true
 
 WORKDIR /app
@@ -33,7 +34,7 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
 
 # stage
-FROM eclipse-temurin:11-jre-jammy
+FROM eclipse-temurin:${JAVA_VERSION}-jre-jammy
 ENV FLINK_HOME=/opt/flink
 ENV FLINK_PLUGINS_DIR=$FLINK_HOME/plugins
 ENV OPERATOR_VERSION=1.10-SNAPSHOT
