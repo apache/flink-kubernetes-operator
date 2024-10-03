@@ -39,8 +39,6 @@ import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -50,8 +48,6 @@ import java.util.Optional;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
 public interface FlinkService {
-
-    Logger LOG = LoggerFactory.getLogger(FlinkService.class);
 
     KubernetesClient getKubernetesClient();
 

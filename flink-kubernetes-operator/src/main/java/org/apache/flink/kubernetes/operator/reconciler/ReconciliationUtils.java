@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadat
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
@@ -43,7 +42,6 @@ import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
@@ -296,6 +294,7 @@ public class ReconciliationUtils {
         }
     }
 
+    @VisibleForTesting
     public static Duration rescheduleAfter(
             JobManagerDeploymentStatus status,
             FlinkDeployment flinkDeployment,
@@ -308,7 +307,6 @@ public class ReconciliationUtils {
             case READY:
                 rescheduleAfter =
                         savepointInProgress(flinkDeployment.getStatus().getJobStatus())
-                                        || isJobCancelling(flinkDeployment.getStatus())
                                 ? operatorConfiguration.getProgressCheckInterval()
                                 : operatorConfiguration.getReconcileInterval();
                 break;
@@ -327,18 +325,6 @@ public class ReconciliationUtils {
 
     private static boolean savepointInProgress(JobStatus jobStatus) {
         return StringUtils.isNotEmpty(jobStatus.getSavepointInfo().getTriggerId());
-    }
-
-    public static boolean isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-            AbstractFlinkResource<?, ?> flinkApp, Configuration observeConfig) {
-
-        var deployedSpec = getDeployedSpec(flinkApp);
-        UpgradeMode previousUpgradeMode = deployedSpec.getJob().getUpgradeMode();
-        UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
-
-        return previousUpgradeMode != UpgradeMode.LAST_STATE
-                && currentUpgradeMode == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(observeConfig);
     }
 
     public static <SPEC extends AbstractFlinkSpec> SPEC getDeployedSpec(

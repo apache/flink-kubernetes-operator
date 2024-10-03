@@ -122,7 +122,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // upgrading state and retry the upgrade (if possible)
             resource.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
         }
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        jobStatus.setState(JobStatus.RECONCILING.name());
         resource.getStatus().setError(JOB_NOT_FOUND_ERR);
     }
 

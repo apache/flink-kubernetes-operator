@@ -216,7 +216,7 @@
             <td><h5>kubernetes.operator.job.upgrade.last-state.job-cancel.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Cancel jobs during last-state upgrade.</td>
+            <td>Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.upgrade.last-state.max.allowed.checkpoint.age</h5></td>

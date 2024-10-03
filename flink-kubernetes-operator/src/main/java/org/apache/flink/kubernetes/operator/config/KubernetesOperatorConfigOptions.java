@@ -470,7 +470,8 @@ public class KubernetesOperatorConfigOptions {
             operatorConfig("job.upgrade.last-state.job-cancel.enabled")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Cancel jobs during last-state upgrade.");
+                    .withDescription(
+                            "Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =
