@@ -135,7 +135,7 @@ class SnapshotTriggerTimestampStoreTest {
         }
         snapshot.getMetadata()
                 .getLabels()
-                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, triggerType.name());
+                .put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, triggerType.name());
         snapshot.setStatus(new FlinkStateSnapshotStatus());
         snapshot.getStatus().setState(COMPLETED);
         return snapshot;

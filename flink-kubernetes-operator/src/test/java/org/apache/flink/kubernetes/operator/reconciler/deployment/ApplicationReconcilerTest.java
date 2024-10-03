@@ -310,7 +310,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertThat(snapshots.get(0).getSpec().getSavepoint().getPath()).isEqualTo("savepoint_0");
         assertEquals(
                 SnapshotTriggerType.UPGRADE.name(),
-                snapshots.get(0).getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+                snapshots
+                        .get(0)
+                        .getMetadata()
+                        .getLabels()
+                        .get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
 
         // Make sure jobId rotated on savepoint
         verifyNewJobId(runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);

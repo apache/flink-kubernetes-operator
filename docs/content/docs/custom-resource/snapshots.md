@@ -127,7 +127,6 @@ This however requires the referenced Flink resource to be alive, as this operati
 
 This feature is not available for checkpoints.
 
-
 ## Triggering snapshots
 
 Upgrade savepoints are triggered automatically by the system during the upgrade process as we have seen in the previous sections.
@@ -208,3 +207,19 @@ Legacy savepoints found in FlinkDeployment/FlinkSessionJob CRs under the depreca
 - For max count and FlinkStateSnapshot resources **disabled**, it will be cleaned up when `savepointHistory` exceeds max count
 - For max count and FlinkStateSnapshot resources **enabled**, it will be cleaned up when `savepointHistory` + number of FlinkStateSnapshot CRs related to the job exceed max count
 
+
+## Advanced Snapshot Filtering
+
+At the end of each snapshot reconciliation phase, the operator will update its labels to reflect the latest status and spec of the resources.
+This will allow the Kubernetes API server to filter snapshots without having to query all resources, since filtering by status or spec fields of custom resources is not supported in Kubernetes by default.
+Example queries with label selectors using `kubectl`:
+```shell
+# Query all checkpoints
+kubectl -n flink get flinksnp -l 'snapshot.type=CHECKPOINT'
+
+# Query all savepoints with states
+kubectl -n flink get flinksnp -l 'snapshot.state in (COMPLETED,ABANDONED),snapshot.type=SAVEPOINT'
+
+# Query all savepoints/checkpoints with job reference
+kubectl -n flink get flinksnp -l 'job-reference.kind=FlinkDeployment,job-reference.name=test-job'
+```

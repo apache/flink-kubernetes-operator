@@ -42,6 +42,8 @@ import org.apache.commons.lang3.ObjectUtils;
 import javax.annotation.Nullable;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -66,7 +68,7 @@ public class FlinkStateSnapshotUtils {
         var metadata = new ObjectMeta();
         metadata.setNamespace(namespace);
         metadata.setName(name);
-        metadata.getLabels().put(CrdConstants.LABEL_SNAPSHOT_TYPE, triggerType.name());
+        metadata.getLabels().put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, triggerType.name());
 
         var snapshot = new FlinkStateSnapshot();
         snapshot.setSpec(spec);
@@ -84,7 +86,7 @@ public class FlinkStateSnapshotUtils {
      */
     public static SnapshotTriggerType getSnapshotTriggerType(FlinkStateSnapshot snapshot) {
         var triggerTypeStr =
-                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE);
+                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE);
         try {
             return SnapshotTriggerType.valueOf(triggerTypeStr);
         } catch (NullPointerException | IllegalArgumentException e) {
@@ -345,7 +347,9 @@ public class FlinkStateSnapshotUtils {
     public static void snapshotInProgress(FlinkStateSnapshot snapshot, String triggerId) {
         snapshot.getMetadata()
                 .getLabels()
-                .putIfAbsent(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.MANUAL.name());
+                .putIfAbsent(
+                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                        SnapshotTriggerType.MANUAL.name());
         snapshot.getStatus().setState(IN_PROGRESS);
         snapshot.getStatus().setTriggerId(triggerId);
         snapshot.getStatus().setTriggerTimestamp(DateTimeUtils.kubernetes(Instant.now()));
@@ -359,6 +363,52 @@ public class FlinkStateSnapshotUtils {
      */
     public static void snapshotTriggerPending(FlinkStateSnapshot snapshot) {
         snapshot.getStatus().setState(TRIGGER_PENDING);
+    }
+
+    /**
+     * Creates a map of labels that can be applied to a snapshot resource based on its current spec
+     * and status. As described in FLINK-36109, we should set up selectable spec fields instead of
+     * labels once the Kubernetes feature is GA and widely supported.
+     *
+     * @param snapshot snapshot instance
+     * @param secondaryResourceOpt optional referenced Flink resource
+     * @return map of auto-generated labels
+     */
+    public static Map<String, String> getSnapshotLabels(
+            FlinkStateSnapshot snapshot,
+            Optional<AbstractFlinkResource<?, ?>> secondaryResourceOpt) {
+        var labels = new HashMap<String, String>();
+        labels.put(
+                CrdConstants.LABEL_SNAPSHOT_TYPE,
+                snapshot.getSpec().isSavepoint()
+                        ? SnapshotType.SAVEPOINT.name()
+                        : SnapshotType.CHECKPOINT.name());
+        labels.put(
+                CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                snapshot.getMetadata()
+                        .getLabels()
+                        .getOrDefault(
+                                CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                SnapshotTriggerType.MANUAL.name()));
+
+        Optional.ofNullable(snapshot.getStatus())
+                .ifPresent(
+                        status ->
+                                labels.put(
+                                        CrdConstants.LABEL_SNAPSHOT_STATE,
+                                        status.getState().name()));
+
+        secondaryResourceOpt.ifPresent(
+                secondaryResource -> {
+                    labels.put(
+                            CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_KIND,
+                            secondaryResource.getKind());
+                    labels.put(
+                            CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_NAME,
+                            secondaryResource.getMetadata().getName());
+                });
+
+        return labels;
     }
 
     /**

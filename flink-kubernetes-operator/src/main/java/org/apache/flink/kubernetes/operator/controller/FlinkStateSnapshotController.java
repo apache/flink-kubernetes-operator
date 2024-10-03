@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -83,6 +84,8 @@ public class FlinkStateSnapshotController
         if (validateSnapshot(ctx)) {
             reconciler.reconcile(ctx);
         }
+
+        updateLabels(ctx);
 
         notifyListenersAndMetricManager(ctx);
         return getUpdateControl(ctx);
@@ -157,13 +160,27 @@ public class FlinkStateSnapshotController
                 EventSourceUtils.getFlinkStateSnapshotInformerEventSources(context));
     }
 
+    /**
+     * Checks whether status and/or labels were changed on this resource, and returns an
+     * UpdateControl instance accordingly. Unless the snapshot state is terminal, the update control
+     * will be configured to reschedule the reconciliation.
+     *
+     * @param ctx snapshot context
+     * @return update control
+     */
     private UpdateControl<FlinkStateSnapshot> getUpdateControl(FlinkStateSnapshotContext ctx) {
         var resource = ctx.getResource();
-        UpdateControl<FlinkStateSnapshot> updateControl;
-        if (!ctx.getOriginalStatus().equals(resource.getStatus())) {
+        var updateControl = UpdateControl.<FlinkStateSnapshot>noUpdate();
+
+        var labelsChanged = resourceLabelsChanged(ctx);
+        var statusChanged = resourceStatusChanged(ctx);
+
+        if (labelsChanged && statusChanged) {
+            updateControl = UpdateControl.updateResourceAndPatchStatus(resource);
+        } else if (labelsChanged) {
+            updateControl = UpdateControl.updateResource(resource);
+        } else if (statusChanged) {
             updateControl = UpdateControl.patchStatus(resource);
-        } else {
-            updateControl = UpdateControl.noUpdate();
         }
 
         switch (resource.getStatus().getState()) {
@@ -177,7 +194,7 @@ public class FlinkStateSnapshotController
     }
 
     private void notifyListenersAndMetricManager(FlinkStateSnapshotContext ctx) {
-        if (!ctx.getOriginalStatus().equals(ctx.getResource().getStatus())) {
+        if (resourceStatusChanged(ctx)) {
             statusRecorder.notifyListeners(ctx.getResource(), ctx.getOriginalStatus());
         }
         metricManager.onUpdate(ctx.getResource());
@@ -200,5 +217,39 @@ public class FlinkStateSnapshotController
             }
         }
         return true;
+    }
+
+    /**
+     * Updates FlinkStateSnapshot resource labels with labels that represent its current state and
+     * spec.
+     *
+     * @param ctx snapshot context
+     */
+    private void updateLabels(FlinkStateSnapshotContext ctx) {
+        var labels = new HashMap<>(ctx.getResource().getMetadata().getLabels());
+        labels.putAll(
+                FlinkStateSnapshotUtils.getSnapshotLabels(
+                        ctx.getResource(), ctx.getSecondaryResource()));
+        ctx.getResource().getMetadata().setLabels(labels);
+    }
+
+    /**
+     * Checks if the resource status has changed since the start of reconciliation.
+     *
+     * @param ctx snapshot context
+     * @return true if resource status changed
+     */
+    private boolean resourceStatusChanged(FlinkStateSnapshotContext ctx) {
+        return !ctx.getOriginalStatus().equals(ctx.getResource().getStatus());
+    }
+
+    /**
+     * Checks if the resource labels have changed since the start of reconciliation.
+     *
+     * @param ctx snapshot context
+     * @return true if resource labels changed
+     */
+    private boolean resourceLabelsChanged(FlinkStateSnapshotContext ctx) {
+        return !ctx.getOriginalLabels().equals(ctx.getResource().getMetadata().getLabels());
     }
 }
