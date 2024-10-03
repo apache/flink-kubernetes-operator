@@ -181,6 +181,10 @@ public class MetricsCollectionAndEvaluationTest {
         assertTrue(collectedMetrics.isFullyCollected());
 
         var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
+        assertEquals(Map.of(map, 2.0), topology.getVertexInfos().get(sink).getInputRatios());
+        assertEquals(
+                Map.of(source1, 2.0, source2, 2.0),
+                topology.getVertexInfos().get(map).getInputRatios());
         scalingExecutor.scaleResource(
                 context,
                 evaluation,

@@ -58,6 +58,24 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.");
 
+    public static final ConfigOption<Boolean> PROCESSING_RATE_BACKPROPAGATION_ENABLED =
+            autoScalerConfig("processing.rate.backpropagation.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("processing.rate.backpropagation.enabled"))
+                    .withDescription(
+                            "Enable backpropagation of processing rate during autoscaling to reduce resources usage.");
+
+    public static final ConfigOption<Double> PROCESSING_RATE_BACKPROPAGATION_IMPACT =
+            autoScalerConfig("processing.rate.backpropagation.impact")
+                    .doubleType()
+                    .defaultValue(0.0)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("processing.rate.backpropagation.impact"))
+                    .withDescription(
+                            "How strong should backpropagated values affect scaling. 0 - means no effect, 1 - use backpropagated values. It is not recommended to set this factor greater than 0.8");
+
     public static final ConfigOption<Duration> METRICS_WINDOW =
             autoScalerConfig("metrics.window")
                     .durationType()
@@ -320,7 +338,7 @@ public class AutoScalerOptions {
                     .defaultValues()
                     .withFallbackKeys(oldOperatorConfigKey("vertex.exclude.ids"))
                     .withDescription(
-                            "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
+                            "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling.");
 
     public static final ConfigOption<Duration> SCALING_EVENT_INTERVAL =
             autoScalerConfig("scaling.event.interval")
