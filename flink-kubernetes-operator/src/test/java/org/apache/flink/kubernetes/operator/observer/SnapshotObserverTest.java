@@ -266,7 +266,10 @@ public class SnapshotObserverTest extends OperatorTestBase {
         var metadata =
                 new ObjectMetaBuilder()
                         .withName(UUID.randomUUID().toString())
-                        .withLabels(Map.of(CrdConstants.LABEL_SNAPSHOT_TYPE, triggerType.name()))
+                        .withLabels(
+                                Map.of(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        triggerType.name()))
                         .withCreationTimestamp(
                                 DateTimeUtils.kubernetes(Instant.ofEpochMilli(timestamp)))
                         .build();

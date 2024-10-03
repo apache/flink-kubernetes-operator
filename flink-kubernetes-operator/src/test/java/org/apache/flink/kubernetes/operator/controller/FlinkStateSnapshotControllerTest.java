@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -38,6 +39,7 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.TestingMetricListener;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
@@ -49,9 +51,11 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
@@ -63,6 +67,11 @@ import java.util.function.BiConsumer;
 
 import static org.apache.flink.api.common.JobStatus.CANCELED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
+import static org.apache.flink.kubernetes.operator.api.CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_KIND;
+import static org.apache.flink.kubernetes.operator.api.CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_NAME;
+import static org.apache.flink.kubernetes.operator.api.CrdConstants.LABEL_SNAPSHOT_STATE;
+import static org.apache.flink.kubernetes.operator.api.CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE;
+import static org.apache.flink.kubernetes.operator.api.CrdConstants.LABEL_SNAPSHOT_TYPE;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
@@ -161,6 +170,73 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(statusUpdateCounter.getCount()).isEqualTo(1);
     }
 
+    @ParameterizedTest
+    @EnumSource(SnapshotType.class)
+    public void testReconcileLabels(SnapshotType snapshotType) {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, null);
+        FlinkStateSnapshot snapshot;
+        if (snapshotType == SnapshotType.SAVEPOINT) {
+            snapshot = createSavepoint(deployment);
+        } else {
+            snapshot = createCheckpoint(deployment, CheckpointType.FULL, 0);
+        }
+
+        // First we have empty secondary resource, update labels but not status
+        assertThat(snapshot.getMetadata().getLabels()).isEmpty();
+        assertUpdateControl(controller.reconcile(snapshot, context), true, false);
+        assertLabels(snapshot, null, snapshotType, SnapshotTriggerType.MANUAL, TRIGGER_PENDING);
+
+        // Correct secondary resource, update status to IN_PROGRESS, update labels too
+        context = TestUtils.createSnapshotContext(client, deployment);
+        assertUpdateControl(controller.reconcile(snapshot, context), true, true);
+        assertLabels(snapshot, deployment, snapshotType, SnapshotTriggerType.MANUAL, IN_PROGRESS);
+
+        // No update to status or labels
+        assertUpdateControl(controller.reconcile(snapshot, context), false, false);
+        assertLabels(snapshot, deployment, snapshotType, SnapshotTriggerType.MANUAL, IN_PROGRESS);
+
+        // Update to both status and labels
+        assertUpdateControl(controller.reconcile(snapshot, context), true, true);
+        assertLabels(snapshot, deployment, snapshotType, SnapshotTriggerType.MANUAL, COMPLETED);
+
+        // Try to manually modify label
+        snapshot.getMetadata().getLabels().put(LABEL_SNAPSHOT_TYPE, "custom-value");
+        assertUpdateControl(controller.reconcile(snapshot, context), true, false);
+        assertLabels(snapshot, deployment, snapshotType, SnapshotTriggerType.MANUAL, COMPLETED);
+    }
+
+    private void assertLabels(
+            FlinkStateSnapshot snapshot,
+            @Nullable AbstractFlinkResource<?, ?> secondaryResource,
+            SnapshotType snapshotType,
+            SnapshotTriggerType snapshotTriggerType,
+            FlinkStateSnapshotStatus.State state) {
+        assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_TYPE))
+                .isEqualTo(snapshotType.name());
+        assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_TRIGGER_TYPE))
+                .isEqualTo(snapshotTriggerType.name());
+        assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_STATE))
+                .isEqualTo(state.name());
+        if (secondaryResource == null) {
+            assertThat(snapshot.getMetadata().getLabels())
+                    .doesNotContainKey(LABEL_SNAPSHOT_JOB_REFERENCE_KIND);
+            assertThat(snapshot.getMetadata().getLabels())
+                    .doesNotContainKey(LABEL_SNAPSHOT_JOB_REFERENCE_NAME);
+        } else {
+            assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_JOB_REFERENCE_KIND))
+                    .isEqualTo(secondaryResource.getKind());
+            assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_JOB_REFERENCE_NAME))
+                    .isEqualTo(secondaryResource.getMetadata().getName());
+        }
+    }
+
+    private void assertUpdateControl(
+            UpdateControl<FlinkStateSnapshot> actual, boolean updateResource, boolean patchStatus) {
+        assertThat(actual.isUpdateResource()).isEqualTo(updateResource);
+        assertThat(actual.isPatchStatus()).isEqualTo(patchStatus);
+    }
+
     @Test
     public void testReconcileSnapshotDeploymentDoesNotExist() {
         var deployment = createDeployment();
@@ -218,7 +294,7 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(status.getError()).isNull();
         assertThat(status.getTriggerId()).isEqualTo("savepoint_trigger_0");
         assertThat(status.getState()).isEqualTo(IN_PROGRESS);
-        assertThat(snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE))
+        assertThat(snapshot.getMetadata().getLabels().get(LABEL_SNAPSHOT_TRIGGER_TYPE))
                 .isEqualTo(SnapshotTriggerType.MANUAL.name());
         assertThat(statusUpdateCounter.getCount()).isEqualTo(1);
 

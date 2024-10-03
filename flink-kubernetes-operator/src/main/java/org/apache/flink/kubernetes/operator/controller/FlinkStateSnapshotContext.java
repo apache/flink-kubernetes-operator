@@ -33,6 +33,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.util.Map;
 import java.util.Optional;
 
 /** Context for reconciling a snapshot. */
@@ -42,6 +43,7 @@ public class FlinkStateSnapshotContext {
 
     private final FlinkStateSnapshot resource;
     private final FlinkStateSnapshotStatus originalStatus;
+    private final Map<String, String> originalLabels;
     private final Context<FlinkStateSnapshot> josdkContext;
     private final FlinkConfigManager configManager;
 
