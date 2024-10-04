@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -44,8 +43,6 @@ import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
-import org.apache.flink.runtime.rest.messages.JobPlanInfo;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
 import org.apache.flink.util.concurrent.Executors;
@@ -64,7 +61,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -206,20 +202,20 @@ public class NativeFlinkServiceTest {
                 new NativeFlinkService(
                         client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
-                    protected Optional<String> cancelJob(
+                    protected CancelResult cancelJob(
                             FlinkDeployment deployment,
-                            UpgradeMode upgradeMode,
+                            SuspendMode upgradeMode,
                             Configuration conf,
-                            boolean deleteClusterAfterSavepoint) {
-                        assertEquals(false, deleteClusterAfterSavepoint);
+                            boolean deleteCluster) {
+                        assertFalse(deleteCluster);
                         tested.set(true);
-                        return Optional.empty();
+                        return CancelResult.completed(null);
                     }
                 };
 
         flinkService.cancelJob(
                 TestUtils.buildApplicationCluster(flinkVersion),
-                UpgradeMode.SAVEPOINT,
+                SuspendMode.SAVEPOINT,
                 new Configuration());
         assertTrue(tested.get());
     }
@@ -554,24 +550,6 @@ public class NativeFlinkServiceTest {
                 testingClusterClient, deployment, reqs.getJobVertexParallelisms());
     }
 
-    public static JobDetailsInfo createJobDetailsFor(
-            List<JobDetailsInfo.JobVertexDetailsInfo> vertexInfos) {
-        return new JobDetailsInfo(
-                new JobID(),
-                "",
-                false,
-                org.apache.flink.api.common.JobStatus.RUNNING,
-                0,
-                0,
-                0,
-                0,
-                0,
-                Map.of(),
-                vertexInfos,
-                Map.of(),
-                new JobPlanInfo.RawJson(""));
-    }
-
     class TestingNativeFlinkService extends NativeFlinkService {
         private Configuration runtimeConfig;
 
@@ -590,7 +568,7 @@ public class NativeFlinkServiceTest {
         }
 
         @Override
-        protected void submitClusterInternal(Configuration conf) throws Exception {
+        protected void submitClusterInternal(Configuration conf) {
             this.runtimeConfig = conf;
         }
 
@@ -610,9 +588,6 @@ public class NativeFlinkServiceTest {
     }
 
     private Configuration createOperatorConfig() {
-        Map<String, String> configMap = Map.of(OPERATOR_HEALTH_PROBE_PORT.key(), "80");
-        Configuration deployConfig = Configuration.fromMap(configMap);
-
-        return deployConfig;
+        return Configuration.fromMap(Map.of(OPERATOR_HEALTH_PROBE_PORT.key(), "80"));
     }
 }

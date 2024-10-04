@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
-import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.api.utils.SpecWithMeta;
 
@@ -99,23 +98,5 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     @JsonIgnore
     public boolean isBeforeFirstDeployment() {
         return lastReconciledSpec == null;
-    }
-
-    /**
-     * This method is only here for backward compatibility reasons. The current version of the
-     * operator does not leave the resources in UPGRADING state during in-place scaling therefore
-     * this method will always return false.
-     *
-     * @return True if in-place scaling is in progress.
-     */
-    @JsonIgnore
-    @Deprecated
-    public boolean scalingInProgress() {
-        if (isBeforeFirstDeployment() || state != ReconciliationState.UPGRADING) {
-            return false;
-        }
-        var job = deserializeLastReconciledSpec().getJob();
-        // For regular full upgrades the jobstate is suspended in UPGRADING state
-        return job != null && job.getState() == JobState.RUNNING;
     }
 }

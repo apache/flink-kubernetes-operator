@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import static org.apache.flink.configuration.CheckpointingOptions.SAVEPOINT_DIRECTORY;
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.applyJobConfig;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
@@ -292,7 +293,7 @@ public class FlinkConfigManager {
      * @return Session job config
      */
     public Configuration getSessionJobConfig(
-            FlinkDeployment deployment, FlinkSessionJobSpec sessionJobSpec) {
+            String name, FlinkDeployment deployment, FlinkSessionJobSpec sessionJobSpec) {
         Configuration sessionJobConfig = getObserveConfig(deployment);
 
         // merge session job specific config
@@ -300,6 +301,7 @@ public class FlinkConfigManager {
         if (sessionJobFlinkConfiguration != null) {
             sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
         }
+        applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;
     }
 

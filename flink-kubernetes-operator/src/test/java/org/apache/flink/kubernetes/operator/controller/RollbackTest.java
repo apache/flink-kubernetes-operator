@@ -159,7 +159,7 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },
-                true);
+                false);
     }
 
     @Test
@@ -265,7 +265,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     flinkService.setPortReady(true);
                 },
-                false);
+                true);
     }
 
     @Test
@@ -352,7 +352,7 @@ public class RollbackTest {
             FlinkDeployment deployment,
             ThrowingRunnable<Exception> triggerRollback,
             ThrowingRunnable<Exception> validateAndRecover,
-            boolean injectValidationError)
+            boolean expectTwoStepRollback)
             throws Exception {
 
         var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
@@ -376,12 +376,12 @@ public class RollbackTest {
 
         assertFalse(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
         assertEquals(
-                deployment.getSpec().getJob() != null
+                expectTwoStepRollback
                         ? ReconciliationState.ROLLING_BACK
                         : ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
 
-        if (injectValidationError) {
+        if (expectTwoStepRollback) {
             deployment.getSpec().setLogConfiguration(Map.of("invalid", "entry"));
         }
         flinkService.setJobManagerReady(true);

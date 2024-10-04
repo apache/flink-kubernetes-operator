@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
@@ -114,7 +115,19 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+        Assertions.assertEquals(
+                JobState.SUSPENDED,
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+
+        // reset
         sessionJob.getStatus().getJobStatus().setJobId(jobID);
+        ReconciliationUtils.updateLastReconciledSpec(
+                sessionJob, (s, m) -> s.getJob().setState(JobState.RUNNING));
 
         // testing multi job
 

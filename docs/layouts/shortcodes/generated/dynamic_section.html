@@ -123,6 +123,12 @@
             <td>Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.upgrade.last-state.job-cancel.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.upgrade.last-state.max.allowed.checkpoint.age</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Duration</td>

@@ -465,6 +465,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB =
+            operatorConfig("job.upgrade.last-state.job-cancel.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =
             operatorConfig("health.probe.enabled")

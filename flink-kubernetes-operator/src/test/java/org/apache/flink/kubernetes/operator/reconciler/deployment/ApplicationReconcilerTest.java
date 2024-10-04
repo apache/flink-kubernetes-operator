@@ -60,13 +60,14 @@ import org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
@@ -328,14 +329,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                     .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
             reconciler.reconcile(deployment, context);
             fail();
-        } catch (RecoveryFailureException expected) {
+        } catch (UpgradeFailureException expected) {
         }
 
         try {
             deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
             reconciler.reconcile(deployment, context);
             fail();
-        } catch (RecoveryFailureException expected) {
+        } catch (UpgradeFailureException expected) {
         }
 
         flinkService.clear();
@@ -864,11 +865,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                     }
 
                     @Override
-                    public Optional<String> cancelJob(
+                    public CancelResult cancelJob(
                             FlinkDeployment deployment,
-                            UpgradeMode upgradeMode,
+                            SuspendMode upgradeMode,
                             Configuration conf) {
-                        return Optional.empty();
+                        return CancelResult.completed(null);
                     }
                 };
 
@@ -944,7 +945,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         var deployment = TestUtils.buildApplicationCluster();
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-        assertFalse(deployment.getStatus().isImmediateReconciliationNeeded());
 
         // Job running verify no upgrades if overrides are empty
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
@@ -1280,10 +1280,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
 
         assertEquals(
-                ReconciliationState.ROLLING_BACK,
+                jmStarted ? ReconciliationState.ROLLING_BACK : ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals(0, flinkService.listJobs().size());
-        assertEquals("FINISHED", deployment.getStatus().getJobStatus().getState());
         assertEquals(
                 jmStarted ? UpgradeMode.LAST_STATE : UpgradeMode.SAVEPOINT,
                 deployment

@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -38,6 +37,8 @@ import org.apache.flink.runtime.jobmaster.JobResult;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 import javax.annotation.Nullable;
 
@@ -73,8 +74,7 @@ public interface FlinkService {
 
     JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception;
 
-    Optional<String> cancelJob(
-            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    CancelResult cancelJob(FlinkDeployment deployment, SuspendMode suspendMode, Configuration conf)
             throws Exception;
 
     void deleteClusterDeployment(
@@ -83,8 +83,8 @@ public interface FlinkService {
             Configuration conf,
             boolean deleteHaData);
 
-    Optional<String> cancelSessionJob(
-            FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
+    CancelResult cancelSessionJob(
+            FlinkSessionJob sessionJob, SuspendMode suspendMode, Configuration conf)
             throws Exception;
 
     String triggerSavepoint(
@@ -100,7 +100,7 @@ public interface FlinkService {
             Configuration conf)
             throws Exception;
 
-    Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception;
+    Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf);
 
     SavepointFetchResult fetchSavepointInfo(String triggerId, String jobId, Configuration conf);
 
@@ -126,4 +126,23 @@ public interface FlinkService {
             throws Exception;
 
     RestClusterClient<String> getClusterClient(Configuration conf) throws Exception;
+
+    /** Result of a cancel operation. */
+    @AllArgsConstructor
+    class CancelResult {
+        @Getter boolean pending;
+        String savepointPath;
+
+        public static CancelResult completed(String path) {
+            return new CancelResult(false, path);
+        }
+
+        public static CancelResult pending() {
+            return new CancelResult(true, null);
+        }
+
+        public Optional<String> getSavepointPath() {
+            return Optional.ofNullable(savepointPath);
+        }
+    }
 }

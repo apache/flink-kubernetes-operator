@@ -84,13 +84,13 @@ Supported values: `stateless`, `savepoint`, `last-state`
 
 The `upgradeMode` setting controls both the stop and restore mechanisms as detailed in the following table:
 
-|                        | Stateless               | Last State                                 | Savepoint                              |
-|------------------------|-------------------------|--------------------------------------------|----------------------------------------|
-| Config Requirement     | None                    | Checkpointing & HA Enabled                 | Checkpoint/Savepoint directory defined |
-| Job Status Requirement | None                    | HA metadata available                      | Job Running*                           |
-| Suspend Mechanism      | Cancel / Delete         | Delete Flink deployment (keep HA metadata) | Cancel with savepoint                  |
-| Restore Mechanism      | Deploy from empty state | Recover last state using HA metadata       | Restore From savepoint                 |
-| Production Use         | Not recommended         | Recommended                                | Recommended                            |
+|                        | Stateless       | Last State                         | Savepoint                              |
+|------------------------|-----------------|------------------------------------|----------------------------------------|
+| Config Requirement     | None            | Checkpointing Enabled              | Checkpoint/Savepoint directory defined |
+| Job Status Requirement | None            | Job or HA metadata accessible      | Job Running*                           |
+| Suspend Mechanism      | Cancel / Delete | Cancel / Delete (keep HA metadata) | Cancel with savepoint                  |
+| Restore Mechanism      | Empty state     | Use HA metadata or last cp/sp      | Restore From savepoint                 |
+| Production Use         | Not recommended | Recommended                        | Recommended                            |
 
 
 *\* When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behaviour in cases where the job is in an unhealthy state.*
@@ -148,10 +148,6 @@ spec:
     upgradeMode: last-state
     state: running
 ```
-
-{{< hint warning >}}
-Last state upgrade mode is currently only supported for `FlinkDeployments`.
-{{< /hint >}}
 
 ### Application restarts without spec change
 

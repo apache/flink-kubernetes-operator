@@ -219,6 +219,9 @@ public class CrdReferenceDoclet implements Doclet {
                     }
                     break;
                 case FIELD:
+                    if (e.getModifiers().contains(Modifier.STATIC)) {
+                        return null;
+                    }
                     out.println(
                             "| "
                                     + getNameOrJsonPropValue(e)

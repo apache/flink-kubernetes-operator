@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -96,26 +96,29 @@ public class FlinkDeploymentController
         if (canaryResourceManager.handleCanaryResourceDeletion(flinkApp)) {
             return DeleteControl.defaultDelete();
         }
-
-        String msg = "Cleaning up " + FlinkDeployment.class.getSimpleName();
-        LOG.info(msg);
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg,
+                "Cleaning up FlinkDeployment",
                 josdkContext.getClient());
         statusRecorder.updateStatusFromCache(flinkApp);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
         } catch (Exception err) {
-            // ignore during cleanup
+            LOG.error("Error while observing for cleanup", err);
         }
-        statusRecorder.removeCachedStatus(flinkApp);
-        ctxFactory.cleanup(flinkApp);
-        return reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+
+        var deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        if (deleteControl.isRemoveFinalizer()) {
+            statusRecorder.removeCachedStatus(flinkApp);
+            ctxFactory.cleanup(flinkApp);
+        } else {
+            statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
+        }
+        return deleteControl;
     }
 
     @Override
@@ -147,8 +150,8 @@ public class FlinkDeploymentController
             }
             statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
             reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
-        } catch (RecoveryFailureException rfe) {
-            handleRecoveryFailed(ctx, rfe);
+        } catch (UpgradeFailureException ufe) {
+            handleUpgradeFailure(ctx, ufe);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(ctx, dfe);
         } catch (Exception e) {
@@ -184,16 +187,16 @@ public class FlinkDeploymentController
                 ctx.getKubernetesClient());
     }
 
-    private void handleRecoveryFailed(
-            FlinkResourceContext<FlinkDeployment> ctx, RecoveryFailureException rfe) {
-        LOG.error("Flink recovery failed", rfe);
+    private void handleUpgradeFailure(
+            FlinkResourceContext<FlinkDeployment> ctx, UpgradeFailureException ufe) {
+        LOG.error("Error while upgrading Flink Deployment", ufe);
         var flinkApp = ctx.getResource();
-        ReconciliationUtils.updateForReconciliationError(ctx, rfe);
+        ReconciliationUtils.updateForReconciliationError(ctx, ufe);
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Warning,
-                rfe.getReason(),
-                rfe.getMessage(),
+                ufe.getReason(),
+                ufe.getMessage(),
                 EventRecorder.Component.JobManagerDeployment,
                 ctx.getKubernetesClient());
     }

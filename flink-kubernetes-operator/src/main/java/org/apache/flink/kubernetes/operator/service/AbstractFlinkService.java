@@ -34,7 +34,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
@@ -42,12 +42,14 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -96,7 +98,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
-import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
@@ -179,8 +180,6 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
-
-    protected abstract PodList getTmPodList(String namespace, String clusterId);
 
     protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
             throws Exception;
@@ -311,224 +310,174 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    protected Optional<String> cancelJob(
+    protected CancelResult cancelJob(
             FlinkDeployment deployment,
-            UpgradeMode upgradeMode,
+            SuspendMode suspendMode,
             Configuration conf,
-            boolean deleteClusterAfterSavepoint)
+            boolean deleteCluster)
             throws Exception {
-        var deploymentStatus = deployment.getStatus();
-        var jobIdString = deploymentStatus.getJobStatus().getJobId();
-        var jobId = jobIdString != null ? JobID.fromHexString(jobIdString) : null;
-
-        Optional<String> savepointOpt = Optional.empty();
-        var savepointFormatType =
-                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+        var status = deployment.getStatus();
+        String savepointPath = null;
         try (var clusterClient = getClusterClient(conf)) {
-            var clusterId = clusterClient.getClusterId();
-            switch (upgradeMode) {
-                case STATELESS:
-                    if (ReconciliationUtils.isJobRunning(deployment.getStatus())) {
-                        LOG.info("Job is running, cancelling job.");
-                        try {
-                            clusterClient
-                                    .cancel(Preconditions.checkNotNull(jobId))
-                                    .get(
-                                            operatorConfig.getFlinkCancelJobTimeout().toSeconds(),
-                                            TimeUnit.SECONDS);
-                            LOG.info("Job successfully cancelled.");
-                        } catch (Exception e) {
-                            LOG.error("Could not shut down cluster gracefully, deleting...", e);
-                        }
-                    }
-                    deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, conf, true);
-                    break;
+            switch (suspendMode) {
                 case SAVEPOINT:
-                    final String savepointDirectory =
-                            Preconditions.checkNotNull(
-                                    conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                    final long timeout =
-                            conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
-                                    .getSeconds();
-                    if (ReconciliationUtils.isJobRunning(deploymentStatus)) {
+                    savepointPath = savepointJobOrError(clusterClient, status, conf);
+                    break;
+                case STATELESS:
+                    if (ReconciliationUtils.isJobCancellable(status)) {
                         try {
-                            LOG.info("Suspending job with savepoint.");
-                            String savepoint =
-                                    clusterClient
-                                            .stopWithSavepoint(
-                                                    Preconditions.checkNotNull(jobId),
-                                                    conf.getBoolean(
-                                                            KubernetesOperatorConfigOptions
-                                                                    .DRAIN_ON_SAVEPOINT_DELETION),
-                                                    savepointDirectory,
-                                                    savepointFormatType)
-                                            .get(timeout, TimeUnit.SECONDS);
-                            savepointOpt = Optional.of(savepoint);
-                            LOG.info("Job successfully suspended with savepoint {}.", savepoint);
-                        } catch (TimeoutException exception) {
-                            throw new FlinkException(
-                                    String.format(
-                                            "Timed out stopping the job %s in Flink cluster %s with savepoint, "
-                                                    + "please configure a larger timeout via '%s'",
-                                            jobId,
-                                            clusterId,
-                                            ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
-                                                    .key()),
-                                    exception);
-                        } catch (Exception e) {
-                            var stopWithSavepointException =
-                                    ExceptionUtils.findThrowableSerializedAware(
-                                            e,
-                                            StopWithSavepointStoppingException.class,
-                                            getClass().getClassLoader());
-                            if (stopWithSavepointException.isPresent()) {
-                                // Handle edge case where the savepoint completes but the job fails
-                                // right afterward.
-                                savepointOpt =
-                                        Optional.of(
-                                                stopWithSavepointException
-                                                        .get()
-                                                        .getSavepointPath());
-                            } else {
-                                // Rethrow if savepoint was not completed successfully.
-                                throw e;
-                            }
+                            cancelJobOrError(clusterClient, status, true);
+                        } catch (Exception ex) {
+                            // We can simply delete the deployment for stateless
                         }
-                    } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
-                        LOG.info(
-                                "Job is already in terminal state skipping cancel-with-savepoint operation.");
-                    } else {
-                        throw new RuntimeException(
-                                "Unexpected non-terminal status: " + deploymentStatus);
-                    }
-                    if (deleteClusterAfterSavepoint) {
-                        LOG.info("Cleaning up deployment after stop-with-savepoint");
-
-                        deleteClusterDeployment(
-                                deployment.getMetadata(), deploymentStatus, conf, true);
                     }
                     break;
-                case LAST_STATE:
-                    deleteClusterDeployment(
-                            deployment.getMetadata(), deploymentStatus, conf, false);
-                    break;
-                default:
-                    throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
+                case CANCEL:
+                    cancelJobOrError(clusterClient, status, false);
+                    // This is async we need to return
+                    return CancelResult.pending();
             }
         }
-        deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
-
-        // Unless we leave the jm around after savepoint, we should wait until it has finished
-        // shutting down
-        if (deleteClusterAfterSavepoint || upgradeMode != UpgradeMode.SAVEPOINT) {
-            deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        if (suspendMode.deleteCluster() || deleteCluster) {
+            deleteClusterDeployment(
+                    deployment.getMetadata(), status, conf, suspendMode.deleteHaMeta());
         }
-        return savepointOpt;
+
+        status.getJobStatus().setState(JobStatus.FINISHED.name());
+        return CancelResult.completed(savepointPath);
     }
 
     @Override
-    public Optional<String> cancelSessionJob(
-            FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
+    public CancelResult cancelSessionJob(
+            FlinkSessionJob sessionJob, SuspendMode suspendMode, Configuration conf)
             throws Exception {
 
-        var sessionJobStatus = sessionJob.getStatus();
-        var jobStatus = sessionJobStatus.getJobStatus();
-        var jobIdString = jobStatus.getJobId();
-        Preconditions.checkNotNull(jobIdString, "The job to be suspend should not be null");
-        var jobId = JobID.fromHexString(jobIdString);
-        Optional<String> savepointOpt = Optional.empty();
+        var status = sessionJob.getStatus();
+        String savepointPath = null;
+        try (var clusterClient = getClusterClient(conf)) {
+            switch (suspendMode) {
+                case STATELESS:
+                case CANCEL:
+                    cancelJobOrError(clusterClient, status, suspendMode == SuspendMode.STATELESS);
+                    // This is async we need to return and re-observe
+                    return CancelResult.pending();
+                case SAVEPOINT:
+                    savepointPath = savepointJobOrError(clusterClient, status, conf);
+                    break;
+            }
+        }
+        status.getJobStatus().setState(JobStatus.FINISHED.name());
+        status.getJobStatus().setJobId(null);
+        return CancelResult.completed(savepointPath);
+    }
 
+    public void cancelJobOrError(
+            RestClusterClient<String> clusterClient,
+            CommonStatus<?> status,
+            boolean ignoreMissing) {
+        var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
+        if (ReconciliationUtils.isJobCancelling(status)) {
+            LOG.info("Job already cancelling");
+            return;
+        }
+        LOG.info("Cancelling job");
+        try {
+            clusterClient
+                    .cancel(jobID)
+                    .get(operatorConfig.getFlinkCancelJobTimeout().toSeconds(), TimeUnit.SECONDS);
+            LOG.info("Cancellation successfully initiated");
+        } catch (Exception e) {
+            if (isJobMissing(e)) {
+                if (ignoreMissing) {
+                    LOG.info("Job already missing");
+                } else {
+                    throw new UpgradeFailureException(
+                            "Cannot find job when trying to cancel",
+                            EventRecorder.Reason.CleanupFailed.name(),
+                            e);
+                }
+            } else if (isJobTerminated(e)) {
+                LOG.info("Job already terminated");
+            } else {
+                LOG.warn("Error while cancelling job", e);
+                throw new UpgradeFailureException(
+                        "Cancellation Error", EventRecorder.Reason.CleanupFailed.name(), e);
+            }
+        }
+        status.getJobStatus().setState(JobStatus.CANCELLING.name());
+    }
+
+    public String savepointJobOrError(
+            RestClusterClient<String> clusterClient, CommonStatus<?> status, Configuration conf) {
+        var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
+        String savepointDirectory = conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY);
         var savepointFormatType =
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
-
-        LOG.debug("Current job state: {}", jobStatus.getState());
-
-        if (!ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
-            LOG.debug("Job is not in terminal state, cancelling it");
-
-            try (var clusterClient = getClusterClient(conf)) {
-                switch (upgradeMode) {
-                    case STATELESS:
-                        LOG.info("Cancelling job.");
-                        try {
-                            clusterClient
-                                    .cancel(jobId)
-                                    .get(
-                                            operatorConfig.getFlinkCancelJobTimeout().toSeconds(),
-                                            TimeUnit.SECONDS);
-                            LOG.info("Job successfully cancelled.");
-                        } catch (Exception e) {
-                            if (isJobMissingOrTerminated(e)) {
-                                LOG.info("Job already missing or terminated");
-                            } else {
-                                throw e;
-                            }
-                        }
-                        break;
-                    case SAVEPOINT:
-                        if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
-                            LOG.info("Suspending job with savepoint.");
-                            final String savepointDirectory =
-                                    Preconditions.checkNotNull(
-                                            conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                            final long timeout =
-                                    conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
-                                            .getSeconds();
-                            try {
-                                String savepoint =
-                                        clusterClient
-                                                .stopWithSavepoint(
-                                                        jobId,
-                                                        conf.getBoolean(
-                                                                KubernetesOperatorConfigOptions
-                                                                        .DRAIN_ON_SAVEPOINT_DELETION),
-                                                        savepointDirectory,
-                                                        savepointFormatType)
-                                                .get(timeout, TimeUnit.SECONDS);
-                                savepointOpt = Optional.of(savepoint);
-                                LOG.info(
-                                        "Job successfully suspended with savepoint {}.", savepoint);
-                            } catch (TimeoutException exception) {
-                                throw new FlinkException(
-                                        String.format(
-                                                "Timed out stopping the job %s with savepoint, "
-                                                        + "please configure a larger timeout via '%s'",
-                                                jobId,
-                                                ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
-                                                        .key()),
-                                        exception);
-                            }
-                        } else {
-                            throw new RuntimeException(
-                                    "Unexpected non-terminal status: " + jobStatus.getState());
-                        }
-                        break;
-                    case LAST_STATE:
-                    default:
-                        throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
+        long timeout = conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT).getSeconds();
+        String savepointPath;
+        if (ReconciliationUtils.isJobRunning(status)) {
+            LOG.info("Suspending job with savepoint");
+            try {
+                savepointPath =
+                        clusterClient
+                                .stopWithSavepoint(
+                                        jobID,
+                                        conf.getBoolean(
+                                                KubernetesOperatorConfigOptions
+                                                        .DRAIN_ON_SAVEPOINT_DELETION),
+                                        savepointDirectory,
+                                        savepointFormatType)
+                                .get(timeout, TimeUnit.SECONDS);
+            } catch (TimeoutException exception) {
+                throw new UpgradeFailureException(
+                        String.format(
+                                "Timed out stopping the job %s with savepoint, "
+                                        + "please configure a larger timeout via '%s'",
+                                jobID, ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
+                        EventRecorder.Reason.SavepointError.name(),
+                        exception);
+            } catch (Exception e) {
+                var stopWithSavepointException =
+                        ExceptionUtils.findThrowableSerializedAware(
+                                e,
+                                StopWithSavepointStoppingException.class,
+                                getClass().getClassLoader());
+                if (stopWithSavepointException.isPresent()) {
+                    // Handle edge case where the savepoint completes but the job fails
+                    // right afterward.
+                    savepointPath = stopWithSavepointException.get().getSavepointPath();
+                } else {
+                    // Rethrow if savepoint was not completed successfully.
+                    throw new UpgradeFailureException(
+                            "Savepoint Error", EventRecorder.Reason.SavepointError.name(), e);
                 }
             }
         } else {
-            LOG.debug("Job is in terminal state, skipping cancel");
+            throw new RuntimeException("Unexpected job status: " + status);
         }
-
-        jobStatus.setState(JobStatus.FINISHED.name());
-        return savepointOpt;
+        LOG.info("Job successfully suspended with savepoint {}", savepointPath);
+        return savepointPath;
     }
 
-    public static boolean isJobMissingOrTerminated(Exception e) {
-        if (findThrowable(e, FlinkJobNotFoundException.class).isPresent()
-                || findThrowable(e, FlinkJobTerminatedWithoutCancellationException.class)
-                        .isPresent()) {
+    public static boolean isJobMissing(Exception e) {
+        if (findThrowable(e, FlinkJobNotFoundException.class).isPresent()) {
             return true;
         }
 
         return findThrowable(e, RestClientException.class)
                 .map(RestClientException::getHttpResponseStatus)
-                .map(
-                        respCode ->
-                                HttpResponseStatus.NOT_FOUND == respCode
-                                        || HttpResponseStatus.CONFLICT == respCode)
+                .map(respCode -> HttpResponseStatus.NOT_FOUND == respCode)
+                .orElse(false);
+    }
+
+    public static boolean isJobTerminated(Exception e) {
+        if (findThrowable(e, FlinkJobTerminatedWithoutCancellationException.class).isPresent()) {
+            return true;
+        }
+
+        return findThrowable(e, RestClientException.class)
+                .map(RestClientException::getHttpResponseStatus)
+                .map(respCode -> HttpResponseStatus.CONFLICT == respCode)
                 .orElse(false);
     }
 
@@ -589,15 +538,20 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
-        var latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
+    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) {
+        Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo> latestCheckpointOpt;
+        try {
+            latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
+        } catch (Exception e) {
+            throw new ReconciliationException("Could not observe latest savepoint information", e);
+        }
 
         if (latestCheckpointOpt.isPresent()
                 && latestCheckpointOpt
                         .get()
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
-            throw new RecoveryFailureException(
+            throw new UpgradeFailureException(
                     "Latest checkpoint not externally addressable, manual recovery required.",
                     "CheckpointNotFound");
         }
@@ -837,7 +791,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
         final String restServerAddress = String.format("http://%s:%s", host, port);
-        LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
                 operatorRestConf,
                 clusterId,
@@ -980,7 +933,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
-            throw new RecoveryFailureException(
+            throw new UpgradeFailureException(
                     "HA metadata not available to restore from last state. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. ",
                     "RestoreFailed");

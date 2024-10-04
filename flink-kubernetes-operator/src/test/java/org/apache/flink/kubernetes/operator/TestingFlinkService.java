@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -35,7 +36,6 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
@@ -43,12 +43,13 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -232,7 +233,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     protected void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
-            throw new RecoveryFailureException(
+            throw new UpgradeFailureException(
                     "HA metadata not available to restore from last state. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",
@@ -403,6 +404,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public RestClusterClient<String> getClusterClient(Configuration config) throws Exception {
+
         TestingClusterClient<String> clusterClient = new TestingClusterClient<>(config);
         FlinkVersion flinkVersion = config.get(FlinkConfigBuilder.FLINK_VERSION);
         clusterClient.setListJobsFunction(
@@ -421,8 +423,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         clusterClient.setStopWithSavepointFunction(
                 (jobID, advanceEventTime, savepointDir) -> {
                     try {
-                        return CompletableFuture.completedFuture(
-                                cancelJob(flinkVersion, jobID, true));
+                        return CompletableFuture.completedFuture(cancelJob(jobID, true));
                     } catch (Exception e) {
                         return CompletableFuture.failedFuture(e);
                     }
@@ -431,7 +432,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         clusterClient.setCancelFunction(
                 jobID -> {
                     try {
-                        cancelJob(flinkVersion, jobID, false);
+                        cancelJob(jobID, false);
                     } catch (Exception e) {
                         return CompletableFuture.failedFuture(e);
                     }
@@ -486,14 +487,14 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Optional<String> cancelJob(
-            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
+    public CancelResult cancelJob(
+            FlinkDeployment deployment, SuspendMode upgradeMode, Configuration configuration)
             throws Exception {
         return cancelJob(deployment, upgradeMode, configuration, false);
     }
 
-    private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
-            throws Exception {
+    @VisibleForTesting
+    public String cancelJob(JobID jobID, boolean savepoint) throws Exception {
         cancelJobCallCount++;
 
         if (!isPortReady) {
@@ -537,7 +538,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                 new JobStatusMessage(
                         oldStatus.getJobId(),
                         oldStatus.getJobName(),
-                        JobStatus.FINISHED,
+                        savepoint ? JobStatus.FINISHED : JobStatus.CANCELED,
                         oldStatus.getStartTime());
         jobOpt.get().f0 = sp;
 
@@ -572,7 +573,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
+    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) {
         jobs.stream()
                 .filter(js -> js.f1.getJobId().equals(jobId))
                 .findAny()
@@ -629,11 +630,6 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     protected PodList getJmPodList(String namespace, String clusterId) {
         return podList;
-    }
-
-    @Override
-    protected PodList getTmPodList(String namespace, String clusterId) {
-        return new PodList();
     }
 
     public void markApplicationJobFailedWithError(JobID jobID, String error) throws Exception {

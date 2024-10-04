@@ -215,10 +215,6 @@ COPY flink-hadoop-fs-1.19-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
 
 Alternatively, if you use helm to install flink-kubernetes-operator, it allows you to specify a postStart hook to download the required plugins.
 
-### Limitations
-
-- Last-state upgradeMode is currently not supported for FlinkSessionJobs
-
 ## Further information
 
  - [Snapshots]({{< ref "docs/custom-resource/snapshots" >}})
