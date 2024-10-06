@@ -67,7 +67,7 @@ jobs:
           cd flink-autoscaler-plugin-jdbc
           mvn -B verify -Dit.skip=false
           cd ..
-  e2e_smoketest:
+  e2e_smoke_test:
     name: HTTP Client smoke test
     runs-on: ubuntu-latest
     strategy:
@@ -131,6 +131,7 @@ jobs:
           source e2e-tests/utils.sh
           stop_minikube
   e2e_ci:
+    needs: e2e_smoke_test
     runs-on: ubuntu-latest
     strategy:
       matrix:
