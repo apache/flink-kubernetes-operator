@@ -23,6 +23,9 @@
 name: Flink Kubernetes Operator CI
 on:
   push:
+    branches:
+      - main
+      - release-*
   pull_request:
 jobs:
   test_ci:
@@ -163,7 +166,8 @@ jobs:
           export SHELL=/bin/bash
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain .
+          export JAVA_VERSION=${{ matrix.java-version }}
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" .
           docker images
       - name: Start the operator
         run: |
