@@ -23,6 +23,9 @@
 name: Flink Kubernetes Operator CI
 on:
   push:
+    branches:
+      - main
+      - release-*
   pull_request:
 jobs:
   test_ci:
