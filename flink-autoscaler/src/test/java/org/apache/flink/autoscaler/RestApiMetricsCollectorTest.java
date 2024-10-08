@@ -160,6 +160,8 @@ public class RestApiMetricsCollectorTest {
                             (c, e) ->
                                     new StandaloneClientHAServices(
                                             miniCluster.getRestAddress().get().toString()));
+            // wait a little to ensure data is ready
+            Thread.sleep(500);
             do {
                 var collector = new RestApiMetricsCollector<>();
                 Map<FlinkMetric, Metric> flinkMetricMetricMap =
