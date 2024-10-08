@@ -409,25 +409,19 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return newParallelism;
         }
 
-        final int numKeyGroupsOrPartitions;
-        final int upperBoundForAlignment;
-        if (numSourcePartitions <= 0) {
-            numKeyGroupsOrPartitions = maxParallelism;
-            upperBoundForAlignment =
-                    Math.min(
-                            // Optimize the case where newParallelism <= maxParallelism / 2
-                            newParallelism > maxParallelism / 2
-                                    ? maxParallelism
-                                    : maxParallelism / 2,
-                            upperBound);
-        } else {
-            numKeyGroupsOrPartitions = numSourcePartitions;
-            upperBoundForAlignment = Math.min(numSourcePartitions, upperBound);
-        }
+        var numKeyGroupsOrPartitions =
+                numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
+        var upperBoundForAlignment =
+                Math.min(
+                        // Optimize the case where newParallelism <= maxParallelism / 2
+                        newParallelism > numKeyGroupsOrPartitions / 2
+                                ? numKeyGroupsOrPartitions
+                                : numKeyGroupsOrPartitions / 2,
+                        upperBound);
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
         // we try to adjust the parallelism such that it divides
-        // the adjustableMaxParallelism without a remainder => data is evenly spread across subtasks
+        // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
         for (int p = newParallelism; p <= upperBoundForAlignment; p++) {
             if (numKeyGroupsOrPartitions % p == 0) {
                 return p;

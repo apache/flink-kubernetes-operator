@@ -56,6 +56,7 @@ public enum ScalingMetric {
 
     /** Source vertex partition count. */
     NUM_SOURCE_PARTITIONS(false),
+
     /** Upper boundary of the target data rate range. */
     SCALE_UP_RATE_THRESHOLD(false),
 

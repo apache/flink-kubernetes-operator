@@ -958,7 +958,7 @@ public class JobVertexScalerTest {
                         List.of(),
                         15,
                         128,
-                        0.8,
+                        1.2,
                         minParallelism,
                         maxParallelism,
                         eventCollector,
