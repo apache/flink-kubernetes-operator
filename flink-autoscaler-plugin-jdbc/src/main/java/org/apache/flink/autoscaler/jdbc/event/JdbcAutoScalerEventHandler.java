@@ -163,11 +163,13 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                     break;
                 }
 
-                for (long startId = minId;
-                        jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
-                                        startId, startId + batchSize, date)
-                                == batchSize;
-                        startId += batchSize) {
+                boolean cleanable = true;
+                for (long startId = minId; cleanable; startId += batchSize) {
+                    int deleted =
+                            jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
+                                    startId, startId + batchSize, date);
+                    cleanable = deleted == batchSize;
+                    deletedTotalCount += deleted;
                     Thread.sleep(sleepMs);
                 }
             }
