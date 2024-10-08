@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /** Structure representing information about the jobgraph that is relevant for scaling. */
@@ -52,6 +53,7 @@ public class JobTopology {
     @Getter private final Map<SlotSharingGroupId, Set<JobVertexID>> slotSharingGroupMapping;
     @Getter private final Set<JobVertexID> finishedVertices;
     @Getter private final List<JobVertexID> verticesInTopologicalOrder;
+    @Getter private final List<JobVertexID> strongTopologicalOrder;
 
     public JobTopology(Collection<VertexInfo> vertexInfo) {
         this(new HashSet<>(vertexInfo));
@@ -99,6 +101,7 @@ public class JobTopology {
         this.slotSharingGroupMapping = ImmutableMap.copyOf(vertexSlotSharingGroupMapping);
         this.finishedVertices = finishedVertices.build();
         this.verticesInTopologicalOrder = returnVerticesInTopologicalOrder();
+        this.strongTopologicalOrder = returnStrongTopologicalOrder();
     }
 
     public VertexInfo get(JobVertexID jvi) {
@@ -112,9 +115,9 @@ public class JobTopology {
     private List<JobVertexID> returnVerticesInTopologicalOrder() {
         List<JobVertexID> sorted = new ArrayList<>(vertexInfos.size());
 
-        Map<JobVertexID, List<JobVertexID>> remainingInputs = new HashMap<>(vertexInfos.size());
+        Map<JobVertexID, Set<JobVertexID>> remainingInputs = new HashMap<>(vertexInfos.size());
         vertexInfos.forEach(
-                (id, v) -> remainingInputs.put(id, new ArrayList<>(v.getInputs().keySet())));
+                (id, v) -> remainingInputs.put(id, new HashSet<>(v.getInputs().keySet())));
 
         while (!remainingInputs.isEmpty()) {
             List<JobVertexID> verticesWithZeroIndegree = new ArrayList<>();
@@ -136,6 +139,71 @@ public class JobTopology {
                     });
 
             sorted.addAll(verticesWithZeroIndegree);
+        }
+        return sorted;
+    }
+
+    /**
+     * Strong topological order is a topological order, where vertices are also sorted by their
+     * distance to the most distant sources.
+     *
+     * @return vertices in the enhanced topological order
+     */
+    public List<JobVertexID> returnStrongTopologicalOrder() {
+        List<JobVertexID> sorted = new ArrayList<>(vertexInfos.size());
+
+        Map<JobVertexID, Set<JobVertexID>> remainingInputs = new HashMap<>(vertexInfos.size());
+        vertexInfos.forEach(
+                (id, v) -> remainingInputs.put(id, new HashSet<>(v.getInputs().keySet())));
+
+        Map<JobVertexID, Integer> distances = new HashMap<>(vertexInfos.size());
+        TreeMap<Integer, List<JobVertexID>> order = new TreeMap<>();
+
+        while (!remainingInputs.isEmpty()) {
+            List<JobVertexID> verticesWithZeroIndegree = new ArrayList<>();
+
+            // storing
+            remainingInputs.forEach(
+                    (v, inputs) -> {
+                        if (inputs.isEmpty()) {
+                            int dist = distances.getOrDefault(v, 0);
+                            if (!order.containsKey(dist)) {
+                                order.put(dist, new ArrayList<>());
+                            }
+                            order.get(dist).add(v);
+                            verticesWithZeroIndegree.add(v);
+                        }
+                    });
+
+            verticesWithZeroIndegree.forEach(
+                    v -> {
+                        remainingInputs.remove(v);
+                        vertexInfos
+                                .get(v)
+                                .getOutputs()
+                                .keySet()
+                                .forEach(o -> remainingInputs.get(o).remove(v));
+                    });
+
+            List<JobVertexID> layer = order.firstEntry().getValue();
+            order.remove(order.firstKey());
+
+            layer.forEach(
+                    v -> {
+                        final int dist = distances.getOrDefault(v, 0);
+                        vertexInfos
+                                .get(v)
+                                .getOutputs()
+                                .keySet()
+                                .forEach(
+                                        o -> {
+                                            remainingInputs.get(o).remove(v);
+                                            int dist1 = distances.getOrDefault(o, 0);
+                                            distances.put(o, Math.max(dist1, dist + 1));
+                                        });
+                    });
+
+            sorted.addAll(layer);
         }
         return sorted;
     }

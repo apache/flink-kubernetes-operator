@@ -18,8 +18,10 @@
 package org.apache.flink.autoscaler.utils;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -93,5 +95,42 @@ public class AutoScalerUtils {
         }
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
         return anyAdded;
+    }
+
+    public static double getTargetDataRateFromUpstream(
+            EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            JobVertexID vertex,
+            Map<JobVertexID, Double> backpropagationRate) {
+        if (jobTopology.isSource(vertex)) {
+            return evaluatedMetrics
+                            .getVertexMetrics()
+                            .get(vertex)
+                            .get(TARGET_DATA_RATE)
+                            .getAverage()
+                    * backpropagationRate.getOrDefault(vertex, 1.0);
+        }
+
+        double targetDataRate = 0.0;
+
+        for (var input : jobTopology.getVertexInfos().get(vertex).getInputs().keySet()) {
+            double inputDataRate =
+                    evaluatedMetrics
+                            .getVertexMetrics()
+                            .get(input)
+                            .get(TARGET_DATA_RATE)
+                            .getAverage();
+
+            inputDataRate *= backpropagationRate.getOrDefault(input, 1.0);
+            inputDataRate *=
+                    jobTopology
+                            .getVertexInfos()
+                            .get(vertex)
+                            .getInputRatios()
+                            .getOrDefault(input, 1.0);
+            targetDataRate += inputDataRate;
+        }
+
+        return targetDataRate;
     }
 }

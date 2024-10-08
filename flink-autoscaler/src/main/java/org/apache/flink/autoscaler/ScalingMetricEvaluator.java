@@ -346,6 +346,7 @@ public class ScalingMetricEvaluator {
                 var inputTargetRate = inputEvaluatedMetrics.get(TARGET_DATA_RATE);
                 var outputRatio =
                         computeEdgeOutputRatio(inputVertex, vertex, topology, metricsHistory);
+                topology.get(vertex).getInputRatios().put(inputVertex, outputRatio);
                 LOG.debug(
                         "Computed output ratio for edge ({} -> {}) : {}",
                         inputVertex,

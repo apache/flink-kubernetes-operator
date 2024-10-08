@@ -20,8 +20,10 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
@@ -37,6 +39,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
@@ -51,8 +54,10 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PA
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.autoscaler.utils.AutoScalerUtils.getTargetDataRateFromUpstream;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /** Component responsible for computing vertex parallelism based on the scaling metrics. */
@@ -136,6 +141,67 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         public static ParallelismChange noChange() {
             return NO_CHANGE;
+        }
+    }
+
+    public void backpropagateRate(
+            Configuration conf,
+            JobVertexID vertex,
+            JobTopology topology,
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, Double> backpropagationRate,
+            List<String> excludedVertices) {
+
+        if (excludedVertices.contains(vertex.toHexString())) {
+            return;
+        }
+
+        var vertexMetrics = evaluatedMetrics.getVertexMetrics().get(vertex);
+
+        // vertex scale factor is limited by max scale factor
+        double scaleFactor = 1 + conf.get(MAX_SCALE_UP_FACTOR);
+
+        // vertex scale factor is limited by max parallelism scale factor
+        scaleFactor =
+                Math.min(
+                        scaleFactor,
+                        vertexMetrics.get(MAX_PARALLELISM).getCurrent()
+                                / vertexMetrics.get(PARALLELISM).getCurrent());
+
+        double maxProcessingRateAfterScale =
+                Math.min(
+                        vertexMetrics.get(TARGET_DATA_RATE).getAverage()
+                                * backpropagationRate.getOrDefault(vertex, 1.0),
+                        vertexMetrics.get(TRUE_PROCESSING_RATE).getAverage() * scaleFactor);
+
+        // evaluating partially updated target data rate from upstream
+        double targetDataRate =
+                getTargetDataRateFromUpstream(
+                        evaluatedMetrics, topology, vertex, backpropagationRate);
+
+        // if cannot derive finite value, then assume full processing
+        if (Double.isNaN(targetDataRate) || Double.isInfinite(targetDataRate)) {
+            return;
+        }
+
+        // if cannot derive finite value, then assume full processing
+        if (Double.isNaN(maxProcessingRateAfterScale)
+                || Double.isInfinite(maxProcessingRateAfterScale)) {
+            return;
+        }
+
+        // if all input stream can be processed, skip propagation
+        if (targetDataRate < maxProcessingRateAfterScale) {
+            return;
+        }
+
+        // propagation coefficient
+        double adjustmentRate = maxProcessingRateAfterScale / targetDataRate;
+
+        // update rate of direct upstream vertices
+        for (var v : topology.getVertexInfos().get(vertex).getInputs().keySet()) {
+            double vertexRate = backpropagationRate.getOrDefault(v, 1.0);
+            backpropagationRate.put(v, vertexRate * adjustmentRate);
         }
     }
 
