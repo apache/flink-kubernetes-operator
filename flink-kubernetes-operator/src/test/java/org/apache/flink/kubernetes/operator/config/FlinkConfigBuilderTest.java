@@ -63,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.IMAGE;
@@ -348,14 +349,27 @@ public class FlinkConfigBuilderTest {
                 PodTemplateSpec.class);
     }
 
-    @Test
-    public void testApplyIngressDomain() {
+    @ParameterizedTest
+    @MethodSource("serviceExposedTypes")
+    public void testApplyIngressDomain(
+            KubernetesConfigOptions.ServiceExposedType serviceExposedType) {
+
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(
+                                flinkDeployment,
+                                serviceExposedType == null
+                                        ? new Configuration()
+                                        : new Configuration()
+                                                .set(
+                                                        KubernetesConfigOptions
+                                                                .REST_SERVICE_EXPOSED_TYPE,
+                                                        serviceExposedType))
                         .applyIngressDomain()
                         .build();
         assertEquals(
-                KubernetesConfigOptions.ServiceExposedType.ClusterIP,
+                serviceExposedType == null
+                        ? KubernetesConfigOptions.ServiceExposedType.ClusterIP
+                        : serviceExposedType,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
     }
 
@@ -943,5 +957,14 @@ public class FlinkConfigBuilderTest {
         var pod =
                 TestUtils.getTestPodTemplate("hostname", List.of(mainContainer, sideCarContainer));
         return pod;
+    }
+
+    private static Stream<KubernetesConfigOptions.ServiceExposedType> serviceExposedTypes() {
+        return Stream.of(
+                null,
+                KubernetesConfigOptions.ServiceExposedType.ClusterIP,
+                KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
+                KubernetesConfigOptions.ServiceExposedType.Headless_ClusterIP,
+                KubernetesConfigOptions.ServiceExposedType.NodePort);
     }
 }
