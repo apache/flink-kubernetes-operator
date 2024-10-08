@@ -30,4 +30,8 @@ public class CrdConstants {
     public static final String EPHEMERAL_STORAGE = "ephemeral-storage";
 
     public static final String LABEL_SNAPSHOT_TYPE = "snapshot.type";
+    public static final String LABEL_SNAPSHOT_TRIGGER_TYPE = "snapshot.trigger-type";
+    public static final String LABEL_SNAPSHOT_STATE = "snapshot.state";
+    public static final String LABEL_SNAPSHOT_JOB_REFERENCE_KIND = "job-reference.kind";
+    public static final String LABEL_SNAPSHOT_JOB_REFERENCE_NAME = "job-reference.name";
 }

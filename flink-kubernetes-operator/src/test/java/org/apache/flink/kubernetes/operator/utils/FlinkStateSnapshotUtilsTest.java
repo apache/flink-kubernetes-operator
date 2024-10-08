@@ -22,15 +22,18 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -40,12 +43,17 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.api.common.JobStatus.FAILED;
 import static org.apache.flink.kubernetes.operator.TestUtils.reconcileSpec;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_SESSION_JOB_NAME;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -68,25 +76,25 @@ public class FlinkStateSnapshotUtilsTest {
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.UNKNOWN);
 
-        snapshot.getMetadata().getLabels().put(CrdConstants.LABEL_SNAPSHOT_TYPE, "");
+        snapshot.getMetadata().getLabels().put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, "");
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.UNKNOWN);
 
         snapshot.getMetadata()
                 .getLabels()
-                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.MANUAL.name());
+                .put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, SnapshotTriggerType.MANUAL.name());
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.MANUAL);
 
         snapshot.getMetadata()
                 .getLabels()
-                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.UPGRADE.name());
+                .put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, SnapshotTriggerType.UPGRADE.name());
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.UPGRADE);
 
         snapshot.getMetadata()
                 .getLabels()
-                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.PERIODIC.name());
+                .put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, SnapshotTriggerType.PERIODIC.name());
         assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
                 .isEqualTo(SnapshotTriggerType.PERIODIC);
     }
@@ -304,6 +312,86 @@ public class FlinkStateSnapshotUtilsTest {
                         });
     }
 
+    @Test
+    public void testGetSnapshotLabels() {
+        var snapshot = initSavepoint(IN_PROGRESS, null);
+        assertThat(FlinkStateSnapshotUtils.getSnapshotLabels(snapshot, Optional.empty()))
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.ofEntries(
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TYPE,
+                                        SnapshotType.SAVEPOINT.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        SnapshotTriggerType.MANUAL.name()),
+                                Map.entry(CrdConstants.LABEL_SNAPSHOT_STATE, IN_PROGRESS.name())));
+
+        var deployment = initDeployment();
+        snapshot = initCheckpoint(COMPLETED, JobReference.fromFlinkResource(deployment));
+        assertThat(FlinkStateSnapshotUtils.getSnapshotLabels(snapshot, Optional.of(deployment)))
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.ofEntries(
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TYPE,
+                                        SnapshotType.CHECKPOINT.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        SnapshotTriggerType.MANUAL.name()),
+                                Map.entry(CrdConstants.LABEL_SNAPSHOT_STATE, COMPLETED.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_KIND,
+                                        "FlinkDeployment"),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_NAME,
+                                        TEST_DEPLOYMENT_NAME)));
+
+        // Null status should be handled correctly
+        snapshot.setStatus(null);
+        assertThat(FlinkStateSnapshotUtils.getSnapshotLabels(snapshot, Optional.of(deployment)))
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.ofEntries(
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TYPE,
+                                        SnapshotType.CHECKPOINT.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        SnapshotTriggerType.MANUAL.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_KIND,
+                                        "FlinkDeployment"),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_NAME,
+                                        TEST_DEPLOYMENT_NAME)));
+
+        var sessionJob = initFlinkSessionJob();
+        snapshot = initCheckpoint(ABANDONED, JobReference.fromFlinkResource(sessionJob));
+        assertThat(FlinkStateSnapshotUtils.getSnapshotLabels(snapshot, Optional.of(sessionJob)))
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.ofEntries(
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TYPE,
+                                        SnapshotType.CHECKPOINT.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        SnapshotTriggerType.MANUAL.name()),
+                                Map.entry(CrdConstants.LABEL_SNAPSHOT_STATE, ABANDONED.name()),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_KIND,
+                                        "FlinkSessionJob"),
+                                Map.entry(
+                                        CrdConstants.LABEL_SNAPSHOT_JOB_REFERENCE_NAME,
+                                        TEST_SESSION_JOB_NAME)));
+
+        // Trigger type should not be overridden
+        snapshot.getMetadata()
+                .getLabels()
+                .put(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, SnapshotTriggerType.UPGRADE.name());
+        assertThat(FlinkStateSnapshotUtils.getSnapshotLabels(snapshot, Optional.of(deployment)))
+                .containsEntry(
+                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                        SnapshotTriggerType.UPGRADE.name());
+    }
+
     private void assertSavepointResource(
             FlinkStateSnapshot snapshot,
             FlinkDeployment deployment,
@@ -313,7 +401,7 @@ public class FlinkStateSnapshotUtilsTest {
             boolean expectedAlreadyExists) {
         assertEquals(
                 triggerType.name(),
-                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
         assertTrue(snapshot.getSpec().isSavepoint());
         assertEquals(SAVEPOINT_PATH, snapshot.getSpec().getSavepoint().getPath());
         assertEquals(expectedFormatType, snapshot.getSpec().getSavepoint().getFormatType());
@@ -332,7 +420,7 @@ public class FlinkStateSnapshotUtilsTest {
             SnapshotTriggerType triggerType) {
         assertEquals(
                 triggerType.name(),
-                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
         assertTrue(snapshot.getSpec().isCheckpoint());
 
         assertEquals(
@@ -341,11 +429,17 @@ public class FlinkStateSnapshotUtilsTest {
     }
 
     private static FlinkDeployment initDeployment() {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_19);
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_19);
         deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconcileSpec(deployment);
         return deployment;
+    }
+
+    private static FlinkSessionJob initFlinkSessionJob() {
+        var sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getStatus().getJobStatus().setState(JobStatus.RUNNING);
+        return sessionJob;
     }
 
     private static FlinkStateSnapshot initSavepoint(
@@ -358,6 +452,16 @@ public class FlinkStateSnapshotUtilsTest {
         if (COMPLETED.equals(snapshotState)) {
             snapshot.getStatus().setPath(SAVEPOINT_PATH);
         }
+
+        return snapshot;
+    }
+
+    private static FlinkStateSnapshot initCheckpoint(
+            FlinkStateSnapshotStatus.State snapshotState, JobReference jobReference) {
+        var snapshot =
+                TestUtils.buildFlinkStateSnapshotCheckpoint(
+                        SAVEPOINT_NAME, NAMESPACE, CheckpointType.FULL, jobReference);
+        snapshot.setStatus(FlinkStateSnapshotStatus.builder().state(snapshotState).build());
 
         return snapshot;
     }

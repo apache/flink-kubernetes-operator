@@ -410,7 +410,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                             .get(0)
                             .getMetadata()
                             .getLabels()
-                            .get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+                            .get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
             assertEquals(
                     snapshots.get(0).getSpec().getSavepoint().getPath(),
                     statefulSessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());

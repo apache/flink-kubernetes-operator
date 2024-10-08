@@ -80,7 +80,7 @@ public class SnapshotTriggerTimestampStore {
                                                                 .getLabels()
                                                                 .get(
                                                                         CrdConstants
-                                                                                .LABEL_SNAPSHOT_TYPE)))
+                                                                                .LABEL_SNAPSHOT_TRIGGER_TYPE)))
                         .map(
                                 s ->
                                         DateTimeUtils.parseKubernetes(

@@ -179,7 +179,11 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
         assertEquals(
                 SnapshotTriggerType.UPGRADE.name(),
-                snapshots.get(0).getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+                snapshots
+                        .get(0)
+                        .getMetadata()
+                        .getLabels()
+                        .get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
     }
 
     @ParameterizedTest

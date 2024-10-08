@@ -35,6 +35,8 @@ import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
+
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
@@ -76,7 +78,11 @@ public class FlinkResourceContextFactory {
     public FlinkStateSnapshotContext getFlinkStateSnapshotContext(
             FlinkStateSnapshot savepoint, Context<FlinkStateSnapshot> josdkContext) {
         return new FlinkStateSnapshotContext(
-                savepoint, savepoint.getStatus().toBuilder().build(), josdkContext, configManager);
+                savepoint,
+                savepoint.getStatus().toBuilder().build(),
+                ImmutableMap.copyOf(savepoint.getMetadata().getLabels()),
+                josdkContext,
+                configManager);
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(

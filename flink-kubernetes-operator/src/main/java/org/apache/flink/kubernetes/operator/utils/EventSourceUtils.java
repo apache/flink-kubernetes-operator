@@ -61,7 +61,7 @@ public class EventSourceUtils {
                         .map(Enum::name)
                         .collect(Collectors.joining(","));
         var labelSelector =
-                String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TYPE, labelFilters);
+                String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, labelFilters);
         var configuration =
                 InformerConfiguration.from(FlinkStateSnapshot.class, context)
                         .withLabelSelector(labelSelector)
