@@ -68,15 +68,15 @@ jobs:
           mvn -B verify -Dit.skip=false
           cd ..
   e2e_smoke_test:
-    name: HTTP Client smoke test
+    name: Operator smoke test
     runs-on: ubuntu-latest
     strategy:
       matrix:
         http-client: [ "okhttp", "jdk", "jetty", "vertx" ]
         version: ["v1_20"]
         mode: ["native"]
-        namespace: ["default"]
-        java-version: ["21"]
+        namespace: ["default", "flink"]
+        java-version: ["11", "17", "21"]
         test:
           - test_application_operations.sh
     steps:
@@ -112,7 +112,7 @@ jobs:
             sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
             sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
           fi
-          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
+          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest --create-namespace --set "watchNamespaces={default,flink}"
           kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
@@ -139,7 +139,7 @@ jobs:
         version: ["v1_20","v1_19","v1_18","v1_17","v1_16"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
-        java-version: [ 11, 17, 21 ]
+        java-version: [ 11 ]
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
