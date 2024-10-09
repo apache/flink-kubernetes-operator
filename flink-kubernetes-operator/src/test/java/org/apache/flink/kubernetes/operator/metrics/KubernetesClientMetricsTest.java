@@ -36,7 +36,9 @@ import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.Timeout;
 
+import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -125,7 +127,8 @@ public class KubernetesClientMetricsTest {
 
     @Test
     @Order(2)
-    public void testMetricsEnabled() {
+    @Timeout(120)
+    public void testMetricsEnabled() throws Exception {
         var configuration = new Configuration();
         var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
@@ -135,81 +138,134 @@ public class KubernetesClientMetricsTest {
                         mockServer.createClient().getConfiguration());
 
         var deployment = TestUtils.buildApplicationCluster();
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMin());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMax());
-
+        do {
+            try {
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID))
+                                .get()
+                                .getRate());
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
+                assertEquals(
+                        0,
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMin());
+                assertEquals(
+                        0,
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMax());
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         kubernetesClient.resource(deployment).createOrReplace();
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMin()
-                        > 0);
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMax()
-                        > 0);
 
+        do {
+            try {
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertTrue(
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                        .get()
+                                        .getStatistics()
+                                        .getMin()
+                                > 0);
+                assertTrue(
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                        .get()
+                                        .getStatistics()
+                                        .getMax()
+                                > 0);
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
+        do {
+            try {
 
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                                .get()
+                                .getCount());
+
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                2,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
-                        .get()
-                        .getCount());
+        do {
+            try {
+
+                assertEquals(
+                        2,
+                        listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
+                                .get()
+                                .getCount());
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         Awaitility.await()
                 .atMost(1, TimeUnit.MINUTES)
                 .until(
@@ -304,7 +360,8 @@ public class KubernetesClientMetricsTest {
 
     @Test
     @Order(3)
-    public void testMetricsHttpResponseCodeGroupsEnabled() {
+    @Timeout(120)
+    public void testMetricsHttpResponseCodeGroupsEnabled() throws Exception {
         var configuration = new Configuration();
         configuration.set(
                 KubernetesOperatorMetricOptions
@@ -318,91 +375,145 @@ public class KubernetesClientMetricsTest {
                         mockServer.createClient().getConfiguration());
 
         var deployment = TestUtils.buildApplicationCluster();
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMin());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMax());
+        do {
 
+            try {
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID))
+                                .get()
+                                .getRate());
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
+                assertEquals(
+                        0,
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMin());
+                assertEquals(
+                        0,
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMax());
+
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         kubernetesClient.resource(deployment).createOrReplace();
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_2xx_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMin()
-                        > 0);
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMax()
-                        > 0);
+        do {
+            try {
 
-        kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_2xx_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertTrue(
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                        .get()
+                                        .getStatistics()
+                                        .getMin()
+                                > 0);
+                assertTrue(
+                        listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                        .get()
+                                        .getStatistics()
+                                        .getMax()
+                                > 0);
 
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                2,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_4xx_COUNTER_ID))
-                        .get()
-                        .getCount());
+        do {
+            try {
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                                .get()
+                                .getCount());
+
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
+        kubernetesClient.resource(deployment).delete();
+        do {
+            try {
+                assertEquals(
+                        2,
+                        listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        1,
+                        listener.getCounter(listener.getMetricId(RESPONSE_4xx_COUNTER_ID))
+                                .get()
+                                .getCount());
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         Awaitility.await()
                 .atMost(1, TimeUnit.MINUTES)
                 .until(
@@ -445,7 +556,8 @@ public class KubernetesClientMetricsTest {
 
     @Test
     @Order(3)
-    public void testAPIServerIsDown() {
+    @Timeout(120)
+    public void testAPIServerIsDown() throws Exception {
         var configuration = new Configuration();
         var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
@@ -456,14 +568,26 @@ public class KubernetesClientMetricsTest {
 
         var deployment = TestUtils.buildApplicationCluster();
         mockServer.shutdown();
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
+        do {
+            try {
+                assertEquals(
+                        0,
+                        listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
+                                .get()
+                                .getCount());
+                assertEquals(
+                        0.0,
+                        listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID))
+                                .get()
+                                .getRate());
+
+                break;
+            } catch (NoSuchElementException e) {
+                // Metrics might not be available yet (timeout above will eventually kill this
+                // test)
+                Thread.sleep(100);
+            }
+        } while (true);
         Awaitility.await()
                 .atMost(1, TimeUnit.MINUTES)
                 .until(
