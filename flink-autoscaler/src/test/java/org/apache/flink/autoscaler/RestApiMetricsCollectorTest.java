@@ -44,18 +44,21 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 /** Tests for {@link RestApiMetricsCollector}. */
-public class RestApiMetricsCollectorTest {
+class RestApiMetricsCollectorTest {
 
     private static final String GC_METRIC_NAME = "Status.JVM.GarbageCollector.All.TimeMsPerSecond";
     private static final String HEAP_MAX_NAME = "Status.JVM.Memory.Heap.Max";
@@ -64,7 +67,7 @@ public class RestApiMetricsCollectorTest {
     private static final String METASPACE_MEMORY_NAME = "Status.JVM.Memory.Metaspace.Used";
 
     @Test
-    public void testAggregateMultiplePendingRecordsMetricsPerSource() throws Exception {
+    void testAggregateMultiplePendingRecordsMetricsPerSource() throws Exception {
         var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
 
         JobVertexID jobVertexID = new JobVertexID();
@@ -145,7 +148,7 @@ public class RestApiMetricsCollectorTest {
 
     @Test
     @Timeout(60)
-    public void testJmMetricCollection() throws Exception {
+    void testJmMetricCollection() throws Exception {
         try (MiniCluster miniCluster =
                 new MiniCluster(
                         new MiniClusterConfiguration.Builder()
@@ -160,36 +163,38 @@ public class RestApiMetricsCollectorTest {
                             (c, e) ->
                                     new StandaloneClientHAServices(
                                             miniCluster.getRestAddress().get().toString()));
-            do {
-                var collector = new RestApiMetricsCollector<>();
-                Map<FlinkMetric, Metric> flinkMetricMetricMap =
-                        collector.queryJmMetrics(
-                                client,
-                                Map.of(
-                                        "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
-                                        "taskSlotsAvailable",
-                                                FlinkMetric.NUM_TASK_SLOTS_AVAILABLE));
-                try {
-                    assertEquals(
-                            "3",
-                            flinkMetricMetricMap.get(FlinkMetric.NUM_TASK_SLOTS_TOTAL).getValue());
-                    assertEquals(
-                            "3",
-                            flinkMetricMetricMap
-                                    .get(FlinkMetric.NUM_TASK_SLOTS_AVAILABLE)
-                                    .getValue());
-                    break;
-                } catch (NullPointerException e) {
-                    // Metrics might not be available yet (timeout above will eventually kill this
-                    // test)
-                    Thread.sleep(100);
-                }
-            } while (true);
+            var collector = new RestApiMetricsCollector<>();
+            Map<FlinkMetric, Metric> flinkMetricMetricMap = new HashMap<>();
+            // Metrics might not be available yet so retry the query until it returns results or the
+            // timeout reached.
+            await().atMost(Duration.ofSeconds(60))
+                    .until(
+                            () -> {
+                                final Map<FlinkMetric, Metric> results =
+                                        collector.queryJmMetrics(
+                                                client,
+                                                Map.of(
+                                                        "taskSlotsTotal",
+                                                        FlinkMetric.NUM_TASK_SLOTS_TOTAL,
+                                                        "taskSlotsAvailable",
+                                                        FlinkMetric.NUM_TASK_SLOTS_AVAILABLE));
+                                flinkMetricMetricMap.putAll(results);
+                                return !results.isEmpty();
+                            });
+
+            assertThat(flinkMetricMetricMap)
+                    .hasSize(2)
+                    .hasEntrySatisfying(
+                            FlinkMetric.NUM_TASK_SLOTS_TOTAL,
+                            metricValue -> assertMetricValueIs(metricValue, 3))
+                    .hasEntrySatisfying(
+                            FlinkMetric.NUM_TASK_SLOTS_AVAILABLE,
+                            metricValue -> assertMetricValueIs(metricValue, 3));
         }
     }
 
     @Test
-    public void testTmMetricCollection() throws Exception {
+    void testTmMetricCollection() throws Exception {
 
         var metricValues = new HashMap<String, AggregatedMetric>();
 
@@ -308,5 +313,9 @@ public class RestApiMetricsCollectorTest {
                     assertEquals(v.getAvg(), a.getAvg(), k.name());
                     assertEquals(v.getSum(), a.getSum(), k.name());
                 });
+    }
+
+    private static void assertMetricValueIs(Metric metricValue, int expected) {
+        assertThat(metricValue.getValue()).asInt().isEqualTo(expected);
     }
 }
