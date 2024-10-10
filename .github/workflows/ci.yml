@@ -146,6 +146,9 @@ jobs:
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_dynamic_config.sh
+        excludes:
+          - mode: standalone
+            test: test_autoscaler.sh
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
