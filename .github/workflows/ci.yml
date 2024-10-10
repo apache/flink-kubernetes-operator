@@ -252,16 +252,6 @@ jobs:
             test: test_snapshot.sh
           - version: v1_19
             test: test_snapshot.sh
-          - version: v1_16
-            java-version: 17
-          - version: v1_17
-            java-version: 17
-          - version: v1_16
-            java-version: 21
-          - version: v1_17
-            java-version: 21
-          - version: v1_18
-            java-version: 21
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
