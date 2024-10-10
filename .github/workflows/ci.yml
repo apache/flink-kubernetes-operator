@@ -27,6 +27,10 @@ on:
       - main
       - release-*
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
 jobs:
   test_ci:
     runs-on: ubuntu-latest
