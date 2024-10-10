@@ -72,7 +72,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @VisibleForTesting
     protected static final String SCALE_LIMITED_MESSAGE_FORMAT =
             "Scaling limited detected for %s (expected parallelism: %s, actual parallelism %s). "
-                    + "Scaling limited due to source partitions : %s，"
+                    + "Scaling limited due to numKeyGroupsOrPartitions : %s，"
                     + "upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, parallelismLowerLimit: %s.";
 
     private Clock clock = Clock.system(ZoneId.systemDefault());
@@ -448,7 +448,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         vertex,
                         newParallelism,
                         p,
-                        numSourcePartitions,
+                        numKeyGroupsOrPartitions,
                         upperBound,
                         parallelismLowerLimit);
         eventHandler.handleEvent(

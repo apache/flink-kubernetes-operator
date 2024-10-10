@@ -933,8 +933,8 @@ public class JobVertexScalerTest {
 
     @Test
     public void testNumPartitionsAdjustment() {
-        final int minParallelism = 1;
-        final int maxParallelism = Integer.MAX_VALUE;
+        final int parallelismLowerLimit = 1;
+        final int parallelismUpperLimit = Integer.MAX_VALUE;
         final var vertex = new JobVertexID();
 
         assertEquals(
@@ -946,8 +946,8 @@ public class JobVertexScalerTest {
                         15,
                         128,
                         0.4,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
         assertEquals(
@@ -959,8 +959,8 @@ public class JobVertexScalerTest {
                         15,
                         128,
                         1.2,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
         assertEquals(
@@ -972,8 +972,8 @@ public class JobVertexScalerTest {
                         35,
                         30,
                         0.9,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
 
@@ -987,7 +987,7 @@ public class JobVertexScalerTest {
                         30,
                         1.1,
                         20,
-                        maxParallelism,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
 
@@ -1000,8 +1000,8 @@ public class JobVertexScalerTest {
                         200,
                         128,
                         1.4,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
     }
