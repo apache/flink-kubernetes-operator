@@ -53,6 +53,10 @@ public enum ScalingMetric {
 
     /** Job vertex max parallelism. */
     MAX_PARALLELISM(false),
+
+    /** Source vertex partition count. */
+    NUM_SOURCE_PARTITIONS(false),
+
     /** Upper boundary of the target data rate range. */
     SCALE_UP_RATE_THRESHOLD(false),
 
@@ -101,6 +105,7 @@ public enum ScalingMetric {
                     PARALLELISM,
                     RECOMMENDED_PARALLELISM,
                     MAX_PARALLELISM,
+                    NUM_SOURCE_PARTITIONS,
                     SCALE_UP_RATE_THRESHOLD,
                     SCALE_DOWN_RATE_THRESHOLD,
                     EXPECTED_PROCESSING_RATE);

@@ -50,6 +50,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PA
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_SOURCE_PARTITIONS;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
@@ -65,6 +66,14 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @VisibleForTesting
     protected static final String INEFFECTIVE_MESSAGE_FORMAT =
             "Ineffective scaling detected for %s (expected increase: %s, actual increase %s). Blocking of ineffective scaling decisions is %s";
+
+    @VisibleForTesting protected static final String SCALING_LIMITED = "ScalingLimited";
+
+    @VisibleForTesting
+    protected static final String SCALE_LIMITED_MESSAGE_FORMAT =
+            "Scaling limited detected for %s (expected parallelism: %s, actual parallelism %s). "
+                    + "Scaling limited due to numKeyGroupsOrPartitions : %s，"
+                    + "upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, parallelismLowerLimit: %s.";
 
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
@@ -193,12 +202,16 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         int newParallelism =
                 scale(
+                        vertex,
                         currentParallelism,
                         inputShipStrategies,
+                        (int) evaluatedMetrics.get(NUM_SOURCE_PARTITIONS).getCurrent(),
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
-                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)));
+                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)),
+                        autoScalerEventHandler,
+                        context);
 
         if (newParallelism == currentParallelism) {
             // Clear delayed scale down request if the new parallelism is equal to
@@ -345,15 +358,22 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * <p>Also, in order to ensure the data is evenly spread across subtasks, we try to adjust the
      * parallelism for source and keyed vertex such that it divides the maxParallelism without a
      * remainder.
+     *
+     * <p>This method also attempts to adjust the parallelism to ensure it aligns well with the
+     * number of source partitions if a vertex has a known source partition count.
      */
     @VisibleForTesting
-    protected static int scale(
+    protected static <KEY, Context extends JobAutoScalerContext<KEY>> int scale(
+            JobVertexID vertex,
             int currentParallelism,
             Collection<ShipStrategy> inputShipStrategies,
+            int numSourcePartitions,
             int maxParallelism,
             double scaleFactor,
             int parallelismLowerLimit,
-            int parallelismUpperLimit) {
+            int parallelismUpperLimit,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
         checkArgument(
                 parallelismLowerLimit <= parallelismUpperLimit,
                 "The parallelism lower limitation must not be greater than the parallelism upper limitation.");
@@ -383,23 +403,62 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Apply min/max parallelism
         newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
-        var adjustByMaxParallelism =
-                inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
-        if (!adjustByMaxParallelism) {
+        var adjustByMaxParallelismOrPartitions =
+                numSourcePartitions > 0 || inputShipStrategies.contains(HASH);
+        if (!adjustByMaxParallelismOrPartitions) {
             return newParallelism;
         }
 
-        // When the shuffle type of vertex inputs contains keyBy or vertex is a source, we try to
-        // adjust the parallelism such that it divides the maxParallelism without a remainder
-        // => data is evenly spread across subtasks
-        for (int p = newParallelism; p <= maxParallelism / 2 && p <= upperBound; p++) {
-            if (maxParallelism % p == 0) {
+        var numKeyGroupsOrPartitions =
+                numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
+        var upperBoundForAlignment =
+                Math.min(
+                        // Optimize the case where newParallelism <= maxParallelism / 2
+                        newParallelism > numKeyGroupsOrPartitions / 2
+                                ? numKeyGroupsOrPartitions
+                                : numKeyGroupsOrPartitions / 2,
+                        upperBound);
+
+        // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
+        // we try to adjust the parallelism such that it divides
+        // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
+        for (int p = newParallelism; p <= upperBoundForAlignment; p++) {
+            if (numKeyGroupsOrPartitions % p == 0) {
                 return p;
             }
         }
 
-        // If parallelism adjustment fails, use originally computed parallelism
-        return newParallelism;
+        // When adjust the parallelism after rounding up cannot be evenly divided by
+        // numKeyGroupsOrPartitions, Try to find the smallest parallelism that can satisfy the
+        // current consumption rate.
+        int p = newParallelism;
+        for (; p > 0; p--) {
+            if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
+                if (numKeyGroupsOrPartitions % p != 0) {
+                    p++;
+                }
+                break;
+            }
+        }
+
+        p = Math.max(p, parallelismLowerLimit);
+        var message =
+                String.format(
+                        SCALE_LIMITED_MESSAGE_FORMAT,
+                        vertex,
+                        newParallelism,
+                        p,
+                        numKeyGroupsOrPartitions,
+                        upperBound,
+                        parallelismLowerLimit);
+        eventHandler.handleEvent(
+                context,
+                AutoScalerEventHandler.Type.Warning,
+                SCALING_LIMITED,
+                message,
+                SCALING_LIMITED + vertex + (scaleFactor * currentParallelism),
+                context.getConfiguration().get(SCALING_EVENT_INTERVAL));
+        return p;
     }
 
     @VisibleForTesting

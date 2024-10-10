@@ -46,7 +46,7 @@ public class VertexInfo {
     @Setter(AccessLevel.NONE)
     private int maxParallelism;
 
-    private final int originalMaxParallelism;
+    @Setter private int numSourcePartitions;
 
     private final boolean finished;
 
@@ -65,7 +65,6 @@ public class VertexInfo {
         this.inputs = inputs;
         this.parallelism = parallelism;
         this.maxParallelism = maxParallelism;
-        this.originalMaxParallelism = maxParallelism;
         this.finished = finished;
         this.ioMetrics = ioMetrics;
     }
@@ -98,9 +97,5 @@ public class VertexInfo {
             int parallelism,
             int maxParallelism) {
         this(id, inputs, parallelism, maxParallelism, null);
-    }
-
-    public void updateMaxParallelism(int maxParallelism) {
-        this.maxParallelism = Math.min(originalMaxParallelism, maxParallelism);
     }
 }
