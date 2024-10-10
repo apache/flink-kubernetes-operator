@@ -34,7 +34,7 @@ concurrency:
 jobs:
   test_ci:
     runs-on: ubuntu-latest
-    name: test_ci
+    name: maven build
     strategy:
       matrix:
         java-version: [ 11, 17, 21 ]
@@ -72,7 +72,7 @@ jobs:
           mvn -B verify -Dit.skip=false
           cd ..
   e2e_smoke_test:
-    name: Operator smoke test
+    name: Smoke test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -131,7 +131,7 @@ jobs:
           source e2e-tests/utils.sh
           stop_minikube
   e2e_namespace_tests:
-    name: Test outside the default namespaces
+    name: Namespace aware tests
     runs-on: ubuntu-latest
     needs: e2e_smoke_test
     strategy:
@@ -140,6 +140,7 @@ jobs:
         mode: ["native", "standalone"]
         namespace: ["flink"]
         java-version: ["11"]
+        image: ["flink:1.20"]
         test:
           - test_application_operations.sh
           - test_multi_sessionjob.sh
