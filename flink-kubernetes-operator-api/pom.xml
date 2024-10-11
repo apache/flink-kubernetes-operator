@@ -32,7 +32,6 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
-        <awaitility.version>4.1.0</awaitility.version>
         <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
     </properties>
 
