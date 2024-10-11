@@ -24,6 +24,8 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Histogram;
+import org.apache.flink.metrics.Meter;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.NamespaceableResource;
@@ -32,6 +34,7 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.awaitility.Awaitility;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.COUNTER;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.HISTO;
@@ -49,15 +53,14 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetri
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.METER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.InstanceOfAssertFactories.LONG;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link KubernetesClientMetrics} tests. */
 @EnableKubernetesMockClient(crud = true)
 @TestMethodOrder(OrderAnnotation.class)
-public class KubernetesClientMetricsTest {
+class KubernetesClientMetricsTest {
     private KubernetesMockServer mockServer;
 
     private static final String REQUEST_COUNTER_ID =
@@ -97,9 +100,14 @@ public class KubernetesClientMetricsTest {
     private static final String RESPONSE_LATENCY_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, HISTO);
 
+    @BeforeAll
+    static void beforeAll() {
+        Awaitility.ignoreExceptionByDefault(AssertionError.class);
+    }
+
     @Test
     @Order(1)
-    public void testMetricsDisabled() {
+    void testMetricsDisabled() {
         var configuration = new Configuration();
         configuration.set(
                 KubernetesOperatorMetricOptions.OPERATOR_KUBERNETES_CLIENT_METRICS_ENABLED, false);
@@ -125,7 +133,7 @@ public class KubernetesClientMetricsTest {
 
     @Test
     @Order(2)
-    public void testMetricsEnabled() {
+    void testMetricsEnabled() {
         var configuration = new Configuration();
         var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
@@ -135,106 +143,53 @@ public class KubernetesClientMetricsTest {
                         mockServer.createClient().getConfiguration());
 
         var deployment = TestUtils.buildApplicationCluster();
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMin());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMax());
+        assertCounterIsZero(listener, REQUEST_COUNTER_ID);
+        assertRateIsZero(listener, REQUEST_METER_ID);
+        assertCounterIsZero(listener, REQUEST_FAILED_COUNTER_ID);
+        assertRateIsZero(listener, REQUEST_FAILED_METER_ID);
+        assertCounterIsZero(listener, RESPONSE_COUNTER_ID);
+        assertRateIsZero(listener, RESPONSE_METER_ID);
+        assertHistogramHasZeroStatistics(listener);
 
         kubernetesClient.resource(deployment).createOrReplace();
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMin()
-                        > 0);
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMax()
-                        > 0);
-
-        kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
-
-        kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                2,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
-                        .get()
-                        .getCount());
-        Awaitility.await()
-                .atMost(1, TimeUnit.MINUTES)
+        await().atMost(20, TimeUnit.SECONDS)
                 .until(
                         () -> {
-                            kubernetesClient.resource(deployment).createOrReplace();
-                            return listener.getMeter(listener.getMetricId(REQUEST_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(listener.getMetricId(RESPONSE_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_201_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_404_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01;
+                            assertCounterHasValue(listener, REQUEST_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, REQUEST_POST_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_201_COUNTER_ID, 1);
+
+                            assertHistogramHasStatistics(listener);
+                            return true;
+                        });
+
+        kubernetesClient.resource(deployment).delete();
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertCounterHasValue(listener, REQUEST_DELETE_COUNTER_ID, 1);
+                            return true;
+                        });
+
+        kubernetesClient.resource(deployment).delete();
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertCounterHasValue(listener, REQUEST_DELETE_COUNTER_ID, 2);
+                            assertCounterHasValue(listener, RESPONSE_404_COUNTER_ID, 1);
+                            return true;
+                        });
+
+        kubernetesClient.resource(deployment).createOrReplace();
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertPositiveRate(listener, REQUEST_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_201_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_404_METER_ID);
+                            return true;
                         });
     }
 
@@ -285,8 +240,7 @@ public class KubernetesClientMetricsTest {
                         })) {
 
             // Then
-            Awaitility.await()
-                    .atMost(1, TimeUnit.MINUTES)
+            await().atMost(20, TimeUnit.SECONDS)
                     .untilAtomic(watchEventCount, Matchers.greaterThanOrEqualTo(1L));
             assertThat(requestCounter)
                     .extracting(Counter::getCount)
@@ -304,7 +258,7 @@ public class KubernetesClientMetricsTest {
 
     @Test
     @Order(3)
-    public void testMetricsHttpResponseCodeGroupsEnabled() {
+    void testMetricsHttpResponseCodeGroupsEnabled() {
         var configuration = new Configuration();
         configuration.set(
                 KubernetesOperatorMetricOptions
@@ -318,134 +272,63 @@ public class KubernetesClientMetricsTest {
                         mockServer.createClient().getConfiguration());
 
         var deployment = TestUtils.buildApplicationCluster();
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
-        assertEquals(
-                0, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                0.0, listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMin());
-        assertEquals(
-                0,
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                        .get()
-                        .getStatistics()
-                        .getMax());
+
+        assertCounterIsZero(listener, REQUEST_COUNTER_ID);
+        assertRateIsZero(listener, REQUEST_METER_ID);
+        assertCounterIsZero(listener, REQUEST_FAILED_COUNTER_ID);
+        assertRateIsZero(listener, REQUEST_FAILED_METER_ID);
+        assertCounterIsZero(listener, RESPONSE_COUNTER_ID);
+        assertRateIsZero(listener, RESPONSE_METER_ID);
+        assertHistogramHasZeroStatistics(listener);
 
         kubernetesClient.resource(deployment).createOrReplace();
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_2xx_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMin()
-                        > 0);
-        assertTrue(
-                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
-                                .get()
-                                .getStatistics()
-                                .getMax()
-                        > 0);
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertCounterHasValue(listener, REQUEST_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, REQUEST_POST_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_201_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_2xx_COUNTER_ID, 1);
+                            assertHistogramHasStatistics(listener);
+                            return true;
+                        });
 
         kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertCounterHasValue(listener, REQUEST_DELETE_COUNTER_ID, 1);
+                            return true;
+                        });
 
         kubernetesClient.resource(deployment).delete();
-        assertEquals(
-                2,
-                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                1,
-                listener.getCounter(listener.getMetricId(RESPONSE_4xx_COUNTER_ID))
-                        .get()
-                        .getCount());
-        Awaitility.await()
-                .atMost(1, TimeUnit.MINUTES)
+        await().atMost(20, TimeUnit.SECONDS)
+                .until(
+                        () -> {
+                            assertCounterHasValue(listener, REQUEST_DELETE_COUNTER_ID, 2);
+                            assertCounterHasValue(listener, RESPONSE_404_COUNTER_ID, 1);
+                            assertCounterHasValue(listener, RESPONSE_404_COUNTER_ID, 1);
+                            return true;
+                        });
+
+        await().atMost(20, TimeUnit.SECONDS)
                 .until(
                         () -> {
                             kubernetesClient.resource(deployment).createOrReplace();
-                            return listener.getMeter(listener.getMetricId(REQUEST_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(listener.getMetricId(RESPONSE_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_201_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_404_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_2xx_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    RESPONSE_4xx_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01;
+                            assertPositiveRate(listener, REQUEST_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_201_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_404_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_2xx_METER_ID);
+                            assertPositiveRate(listener, RESPONSE_4xx_METER_ID);
+                            return true;
                         });
     }
 
     @Test
     @Order(3)
-    public void testAPIServerIsDown() {
+    void testAPIServerIsDown() {
         var configuration = new Configuration();
         var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
@@ -456,33 +339,101 @@ public class KubernetesClientMetricsTest {
 
         var deployment = TestUtils.buildApplicationCluster();
         mockServer.shutdown();
-        assertEquals(
-                0,
-                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
-                        .get()
-                        .getCount());
-        assertEquals(
-                0.0,
-                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
-        Awaitility.await()
-                .atMost(1, TimeUnit.MINUTES)
+
+        assertCounterIsZero(listener, REQUEST_FAILED_COUNTER_ID);
+        assertRateIsZero(listener, REQUEST_FAILED_METER_ID);
+
+        await().atMost(20, TimeUnit.SECONDS)
                 .until(
                         () -> {
                             assertThrows(
                                     KubernetesClientException.class,
                                     () -> kubernetesClient.resource(deployment).createOrReplace());
-                            return listener.getCounter(
-                                                            listener.getMetricId(
-                                                                    REQUEST_FAILED_COUNTER_ID))
-                                                    .get()
-                                                    .getCount()
-                                            > 0
-                                    && listener.getMeter(
-                                                            listener.getMetricId(
-                                                                    REQUEST_FAILED_METER_ID))
-                                                    .get()
-                                                    .getRate()
-                                            > 0.01;
+                            assertCounterIsPositive(listener);
+                            assertPositiveRate(listener, REQUEST_FAILED_METER_ID);
+                            return true;
                         });
+    }
+
+    private static void assertRateIsZero(TestingMetricListener listener, String meterId) {
+        assertPositiveRate(listener, meterId, meter -> assertThat(meter.getRate()).isEqualTo(0.0));
+    }
+
+    private static void assertPositiveRate(TestingMetricListener listener, String meterId) {
+        assertPositiveRate(
+                listener,
+                meterId,
+                meter -> assertThat(meter.getRate()).isGreaterThanOrEqualTo(0.01));
+    }
+
+    private static void assertPositiveRate(
+            TestingMetricListener listener, String meterId, Consumer<Meter> meterConsumer) {
+        assertThat(listener.getMeter(listener.getMetricId(meterId)))
+                .hasValueSatisfying(meterConsumer);
+    }
+
+    private static void assertCounterIsPositive(TestingMetricListener listener) {
+        assertCounterHasValue(
+                listener,
+                KubernetesClientMetricsTest.REQUEST_FAILED_COUNTER_ID,
+                counter -> assertThat(counter.getCount()).isPositive());
+    }
+
+    private static void assertCounterIsZero(TestingMetricListener listener, String counterId) {
+        assertCounterHasValue(
+                listener, counterId, counter -> assertThat(counter.getCount()).isZero());
+    }
+
+    private static void assertCounterHasValue(
+            TestingMetricListener listener, String requestDeleteCounterId, int expected) {
+        assertCounterHasValue(
+                listener,
+                requestDeleteCounterId,
+                counter -> assertThat(counter.getCount()).isEqualTo(expected));
+    }
+
+    private static void assertCounterHasValue(
+            TestingMetricListener listener,
+            String requestDeleteCounterId,
+            Consumer<Counter> counterConsumer) {
+        assertThat(listener.getCounter(listener.getMetricId(requestDeleteCounterId)))
+                .hasValueSatisfying(counterConsumer);
+    }
+
+    private static void assertHistogramHasStatistics(TestingMetricListener listener) {
+        assertHistogramStatistics(
+                listener,
+                histogram -> {
+                    assertThat(histogram.getCount()).isPositive();
+                    assertThat(histogram.getStatistics())
+                            .satisfies(
+                                    stats -> {
+                                        assertThat(stats.getMin()).isPositive();
+                                        assertThat(stats.getMax()).isPositive();
+                                    });
+                });
+    }
+
+    private static void assertHistogramHasZeroStatistics(TestingMetricListener listener) {
+        assertHistogramStatistics(
+                listener,
+                histogram -> {
+                    assertThat(histogram.getCount()).isZero();
+                    assertThat(histogram.getStatistics())
+                            .satisfies(
+                                    stats -> {
+                                        assertThat(stats.getMin()).isZero();
+                                        assertThat(stats.getMax()).isZero();
+                                    });
+                });
+    }
+
+    private static void assertHistogramStatistics(
+            TestingMetricListener listener, Consumer<Histogram> histogramConsumer) {
+        assertThat(
+                        listener.getHistogram(
+                                listener.getMetricId(
+                                        KubernetesClientMetricsTest.RESPONSE_LATENCY_ID)))
+                .hasValueSatisfying(histogramConsumer);
     }
 }
