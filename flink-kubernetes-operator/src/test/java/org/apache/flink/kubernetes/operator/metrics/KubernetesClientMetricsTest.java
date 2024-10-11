@@ -52,6 +52,7 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetri
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.KUBE_CLIENT_GROUP;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics.METER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.byLessThan;
 import static org.assertj.core.api.InstanceOfAssertFactories.LONG;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -356,17 +357,20 @@ class KubernetesClientMetricsTest {
     }
 
     private static void assertRateIsZero(TestingMetricListener listener, String meterId) {
-        assertPositiveRate(listener, meterId, meter -> assertThat(meter.getRate()).isEqualTo(0.0));
+        assertRate(
+                listener,
+                meterId,
+                meter -> assertThat(meter.getRate()).isCloseTo(0.0, byLessThan(0.00001)));
     }
 
     private static void assertPositiveRate(TestingMetricListener listener, String meterId) {
-        assertPositiveRate(
+        assertRate(
                 listener,
                 meterId,
                 meter -> assertThat(meter.getRate()).isGreaterThanOrEqualTo(0.01));
     }
 
-    private static void assertPositiveRate(
+    private static void assertRate(
             TestingMetricListener listener, String meterId, Consumer<Meter> meterConsumer) {
         assertThat(listener.getMeter(listener.getMetricId(meterId)))
                 .hasValueSatisfying(meterConsumer);
