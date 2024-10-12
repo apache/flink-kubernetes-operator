@@ -94,7 +94,7 @@ jobs:
       - name: Install cert-manager
         run: |
           kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+          kubectl apply -f e2e-tests/cert-manager.yaml
           kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
       - name: Build image
         run: |
@@ -224,7 +224,7 @@ jobs:
       - name: Install cert-manager
         run: |
           kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+          kubectl apply -f e2e-tests/cert-manager.yaml
           kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
       - name: Build image
         run: |
