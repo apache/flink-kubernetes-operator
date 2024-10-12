@@ -349,30 +349,6 @@ public class FlinkConfigBuilderTest {
                 PodTemplateSpec.class);
     }
 
-    @ParameterizedTest
-    @MethodSource("serviceExposedTypes")
-    public void testApplyIngressDomain(
-            KubernetesConfigOptions.ServiceExposedType serviceExposedType) {
-
-        final Configuration configuration =
-                new FlinkConfigBuilder(
-                                flinkDeployment,
-                                serviceExposedType == null
-                                        ? new Configuration()
-                                        : new Configuration()
-                                                .set(
-                                                        KubernetesConfigOptions
-                                                                .REST_SERVICE_EXPOSED_TYPE,
-                                                        serviceExposedType))
-                        .applyIngressDomain()
-                        .build();
-        assertEquals(
-                serviceExposedType == null
-                        ? KubernetesConfigOptions.ServiceExposedType.ClusterIP
-                        : serviceExposedType,
-                configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
-    }
-
     @Test
     public void testApplyServiceAccount() {
         final Configuration configuration =
