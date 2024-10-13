@@ -249,16 +249,6 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    protected FlinkConfigBuilder applyIngressDomain() {
-        // Web UI
-        if (spec.getIngress() != null) {
-            effectiveConfig.set(
-                    REST_SERVICE_EXPOSED_TYPE,
-                    KubernetesConfigOptions.ServiceExposedType.ClusterIP);
-        }
-        return this;
-    }
-
     protected FlinkConfigBuilder applyServiceAccount() {
         if (spec.getServiceAccount() != null) {
             effectiveConfig.set(
@@ -412,7 +402,6 @@ public class FlinkConfigBuilder {
                 .applyImagePullPolicy()
                 .applyServiceAccount()
                 .applyPodTemplate()
-                .applyIngressDomain()
                 .applyJobManagerSpec()
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
