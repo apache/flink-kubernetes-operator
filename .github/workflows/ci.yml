@@ -77,10 +77,10 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp", "jdk", "jetty", "vertx" ]
-        version: ["v1_20"]
-        mode: ["native"]
-        namespace: ["default"]
-        java-version: ["11", "17", "21"]
+        flink_version: [ { tag: "v1_20", image: "flink:1.20" }]
+        mode: [ "native" ]
+        namespace: [ "default" ]
+        java-version: [ "11", "17", "21" ]
         test:
           - test_application_operations.sh
     steps:
@@ -116,8 +116,8 @@ jobs:
           kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
         run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
+          sed -i "s/image: flink:.*/image: ${{ matrix.flink_version.image }}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.flink_version.tag }}/" e2e-tests/data/*.yaml
           sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
@@ -136,19 +136,27 @@ jobs:
     needs: e2e_smoke_test
     strategy:
       matrix:
-        version: ["v1_20"]
-        mode: ["native", "standalone"]
-        namespace: ["flink"]
-        java-version: ["11"]
-        image: ["flink:1.20"]
+        # Define a single matrix entry for the tag image mapping https://github.com/orgs/community/discussions/24981#discussioncomment-3246068
+        flink_version: [
+          { tag: "v1_20", image: "flink:1.20" },
+          { tag: "v1_18", image: "flink:1.18" },
+          { tag: "v1_19", image: "flink:1.19" },
+          { tag: "v1_17", image: "flink:1.17" },
+          { tag: "v1_16", image: "flink:1.16" } ]
+        mode: [ "native", "standalone" ]
+        namespace: [ "flink" ]
+        java-version: [ "11" ]
         test:
           - test_application_operations.sh
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_dynamic_config.sh
         excludes:
-          - mode: standalone
-            test: test_autoscaler.sh
+          - { mode: standalone, test: test_autoscaler.sh }
+          - { mode: standalone, test: test_dynamic_config.sh }
+          - { flink_version: {tag: "v1_17", image: "flink:1.17"}, test: test_dynamic_config.sh }
+          - { flink_version: {tag: "v1_16", image: "flink:1.16"}, test: test_autoscaler.sh }
+          - { flink_version: {tag: "v1_16", image: "flink:1.16"}, test: test_dynamic_config.sh }
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -182,8 +190,8 @@ jobs:
           kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
         run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
+          sed -i "s/image: flink:.*/image: ${{ matrix.flink_version.image }}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.flink_version.tag }}/" e2e-tests/data/*.yaml
           sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
@@ -202,9 +210,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_20","v1_19","v1_18","v1_17","v1_16"]
-        namespace: ["default"]
-        mode: ["native", "standalone"]
+        # Define a single matrix entry for the tag image mapping https://github.com/orgs/community/discussions/24981#discussioncomment-3246068
+        flink_version: [
+          { tag: "v1_20", image: "flink:1.20" },
+          { tag: "v1_18", image: "flink:1.18" },
+          { tag: "v1_19", image: "flink:1.19" },
+          { tag: "v1_17", image: "flink:1.17" },
+          { tag: "v1_16", image: "flink:1.16" } ]
+        namespace: [ "default" ]
+        mode: [ "native", "standalone" ]
         java-version: [ 11 ]
         test:
           - test_application_kubernetes_ha.sh
@@ -212,45 +226,24 @@ jobs:
           - test_sessionjob_operations.sh
           - test_flink_operator_ha.sh
           - test_snapshot.sh
-        include:
-          - version: v1_20
-            image: flink:1.20
-          - version: v1_19
-            image: flink:1.19
-          - version: v1_18
-            image: flink:1.18
-          - version: v1_17
-            image: flink:1.17
-          - version: v1_16
-            image: flink:1.16
         exclude:
           - mode: standalone
-            test: test_autoscaler.sh
-          - mode: standalone
-            test: test_dynamic_config.sh
-          - mode: standalone
             test: test_snapshot.sh
-          - version: v1_16
-            test: test_autoscaler.sh
-          - version: v1_16
-            test: test_dynamic_config.sh
-          - version: v1_16
+          - flink_version: { tag: "v1_16", image: "flink:1.16" }
             test: test_flink_operator_ha.sh
-          - version: v1_16
+          - flink_version: { tag: "v1_16", image: "flink:1.16" }
             test: test_snapshot.sh
-          - version: v1_17
-            test: test_dynamic_config.sh
-          - version: v1_17
+          - flink_version: { tag: "v1_17", image: "flink:1.17" }
             test: test_flink_operator_ha.sh
-          - version: v1_17
+          - flink_version: { tag: "v1_17", image: "flink:1.17" }
             test: test_snapshot.sh
-          - version: v1_18
+          - flink_version: { tag: "v1_18", image: "flink:1.18" }
             test: test_dynamic_config.sh
-          - version: v1_18
+          - flink_version: { tag: "v1_18", image: "flink:1.18" }
             test: test_flink_operator_ha.sh
-          - version: v1_18
+          - flink_version: { tag: "v1_18", image: "flink:1.18" }
             test: test_snapshot.sh
-          - version: v1_19
+          - flink_version: { tag: "v1_19", image: "flink:1.19" }
             test: test_snapshot.sh
     steps:
       - uses: actions/checkout@v4
@@ -289,8 +282,8 @@ jobs:
           kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
         run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
+          sed -i "s/image: flink:.*/image: ${{ matrix.flink_version.image }}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.flink_version.tag }}/" e2e-tests/data/*.yaml
           sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
