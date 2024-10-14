@@ -38,7 +38,7 @@ under the License.
             --add-opens=java.base/java.util=ALL-UNNAMED
         </surefire.module.config>
         <!-- valid options can be checked at https://central.sonatype.com/search?q=kubernetes-httpclient- currently: okhttp, jdk, jetty, vertx -->
-        <fabric8.httpclinent.impl>okhttp</fabric8.httpclinent.impl>
+        <fabric8.httpclient.impl>okhttp</fabric8.httpclient.impl>
     </properties>
 
     <dependencies>
@@ -69,7 +69,7 @@ under the License.
         <dependency>
             <!-- https://github.com/fabric8io/kubernetes-client/blob/main/doc/FAQ.md#what-artifacts-should-my-project-depend-on-->
             <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-httpclient-${fabric8.httpclinent.impl}</artifactId>
+            <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>
             <version>${fabric8.version}</version>
             <exclusions>
                 <exclusion>
@@ -425,7 +425,7 @@ under the License.
             <id>depend-on-okhttp4</id>
             <activation>
                 <property>
-                    <name>fabric8.httpclinent.impl</name>
+                    <name>fabric8.httpclient.impl</name>
                     <value>okhttp</value>
                 </property>
             </activation>
