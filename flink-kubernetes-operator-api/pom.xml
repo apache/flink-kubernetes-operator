@@ -72,6 +72,10 @@ under the License.
                     <groupId>com.squareup.okhttp3</groupId>
                     <artifactId>*</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>io.fabric8</groupId>
+                    <artifactId>kubernetes-httpclient-okhttp</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
