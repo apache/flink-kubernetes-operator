@@ -113,6 +113,7 @@ jobs:
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       namespace: "flink"
+      create-namespace: true
       mode: ${{ matrix.mode }}
   e2e_ci:
     needs: e2e_smoke_test

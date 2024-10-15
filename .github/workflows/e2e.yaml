@@ -24,6 +24,9 @@ on:
       test:
         required: true
         type: string
+      create-namespace:
+        type: boolean
+        default: false
 
 jobs:
   e2e_test:
@@ -55,9 +58,16 @@ jobs:
           HTTP_CLIENT=${{ inputs.http-client }}
           docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT="${HTTP_CLIENT:-okhttp}" .
           docker images
+      - name: Create ${{ inputs.namespace }} == ${{ inputs.create-namespace }}
+        if: inputs.create_namespace
+        run: |
+          source e2e-tests/utils.sh
+          create_namespace flink
+          echo JAVA_VERSION=${JAVA_VERSION:out of scope}
+          export EXTRA_HELM_INSTALL_ARGS="--set "watchNamespaces={default,flink}""
       - name: Start the operator
         run: |
-          helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
+          helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${EXTRA_HELM_INSTALL_ARGS} 
           kubectl wait --for=condition=Available --timeout=120s -n ${{ inputs.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ inputs.namespace }}
       - name: Run Flink e2e tests
