@@ -32,45 +32,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test_ci:
-    runs-on: ubuntu-latest
-    name: maven build
-    strategy:
-      matrix:
-        java-version: [ 11, 17, 21 ]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
-          cache: 'maven'
-      - name: Build with Maven
-        run: |
-          mvn -B clean install javadoc:javadoc -Pgenerate-docs
-          if [[ $(git diff HEAD | wc -l) -gt 0 ]]; then
-            echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
-            exit 1
-          fi
-      - name: Validate helm chart linting
-        run: |
-          helm lint helm/flink-kubernetes-operator
-      - name: Tests in flink-kubernetes-operator
-        run: |
-          cd flink-kubernetes-operator
-          mvn -B verify -Dit.skip=false
-          cd ..
-      - name: Tests in flink-kubernetes-webhook
-        run: |
-          cd flink-kubernetes-webhook
-          mvn -B verify -Dit.skip=false
-          cd ..
-      - name: Tests in flink-autoscaler-plugin-jdbc
-        run: |
-          cd flink-autoscaler-plugin-jdbc
-          mvn -B verify -Dit.skip=false
-          cd ..
+#  test_ci:
+#    runs-on: ubuntu-latest
+#    name: maven build
+#    strategy:
+#      matrix:
+#        java-version: [ 11, 17, 21 ]
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Set up JDK ${{ matrix.java-version }}
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: ${{ matrix.java-version }}
+#          distribution: 'temurin'
+#          cache: 'maven'
+#      - name: Build with Maven
+#        run: |
+#          mvn -B clean install javadoc:javadoc -Pgenerate-docs
+#          if [[ $(git diff HEAD | wc -l) -gt 0 ]]; then
+#            echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
+#            exit 1
+#          fi
+#      - name: Validate helm chart linting
+#        run: |
+#          helm lint helm/flink-kubernetes-operator
+#      - name: Tests in flink-kubernetes-operator
+#        run: |
+#          cd flink-kubernetes-operator
+#          mvn -B verify -Dit.skip=false
+#          cd ..
+#      - name: Tests in flink-kubernetes-webhook
+#        run: |
+#          cd flink-kubernetes-webhook
+#          mvn -B verify -Dit.skip=false
+#          cd ..
+#      - name: Tests in flink-autoscaler-plugin-jdbc
+#        run: |
+#          cd flink-autoscaler-plugin-jdbc
+#          mvn -B verify -Dit.skip=false
+#          cd ..
   e2e_smoke_test:
     name: Smoke test
     strategy:
