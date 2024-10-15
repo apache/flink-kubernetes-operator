@@ -64,7 +64,7 @@ jobs:
         run: |
           source e2e-tests/utils.sh
           create_namespace flink
-          echo "EXTRA_HELM_INSTALL_ARGS=--set 'watchNamespaces={default,flink}'" >> $GITHUB_OUTPUTS
+          echo 'EXTRA_HELM_INSTALL_ARGS=--set "watchNamespaces={default,flink}"' >> $GITHUB_OUTPUT
       - name: Start the operator
         run: |
           helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ steps.namespace-creator.outputs.EXTRA_HELM_INSTALL_ARGS }} 
