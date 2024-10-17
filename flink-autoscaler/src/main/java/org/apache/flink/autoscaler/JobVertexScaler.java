@@ -416,21 +416,31 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         // Optimize the case where newParallelism <= maxParallelism / 2
                         newParallelism > numKeyGroupsOrPartitions / 2
                                 ? numKeyGroupsOrPartitions
-                                : numKeyGroupsOrPartitions / 2,
+                                : numKeyGroupsOrPartitions / 2 + numKeyGroupsOrPartitions % 2,
                         upperBound);
+
+        boolean scalingRadical =
+                context.getConfiguration().get(AutoScalerOptions.SCALING_RADICAL_ENABLED);
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
         // we try to adjust the parallelism such that it divides
         // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
         for (int p = newParallelism; p <= upperBoundForAlignment; p++) {
-            if (numKeyGroupsOrPartitions % p == 0) {
+            if (numKeyGroupsOrPartitions % p == 0
+                    ||
+                    // When scaling radical is enabled, Try to find the smallest parallelism that
+                    // can satisfy the
+                    // current consumption rate.
+                    (scalingRadical
+                            && numKeyGroupsOrPartitions / p
+                                    < numKeyGroupsOrPartitions / newParallelism)) {
                 return p;
             }
         }
 
-        // When adjust the parallelism after rounding up cannot be evenly divided by
-        // numKeyGroupsOrPartitions, Try to find the smallest parallelism that can satisfy the
-        // current consumption rate.
+        // When adjust the parallelism after rounding up cannot be
+        // find the right degree of parallelism to meet requirements,
+        // Try to find the smallest parallelism that can satisfy the current consumption rate.
         int p = newParallelism;
         for (; p > 0; p--) {
             if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
