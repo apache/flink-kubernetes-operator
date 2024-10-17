@@ -351,4 +351,13 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("quota.cpu"))
                     .withDescription(
                             "Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.");
+
+    public static final ConfigOption<Boolean> SCALING_RADICAL_ENABLED =
+            autoScalerConfig("scaling.radical.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.radical.enabled"))
+                    .withDescription(
+                            "If this option is enabled, The determination of parallelism will be more radical, which"
+                                    + " will maximize resource utilization, but may also cause data skew in some vertex.");
 }

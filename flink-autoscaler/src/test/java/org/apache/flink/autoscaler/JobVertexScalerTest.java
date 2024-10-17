@@ -379,6 +379,37 @@ public class JobVertexScalerTest {
                         maxParallelism,
                         eventCollector,
                         context));
+
+        assertEquals(
+                32,
+                JobVertexScaler.scale(
+                        vertex,
+                        10,
+                        inputShipStrategies,
+                        0,
+                        128,
+                        2.5,
+                        minParallelism,
+                        maxParallelism,
+                        eventCollector,
+                        context));
+
+        // scaling.radical.enabled  = true
+        Configuration conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.SCALING_RADICAL_ENABLED, true);
+        assertEquals(
+                26,
+                JobVertexScaler.scale(
+                        vertex,
+                        10,
+                        inputShipStrategies,
+                        0,
+                        128,
+                        2.5,
+                        minParallelism,
+                        maxParallelism,
+                        eventCollector,
+                        context));
     }
 
     @ParameterizedTest
@@ -1000,6 +1031,37 @@ public class JobVertexScalerTest {
                         200,
                         128,
                         1.4,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        assertEquals(
+                199,
+                JobVertexScaler.scale(
+                        vertex,
+                        24,
+                        List.of(),
+                        199,
+                        256,
+                        4,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        // scaling.radical.enabled  = true
+        Configuration conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.SCALING_RADICAL_ENABLED, true);
+        assertEquals(
+                100,
+                JobVertexScaler.scale(
+                        vertex,
+                        24,
+                        List.of(),
+                        199,
+                        256,
+                        4,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
                         eventCollector,
