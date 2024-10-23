@@ -96,6 +96,11 @@ under the License.
             <version>${log4j.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.apache.flink</groupId>
