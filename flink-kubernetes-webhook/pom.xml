@@ -63,12 +63,6 @@ under the License.
             <artifactId>kubernetes-server-mock</artifactId>
             <version>${fabric8.version}</version>
             <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp3</groupId>
-                    <artifactId>mockwebserver</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
