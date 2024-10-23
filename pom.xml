@@ -196,10 +196,7 @@ under the License.
         <profile>
             <id>depend-on-okhttp4</id>
             <activation>
-                <property>
-                    <name>fabric8.httpclient.impl</name>
-                    <value>okhttp</value>
-                </property>
+                <activeByDefault>true</activeByDefault>
             </activation>
             <dependencies>
                 <dependency>
