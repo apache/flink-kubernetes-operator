@@ -63,6 +63,11 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-client</artifactId>
+        </dependency>
+        
         <!-- Utils -->
         <dependency>
             <groupId>org.apache.commons</groupId>
