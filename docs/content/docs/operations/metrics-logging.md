@@ -79,7 +79,7 @@ The Operator gathers various metrics related to Kubernetes API server access.
 
 #### Kubernetes client metrics by Http Response Code
 
-It's possible to publish additional metrics by Http response code received from API server by setting `kubernetes.client.metrics.http.response.code.groups.enabled` to `true` .
+It's possible to publish additional metrics by Http response code received from API server by setting `kubernetes.operator.kubernetes.client.metrics.http.response.code.groups.enabled` to `true` .
 
 | Scope  | Metrics                                                   | Description                                                                                                                                                  | Type      |
 |--------|-----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
