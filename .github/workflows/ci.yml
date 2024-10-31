@@ -145,6 +145,8 @@ jobs:
         exclude:
           - flink-version: v1_16
             test: test_autoscaler.sh
+          - mode: standalone
+            test: test_autoscaler.sh
           - flink-version: v1_16
             test: test_dynamic_config.sh
           - flink-version: v1_16
