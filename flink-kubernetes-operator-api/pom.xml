@@ -66,19 +66,8 @@ under the License.
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
-            <version>${fabric8.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp3</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.fabric8</groupId>
-                    <artifactId>kubernetes-httpclient-okhttp</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
-
+        
         <!-- Utils -->
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -110,6 +99,11 @@ under the License.
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>${log4j.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
 
         <!-- Test -->
