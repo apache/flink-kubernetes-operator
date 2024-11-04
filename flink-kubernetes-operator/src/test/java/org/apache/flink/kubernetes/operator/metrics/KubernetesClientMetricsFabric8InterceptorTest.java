@@ -346,6 +346,120 @@ class KubernetesClientMetricsFabric8InterceptorTest {
     }
 
     @Test
+    void shouldTrackResponseAsSlowResponseAboveThreshold() {
+        // Given
+        long[] currentTime = {0L};
+        kubernetesClientMetrics =
+                new KubernetesClientMetrics(
+                        KubernetesOperatorMetricGroup.create(
+                                registry, new Configuration(), NAMESPACE, NAME, HOST),
+                        FlinkOperatorConfiguration.fromConfiguration(operatorConfig),
+                        () -> currentTime[0]);
+        final HttpRequest postRequest =
+                builder.post("application/json", "{}").uri("/random").build();
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+        currentTime[0] += kubernetesClientMetrics.getSlowRequestThreshold().toNanos() + 1L;
+
+        // When
+        kubernetesClientMetrics.after(
+                postRequest,
+                new StubHttpResponse(postRequest, Map.of(), 200),
+                (value, asyncBody) -> {});
+
+        // Then
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void shouldNotTrackResponseAsSlowResponseBelowThreshold() {
+        // Given
+        long[] currentTime = {0L};
+        kubernetesClientMetrics =
+                new KubernetesClientMetrics(
+                        KubernetesOperatorMetricGroup.create(
+                                registry, new Configuration(), NAMESPACE, NAME, HOST),
+                        FlinkOperatorConfiguration.fromConfiguration(operatorConfig),
+                        () -> currentTime[0]);
+        final HttpRequest postRequest =
+                builder.post("application/json", "{}").uri("/random").build();
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+        currentTime[0] += kubernetesClientMetrics.getSlowRequestThreshold().toNanos() - 1L;
+
+        // When
+        kubernetesClientMetrics.after(
+                postRequest,
+                new StubHttpResponse(postRequest, Map.of(), 200),
+                (value, asyncBody) -> {});
+
+        // Then
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+    }
+
+    @Test
+    void shouldTrackResponseForFailedConnectionAsSlowResponseAboveThreshold() {
+        // Given
+        long[] currentTime = {0L};
+        kubernetesClientMetrics =
+                new KubernetesClientMetrics(
+                        KubernetesOperatorMetricGroup.create(
+                                registry, new Configuration(), NAMESPACE, NAME, HOST),
+                        FlinkOperatorConfiguration.fromConfiguration(operatorConfig),
+                        () -> currentTime[0]);
+        final HttpRequest postRequest =
+                builder.post("application/json", "{}").uri("/random").build();
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+        currentTime[0] += kubernetesClientMetrics.getSlowRequestThreshold().toNanos() + 1L;
+
+        // When
+        kubernetesClientMetrics.afterConnectionFailure(postRequest, new RuntimeException("kaboom"));
+
+        // Then
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void shouldNotTrackResponseForFailedConnectionAsSlowResponseUnderThreshold() {
+        // Given
+        long[] currentTime = {0L};
+        kubernetesClientMetrics =
+                new KubernetesClientMetrics(
+                        KubernetesOperatorMetricGroup.create(
+                                registry, new Configuration(), NAMESPACE, NAME, HOST),
+                        FlinkOperatorConfiguration.fromConfiguration(operatorConfig),
+                        () -> currentTime[0]);
+        final HttpRequest postRequest =
+                builder.post("application/json", "{}").uri("/random").build();
+        kubernetesClientMetrics.before(builder, postRequest, emptyTags);
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+        currentTime[0] += kubernetesClientMetrics.getSlowRequestThreshold().toNanos() - 1L;
+
+        // When
+        kubernetesClientMetrics.afterConnectionFailure(postRequest, new RuntimeException("kaboom"));
+
+        // Then
+        assertThat(kubernetesClientMetrics.getSlowRequestCounter())
+                .extracting(Counter::getCount)
+                .isEqualTo(0L);
+    }
+
+    @Test
     void shouldTrackFailedRequests() {
         // Given
         final HttpRequest postRequest =
