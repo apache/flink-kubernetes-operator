@@ -85,7 +85,7 @@ generate_olm_bundle() {
 
   yq ea -i ".spec.install.spec.deployments[0].spec.template.spec.initContainers = load(\"${INIT_CONT}\").initContainers" "${CSV_FILE}"
 
-  yq ea -i '.spec.install.spec.deployments[0].spec.template.spec.volumes[1] = {"name": "keystore","emptyDir": {}}' "${CSV_FILE}"
+  yq ea -i '(.spec.install.spec.deployments[0].spec.template.spec.volumes[] | select(.name == "keystore")) = {"name": "keystore","emptyDir": {}}' "${CSV_FILE}"
 
   yq ea -i "(... | select(has(\"image\"))).image =\"${OPERATOR_IMG}\"" "${CSV_FILE}"
 
