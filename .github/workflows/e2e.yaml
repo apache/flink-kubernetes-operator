@@ -27,6 +27,9 @@ on:
       create-namespace:
         type: boolean
         default: false
+      append-java-version:
+        type: boolean
+        default: false
 
 jobs:
   e2e_test:
@@ -77,7 +80,10 @@ jobs:
           kubectl get pods -n ${{ inputs.namespace }}
       - name: Run Flink e2e tests
         run: |
-          FLINK_IMAGE=$(sed --regexp-extended 's/v([0-9]+)_([0-9]+)/flink:\1.\2/g' <<< ${{ inputs.flink-version }} )-java${{ inputs.java-version }}
+          FLINK_IMAGE=$(sed --regexp-extended 's/v([0-9]+)_([0-9]+)/flink:\1.\2/g' <<< ${{ inputs.flink-version }} )
+          if [[ "${{ inputs.append-java-version }}" == "true" ]]; then
+            FLINK_IMAGE=${FLINK_IMAGE}-java${{ inputs.java-version }}
+          fi
           echo FLINK_IMAGE=${FLINK_IMAGE}
           sed -i "s/image: flink:.*/image: ${FLINK_IMAGE}/" e2e-tests/data/*.yaml
           sed -i "s/flinkVersion: .*/flinkVersion: ${{ inputs.flink-version }}/" e2e-tests/data/*.yaml

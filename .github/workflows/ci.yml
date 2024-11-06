@@ -89,19 +89,18 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp" ]
-        java-version: [ "11", "17", "21" ]
+        java-version: [ "11", "17"]
         flink-version:
           - "v1_20"
-          - "v1_18"
           - "v1_19"
-          - "v1_17"
-          - "v1_16"
+          - "v1_18"
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: ${{ matrix.java-version }}
       flink-version: ${{ matrix.flink-version }}
       http-client: ${{ matrix.http-client }}
       test: test_application_operations.sh
+      append-java-version: true
   e2e_namespace_tests:
     name: Alternative namespace tests
     needs: e2e_smoke_test
@@ -109,8 +108,8 @@ jobs:
       matrix:
         flink-version:
           - "v1_20"
-          - "v1_18"
           - "v1_19"
+          - "v1_18"
           - "v1_17"
           - "v1_16"
         mode:
