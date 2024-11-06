@@ -85,6 +85,7 @@ jobs:
       test: test_application_operations.sh
   java_rutimes:
     name: Java runtimes smoke test
+    needs: e2e_smoke_test
     strategy:
       matrix:
         http-client: [ "okhttp" ]
