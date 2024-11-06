@@ -83,7 +83,7 @@ jobs:
       flink-version: "v1_20"
       http-client: ${{ matrix.http-client }}
       test: test_application_operations.sh
-  java_rutimes:
+  java_runtimes:
     name: Java runtimes smoke test
     needs: e2e_smoke_test
     strategy:
