@@ -193,9 +193,13 @@ defaultConfiguration:
   log4j-operator.properties: |+
     # Flink Operator Logging Overrides
     # rootLogger.level = DEBUG
+    # The monitor interval in seconds to enable log4j automatic reconfiguration
+    # monitorInterval = 30
   log4j-console.properties: |+
     # Flink Deployment Logging Overrides
     # rootLogger.level = DEBUG
+    # The monitor interval in seconds to enable log4j automatic reconfiguration
+    # monitorInterval = 30
 ```
 
 {{< hint info >}}
