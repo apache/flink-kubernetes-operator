@@ -62,6 +62,8 @@ operatorPod:
   priorityClassName: null
   annotations: {}
   labels: {}
+  # The env variables only apply to the operator container in the operator pod
+  # TODO: consider making this pod level env variables
   env:
   # - name: ""
   #   value: ""
@@ -96,6 +98,10 @@ operatorPod:
   #     memory: "512Mi"
   webhook:
     resources: {}
+    container:
+      env:
+      # - name: ""
+      #   value: ""
 
 operatorServiceAccount:
   create: true
