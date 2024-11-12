@@ -159,3 +159,32 @@ due to a known bug in Okhttp client. As a workaround before new Okhttp 5.0.0 rel
 for both Flink Operator and Flink Deployment Configuration.
 
 KUBERNETES_DISABLE_HOSTNAME_VERIFICATION=true
+
+## Java options for Java 17 based Job/Task Manager images
+
+### Summary
+
+From Java 17 onwards, Flink requires certain Java options to be supplied in order to function. These are set by default in the operator's `helm` configuration file. 
+However, users should note:
+
+- **Flink 1.19+**: If users want to change the default opts for all Flink deployments, they should **add to** rather than replace these default options (`kubernetes.operator.default-configuration.flink-version.<flink-version>.env.java.default-opts.all`) in the `helm` configuration. They should also avoid overriding `env.java.default-opts.all` in their `FlinkDeployment` configuration and use `env.java.opts.all` for any Java options needed by their own code.
+- **Flink 1.18**: Setting default Java opts is not available in Flink 1.18, so the operator sets `env.java.opts.all` to allow Java 17 to work. If users wish to use Flink 1.18 with Java 17 based images, they should avoid overriding `env.java.default.all` in their `FlinkDeployment` configuration. If custom Java opts are required, then they should include the [upstream Java options](https://github.com/apache/flink/blob/release-1.18.1/flink-dist/src/main/resources/flink-conf.yaml).
+
+### Details
+
+The default Job/Task Manager images use JRE 11 (Eclipse Temurin).
+However, there are official images published which use JRE 17 (e.g. `flink:1.20.0-scala_2.12-java17`) and users can customize the image used in their `FlinkDeployment` which can use a custom JRE.
+
+As Java 17 now requires the use of the module system ([Project Jigsaw](https://openjdk.org/projects/jigsaw/)), the user will need to supply the appropriate `add-exports` and `add-opens` Java options in order for the pre-module system code in Flink to function correctly with Java 17+.
+These options are defined upstream in the default configuration yaml (e.g. for [Flink 1.20](https://github.com/apache/flink/blob/release-1.20.0/flink-dist/src/main/resources/config.yaml)).
+
+Users wanting to run images based on Java 17 could supply a copy of these options by setting `env.java.opts.all`, in their `FlinkDeployment.spec.flinkconfiguration` to the upstream opts list and adding any options their code required.
+However, this has to be done for every deployment.
+To avoid this, the default configuration file used for `helm` sets the [`env.java.default-opts.all`](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/config/#env-java-default-opts-all) config to the upstream Flink Java options for the given Flink version.
+The default opts are appended to any user supplied options via `env.java.opts.all`.
+Therefore, users can continue to set Java options for their own code in their `FlinkDeployment`s and those required for Flink's core operations will be appended automatically.
+
+The exception to the above is Flink 1.18, as the `env.java.default-opts.all` option is not available in that version.
+For 1.18 the `helm` default config sets the `env.java.opts.all` directly.
+This will allow Java 17 based images to work correctly.
+However, if a user sets their own `env.java.opts.all` in their `FlinkDeployment`, then they will need to copy the [upstream Java options](https://github.com/apache/flink/blob/release-1.18.1/flink-dist/src/main/resources/flink-conf.yaml) into their list.
