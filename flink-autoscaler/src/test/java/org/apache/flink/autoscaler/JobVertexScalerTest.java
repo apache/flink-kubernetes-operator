@@ -323,8 +323,8 @@ public class JobVertexScalerTest {
     @MethodSource("adjustmentInputsProvider")
     public void testParallelismComputationWithAdjustment(
             Collection<ShipStrategy> inputShipStrategies) {
-        final int minParallelism = 1;
-        final int maxParallelism = Integer.MAX_VALUE;
+        final int parallelismLowerLimit = 1;
+        final int parallelismUpperLimit = Integer.MAX_VALUE;
         final var vertex = new JobVertexID();
 
         assertEquals(
@@ -336,8 +336,8 @@ public class JobVertexScalerTest {
                         0,
                         36,
                         0.8,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
         assertEquals(
@@ -349,8 +349,8 @@ public class JobVertexScalerTest {
                         0,
                         128,
                         1.5,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
         assertEquals(
@@ -362,8 +362,8 @@ public class JobVertexScalerTest {
                         0,
                         720,
                         1.3,
-                        minParallelism,
-                        maxParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
                         eventCollector,
                         context));
         assertEquals(
@@ -375,7 +375,44 @@ public class JobVertexScalerTest {
                         0,
                         720,
                         Integer.MAX_VALUE,
-                        minParallelism,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        int maxParallelism = 128;
+        double scaleFactor = 2.5;
+        int currentParallelism = 10;
+        int expectedEvenly = 32;
+        int expectedMaximumUtilization = 26;
+        assertEquals(
+                expectedEvenly,
+                JobVertexScaler.scale(
+                        vertex,
+                        currentParallelism,
+                        inputShipStrategies,
+                        0,
+                        maxParallelism,
+                        scaleFactor,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        Configuration conf = context.getConfiguration();
+        conf.set(
+                AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
+                JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+        assertEquals(
+                expectedMaximumUtilization,
+                JobVertexScaler.scale(
+                        vertex,
+                        currentParallelism,
+                        inputShipStrategies,
+                        0,
+                        maxParallelism,
+                        scaleFactor,
+                        parallelismLowerLimit,
                         maxParallelism,
                         eventCollector,
                         context));
@@ -1000,6 +1037,47 @@ public class JobVertexScalerTest {
                         200,
                         128,
                         1.4,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        int partition = 199;
+        double scaleFactor = 4;
+        int currentParallelism = 24;
+        int expectedEvenly = 199;
+        // At MAXIMIZE_UTILISATION, 99 subtasks consume two partitions,
+        // one subtask consumes one partition.
+        int expectedMaximumUtilization = 100;
+
+        assertEquals(
+                expectedEvenly,
+                JobVertexScaler.scale(
+                        vertex,
+                        currentParallelism,
+                        List.of(),
+                        partition,
+                        parallelismUpperLimit,
+                        scaleFactor,
+                        parallelismLowerLimit,
+                        parallelismUpperLimit,
+                        eventCollector,
+                        context));
+
+        Configuration conf = context.getConfiguration();
+        conf.set(
+                AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
+                JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+
+        assertEquals(
+                expectedMaximumUtilization,
+                JobVertexScaler.scale(
+                        vertex,
+                        currentParallelism,
+                        List.of(),
+                        partition,
+                        parallelismUpperLimit,
+                        scaleFactor,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
                         eventCollector,

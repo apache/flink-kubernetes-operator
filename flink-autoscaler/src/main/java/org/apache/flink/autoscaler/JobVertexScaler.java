@@ -25,6 +25,8 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DescribedEnum;
+import org.apache.flink.configuration.description.InlineElement;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -41,10 +43,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALE_DOWN_INTERVAL;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
@@ -54,6 +58,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_SOURCE_PARTI
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.configuration.description.TextElement.text;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /** Component responsible for computing vertex parallelism based on the scaling metrics. */
@@ -411,26 +416,30 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         var numKeyGroupsOrPartitions =
                 numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
-        var upperBoundForAlignment =
-                Math.min(
-                        // Optimize the case where newParallelism <= maxParallelism / 2
-                        newParallelism > numKeyGroupsOrPartitions / 2
-                                ? numKeyGroupsOrPartitions
-                                : numKeyGroupsOrPartitions / 2,
-                        upperBound);
+
+        KeyGroupOrPartitionsAdjustMode mode =
+                context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
+
+        var upperBoundForAlignment = Math.min(numKeyGroupsOrPartitions, upperBound);
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
         // we try to adjust the parallelism such that it divides
         // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
         for (int p = newParallelism; p <= upperBoundForAlignment; p++) {
-            if (numKeyGroupsOrPartitions % p == 0) {
+            if (numKeyGroupsOrPartitions % p == 0
+                    ||
+                    // When Mode is MAXIMIZE_UTILISATION , Try to find the smallest parallelism
+                    // that can satisfy the current consumption rate.
+                    (mode == MAXIMIZE_UTILISATION
+                            && numKeyGroupsOrPartitions / p
+                                    < numKeyGroupsOrPartitions / newParallelism)) {
                 return p;
             }
         }
 
-        // When adjust the parallelism after rounding up cannot be evenly divided by
-        // numKeyGroupsOrPartitions, Try to find the smallest parallelism that can satisfy the
-        // current consumption rate.
+        // When adjusting the parallelism after rounding up cannot
+        // find the parallelism to meet requirements.
+        // Try to find the smallest parallelism that can satisfy the current consumption rate.
         int p = newParallelism;
         for (; p > 0; p--) {
             if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
@@ -464,5 +473,30 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @VisibleForTesting
     protected void setClock(Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
+    }
+
+    /** The mode of the key group or parallelism adjustment. */
+    public enum KeyGroupOrPartitionsAdjustMode implements DescribedEnum {
+        EVENLY_SPREAD(
+                "This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks"
+                        + ". It is particularly effective for source vertices that are aware of partition counts or vertices after "
+                        + "'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew."),
+
+        MAXIMIZE_UTILISATION(
+                "This model is to maximize resource utilization. In this mode, an attempt is made to set"
+                        + " the parallelism that meets the current consumption rate requirements. It is not enforced "
+                        + "that the number of key groups or partitions is divisible by the parallelism."),
+        ;
+
+        private final InlineElement description;
+
+        KeyGroupOrPartitionsAdjustMode(String description) {
+            this.description = text(description);
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return description;
+        }
     }
 }
