@@ -136,8 +136,10 @@ webhooks:
         scope: "Namespaced"
         operations:
           - CREATE
+          - UPDATE
         resources:
           - flinksessionjobs
+          - flinkdeployments
     sideEffects: None
     {{- if .Values.watchNamespaces }}
     namespaceSelector:
