@@ -56,6 +56,10 @@ To override single parameters you can use `--set`, for example:
 ```
 helm install --set image.repository=apache/flink-kubernetes-operator --set image.tag={{< stable >}}{{< version >}}{{< /stable >}}{{< unstable >}}latest{{< /unstable >}} flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
+Note, you should escape special characters in your `--set` lines, for example:
+```
+helm install --set defaultConfiguration."log4j-operator\.properties"=rootLogger.level\=DEBUG flink-kubernetes-operator helm/flink-kubernetes-operator
+```
 
 You can also provide your custom values file by using the `-f` flag:
 ```
