@@ -36,6 +36,8 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import org.apache.flink.shaded.curator5.com.google.common.base.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +55,7 @@ import java.util.SortedMap;
 import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.NO_CHANGE;
 import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.REQUIRED_CHANGE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_EXECUTION_DISABLED_REASON;
@@ -61,6 +64,7 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_S
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
@@ -238,6 +242,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+
+        if (context.getConfiguration().get(PROCESSING_RATE_BACKPROPAGATION_ENABLED)) {
+            backpropagateProcessingRate(context, evaluatedMetrics, jobTopology);
+        }
+
         evaluatedMetrics
                 .getVertexMetrics()
                 .forEach(
@@ -282,6 +291,73 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         return out;
+    }
+
+    private void backpropagateProcessingRate(
+            Context context, EvaluatedMetrics evaluatedMetrics, JobTopology jobTopology) {
+        var conf = context.getConfiguration();
+        double impact = conf.get(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_IMPACT);
+        Preconditions.checkState(
+                0 <= impact && impact <= 1.0, "Backpropagation impact should be in range [0, 1]");
+        var propagationRate = new HashMap<JobVertexID, Double>();
+        var excludeVertexIdList =
+                context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+        var vertexIterator =
+                jobTopology
+                        .getStrongTopologicalOrder()
+                        .listIterator(jobTopology.getStrongTopologicalOrder().size());
+
+        // backpropagate scale factors
+        while (vertexIterator.hasPrevious()) {
+            var vertex = vertexIterator.previous();
+            jobVertexScaler.backpropagateRate(
+                    conf,
+                    vertex,
+                    jobTopology,
+                    evaluatedMetrics,
+                    propagationRate,
+                    excludeVertexIdList);
+        }
+
+        // use an extra map to not lose precision
+        Map<JobVertexID, Double> adjustedDataRate = new HashMap<>();
+
+        // re-evaluating vertices capacity
+        // Target data rate metric is rewritten for parallelism evaluation
+        for (var vertex : jobTopology.getVerticesInTopologicalOrder()) {
+            double newTargetDataRate = 0.0;
+
+            if (jobTopology.isSource(vertex)) {
+                double targetDateRate =
+                        evaluatedMetrics
+                                .getVertexMetrics()
+                                .get(vertex)
+                                .get(TARGET_DATA_RATE)
+                                .getAverage();
+
+                // linear interpolation between adjusted value and initial
+                newTargetDataRate =
+                        targetDateRate
+                                * (impact * propagationRate.getOrDefault(vertex, 1.0)
+                                        + 1.0
+                                        - impact);
+            } else {
+                for (var input : jobTopology.getVertexInfos().get(vertex).getInputs().keySet()) {
+                    newTargetDataRate +=
+                            adjustedDataRate.get(input)
+                                    * jobTopology
+                                            .getVertexInfos()
+                                            .get(vertex)
+                                            .getInputRatios()
+                                            .get(input);
+                }
+            }
+            adjustedDataRate.put(vertex, newTargetDataRate);
+            evaluatedMetrics
+                    .getVertexMetrics()
+                    .get(vertex)
+                    .put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(newTargetDataRate));
+        }
     }
 
     private boolean isJobUnderMemoryPressure(
