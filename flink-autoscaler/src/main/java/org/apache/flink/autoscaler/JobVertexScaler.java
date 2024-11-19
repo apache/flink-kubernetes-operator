@@ -416,11 +416,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         var numKeyGroupsOrPartitions =
                 numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
+        var upperBoundForAlignment = Math.min(numKeyGroupsOrPartitions, upperBound);
 
         KeyGroupOrPartitionsAdjustMode mode =
                 context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
-
-        var upperBoundForAlignment = Math.min(numKeyGroupsOrPartitions, upperBound);
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
         // we try to adjust the parallelism such that it divides
