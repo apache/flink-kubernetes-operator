@@ -189,6 +189,12 @@
             <td>Time interval to resend the identical event</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scaling.key-group.partitions.adjust.mode</h5></td>
+            <td style="word-wrap: break-word;">EVENLY_SPREAD</td>
+            <td><p>Enum</p></td>
+            <td>How to adjust the parallelism of Source vertex or upstream shuffle is keyBy<br /><br />Possible values:<ul><li>"EVENLY_SPREAD": This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks. It is particularly effective for source vertices that are aware of partition counts or vertices after 'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew.</li><li>"MAXIMIZE_UTILISATION": This model is to maximize resource utilization. In this mode, an attempt is made to set the parallelism that meets the current consumption rate requirements. It is not enforced that the number of key groups or partitions is divisible by the parallelism.</li></ul></td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.stabilization.interval</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>

@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.config;
 
+import org.apache.flink.autoscaler.JobVertexScaler;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -351,4 +352,16 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("quota.cpu"))
                     .withDescription(
                             "Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.");
+
+    public static final ConfigOption<JobVertexScaler.KeyGroupOrPartitionsAdjustMode>
+            SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE =
+                    autoScalerConfig("scaling.key-group.partitions.adjust.mode")
+                            .enumType(JobVertexScaler.KeyGroupOrPartitionsAdjustMode.class)
+                            .defaultValue(
+                                    JobVertexScaler.KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
+                            .withFallbackKeys(
+                                    oldOperatorConfigKey(
+                                            "scaling.key-group.partitions.adjust.mode"))
+                            .withDescription(
+                                    "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
 }
