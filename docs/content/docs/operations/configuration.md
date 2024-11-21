@@ -52,21 +52,43 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 ### Flink Version and Namespace specific defaults
 
-The operator also supports default configuration overrides for selected Flink versions and namespaces. This can be important if some behaviour changed across Flink versions or we want to treat certain namespaces differently (such as reconcile it more or less frequently etc).
+The operator also supports default configuration overrides for selected Flink versions and namespaces. This can be important if some behaviour changed across Flink versions, or we want to treat certain namespaces differently (such as reconcile it more or less frequently etc.):
 
 ```
-# Flink Version specific defaults 
-kubernetes.operator.default-configuration.flink-version.v1_17.k1: v1
-kubernetes.operator.default-configuration.flink-version.v1_17.k2: v2
-kubernetes.operator.default-configuration.flink-version.v1_17.k3: v3
-
 # Namespace specific defaults
 kubernetes.operator.default-configuration.namespace.ns1.k1: v1
 kubernetes.operator.default-configuration.namespace.ns1.k2: v2
 kubernetes.operator.default-configuration.namespace.ns2.k1: v1
 ```
 
-Flink version specific defaults will have a higher precedence so namespace defaults would be overridden by the same key.
+Flink version specific defaults have a higher precedence, so namespace defaults will be overridden by version defaults with the same key.
+
+Flink version defaults can also be suffixed by a `+` character after the version string. This indicates that the default applies to this Flink version and any higher version.
+
+For example, taking the configuration below:
+```
+# Flink Version specific defaults 
+kubernetes.operator.default-configuration.flink-version.v1_16+.k4: v4
+kubernetes.operator.default-configuration.flink-version.v1_16+.k5: v5
+kubernetes.operator.default-configuration.flink-version.v1_17.k1: v1
+kubernetes.operator.default-configuration.flink-version.v1_17.k2: v2
+kubernetes.operator.default-configuration.flink-version.v1_17.k3: v3
+kubernetes.operator.default-configuration.flink-version.v1_17.k5: v5.1
+```
+This would result in the defaults for Flink 1.17 being:
+```
+k1: v1
+k2: v2
+k3: v3
+k4: v4
+k5: v5.1
+```
+
+**Note**: The configuration above sets `k5: v5` for all versions >= 1.16. 
+However, this is overridden for Flink 1.17 to `v5.1`. 
+But if you ran a Flink 1.18 deployment with this configuration, then the value of `k5` would be `v5` not `v5.1`. The `k5` override only applies to Flink 1.17. 
+Adding a `+` to the Flink 1.17 `k5` default would apply the new value to all future versions.
+
 
 ## Dynamic Operator Configuration
 
