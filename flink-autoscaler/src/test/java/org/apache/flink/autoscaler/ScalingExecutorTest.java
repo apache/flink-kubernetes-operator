@@ -133,13 +133,13 @@ public class ScalingExecutorTest {
 
         var evaluated = Map.of(op1, evaluated(1, 70, 100));
         assertFalse(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
 
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.2);
         evaluated = Map.of(op1, evaluated(1, 70, 100));
         assertTrue(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
         assertTrue(getScaledParallelism(stateStore, context).isEmpty());
 
@@ -150,7 +150,7 @@ public class ScalingExecutorTest {
                         op2, evaluated(1, 85, 100));
 
         assertFalse(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
 
         evaluated =
@@ -158,13 +158,13 @@ public class ScalingExecutorTest {
                         op1, evaluated(1, 70, 100),
                         op2, evaluated(1, 70, 100));
         assertTrue(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
 
         // Test with backlog based scaling
         evaluated = Map.of(op1, evaluated(1, 70, 100, 15));
         assertFalse(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
     }
 
@@ -186,11 +186,11 @@ public class ScalingExecutorTest {
                         op1, evaluated(1, 70, 100),
                         op2, evaluated(1, 85, 100));
 
-        assertTrue(ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(evaluated, Set.of()));
+        assertTrue(ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of()));
 
         // One vertex is required, and it's out of range.
         assertFalse(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(evaluated, Set.of(op1)));
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op1)));
 
         // One vertex is required, and it's within the range.
         // The op2 is optional, so it shouldn't affect the scaling even if it is out of range,
@@ -200,7 +200,7 @@ public class ScalingExecutorTest {
                         op1, evaluated(1, 65, 100),
                         op2, evaluated(1, 85, 100));
         assertTrue(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(evaluated, Set.of(op1)));
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op1)));
     }
 
     @Test
@@ -225,7 +225,7 @@ public class ScalingExecutorTest {
                         dummyGlobalMetrics);
 
         assertTrue(
-                ScalingExecutor.allRequiredVerticesWithinUtilizationTarget(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated.getVertexMetrics(), evaluated.getVertexMetrics().keySet()));
 
         // Execute the full scaling path

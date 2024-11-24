@@ -184,7 +184,7 @@ public abstract class AbstractAutoScalerStateStoreTest<
         assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
         assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isEmpty();
         assertThat(stateStore.getScalingTracking(ctx).getScalingRecords()).isEmpty();
-        assertThat(stateStore.getDelayedScaleDown(ctx).getFirstTriggerTime()).isEmpty();
+        assertThat(stateStore.getDelayedScaleDown(ctx).getDelayedVertices()).isEmpty();
 
         stateStore.storeCollectedMetrics(
                 ctx, new TreeMap<>(Map.of(Instant.now(), new CollectedMetrics())));
@@ -206,16 +206,19 @@ public abstract class AbstractAutoScalerStateStoreTest<
                 Instant.now().minus(Duration.ofHours(1)), new ScalingRecord());
         stateStore.storeScalingTracking(ctx, scalingTracking);
 
-        var firstTriggerTime = Map.of(new JobVertexID(), Instant.now());
-        stateStore.storeDelayedScaleDown(ctx, new DelayedScaleDown(firstTriggerTime));
+        var delayedScaleDown = new DelayedScaleDown();
+        delayedScaleDown.triggerScaleDown(new JobVertexID(), Instant.now(), 10);
+        delayedScaleDown.triggerScaleDown(new JobVertexID(), Instant.now().plusSeconds(10), 12);
+
+        stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
 
         assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
         assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
         assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
         assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isNotEmpty();
         assertThat(stateStore.getScalingTracking(ctx)).isEqualTo(scalingTracking);
-        assertThat(stateStore.getDelayedScaleDown(ctx).getFirstTriggerTime())
-                .isEqualTo(firstTriggerTime);
+        assertThat(stateStore.getDelayedScaleDown(ctx).getDelayedVertices())
+                .isEqualTo(delayedScaleDown.getDelayedVertices());
 
         stateStore.flush(ctx);
 
@@ -224,8 +227,8 @@ public abstract class AbstractAutoScalerStateStoreTest<
         assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
         assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isNotEmpty();
         assertThat(stateStore.getScalingTracking(ctx)).isEqualTo(scalingTracking);
-        assertThat(stateStore.getDelayedScaleDown(ctx).getFirstTriggerTime())
-                .isEqualTo(firstTriggerTime);
+        assertThat(stateStore.getDelayedScaleDown(ctx).getDelayedVertices())
+                .isEqualTo(delayedScaleDown.getDelayedVertices());
 
         stateStore.clearAll(ctx);
 
@@ -234,6 +237,6 @@ public abstract class AbstractAutoScalerStateStoreTest<
         assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
         assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isEmpty();
         assertThat(stateStore.getScalingTracking(ctx).getScalingRecords()).isEmpty();
-        assertThat(stateStore.getDelayedScaleDown(ctx).getFirstTriggerTime()).isEmpty();
+        assertThat(stateStore.getDelayedScaleDown(ctx).getDelayedVertices()).isEmpty();
     }
 }
