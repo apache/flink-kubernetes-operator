@@ -237,7 +237,7 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
         try {
             return deserializeDelayedScaleDown(delayedScaleDown.get());
         } catch (JacksonException e) {
-            LOG.error(
+            LOG.warn(
                     "Could not deserialize delayed scale down, possibly the format changed. Discarding...",
                     e);
             jdbcStateStore.removeSerializedState(getSerializeKey(jobContext), DELAYED_SCALE_DOWN);
@@ -330,13 +330,11 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     private static String serializeDelayedScaleDown(DelayedScaleDown delayedScaleDown)
             throws JacksonException {
-        return YAML_MAPPER.writeValueAsString(delayedScaleDown.getFirstTriggerTime());
+        return YAML_MAPPER.writeValueAsString(delayedScaleDown);
     }
 
     private static DelayedScaleDown deserializeDelayedScaleDown(String delayedScaleDown)
             throws JacksonException {
-        Map<JobVertexID, Instant> firstTriggerTime =
-                YAML_MAPPER.readValue(delayedScaleDown, new TypeReference<>() {});
-        return new DelayedScaleDown(firstTriggerTime);
+        return YAML_MAPPER.readValue(delayedScaleDown, new TypeReference<>() {});
     }
 }

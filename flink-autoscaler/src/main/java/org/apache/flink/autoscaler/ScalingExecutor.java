@@ -45,13 +45,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 
-import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.NO_CHANGE;
-import static org.apache.flink.autoscaler.JobVertexScaler.ParallelismChangeType.REQUIRED_CHANGE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
@@ -181,15 +178,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     @VisibleForTesting
-    static boolean allRequiredVerticesWithinUtilizationTarget(
+    static boolean allChangedVerticesWithinUtilizationTarget(
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Set<JobVertexID> requiredVertices) {
-        // All vertices' ParallelismChange is optional, rescaling will be ignored.
-        if (requiredVertices.isEmpty()) {
+            Set<JobVertexID> changedVertices) {
+        // No vertices with changed parallelism.
+        if (changedVertices.isEmpty()) {
             return true;
         }
 
-        for (JobVertexID vertex : requiredVertices) {
+        for (JobVertexID vertex : changedVertices) {
             var metrics = evaluatedMetrics.get(vertex);
 
             double trueProcessingRate = metrics.get(TRUE_PROCESSING_RATE).getAverage();
@@ -234,7 +231,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
-        var requiredVertices = new HashSet<JobVertexID>();
 
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
@@ -260,10 +256,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                         v, Collections.emptySortedMap()),
                                                 restartTime,
                                                 delayedScaleDown);
-                                if (NO_CHANGE == parallelismChange.getChangeType()) {
+                                if (parallelismChange.isNoChange()) {
                                     return;
-                                } else if (REQUIRED_CHANGE == parallelismChange.getChangeType()) {
-                                    requiredVertices.add(v);
                                 }
                                 out.put(
                                         v,
@@ -274,10 +268,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                             }
                         });
 
-        // If the Utilization of all required tasks is within range, we can skip scaling.
-        // It means that if only optional tasks are out of scope, we still need to ignore scale.
-        if (allRequiredVerticesWithinUtilizationTarget(
-                evaluatedMetrics.getVertexMetrics(), requiredVertices)) {
+        // If the Utilization of all tasks is within range, we can skip scaling.
+        if (allChangedVerticesWithinUtilizationTarget(
+                evaluatedMetrics.getVertexMetrics(), out.keySet())) {
             return Map.of();
         }
 

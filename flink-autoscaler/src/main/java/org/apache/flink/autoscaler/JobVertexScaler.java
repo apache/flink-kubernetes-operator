@@ -88,29 +88,20 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         this.autoScalerEventHandler = autoScalerEventHandler;
     }
 
-    /** The parallelism change type of {@link ParallelismChange}. */
-    public enum ParallelismChangeType {
-        NO_CHANGE,
-        REQUIRED_CHANGE,
-        OPTIONAL_CHANGE;
-    }
-
-    /**
-     * The rescaling will be triggered if any vertex's ParallelismChange is required. This means
-     * that if all vertices' ParallelismChange is optional, rescaling will be ignored.
-     */
+    /** The rescaling will be triggered if any vertex's {@link ParallelismChange} is changed. */
     @Getter
     public static class ParallelismChange {
 
-        private static final ParallelismChange NO_CHANGE =
-                new ParallelismChange(ParallelismChangeType.NO_CHANGE, -1);
+        private static final ParallelismChange NO_CHANGE = new ParallelismChange(-1);
 
-        private final ParallelismChangeType changeType;
         private final int newParallelism;
 
-        private ParallelismChange(ParallelismChangeType changeType, int newParallelism) {
-            this.changeType = changeType;
+        private ParallelismChange(int newParallelism) {
             this.newParallelism = newParallelism;
+        }
+
+        public boolean isNoChange() {
+            return this == NO_CHANGE;
         }
 
         @Override
@@ -122,30 +113,24 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 return false;
             }
             ParallelismChange that = (ParallelismChange) o;
-            return changeType == that.changeType && newParallelism == that.newParallelism;
+            return newParallelism == that.newParallelism;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(changeType, newParallelism);
+            return Objects.hash(newParallelism);
         }
 
         @Override
         public String toString() {
-            return "ParallelismChange{"
-                    + "changeType="
-                    + changeType
-                    + ", newParallelism="
-                    + newParallelism
-                    + '}';
+            return isNoChange()
+                    ? "NoParallelismChange"
+                    : "ParallelismChange{newParallelism=" + newParallelism + '}';
         }
 
-        public static ParallelismChange required(int newParallelism) {
-            return new ParallelismChange(ParallelismChangeType.REQUIRED_CHANGE, newParallelism);
-        }
-
-        public static ParallelismChange optional(int newParallelism) {
-            return new ParallelismChange(ParallelismChangeType.OPTIONAL_CHANGE, newParallelism);
+        public static ParallelismChange build(int newParallelism) {
+            checkArgument(newParallelism > 0, "The parallelism should be greater than 0.");
+            return new ParallelismChange(newParallelism);
         }
 
         public static ParallelismChange noChange() {
@@ -263,7 +248,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
             // If we don't have past scaling actions for this vertex, don't block scale up.
             if (history.isEmpty()) {
-                return ParallelismChange.required(newParallelism);
+                return ParallelismChange.build(newParallelism);
             }
 
             var lastSummary = history.get(history.lastKey());
@@ -275,7 +260,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 return ParallelismChange.noChange();
             }
 
-            return ParallelismChange.required(newParallelism);
+            return ParallelismChange.build(newParallelism);
         } else {
             return applyScaleDownInterval(delayedScaleDown, vertex, conf, newParallelism);
         }
@@ -289,21 +274,26 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         var scaleDownInterval = conf.get(SCALE_DOWN_INTERVAL);
         if (scaleDownInterval.toMillis() <= 0) {
             // The scale down interval is disable, so don't block scaling.
-            return ParallelismChange.required(newParallelism);
+            return ParallelismChange.build(newParallelism);
         }
 
-        var firstTriggerTime = delayedScaleDown.getFirstTriggerTimeForVertex(vertex);
-        if (firstTriggerTime.isEmpty()) {
-            LOG.info("The scale down of {} is delayed by {}.", vertex, scaleDownInterval);
-            delayedScaleDown.updateTriggerTime(vertex, clock.instant());
-            return ParallelismChange.optional(newParallelism);
-        }
+        var now = clock.instant();
+        var delayedScaleDownInfo = delayedScaleDown.triggerScaleDown(vertex, now, newParallelism);
 
-        if (clock.instant().isBefore(firstTriggerTime.get().plus(scaleDownInterval))) {
-            LOG.debug("Try to skip immediate scale down within scale-down interval for {}", vertex);
-            return ParallelismChange.optional(newParallelism);
+        // Never scale down within scale down interval
+        if (now.isBefore(delayedScaleDownInfo.getFirstTriggerTime().plus(scaleDownInterval))) {
+            if (now.equals(delayedScaleDownInfo.getFirstTriggerTime())) {
+                LOG.info("The scale down of {} is delayed by {}.", vertex, scaleDownInterval);
+            } else {
+                LOG.debug(
+                        "Try to skip immediate scale down within scale-down interval for {}",
+                        vertex);
+            }
+            return ParallelismChange.noChange();
         } else {
-            return ParallelismChange.required(newParallelism);
+            // Using the maximum parallelism within the scale down interval window instead of the
+            // latest parallelism when scaling down
+            return ParallelismChange.build(delayedScaleDownInfo.getMaxRecommendedParallelism());
         }
     }
 
