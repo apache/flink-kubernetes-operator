@@ -1114,6 +1114,30 @@ public class JobVertexScalerTest {
                 .isEqualTo(
                         String.format(
                                 SCALE_LIMITED_MESSAGE_FORMAT, jobVertexID, 20, 15, 15, 200, 1));
+        // small changes for scaleFactor, verify that the event messageKey is the same.
+        var smallChangesForScaleFactor = evaluated(10, 199, 100);
+        smallChangesForScaleFactor.put(
+                ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(15));
+        assertEquals(
+                ParallelismChange.required(15),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        jobVertexID,
+                        List.of(),
+                        smallChangesForScaleFactor,
+                        history,
+                        restartTime,
+                        delayedScaleDown));
+        assertEquals(1, eventCollector.events.size());
+        TestingEventCollector.Event<JobID, JobAutoScalerContext<JobID>>
+                smallChangesForScaleFactorLimitedEvent = eventCollector.events.poll();
+        assertThat(partitionLimitedEvent.getMessage())
+                .isEqualTo(
+                        String.format(
+                                SCALE_LIMITED_MESSAGE_FORMAT, jobVertexID, 20, 15, 15, 200, 1));
+        assertThat(smallChangesForScaleFactorLimitedEvent).isNotNull();
+        assertThat(partitionLimitedEvent.getMessageKey())
+                .isEqualTo(smallChangesForScaleFactorLimitedEvent.getMessageKey());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
