@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -86,6 +87,7 @@ public class FlinkConfigManager {
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
+    private volatile Map<FlinkVersion, List<String>> relevantFlinkVersionPrefixes;
 
     protected static final Pattern FLINK_VERSION_PATTERN =
             Pattern.compile(
@@ -112,6 +114,7 @@ public class FlinkConfigManager {
         this.namespaceListener = namespaceListener;
         Duration cacheTimeout =
                 defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
+        this.relevantFlinkVersionPrefixes = new HashMap<>();
         this.cache =
                 CacheBuilder.newBuilder()
                         .maximumSize(
@@ -182,6 +185,11 @@ public class FlinkConfigManager {
         // We do not invalidate the cache to avoid deleting currently used temp files,
         // simply bump the version
         this.defaultConfigVersion.incrementAndGet();
+
+        // We clear the cached relevant Flink version prefixes as the base config may include new
+        // version overrides.
+        // This will trigger a regeneration of the prefixes in the next call to getDefaultConfig.
+        relevantFlinkVersionPrefixes = new HashMap<>();
     }
 
     /**
@@ -292,10 +300,13 @@ public class FlinkConfigManager {
         }
 
         if (flinkVersion != null) {
-            // Get a list of flink version configs that apply to this current flink version
-            // That will include all versions that are equal to or lower than the current one
-            // that are suffixed by a `+`
-            List<String> versionPrefixes = getRelevantVersionPrefixes(baseConfMap, flinkVersion);
+            // Fetch or create a list of Flink version configs that apply to this current
+            // FlinkVersion. That will include all versions that are equal to or lower than
+            // the current one that are suffixed by a `+`
+            List<String> versionPrefixes =
+                    relevantFlinkVersionPrefixes.computeIfAbsent(
+                            flinkVersion,
+                            fv -> getRelevantVersionPrefixes(baseConfMap, flinkVersion));
 
             // The version prefixes are returned in ascending order of Flink version, so configs
             // attached to newer versions will override older ones. For example v1_16+.conf1 will
