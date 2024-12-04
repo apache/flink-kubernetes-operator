@@ -65,6 +65,10 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
+
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
 
@@ -605,9 +609,19 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d),
                 validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
-                validateNumber(flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION, 0.0d),
+                validateNumber(flinkConfiguration, UTILIZATION_TARGET, 0.0d, 1.0d),
                 validateNumber(
                         flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
+                validateNumber(
+                        flinkConfiguration,
+                        UTILIZATION_MAX,
+                        flinkConfiguration.get(UTILIZATION_TARGET),
+                        1.0d),
+                validateNumber(
+                        flinkConfiguration,
+                        UTILIZATION_MIN,
+                        0.0d,
+                        flinkConfiguration.get(UTILIZATION_TARGET)),
                 CalendarUtils.validateExcludedPeriods(flinkConfiguration));
     }
 

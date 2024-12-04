@@ -86,8 +86,9 @@ public class RecommendedParallelismTest {
         defaultConf.set(AutoScalerOptions.SCALING_ENABLED, true);
         defaultConf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         defaultConf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
-        defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.8);
-        defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.8);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_MAX, 0.9);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_MIN, 0.7);
         defaultConf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
 
         autoscaler =

@@ -89,13 +89,17 @@ public class AutoScalerOptions {
                                     + "seconds suffix, daily expression's formation is startTime-endTime, such as 9:30:30-10:50:20, when exclude from 9:30:30-10:50:20 in Monday and Thursday "
                                     + "we can express it as 9:30:30-10:50:20 && * * * ? * 2,5");
 
-    public static final ConfigOption<Double> TARGET_UTILIZATION =
-            autoScalerConfig("target.utilization")
+    public static final ConfigOption<Double> UTILIZATION_TARGET =
+            autoScalerConfig("utilization.target")
                     .doubleType()
                     .defaultValue(0.7)
-                    .withFallbackKeys(oldOperatorConfigKey("target.utilization"))
+                    .withDeprecatedKeys(autoScalerConfigKey("target.utilization"))
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("utilization.target"),
+                            oldOperatorConfigKey("target.utilization"))
                     .withDescription("Target vertex utilization");
 
+    @Deprecated
     public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
             autoScalerConfig("target.utilization.boundary")
                     .doubleType()
@@ -103,6 +107,20 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("target.utilization.boundary"))
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
+
+    public static final ConfigOption<Double> UTILIZATION_MAX =
+            autoScalerConfig("utilization.max")
+                    .doubleType()
+                    .defaultValue(1.)
+                    .withFallbackKeys(oldOperatorConfigKey("utilization.max"))
+                    .withDescription("Max vertex utilization");
+
+    public static final ConfigOption<Double> UTILIZATION_MIN =
+            autoScalerConfig("utilization.min")
+                    .doubleType()
+                    .defaultValue(0.4)
+                    .withFallbackKeys(oldOperatorConfigKey("utilization.min"))
+                    .withDescription("Min vertex utilization");
 
     public static final ConfigOption<Duration> SCALE_DOWN_INTERVAL =
             autoScalerConfig("scale-down.interval")
