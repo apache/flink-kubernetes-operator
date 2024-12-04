@@ -41,8 +41,7 @@ import java.util.TreeMap;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKED_RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -265,8 +264,9 @@ public class ScalingMetricEvaluatorTest {
     public void testUtilizationBoundaryComputation() {
 
         var conf = new Configuration();
-        conf.set(TARGET_UTILIZATION, 0.8);
-        conf.set(TARGET_UTILIZATION_BOUNDARY, 0.1);
+        conf.set(UTILIZATION_TARGET, 0.8);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.9);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.7);
         conf.set(RESTART_TIME, Duration.ofSeconds(1));
         conf.set(CATCH_UP_DURATION, Duration.ZERO);
 
@@ -287,8 +287,9 @@ public class ScalingMetricEvaluatorTest {
     public void testUtilizationBoundaryComputationWithRestartTimesTracking() {
 
         var conf = new Configuration();
-        conf.set(TARGET_UTILIZATION, 0.8);
-        conf.set(TARGET_UTILIZATION_BOUNDARY, 0.1);
+        conf.set(UTILIZATION_TARGET, 0.8);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.9);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.7);
         conf.set(RESTART_TIME, Duration.ofMinutes(10));
         conf.set(CATCH_UP_DURATION, Duration.ZERO);
         conf.set(PREFER_TRACKED_RESTART_TIME, true);

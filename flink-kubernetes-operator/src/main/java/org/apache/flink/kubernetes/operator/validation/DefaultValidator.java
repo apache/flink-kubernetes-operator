@@ -605,9 +605,16 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d),
                 validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
-                validateNumber(flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION, 0.0d),
+                validateNumber(flinkConfiguration, AutoScalerOptions.UTILIZATION_TARGET, 0.0d),
                 validateNumber(
                         flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
+                validateNumber(flinkConfiguration, AutoScalerOptions.UTILIZATION_MAX, 0.0d, 1.0d),
+                validateNumber(flinkConfiguration, AutoScalerOptions.UTILIZATION_MIN, 0.0d, 1.0d),
+                validateNumberOrder(
+                        flinkConfiguration,
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        AutoScalerOptions.UTILIZATION_TARGET,
+                        AutoScalerOptions.UTILIZATION_MAX),
                 CalendarUtils.validateExcludedPeriods(flinkConfiguration));
     }
 
@@ -640,5 +647,33 @@ public class DefaultValidator implements FlinkResourceValidator {
     private static <T extends Number> Optional<String> validateNumber(
             Configuration flinkConfiguration, ConfigOption<T> autoScalerConfig, Double min) {
         return validateNumber(flinkConfiguration, autoScalerConfig, min, null);
+    }
+
+    @SafeVarargs
+    private static <T extends Number> Optional<String> validateNumberOrder(
+            Configuration flinkConfiguration, ConfigOption<T>... autoScalerConfigs) {
+        for (int i = 0; i < autoScalerConfigs.length - 1; i++) {
+            try {
+                var configValue = flinkConfiguration.get(autoScalerConfigs[i]).doubleValue();
+                var configValueNext =
+                        flinkConfiguration.get(autoScalerConfigs[i + 1]).doubleValue();
+                if (configValue > configValueNext) {
+                    return Optional.of(
+                            String.format(
+                                    "The AutoScalerOption %s or %s is invalid, %s must be less than or equal to the value of "
+                                            + "%s",
+                                    autoScalerConfigs[i].key(),
+                                    autoScalerConfigs[i + 1].key(),
+                                    autoScalerConfigs[i].key(),
+                                    autoScalerConfigs[i + 1].key()));
+                }
+            } catch (IllegalArgumentException e) {
+                return Optional.of(
+                        String.format(
+                                "Invalid value in the autoscaler config %s",
+                                autoScalerConfigs[i].key()));
+            }
+        }
+        return Optional.empty();
     }
 }

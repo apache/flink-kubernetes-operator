@@ -123,8 +123,9 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testEndToEnd() throws Exception {
         var conf = context.getConfiguration();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 1.);
 
         setDefaultMetrics(metricsCollector);
 
@@ -344,8 +345,9 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testClearHistoryOnTopoChange() throws Exception {
         var conf = context.getConfiguration();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 1.);
 
         setDefaultMetrics(metricsCollector);
 
