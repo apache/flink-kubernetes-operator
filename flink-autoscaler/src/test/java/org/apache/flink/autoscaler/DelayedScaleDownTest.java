@@ -38,16 +38,22 @@ public class DelayedScaleDownTest {
 
         // First trigger time as the trigger time, and it won't be updated.
         assertVertexDelayedScaleDownInfo(
-                delayedScaleDown.triggerScaleDown(vertex, instant, 5), instant, 5);
+                delayedScaleDown.triggerScaleDown(vertex, instant, 5), instant, 5, instant);
         assertThat(delayedScaleDown.isUpdated()).isTrue();
 
         // The lower parallelism doesn't update the result
         assertVertexDelayedScaleDownInfo(
-                delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(5), 3), instant, 5);
+                delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(5), 3),
+                instant,
+                5,
+                instant);
 
         // The higher parallelism will update the result
         assertVertexDelayedScaleDownInfo(
-                delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(10), 8), instant, 8);
+                delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(10), 8),
+                instant,
+                8,
+                instant);
 
         // The scale down could be re-triggered again after clean
         delayedScaleDown.clearVertex(vertex);
@@ -55,7 +61,8 @@ public class DelayedScaleDownTest {
         assertVertexDelayedScaleDownInfo(
                 delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(15), 4),
                 instant.plusSeconds(15),
-                4);
+                4,
+                instant);
 
         // The scale down could be re-triggered again after cleanAll
         delayedScaleDown.clearAll();
@@ -63,15 +70,17 @@ public class DelayedScaleDownTest {
         assertVertexDelayedScaleDownInfo(
                 delayedScaleDown.triggerScaleDown(vertex, instant.plusSeconds(15), 2),
                 instant.plusSeconds(15),
-                2);
+                2,
+                instant);
     }
 
     void assertVertexDelayedScaleDownInfo(
             DelayedScaleDown.VertexDelayedScaleDownInfo vertexDelayedScaleDownInfo,
             Instant expectedTriggerTime,
-            int expectedMaxRecommendedParallelism) {
+            int expectedMaxRecommendedParallelism,
+            Instant windowStartTime) {
         assertThat(vertexDelayedScaleDownInfo.getFirstTriggerTime()).isEqualTo(expectedTriggerTime);
-        assertThat(vertexDelayedScaleDownInfo.getMaxRecommendedParallelism())
+        assertThat(vertexDelayedScaleDownInfo.getMaxRecommendedParallelism(windowStartTime))
                 .isEqualTo(expectedMaxRecommendedParallelism);
     }
 }

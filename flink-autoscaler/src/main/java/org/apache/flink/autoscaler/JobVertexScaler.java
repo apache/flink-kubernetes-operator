@@ -278,10 +278,11 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var now = clock.instant();
+        var windowStartTime = now.minus(scaleDownInterval);
         var delayedScaleDownInfo = delayedScaleDown.triggerScaleDown(vertex, now, newParallelism);
 
         // Never scale down within scale down interval
-        if (now.isBefore(delayedScaleDownInfo.getFirstTriggerTime().plus(scaleDownInterval))) {
+        if (windowStartTime.isBefore(delayedScaleDownInfo.getFirstTriggerTime())) {
             if (now.equals(delayedScaleDownInfo.getFirstTriggerTime())) {
                 LOG.info("The scale down of {} is delayed by {}.", vertex, scaleDownInterval);
             } else {
@@ -293,7 +294,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         } else {
             // Using the maximum parallelism within the scale down interval window instead of the
             // latest parallelism when scaling down
-            return ParallelismChange.build(delayedScaleDownInfo.getMaxRecommendedParallelism());
+            return ParallelismChange.build(
+                    delayedScaleDownInfo.getMaxRecommendedParallelism(windowStartTime));
         }
     }
 
