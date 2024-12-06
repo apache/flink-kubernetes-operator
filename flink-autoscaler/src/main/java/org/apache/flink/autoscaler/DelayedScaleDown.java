@@ -30,23 +30,96 @@ import javax.annotation.Nonnull;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
+
+import static org.apache.flink.util.Preconditions.checkState;
 
 /** All delayed scale down requests. */
 public class DelayedScaleDown {
+
+    /** Details of the recommended parallelism. */
+    @Data
+    public static class RecommendedParallelism {
+        @Nonnull private final Instant triggerTime;
+        private final int parallelism;
+        private final boolean outsideUtilizationBound;
+
+        @JsonCreator
+        public RecommendedParallelism(
+                @Nonnull @JsonProperty("triggerTime") Instant triggerTime,
+                @JsonProperty("parallelism") int parallelism,
+                @JsonProperty("outsideUtilizationBound") boolean outsideUtilizationBound) {
+            this.triggerTime = triggerTime;
+            this.parallelism = parallelism;
+            this.outsideUtilizationBound = outsideUtilizationBound;
+        }
+    }
 
     /** The delayed scale down info for vertex. */
     @Data
     public static class VertexDelayedScaleDownInfo {
         private final Instant firstTriggerTime;
-        private int maxRecommendedParallelism;
+
+        /**
+         * In theory, it maintains all recommended parallelisms at each time within the past
+         * `scale-down.interval` window period, so all recommended parallelisms before the window
+         * start time will be evicted.
+         *
+         * <p>Also, if latest parallelism is greater than the past parallelism, all smaller
+         * parallelism in the past never be the max recommended parallelism, so we could evict all
+         * smaller parallelism in the past. It's a general optimization for calculating max value
+         * for sliding window. So we only need to maintain a list with monotonically decreasing
+         * parallelism within the past window, and the first parallelism will be the max recommended
+         * parallelism within the past `scale-down.interval` window period.
+         */
+        private final LinkedList<RecommendedParallelism> recommendedParallelisms;
+
+        public VertexDelayedScaleDownInfo(Instant firstTriggerTime) {
+            this.firstTriggerTime = firstTriggerTime;
+            this.recommendedParallelisms = new LinkedList<>();
+        }
 
         @JsonCreator
         public VertexDelayedScaleDownInfo(
                 @JsonProperty("firstTriggerTime") Instant firstTriggerTime,
-                @JsonProperty("maxRecommendedParallelism") int maxRecommendedParallelism) {
+                @JsonProperty("recommendedParallelisms")
+                        LinkedList<RecommendedParallelism> recommendedParallelisms) {
             this.firstTriggerTime = firstTriggerTime;
-            this.maxRecommendedParallelism = maxRecommendedParallelism;
+            this.recommendedParallelisms = recommendedParallelisms;
+        }
+
+        /** Record current recommended parallelism. */
+        public void recordRecommendedParallelism(
+                Instant triggerTime, int parallelism, boolean outsideUtilizationBound) {
+            // Evict all recommended parallelisms that are lower than or equal to the latest
+            // parallelism. When the past parallelism is equal to the latest parallelism,
+            // triggerTime needs to be updated, so it also needs to be evicted.
+            while (!recommendedParallelisms.isEmpty()
+                    && recommendedParallelisms.peekLast().getParallelism() <= parallelism) {
+                recommendedParallelisms.pollLast();
+            }
+
+            recommendedParallelisms.addLast(
+                    new RecommendedParallelism(triggerTime, parallelism, outsideUtilizationBound));
+        }
+
+        @JsonIgnore
+        public RecommendedParallelism getMaxRecommendedParallelism(Instant windowStartTime) {
+            // Evict all recommended parallelisms before the window start time.
+            while (!recommendedParallelisms.isEmpty()
+                    && recommendedParallelisms
+                            .peekFirst()
+                            .getTriggerTime()
+                            .isBefore(windowStartTime)) {
+                recommendedParallelisms.pollFirst();
+            }
+
+            var maxRecommendedParallelism = recommendedParallelisms.peekFirst();
+            checkState(
+                    maxRecommendedParallelism != null,
+                    "The getMaxRecommendedParallelism should be called after triggering a scale down, it may be a bug.");
+            return maxRecommendedParallelism;
         }
     }
 
@@ -63,18 +136,19 @@ public class DelayedScaleDown {
     /** Trigger a scale down, and return the corresponding {@link VertexDelayedScaleDownInfo}. */
     @Nonnull
     public VertexDelayedScaleDownInfo triggerScaleDown(
-            JobVertexID vertex, Instant triggerTime, int parallelism) {
-        var vertexDelayedScaleDownInfo = delayedVertices.get(vertex);
-        if (vertexDelayedScaleDownInfo == null) {
-            // It's the first trigger
-            vertexDelayedScaleDownInfo = new VertexDelayedScaleDownInfo(triggerTime, parallelism);
-            delayedVertices.put(vertex, vertexDelayedScaleDownInfo);
-            updated = true;
-        } else if (parallelism > vertexDelayedScaleDownInfo.getMaxRecommendedParallelism()) {
-            // Not the first trigger, but the maxRecommendedParallelism needs to be updated.
-            vertexDelayedScaleDownInfo.setMaxRecommendedParallelism(parallelism);
-            updated = true;
-        }
+            JobVertexID vertex,
+            Instant triggerTime,
+            int parallelism,
+            boolean outsideUtilizationBound) {
+        // The vertexDelayedScaleDownInfo is updated once scale down is triggered due to we need
+        // update the triggerTime each time.
+        updated = true;
+
+        var vertexDelayedScaleDownInfo =
+                delayedVertices.computeIfAbsent(
+                        vertex, k -> new VertexDelayedScaleDownInfo(triggerTime));
+        vertexDelayedScaleDownInfo.recordRecommendedParallelism(
+                triggerTime, parallelism, outsideUtilizationBound);
 
         return vertexDelayedScaleDownInfo;
     }
