@@ -546,11 +546,6 @@ public class ReconciliationUtils {
         var lastSpecWithMeta = reconciliationStatus.deserializeLastReconciledSpecWithMeta();
         var newMeta = ReconciliationMetadata.from(resource);
 
-        if (newMeta.equals(lastSpecWithMeta.getMeta())) {
-            // Nothing to update
-            return;
-        }
-
         reconciliationStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecWithMeta(lastSpecWithMeta.getSpec(), newMeta));
         resource.getStatus().setObservedGeneration(resource.getMetadata().getGeneration());
