@@ -1235,10 +1235,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Submit no-op upgrade
         deployment.getSpec().getFlinkConfiguration().put("kubernetes.operator.test", "value");
         deployment.getMetadata().setGeneration(2L);
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
 
         reconciler.reconcile(deployment, context);
         assertEquals(2L, deployment.getStatus().getObservedGeneration());
