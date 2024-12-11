@@ -201,16 +201,22 @@
             <td>Stabilization period in which no new scaling will be executed</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.target.utilization</h5></td>
+            <td><h5>job.autoscaler.utilization.max</h5></td>
+            <td style="word-wrap: break-word;">1.0</td>
+            <td>Double</td>
+            <td>Max vertex utilization</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.utilization.min</h5></td>
+            <td style="word-wrap: break-word;">0.4</td>
+            <td>Double</td>
+            <td>Min vertex utilization</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.utilization.target</h5></td>
             <td style="word-wrap: break-word;">0.7</td>
             <td>Double</td>
             <td>Target vertex utilization</td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.target.utilization.boundary</h5></td>
-            <td style="word-wrap: break-word;">0.3</td>
-            <td>Double</td>
-            <td>Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.vertex.exclude.ids</h5></td>
