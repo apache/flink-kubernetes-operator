@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
@@ -493,5 +494,10 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
 
         return !scaleEnabled || isExcluded;
+    }
+
+    @VisibleForTesting
+    void setClock(Clock clock) {
+        jobVertexScaler.setClock(clock);
     }
 }
