@@ -98,7 +98,7 @@ under the License.
 
         <assertj.version>3.26.3</assertj.version>
 
-        <quartz.version>2.3.2</quartz.version>
+        <quartz.version>2.4.0</quartz.version>
         <hikari.version>5.1.0</hikari.version>
 
         <flink-kubernetes-operator.surefire.baseArgLine>-XX:+IgnoreUnrecognizedVMOptions ${surefire.module.config}</flink-kubernetes-operator.surefire.baseArgLine>
