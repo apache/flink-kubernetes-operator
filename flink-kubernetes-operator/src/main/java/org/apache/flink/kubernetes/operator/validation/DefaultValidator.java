@@ -611,7 +611,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
                 validateNumber(flinkConfiguration, UTILIZATION_TARGET, 0.0d, 1.0d),
                 validateNumber(
-                        flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
+                        flinkConfiguration, AutoScalerOptions.UTILIZATION_TARGET_BOUNDARY, 0.0d),
                 validateNumber(
                         flinkConfiguration,
                         UTILIZATION_MAX,

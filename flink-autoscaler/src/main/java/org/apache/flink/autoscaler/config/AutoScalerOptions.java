@@ -99,26 +99,28 @@ public class AutoScalerOptions {
                             oldOperatorConfigKey("target.utilization"))
                     .withDescription("Target vertex utilization");
 
-    @Deprecated
-    public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
-            autoScalerConfig("target.utilization.boundary")
+    public static final ConfigOption<Double> UTILIZATION_TARGET_BOUNDARY =
+            autoScalerConfig("utilization.target.boundary")
                     .doubleType()
                     .defaultValue(0.3)
                     .withFallbackKeys(oldOperatorConfigKey("target.utilization.boundary"))
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("target.utilization.boundary"),
+                            oldOperatorConfigKey("utilization.target.boundary"))
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
 
     public static final ConfigOption<Double> UTILIZATION_MAX =
             autoScalerConfig("utilization.max")
                     .doubleType()
-                    .defaultValue(1.)
+                    .noDefaultValue()
                     .withFallbackKeys(oldOperatorConfigKey("utilization.max"))
                     .withDescription("Max vertex utilization");
 
     public static final ConfigOption<Double> UTILIZATION_MIN =
             autoScalerConfig("utilization.min")
                     .doubleType()
-                    .defaultValue(0.4)
+                    .noDefaultValue()
                     .withFallbackKeys(oldOperatorConfigKey("utilization.min"))
                     .withDescription("Min vertex utilization");
 
