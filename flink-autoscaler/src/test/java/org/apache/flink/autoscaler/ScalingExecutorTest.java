@@ -294,12 +294,46 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 1.);
         conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.7);
         conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.3);
-
         evaluated =
                 Map.of(
                         op1, evaluated(2, 150, 100),
                         op2, evaluated(1, 85, 100));
+        assertFalse(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
 
+        // When the target boundary parameter is used,
+        // but the max parameter is also set,
+        conf.removeConfig(AutoScalerOptions.UTILIZATION_MIN);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.5);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.6);
+
+        evaluated =
+                Map.of(
+                        op1, evaluated(2, 100, 99999),
+                        op2, evaluated(1, 80, 99999));
+        assertTrue(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        evaluated = Map.of(op2, evaluated(1, 85, 100));
+        assertFalse(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        conf.removeConfig(AutoScalerOptions.UTILIZATION_MAX);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.3);
+
+        evaluated =
+                Map.of(
+                        op1, evaluated(2, 80, 81),
+                        op2, evaluated(1, 100, 101));
+        assertTrue(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        evaluated = Map.of(op1, evaluated(1, 80, 79));
         assertFalse(
                 ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));

@@ -287,6 +287,7 @@ public class ScalingMetricEvaluator {
             Duration restartTime) {
 
         double targetUtilization = conf.get(UTILIZATION_TARGET);
+        double utilizationBoundary = conf.get(TARGET_UTILIZATION_BOUNDARY);
 
         double upperUtilization;
         double lowerUtilization;
@@ -297,16 +298,12 @@ public class ScalingMetricEvaluator {
             upperUtilization = 1.0;
             lowerUtilization = 0.0;
         } else {
-            if (conf.getOptional(UTILIZATION_MAX).isPresent()
-                    || conf.getOptional(UTILIZATION_MIN).isPresent()
-                    || conf.getOptional(TARGET_UTILIZATION_BOUNDARY).isEmpty()) {
-                upperUtilization = conf.get(UTILIZATION_MAX);
-                lowerUtilization = conf.get(UTILIZATION_MIN);
-            } else {
-                Double boundary = conf.get(TARGET_UTILIZATION_BOUNDARY);
-                upperUtilization = targetUtilization + boundary;
-                lowerUtilization = targetUtilization - boundary;
-            }
+            upperUtilization =
+                    conf.getOptional(UTILIZATION_MAX)
+                            .orElse(targetUtilization + utilizationBoundary);
+            lowerUtilization =
+                    conf.getOptional(UTILIZATION_MIN)
+                            .orElse(targetUtilization - utilizationBoundary);
         }
 
         double scaleUpThreshold =

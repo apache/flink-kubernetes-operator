@@ -111,14 +111,14 @@ public class AutoScalerOptions {
     public static final ConfigOption<Double> UTILIZATION_MAX =
             autoScalerConfig("utilization.max")
                     .doubleType()
-                    .defaultValue(1.)
+                    .noDefaultValue()
                     .withFallbackKeys(oldOperatorConfigKey("utilization.max"))
                     .withDescription("Max vertex utilization");
 
     public static final ConfigOption<Double> UTILIZATION_MIN =
             autoScalerConfig("utilization.min")
                     .doubleType()
-                    .defaultValue(0.4)
+                    .noDefaultValue()
                     .withFallbackKeys(oldOperatorConfigKey("utilization.min"))
                     .withDescription("Min vertex utilization");
 
