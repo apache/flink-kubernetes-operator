@@ -802,22 +802,34 @@ public class DefaultValidatorTest {
         var result =
                 testAutoScalerConfiguration(
                         flinkConf ->
-                                flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-0.6"));
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "-0.6"));
         assertErrorContains(
-                result, getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION, 0.0d));
+                result, getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_TARGET, 0.0d, 1.0d));
     }
 
     @Test
     public void testAutoScalerDeploymentWithInvalidNegativeUtilizationBoundary() {
-        var result =
+        var resultMaxUtilization =
                 testAutoScalerConfiguration(
                         flinkConf ->
-                                flinkConf.put(
-                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
-                                        "-0.6"));
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-0.6"));
         assertErrorContains(
-                result,
-                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+                resultMaxUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MAX,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue(),
+                        1.0));
+
+        var resultMinUtilization =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-0.6"));
+        assertErrorContains(
+                resultMinUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        0.0d,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue()));
     }
 
     @Test
@@ -838,9 +850,9 @@ public class DefaultValidatorTest {
                             flinkConf.remove(AutoScalerOptions.AUTOSCALER_ENABLED.key());
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
-                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
-                            flinkConf.put(
-                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-1.6");
                         });
         assertErrorNotContains(result);
     }
@@ -853,9 +865,9 @@ public class DefaultValidatorTest {
                             flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
-                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
-                            flinkConf.put(
-                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-1.6");
                         });
         assertErrorNotContains(result);
     }
@@ -891,35 +903,59 @@ public class DefaultValidatorTest {
         var result =
                 testSessionJobAutoScalerConfiguration(
                         flinkConf ->
-                                flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-0.6"));
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "-0.6"));
         assertErrorContains(
-                result, getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION, 0.0d));
+                result, getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_TARGET, 0.0d, 1.0));
     }
 
     @Test
     public void testValidateSessionJobWithInvalidNegativeUtilizationBoundary() {
-        var result =
+        var resultMaxUtilization =
                 testSessionJobAutoScalerConfiguration(
                         flinkConf ->
-                                flinkConf.put(
-                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
-                                        "-0.6"));
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-0.6"));
         assertErrorContains(
-                result,
-                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+                resultMaxUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MAX,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue(),
+                        1.0d));
+
+        var resultMinUtilization =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-0.6"));
+        assertErrorContains(
+                resultMinUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        0.0d,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue()));
     }
 
     @Test
     public void testValidateSessionJobWithInvalidUtilizationBoundary() {
-        var result =
+        var resultMaxUtilization =
                 testSessionJobAutoScalerConfiguration(
                         flinkConf ->
-                                flinkConf.put(
-                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
-                                        "-1.6"));
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-0.6"));
         assertErrorContains(
-                result,
-                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+                resultMaxUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MAX,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue(),
+                        1.0d));
+
+        var resultMinUtilization =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-0.6"));
+        assertErrorContains(
+                resultMinUtilization,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        0.0,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue()));
     }
 
     @Test
@@ -940,11 +976,98 @@ public class DefaultValidatorTest {
                             flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
                             flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
-                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
-                            flinkConf.put(
-                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "-1.6");
                         });
         assertErrorNotContains(result);
+    }
+
+    @Test
+    public void testAutoScalerUtilizationConfiguration() {
+        var deploymentResult =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.3");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.5");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.4");
+                        });
+        assertErrorContains(
+                deploymentResult,
+                getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_MAX, 0.5, 1.0));
+
+        deploymentResult =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.8");
+                        });
+        assertErrorContains(
+                deploymentResult,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        0.0,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue()));
+
+        deploymentResult =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
+                        });
+
+        assertErrorContains(
+                deploymentResult,
+                getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_TARGET, 0.0, 1.0));
+
+        deploymentResult =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.2");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.5");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6");
+                        });
+        assertErrorNotContains(deploymentResult);
+
+        var sessionResult =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.3");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.5");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.4");
+                        });
+        assertErrorContains(
+                sessionResult,
+                getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_MAX, 0.5, 1.0));
+
+        sessionResult =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6");
+                        });
+        assertErrorContains(
+                sessionResult,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.UTILIZATION_MAX,
+                        AutoScalerOptions.UTILIZATION_TARGET.defaultValue(),
+                        1.0));
+
+        sessionResult =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
+                        });
+
+        assertErrorContains(
+                sessionResult,
+                getFormattedErrorMessage(AutoScalerOptions.UTILIZATION_TARGET, 0.0, 1.0));
+
+        sessionResult =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.2");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.5");
+                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6");
+                        });
+        assertErrorNotContains(sessionResult);
     }
 
     private Optional<String> testSessionJobAutoScalerConfiguration(
@@ -972,8 +1095,9 @@ public class DefaultValidatorTest {
         conf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "100000.0");
         conf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "0.6");
         conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED.key(), "0.1");
-        conf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "0.7");
-        conf.put(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "0.4");
+        conf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.7");
+        conf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "1.0");
+        conf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.3");
         return conf;
     }
 
@@ -984,6 +1108,17 @@ public class DefaultValidatorTest {
                 configValue.key(),
                 min != null ? min.toString() : "-Infinity",
                 max != null ? max.toString() : "+Infinity");
+    }
+
+    private static String getFormattedNumberOrderErrorMessage(
+            ConfigOption<Double> configValueLeft, ConfigOption<Double> configValueRight) {
+        return String.format(
+                "The AutoScalerOption %s or %s is invalid, %s must be less than or equal to the value of "
+                        + "%s",
+                configValueLeft.key(),
+                configValueRight.key(),
+                configValueLeft.key(),
+                configValueRight.key());
     }
 
     private static String getFormattedErrorMessage(ConfigOption<Double> configValue, Double min) {
