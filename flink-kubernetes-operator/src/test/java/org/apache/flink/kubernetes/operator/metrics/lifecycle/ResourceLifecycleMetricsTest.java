@@ -62,23 +62,29 @@ public class ResourceLifecycleMetricsTest {
 
     @Test
     public void lifecycleStateTest() {
+        Configuration configuration = new Configuration();
+        TestingMetricListener listener = new TestingMetricListener(configuration);
+        MetricManager<FlinkDeployment> metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(
+                        configuration, listener.getMetricGroup());
+
         var application = TestUtils.buildApplicationCluster();
-        assertEquals(CREATED, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, CREATED, metricManager, listener);
 
-        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(application, new Configuration());
-        assertEquals(UPGRADING, application.getStatus().getLifecycleState());
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(application, configuration);
+        assertAppInExpectedState(application, UPGRADING, metricManager, listener);
 
-        ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
-        assertEquals(DEPLOYED, application.getStatus().getLifecycleState());
+        ReconciliationUtils.updateStatusForDeployedSpec(application, configuration);
+        assertAppInExpectedState(application, DEPLOYED, metricManager, listener);
 
         application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(STABLE, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, STABLE, metricManager, listener);
 
         application.getStatus().setError("errr");
-        assertEquals(STABLE, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, STABLE, metricManager, listener);
 
         application.getStatus().getJobStatus().setState(JobStatus.FAILED);
-        assertEquals(FAILED, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, FAILED, metricManager, listener);
 
         application.getStatus().setError(null);
 
@@ -86,19 +92,45 @@ public class ResourceLifecycleMetricsTest {
                 .getStatus()
                 .getReconciliationStatus()
                 .setState(ReconciliationState.ROLLING_BACK);
-        assertEquals(ROLLING_BACK, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, ROLLING_BACK, metricManager, listener);
 
         application.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
         application.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLED_BACK);
-        assertEquals(ROLLED_BACK, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, ROLLED_BACK, metricManager, listener);
 
         application.getStatus().getJobStatus().setState(JobStatus.FAILED);
-        assertEquals(FAILED, application.getStatus().getLifecycleState());
+        assertAppInExpectedState(application, FAILED, metricManager, listener);
 
         application.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         application.getSpec().getJob().setState(JobState.SUSPENDED);
-        ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
-        assertEquals(SUSPENDED, application.getStatus().getLifecycleState());
+        ReconciliationUtils.updateStatusForDeployedSpec(application, configuration);
+        assertAppInExpectedState(application, SUSPENDED, metricManager, listener);
+    }
+
+    private static void assertAppInExpectedState(
+            FlinkDeployment application,
+            ResourceLifecycleState expectedState,
+            MetricManager<FlinkDeployment> metricManager,
+            TestingMetricListener listener) {
+        assertEquals(expectedState, application.getStatus().getLifecycleState());
+
+        metricManager.onUpdate(application);
+
+        for (var candidateState : ResourceLifecycleState.values()) {
+            var stateGaugeMetricId =
+                    listener.getResourceMetricId(
+                            FlinkDeployment.class,
+                            application.getMetadata().getNamespace(),
+                            application.getMetadata().getName(),
+                            "Lifecycle",
+                            "State",
+                            candidateState.name(),
+                            "InState");
+
+            var expectedGaugeValue = candidateState == expectedState ? 1 : 0;
+            assertEquals(
+                    expectedGaugeValue, listener.getGauge(stateGaugeMetricId).get().getValue());
+        }
     }
 
     @Test
@@ -108,7 +140,7 @@ public class ResourceLifecycleMetricsTest {
 
         var lifecycleTracker =
                 new ResourceLifecycleMetricTracker(
-                        CREATED, Instant.ofEpochMilli(0), transitionHistos, timeHistos);
+                        "ns", "n1", CREATED, Instant.ofEpochMilli(0), transitionHistos, timeHistos);
 
         long ts = 1000;
         lifecycleTracker.onUpdate(CREATED, Instant.ofEpochMilli(ts));
@@ -233,6 +265,7 @@ public class ResourceLifecycleMetricsTest {
     public void testGlobalHistoNames() {
         var conf = new Configuration();
         var testingMetricListener = new TestingMetricListener(new Configuration());
+
         var deploymentMetricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
                         conf, testingMetricListener.getMetricGroup());

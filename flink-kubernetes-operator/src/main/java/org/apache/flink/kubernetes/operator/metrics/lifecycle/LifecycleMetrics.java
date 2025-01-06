@@ -68,9 +68,11 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     public static final List<Transition> TRACKED_TRANSITIONS = getTrackedTransitions();
 
+    // map(tuple(namespace, resource), tracker)
     private final Map<Tuple2<String, String>, ResourceLifecycleMetricTracker> lifecycleTrackers =
             new ConcurrentHashMap<>();
     private final Set<String> namespaces = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<String> resourceNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final Clock clock;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
@@ -104,6 +106,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     @Override
     public void onRemove(CR cr) {
+        resourceNames.remove(cr.getMetadata().getName());
         lifecycleTrackers.remove(
                 Tuple2.of(cr.getMetadata().getNamespace(), cr.getMetadata().getName()));
     }
@@ -120,6 +123,8 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                     ? Instant.parse(cr.getMetadata().getCreationTimestamp())
                                     : clock.instant();
                     return new ResourceLifecycleMetricTracker(
+                            cr.getMetadata().getNamespace(),
+                            cr.getMetadata().getName(),
                             initialState,
                             time,
                             getTransitionHistograms(cr),
@@ -129,30 +134,73 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     private void createNamespaceStateCountIfMissing(CR cr) {
         var namespace = cr.getMetadata().getNamespace();
-        if (!namespaces.add(namespace)) {
-            return;
+
+        if (namespaces.add(namespace)) {
+            var resourceNamespaceGroup =
+                    operatorMetricGroup.createResourceNamespaceGroup(
+                            config, cr.getClass(), namespace);
+            MetricGroup lifecycleNamespaceGroup = metricGroupFunction.apply(resourceNamespaceGroup);
+
+            for (ResourceLifecycleState state : ResourceLifecycleState.values()) {
+                lifecycleNamespaceGroup
+                        .addGroup("State")
+                        .addGroup(state.name())
+                        .gauge(
+                                "Count",
+                                () ->
+                                        lifecycleTrackers.values().stream()
+                                                .filter(
+                                                        tracker ->
+                                                                isMatchingTrackerWithState(
+                                                                        tracker, namespace, state))
+                                                .count());
+            }
         }
 
-        MetricGroup lifecycleGroup =
-                metricGroupFunction.apply(
-                        operatorMetricGroup.createResourceNamespaceGroup(
-                                config, cr.getClass(), namespace));
-        for (ResourceLifecycleState state : ResourceLifecycleState.values()) {
-            lifecycleGroup
-                    .addGroup("State")
-                    .addGroup(state.name())
-                    .gauge(
-                            "Count",
-                            () ->
-                                    lifecycleTrackers.entrySet().stream()
-                                            .filter(
-                                                    tracker ->
-                                                            tracker.getKey().f0.equals(namespace)
-                                                                    && tracker.getValue()
-                                                                                    .getCurrentState()
-                                                                            == state)
-                                            .count());
+        var resourceName = cr.getMetadata().getName();
+        if (resourceNames.add(resourceName)) {
+            var resourceNamespaceGroup =
+                    operatorMetricGroup.createResourceNamespaceGroup(
+                            config, cr.getClass(), namespace);
+            MetricGroup lifecycleResourceGroup =
+                    metricGroupFunction.apply(
+                            resourceNamespaceGroup.createResourceGroup(config, resourceName));
+
+            for (ResourceLifecycleState state : ResourceLifecycleState.values()) {
+                lifecycleResourceGroup
+                        .addGroup("State")
+                        .addGroup(state.name())
+                        .gauge(
+                                "InState",
+                                () ->
+                                        lifecycleTrackers.values().stream()
+                                                        .anyMatch(
+                                                                tracker ->
+                                                                        isMatchingTrackerWithState(
+                                                                                tracker,
+                                                                                namespace,
+                                                                                resourceName,
+                                                                                state))
+                                                ? 1
+                                                : 0);
+            }
         }
+    }
+
+    private static boolean isMatchingTrackerWithState(
+            ResourceLifecycleMetricTracker tracker,
+            String namespace,
+            ResourceLifecycleState state) {
+        return tracker.getNamespace().equals(namespace) && tracker.getCurrentState() == state;
+    }
+
+    private static boolean isMatchingTrackerWithState(
+            ResourceLifecycleMetricTracker tracker,
+            String namespace,
+            String resourceName,
+            ResourceLifecycleState state) {
+        return isMatchingTrackerWithState(tracker, namespace, state)
+                && tracker.getResourceName().equals(resourceName);
     }
 
     private synchronized void init(CR cr) {

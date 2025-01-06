@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.metrics.Histogram;
 
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +37,8 @@ public class ResourceLifecycleMetricTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(ResourceLifecycleMetricTracker.class);
 
+    @Getter private final String namespace;
+    @Getter private final String resourceName;
     private final Map<String, List<Histogram>> transitionHistos;
     private final Map<ResourceLifecycleState, List<Histogram>> stateTimeHistos;
 
@@ -45,10 +48,14 @@ public class ResourceLifecycleMetricTracker {
     private ResourceLifecycleState currentState;
 
     public ResourceLifecycleMetricTracker(
+            String namespace,
+            String resourceName,
             ResourceLifecycleState initialState,
             Instant time,
             Map<String, List<Histogram>> transitionHistos,
             Map<ResourceLifecycleState, List<Histogram>> stateTimeHistos) {
+        this.namespace = namespace;
+        this.resourceName = resourceName;
         this.transitionHistos = transitionHistos;
         this.currentState = initialState;
         this.stateTimeHistos = stateTimeHistos;
