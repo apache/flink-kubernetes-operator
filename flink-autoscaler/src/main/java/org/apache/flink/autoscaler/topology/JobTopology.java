@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.topology;
 
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -149,6 +150,10 @@ public class JobTopology {
             throws JsonProcessingException {
         ObjectNode plan = objectMapper.readValue(jsonPlan, ObjectNode.class);
         ArrayNode nodes = (ArrayNode) plan.get("nodes");
+
+        if (nodes == null || nodes.isEmpty()) {
+            throw new NotReadyException("No nodes found in the plan, job is not ready yet");
+        }
 
         var vertexInfo = new HashSet<VertexInfo>();
 
