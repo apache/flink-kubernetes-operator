@@ -185,10 +185,26 @@ public abstract class AbstractFlinkResourceReconciler<
 
     private void applyAutoscaler(FlinkResourceContext<CR> ctx) throws Exception {
         var autoScalerCtx = ctx.getJobAutoScalerContext();
+        var resource = ctx.getResource();
         boolean autoscalerEnabled =
-                ctx.getResource().getSpec().getJob() != null
+                resource.getSpec().getJob() != null
                         && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
+
+        var reconStatus = resource.getStatus().getReconciliationStatus();
+        if (!reconStatus.isBeforeFirstDeployment() && autoscalerEnabled) {
+            var newResetNonce = resource.getSpec().getJob().getAutoscalerResetNonce();
+            // check if the nonce changed to a non-null value
+            if (newResetNonce != null
+                    && !newResetNonce.equals(
+                            reconStatus
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getAutoscalerResetNonce())) {
+                autoscaler.cleanup(autoScalerCtx);
+                ReconciliationUtils.updateLastReconciledAutoscalerResetNonce(resource);
+            }
+        }
 
         autoscaler.scale(autoScalerCtx);
     }

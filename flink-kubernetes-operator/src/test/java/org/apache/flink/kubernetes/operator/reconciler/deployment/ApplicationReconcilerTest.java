@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.NoopJobAutoscaler;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
@@ -57,6 +58,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -947,29 +949,43 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                     public void scale(KubernetesJobAutoScalerContext ctx) {
                         overrideFunction.get().accept(ctx.getResource().getSpec());
                     }
+
+                    @Override
+                    public void cleanup(KubernetesJobAutoScalerContext ctx) {
+                        overrideFunction.set(s -> {});
+                    }
                 };
+        var v1 = new JobVertexID();
 
         appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscaler);
 
         var deployment = TestUtils.buildApplicationCluster();
+        var config = deployment.getSpec().getFlinkConfiguration();
+        config.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
+        config.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1");
+
+        var specCopy = SpecUtils.clone(deployment.getSpec());
+
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        deployment.setSpec(SpecUtils.clone(specCopy));
 
         // Job running verify no upgrades if overrides are empty
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        deployment.setSpec(SpecUtils.clone(specCopy));
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
         assertEquals(RUNNING, deployment.getStatus().getJobStatus().getState());
 
         // Test overrides are applied correctly
-        var v1 = new JobVertexID();
         overrideFunction.set(
                 s ->
                         s.getFlinkConfiguration()
                                 .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":2"));
 
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        deployment.setSpec(SpecUtils.clone(specCopy));
         assertEquals(
                 ReconciliationState.UPGRADING,
                 deployment.getStatus().getReconciliationStatus().getState());
@@ -979,6 +995,55 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getResourceContext(deployment, context)
                         .getObserveConfig()
                         .get(PipelineOptions.PARALLELISM_OVERRIDES));
+
+        // Set the job into running state (scale up completed)
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        deployment.setSpec(SpecUtils.clone(specCopy));
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        deployment.setSpec(SpecUtils.clone(specCopy));
+
+        // Make sure new reset nonce clears autoscaler
+        deployment.getSpec().getJob().setAutoscalerResetNonce(1L);
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        deployment.setSpec(SpecUtils.clone(specCopy));
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(
+                Map.of(v1.toHexString(), "1"),
+                ctxFactory
+                        .getResourceContext(deployment, context)
+                        .getObserveConfig()
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
+        assertEquals(
+                1L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getAutoscalerResetNonce());
+
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        deployment.setSpec(SpecUtils.clone(specCopy));
+
+        // Make sure autoscaler reset nonce properly updated even if no deployment happens
+
+        deployment.getSpec().getJob().setAutoscalerResetNonce(2L);
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        deployment.setSpec(SpecUtils.clone(specCopy));
+        assertEquals(
+                2L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getAutoscalerResetNonce());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
     }
 
     @ParameterizedTest
