@@ -39,7 +39,7 @@ public interface JobAutoScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     /**
      * Called when the job is deleted.
      *
-     * @param jobKey Job key.
+     * @param context Job context.
      */
-    void cleanup(KEY jobKey);
+    void cleanup(Context context);
 }

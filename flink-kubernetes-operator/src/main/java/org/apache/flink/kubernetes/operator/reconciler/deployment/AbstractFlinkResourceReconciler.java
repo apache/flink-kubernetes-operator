@@ -276,7 +276,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     @Override
     public DeleteControl cleanup(FlinkResourceContext<CR> ctx) {
-        autoscaler.cleanup(ResourceID.fromResource(ctx.getResource()));
+        autoscaler.cleanup(ctx.getJobAutoScalerContext());
         return cleanupInternal(ctx);
     }
 

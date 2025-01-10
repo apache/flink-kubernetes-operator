@@ -80,7 +80,7 @@ class StandaloneAutoscalerExecutorTest {
                     }
 
                     @Override
-                    public void cleanup(JobID jobKey) {
+                    public void cleanup(JobAutoScalerContext<JobID> context) {
                         fail("Should be called.");
                     }
                 };
@@ -126,7 +126,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -164,7 +164,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -221,7 +221,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -255,7 +255,8 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
+                                var jobID = context.getJobKey();
                                 cleanupCounter.put(
                                         jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
                             }
@@ -346,7 +347,8 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
+                                var jobID = context.getJobKey();
                                 cleanupCounter.put(
                                         jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
                             }

@@ -27,7 +27,6 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
-import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
@@ -72,7 +71,7 @@ public class JobAutoScalerImplTest {
     private JobAutoScalerContext<JobID> context;
     private TestingScalingRealizer<JobID, JobAutoScalerContext<JobID>> scalingRealizer;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
-    private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
+    private InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     @BeforeEach
     public void setup() {
@@ -232,7 +231,12 @@ public class JobAutoScalerImplTest {
     void testParallelismOverrides() throws Exception {
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        new TestingMetricsCollector<>(new JobTopology()),
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore);
 
         // Initially we should return empty overrides, do not crate any state
         assertThat(autoscaler.getParallelismOverrides(context)).isEmpty();
@@ -282,6 +286,17 @@ public class JobAutoScalerImplTest {
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "asd");
         autoscaler.scale(context);
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
+
+        context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "true");
+        autoscaler.scale(context);
+        assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
+
+        // Make sure cleanup removes everything
+        assertTrue(stateStore.hasDataFor(context));
+        autoscaler.cleanup(context);
+        assertFalse(stateStore.hasDataFor(context));
+        autoscaler.scale(context);
+        assertParallelismOverrides(null);
     }
 
     @Test

@@ -247,17 +247,13 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     @Override
     public void clearAll(Context jobContext) {
-        jdbcStateStore.clearAll(getSerializeKey(jobContext));
+        var serializedKey = getSerializeKey(jobContext);
+        jdbcStateStore.clearAll(serializedKey);
     }
 
     @Override
     public void flush(Context jobContext) throws Exception {
         jdbcStateStore.flush(getSerializeKey(jobContext));
-    }
-
-    @Override
-    public void removeInfoFromCache(KEY jobKey) {
-        jdbcStateStore.removeInfoFromCache(getSerializeKey(jobKey));
     }
 
     private String getSerializeKey(Context jobContext) {
