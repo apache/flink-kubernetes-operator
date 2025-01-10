@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.state;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.DelayedScaleDown;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
@@ -34,6 +35,7 @@ import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * State store based on the Java Heap, the state will be discarded after process restarts.
@@ -177,10 +179,16 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
         // The InMemory state store doesn't persist data.
     }
 
-    @Override
-    public void removeInfoFromCache(KEY jobKey) {
-        scalingHistoryStore.remove(jobKey);
-        collectedMetricsStore.remove(jobKey);
-        parallelismOverridesStore.remove(jobKey);
+    @VisibleForTesting
+    public boolean hasDataFor(Context jobContext) {
+        var k = jobContext.getJobKey();
+        return Stream.of(
+                        scalingHistoryStore,
+                        parallelismOverridesStore,
+                        collectedMetricsStore,
+                        tmConfigOverrides,
+                        scalingTrackingStore,
+                        delayedScaleDownStore)
+                .anyMatch(m -> m.containsKey(k));
     }
 }

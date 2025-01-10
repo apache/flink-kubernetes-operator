@@ -93,7 +93,4 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
      * was changed through this interface.
      */
     void flush(Context jobContext) throws Exception;
-
-    /** Clean up all information related to the current job. */
-    void removeInfoFromCache(KEY jobKey);
 }
