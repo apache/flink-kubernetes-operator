@@ -44,8 +44,10 @@ import java.util.Optional;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
@@ -284,8 +286,8 @@ public class ScalingMetricEvaluator {
             boolean processingBacklog,
             Duration restartTime) {
 
-        double utilizationBoundary = conf.getDouble(TARGET_UTILIZATION_BOUNDARY);
-        double targetUtilization = conf.get(TARGET_UTILIZATION);
+        double targetUtilization = conf.get(UTILIZATION_TARGET);
+        double utilizationBoundary = conf.get(TARGET_UTILIZATION_BOUNDARY);
 
         double upperUtilization;
         double lowerUtilization;
@@ -296,8 +298,12 @@ public class ScalingMetricEvaluator {
             upperUtilization = 1.0;
             lowerUtilization = 0.0;
         } else {
-            upperUtilization = targetUtilization + utilizationBoundary;
-            lowerUtilization = targetUtilization - utilizationBoundary;
+            upperUtilization =
+                    conf.getOptional(UTILIZATION_MAX)
+                            .orElse(targetUtilization + utilizationBoundary);
+            lowerUtilization =
+                    conf.getOptional(UTILIZATION_MIN)
+                            .orElse(targetUtilization - utilizationBoundary);
         }
 
         double scaleUpThreshold =

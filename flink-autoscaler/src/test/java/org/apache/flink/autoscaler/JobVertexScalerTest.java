@@ -49,6 +49,7 @@ import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_MESSAGE_FO
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
 import static org.apache.flink.autoscaler.JobVertexScaler.SCALE_LIMITED_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.SCALING_LIMITED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -98,7 +99,7 @@ public class JobVertexScalerTest {
     @MethodSource("adjustmentInputsProvider")
     public void testParallelismScaling(Collection<ShipStrategy> inputShipStrategies) {
         var op = new JobVertexID();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         var delayedScaleDown = new DelayedScaleDown();
 
@@ -113,7 +114,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
+        conf.set(UTILIZATION_TARGET, .8);
         assertEquals(
                 ParallelismChange.build(8),
                 vertexScaler.computeScaleTargetParallelism(
@@ -125,7 +126,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
+        conf.set(UTILIZATION_TARGET, .8);
         assertEquals(
                 ParallelismChange.noChange(),
                 vertexScaler.computeScaleTargetParallelism(
@@ -137,7 +138,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
+        conf.set(UTILIZATION_TARGET, .8);
         assertEquals(
                 ParallelismChange.build(8),
                 vertexScaler.computeScaleTargetParallelism(
@@ -160,7 +161,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.5);
+        conf.set(UTILIZATION_TARGET, 0.5);
         assertEquals(
                 ParallelismChange.build(10),
                 vertexScaler.computeScaleTargetParallelism(
@@ -172,7 +173,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
+        conf.set(UTILIZATION_TARGET, 0.6);
         assertEquals(
                 ParallelismChange.build(4),
                 vertexScaler.computeScaleTargetParallelism(
@@ -184,7 +185,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.5);
         assertEquals(
                 ParallelismChange.build(5),
@@ -209,7 +210,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.5);
         assertEquals(
                 ParallelismChange.build(15),
@@ -558,7 +559,7 @@ public class JobVertexScalerTest {
     @Test
     public void testMaxParallelismLimitIsUsed() {
         conf.setInteger(AutoScalerOptions.VERTEX_MAX_PARALLELISM, 10);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         var delayedScaleDown = new DelayedScaleDown();
 
         assertEquals(
@@ -587,7 +588,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testDisableScaleDownInterval() {
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(0));
 
         var delayedScaleDown = new DelayedScaleDown();
@@ -597,7 +598,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testScaleDownAfterInterval() {
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
         var instant = Instant.now();
 
@@ -629,7 +630,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testImmediateScaleUpWithinScaleDownInterval() {
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
         var instant = Instant.now();
 
@@ -655,7 +656,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testCancelDelayedScaleDownAfterNewParallelismIsSame() {
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
         var instant = Instant.now();
 
@@ -701,7 +702,7 @@ public class JobVertexScalerTest {
     public void testIneffectiveScalingDetection() {
         var op = new JobVertexID();
         conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
 
         var evaluated = evaluated(5, 100, 50);
@@ -826,7 +827,7 @@ public class JobVertexScalerTest {
     public void testSendingIneffectiveScalingEvents(Collection<ShipStrategy> inputShipStrategies) {
         var jobVertexID = new JobVertexID();
         conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.0);
+        conf.set(UTILIZATION_TARGET, 1.0);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
 
         var evaluated = evaluated(5, 100, 50);
@@ -1082,7 +1083,7 @@ public class JobVertexScalerTest {
     @Test
     public void testSendingScalingLimitedEvents() {
         var jobVertexID = new JobVertexID();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.0);
+        conf.set(UTILIZATION_TARGET, 1.0);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ZERO);
         var evaluated = evaluated(10, 200, 100);

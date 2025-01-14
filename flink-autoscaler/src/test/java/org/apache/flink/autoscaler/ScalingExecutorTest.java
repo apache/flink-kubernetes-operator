@@ -128,15 +128,17 @@ public class ScalingExecutorTest {
 
         var op1 = new JobVertexID();
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.6);
 
         var evaluated = Map.of(op1, evaluated(1, 70, 100));
         assertFalse(
                 ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
                         evaluated, evaluated.keySet()));
 
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.2);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.8);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.4);
         evaluated = Map.of(op1, evaluated(1, 70, 100));
         assertTrue(
                 ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
@@ -178,8 +180,9 @@ public class ScalingExecutorTest {
         var op2 = new JobVertexID();
 
         // All vertices are optional
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.6);
 
         var evaluated =
                 Map.of(
@@ -194,7 +197,8 @@ public class ScalingExecutorTest {
 
         // One vertex is required, and it's within the range.
         // The op2 is optional, so it shouldn't affect the scaling even if it is out of range,
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.8);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.6);
         evaluated =
                 Map.of(
                         op1, evaluated(1, 65, 100),
@@ -206,15 +210,17 @@ public class ScalingExecutorTest {
     @Test
     public void testNoScaleDownOnZeroLowerUtilizationBoundary() throws Exception {
         var conf = context.getConfiguration();
-        // Target utilization and boundary are identical
+        // Utilization min max is set from 0 to 1
         // which will set the scale down boundary to infinity
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 1.2);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.);
 
         var vertex = new JobVertexID();
         int parallelism = 100;
         int expectedParallelism = 1;
         int targetRate = 1000;
+
         // Intentionally also set the true processing rate to infinity
         // to test the boundaries of the scaling condition.
         double trueProcessingRate = Double.POSITIVE_INFINITY;
@@ -250,6 +256,90 @@ public class ScalingExecutorTest {
     }
 
     @Test
+    public void testUtilizationBoundariesAndUtilizationMinMaxCompatibility() {
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
+        conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
+        var op1 = new JobVertexID();
+        var op2 = new JobVertexID();
+
+        // All vertices are optional
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.6);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
+        var evaluated =
+                Map.of(
+                        op1, evaluated(1, 70, 100),
+                        op2, evaluated(1, 85, 100));
+
+        // target boundary 0.1, target 0.6, max 0.7, min 0.5
+        boolean boundaryOp1 =
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op1));
+        boolean boundaryOp2 =
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op2));
+
+        // Remove target boundary and use min max, should get the same result
+        conf.removeConfig(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.7);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.5);
+        boolean minMaxOp1 =
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op1));
+        boolean minMaxOp2 =
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(evaluated, Set.of(op2));
+        assertEquals(boundaryOp1, minMaxOp1);
+        assertEquals(boundaryOp2, minMaxOp2);
+
+        // When the target boundary parameter is used,
+        // but the min max parameter is also set,
+        // the min max parameter shall prevail.
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.7);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.3);
+        evaluated =
+                Map.of(
+                        op1, evaluated(2, 150, 100),
+                        op2, evaluated(1, 85, 100));
+        assertFalse(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        // When the target boundary parameter is used,
+        // but the max parameter is also set,
+        conf.removeConfig(AutoScalerOptions.UTILIZATION_MIN);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 1.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.5);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.6);
+
+        evaluated =
+                Map.of(
+                        op1, evaluated(2, 100, 99999),
+                        op2, evaluated(1, 80, 99999));
+        assertTrue(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        evaluated = Map.of(op2, evaluated(1, 85, 100));
+        assertFalse(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        conf.removeConfig(AutoScalerOptions.UTILIZATION_MAX);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.3);
+
+        evaluated =
+                Map.of(
+                        op1, evaluated(2, 80, 81),
+                        op2, evaluated(1, 100, 101));
+        assertTrue(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+
+        evaluated = Map.of(op1, evaluated(1, 80, 79));
+        assertFalse(
+                ScalingExecutor.allChangedVerticesWithinUtilizationTarget(
+                        evaluated, evaluated.keySet()));
+    }
+
+    @Test
     public void testVertexesExclusionForScaling() throws Exception {
         var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
         var source = JobVertexID.fromHexString(sourceHexString);
@@ -266,7 +356,7 @@ public class ScalingExecutorTest {
 
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofSeconds(0));
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, .8);
         var metrics =
                 new EvaluatedMetrics(
                         Map.of(
@@ -720,7 +810,7 @@ public class ScalingExecutorTest {
                                 null));
 
         var conf = context.getConfiguration();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 1.d);
 
         // The expected new parallelism is 7 without adjustment by max parallelism.
         var metrics =
@@ -774,8 +864,9 @@ public class ScalingExecutorTest {
         conf.setString("taskmanager.numberOfTaskSlots", "2");
         cpuQuota.ifPresent(v -> conf.set(AutoScalerOptions.CPU_QUOTA, v));
         memoryQuota.ifPresent(v -> conf.set(AutoScalerOptions.MEMORY_QUOTA, MemorySize.parse(v)));
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+        conf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 0.6);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.6);
 
         testQuotaReached(slotSharingGroupId1, slotSharingGroupId2, quotaReached, ctx);
     }
