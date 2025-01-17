@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_WATCHED_NAMESPACES;
@@ -379,5 +380,45 @@ public class FlinkConfigManagerTest {
         assertEquals("v2", observeConfig.get("conf2"));
         assertEquals("v3", observeConfig.get("conf3"));
         assertEquals("false", observeConfig.get("conf0"));
+    }
+
+    @Test
+    public void testConcurrentDefaultConfig() throws InterruptedException {
+        var opConf = new Configuration();
+        var configManager = new FlinkConfigManager(opConf);
+        var completed1 = new AtomicBoolean();
+        var completed2 = new AtomicBoolean();
+        var completed3 = new AtomicBoolean();
+
+        var t1 =
+                new Thread(
+                        () -> {
+                            configManager.getDefaultConfig("ns1", FlinkVersion.v1_18);
+                            completed1.set(true);
+                        });
+        var t2 =
+                new Thread(
+                        () -> {
+                            configManager.getDefaultConfig("ns1", FlinkVersion.v1_18);
+                            completed2.set(true);
+                        });
+        var t3 =
+                new Thread(
+                        () -> {
+                            configManager.getDefaultConfig("ns1", FlinkVersion.v1_18);
+                            completed3.set(true);
+                        });
+
+        t1.start();
+        t2.start();
+        t3.start();
+
+        t1.join();
+        t2.join();
+        t3.join();
+
+        assertTrue(completed1.get());
+        assertTrue(completed2.get());
+        assertTrue(completed3.get());
     }
 }
