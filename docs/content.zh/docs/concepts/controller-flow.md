@@ -24,139 +24,139 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Flink Operator Controller Flow
+# Flink Operator Controller 流程
 
-The goal of this page is to provide a deep introduction to the Flink operator logic and provide enough details about the control flow design so that new developers can get started.
+本页面的目的是深入介绍Flink Operator的逻辑，并提供足够的控制流设计细节，以便新开发者能够快速上手。
 
-We will assume a good level of Flink Kubernetes and general operational experience for different cluster and job types. For Flink related concepts please refer to https://flink.apache.org/.
+我们将假设读者具备良好的Flink Kubernetes及不同类型集群和作业的通用操作经验。有关Flink相关的概念，请参阅 https://flink.apache.org/ 。
 
-We will also assume a deep user-level understanding of the Flink Kubernetes Operator itself.
+我们还将假设读者对Flink Kubernetes Operator本身有深入的用户级理解。
 
-This document is mostly concerned about the ***Why?*** and ***How?*** of the operator mechanism, the user facing ***What?*** is already documented elsewhere.
+本文档主要关注操作机制的 ***为什么？*** 和 ***怎么做？*** ，而用户层面的 ***是什么？*** 已经在其他地方有文档说明。
 
-The core operator controller flow (as implemented in `FlinkDeploymentController` and `FlinkSessionJobController`) contains the following logical phases:
+核心的 operator controller 流程 (在 `FlinkDeploymentController` 和 `FlinkSessionJobController` 中实现) 包含以下逻辑阶段：
 
-1. Observe the status of the currently deployed resource
-2. Validate the new resource spec
-3. Reconcile any required changes based on the new spec and the observed status
-4. Rinse and repeat
+1. 观察当前已部署资源的状态
+2. 验证新的资源规范
+3. 根据新的规范和观察到的状态，协调所需的更改
+4. 重复执行上述步骤
 
-It is very important to note that all these steps are executed every time. Observe and reconciliation is always executed regardless of the output of the validation, but validation might affect the target of reconciliation as we will see in the next sections.
+需要注意的是，所有这些步骤每次都必须执行。无论验证的结果如何，观察和协调总是会执行，但验证可能会影响协调的目标，具体内容将在接下来的章节中详细说明。
 
-## Observation phase
+## 观察阶段
 
-In the observation phase the Observer module is responsible for observing the current (point-in-time) status of any deployed Flink resources (already submitted clusters, jobs) and updated the CR Status fields based on that.
+在观察阶段，Observer模块负责观察当前（某一时间点）已部署的Flink资源（已提交的集群、作业）的状态，并根据这些信息更新自定义资源（CR）的状态字段。
 
-The observer will always work using the previously deployed configuration to ensure that it can access the Flink clusters through the rest api. User configuration can affect the rest clients (port configs etc.) so we must always use the config that is running on the cluster. This is the main reason why the `FlinkConfigManager` and the operator in general distinguishes observe & deploy configuration throughout the implementation.
+观察者始终使用先前部署的配置来确保可以通过REST API访问Flink集群。用户配置可能会影响REST客户端（如端口配置等），因此我们必须始终使用集群上正在运行的配置。这就是为什么 `FlinkConfigManager` 和操作符在整个实现中区分观察和部署配置的主要原因。
 
-The observer should never take actions to change or submit new resources, these actions are the responsibility of the Reconciler module as we will see later. The main reason for this separation is that the required actions not only depend on the current cluster state but also on any new spec changes the user might have submitted in the meantime.
+观察者不应采取任何行动来更改或提交新的资源，我们将在后文看到这些操作是由协调器模块负责。这种分离的主要原因是，所需的操作不仅依赖于当前集群状态，还取决于用户在此期间可能提交的新规格变更。
 
-**Observer class hierarchy:**
+**Observer 类层次结构：**
 
-{{< img src="/img/concepts/observer_classes.svg" alt="Observer Class Hierarchy" >}}
+{{< img src="/img/concepts/observer_classes.svg" alt="Observer 类层次结构" >}}
 
-### Observer Steps
+### Observer 步骤
 
-1. If no resource is deployed we skip observing
-2. If we are in `ReconciliationState.UPGRADING` state, we check whether the upgrade already went through.
-    Normally the reconciler upgrades the state to `DEPLOYED` after a successful submission, but a transient error could prevent this status update. Therefore we use resource specific logic to check if the resource on the cluster already matches the target upgrade spec (annotations, deterministic job ids).
-3. For FlinkDeployments we next observe the status of the cluster Kubernetes resources, JM Deployment and Pods. We do this once after an upgrade or any time we cannot access the Job Rest endpoints. The status is recorded in the `jobManagerDeploymentStatus` field.
+1. 如果没有部署资源，则跳过观察。
+2. 如果处于 `ReconciliationState.UPGRADING` 状态，检查升级是否已经完成。
+   通常，协调器在成功提交后会将状态升级为 `DEPLOYED`，但瞬态错误可能会阻止此状态更新。因此，我们使用资源特定的逻辑来检查集群中的资源是否已经匹配目标升级规范（注解、确定性作业ID）。
+3. 对于 FlinkDeployments，接下来观察集群 Kubernetes 资源的状态，包括 JM Deployment 和 Pods。我们在升级后或无法访问 Job Rest 端点时进行此操作。状态记录在 `jobManagerDeploymentStatus` 字段中。
 
-    It’s important to note here that trying to observe Jobs or anything through the Flink rest API only makes sense if the JobManager Kubernetes resources are seemingly healthy. Any errors with the JM deployment automatically translate into an error state and should clear out any previously observed running JobStatus. A Job cannot be in running state without a healthy jobmanager.
-4. If the cluster is seemingly healthy, we proceed to observing the `JobStatus` (for Application and SessionJob resources). In this phase we query the information using the Jobmanager rest api about the current job state and pending savepoint progress.
+   值得注意的是，只有在 JobManager Kubernetes 资源看似健康的情况下，通过 Flink REST API 观察 Jobs 或其他内容才有意义。任何 JM 部署错误都会自动转换为错误状态，并应清除之前观察到的任何正在运行的 JobStatus。没有健康的 JobManager，作业不可能处于运行状态。
+4. 如果集群看似健康，我们将继续观察 `JobStatus`（适用于 Application 和 SessionJob 资源）。在此阶段，我们使用 JobManager REST API 查询当前作业状态和待处理的保存点进度。
 
-    The current state of the job determines what can be observed. For terminal job states (`FAILED, FINISHED`) we also record the last available savepoint information to be used during last-state upgrades. We can only do this in terminal states because otherwise there is no guarantee that by the time of the upgrade a new checkpoint won’t be created.
+   当前作业状态决定了可以观察的内容。对于终端作业状态（`FAILED, FINISHED`），我们还会记录最后可用的保存点信息，以便在最后状态升级时使用。我们只能在终端状态这样做，因为否则无法保证在升级时不会创建新的检查点。
 
-    If the Job cannot be accessed, we have to check the status of the cluster again (see step 3), or if we cannot find the job on the cluster, the next step will depend on the resource type and config and will either trigger an error or we simply need to wait. When the job’s status cannot be determined we use the `RECONCILING` state.
-5. Last step in the observe flow is some administration based on the observed status. If everything is healthy and running, we clear previously recorded errors on the resource status. If the job is not running anymore we clear previous savepoint trigger information so that it may be retriggered in the reconcile phase later.
-6. At the end of the observer phase the operator sends the updated resource status to Kubernetes. This is a very important step to avoid losing critical information during the later phases. One example of such state loss: You have a failed/completed job and the observer records the latest savepoint info. The reconciler might decide to delete this cluster for an upgrade, but if at this point the operator should fail, the observer would not be able to record the last savepoint again as it cannot be observed on the deleted cluster anymore. Recording the status before any cluster actions are taken is a critical part of the logic.
+   如果无法访问作业，我们需要再次检查集群状态（参见步骤 3），或者如果在集群中找不到作业，下一步将取决于资源类型和配置，可能会触发错误或我们只需等待。当无法确定作业状态时，我们将使用 `RECONCILING` 状态。
+5. 观察流程的最后一步是基于观察到的状态进行一些管理。如果一切正常且正在运行，我们将清除之前记录的资源状态错误。如果作业不再运行，我们将清除之前的保存点触发信息，以便在后续的协调阶段重新触发。
+6. 在观察阶段结束时，操作员将更新的资源状态发送到 Kubernetes。这是避免在后续阶段丢失关键信息的关键步骤。一个这样的状态丢失示例：你有一个失败或完成的作业，观察者记录了最新的保存点信息。协调器可能会决定删除此集群以进行升级，但如果此时操作员失败，观察者将无法再次记录最后的保存点，因为它无法在已删除的集群上观察到。在执行任何集群操作之前记录状态是逻辑的关键部分。### Observing the SavepointInfo
 
 ### Observing the SavepointInfo
 
-Savepoint information is part of the JobStatus and tracks both pending (either manual or periodic savepoint trigger info) and the savepoint history according to the config. Savepoint info is only updated for running and terminal jobs as seen in the observe steps. If a job is failing, restarting etc that means that the savepoint failed and needs to be retriggered.
+Savepoint 信息是 JobStatus 的一部分，跟踪待处理的保存点（无论是手动还是周期性触发的保存点信息）以及根据配置的保存点历史记录。Savepoint 信息仅在观察步骤中更新运行和终端状态的作业。如果作业正在失败、重启等，这意味着保存点失败并需要重新触发。
 
-We observe pending savepoints using the triggerId and if they were completed we record them to the history. If the history reaches the configured size limit we dispose savepoint through the running job rest api, allowing us to do so without any user storage credentials. If the job is not running or unhealthy, we clear pending savepoint trigger info which essentially aborts the savepoint from the operator’s perspective.
+我们使用 triggerId 观察待处理的保存点，如果它们已完成，则将其记录到历史记录中。如果历史记录达到配置的大小限制，我们通过正在运行的作业 REST API 处置保存点，这样无需任何用户存储凭据即可完成。如果作业未运行或不健康，我们将清除待处理的保存点触发信息，这实际上从操作员的角度中止了保存点。
 
-## Validation phase
+## 验证阶段
 
-After the resource was successfully observed and the status updated, we next validate the incoming resource spec field.
+在资源成功观察并状态更新之后，我们接下来验证传入的资源 spec 字段。
 
-If the new spec validation fails, we trigger an error event to the user and we reset the last successfully submitted spec in the resource (we don’t update it in Kubernetes, only locally for the purpose of reconciliation).
+如果新的 spec 验证失败，我们将触发一个错误事件给用户，并重置资源中上次成功提交的 spec（我们不会在 Kubernetes 中更新它，仅在本地用于协调）。
 
-This step is very important to ensure that reconciliation runs even if the user submits an incorrect specification, thus allowing the operator to stabilize the previously desired state if any errors happened to the deployed resources in the meantime.
+这一步非常重要，以确保即使用户提交了不正确的规范，协调也会运行，从而允许操作员在部署资源期间发生任何错误时恢复到之前所需的状态。
 
-## Reconciliation phase
+## 协调阶段
 
-Last step is the reconciliation phase which will execute any required cluster actions to bring the resource to the last desired (valid) spec. In some cases the desired spec is reached in a single reconcile loop, in others we might need multiple passes as we will see.
+最后一步是协调阶段，它将执行任何必要的集群操作，以使资源达到最后一个所需（有效的）spec。在某些情况下，所需的 spec 可能在单次协调循环中达到，在其他情况下，我们可能需要多次传递，如我们将看到的。
 
-It’s very important to understand that the Observer phase records a point-in-time view of the cluster and resources into the status. In most cases this can change at any future time (a running job can fail at any time), in some rare cases it is stable (a terminally failed or completed job will stay that way). Therefore the reconciler logic must always take into account the possibility that the cluster status has already drifted from what is in the status (most of the complications arise from this need).
+非常重要的是要理解，观察阶段会将集群和资源的某个时间点视图记录到状态中。在大多数情况下，这可能会在任何未来时间发生变化（一个正在运行的作业可能会随时失败），在某些罕见情况下它是稳定的（一个终端失败或完成的作业将保持不变）。因此，协调器逻辑必须始终考虑集群状态可能已经与状态中的内容发生偏差的可能性（大多数复杂情况由此产生）。
 
-{{< img src="/img/concepts/reconciler_classes.svg" alt="Reconciler Class Hierarchy" >}}
+< img src="/img/concepts/reconciler_classes.svg" alt="Reconciler 类层次结构" >
 
-### Base reconciler steps
+### 基础协调器步骤
 
-The `AbstractFlinkResourceReconciler` encapsulates the core reconciliation flow for all Flink resource types. Let’s take a look at the high level flow before we go into specifics for session, application and session job resources.
+`AbstractFlinkResourceReconciler` 封装了所有 Flink 资源类型的协调核心流程。在深入会话、应用程序和会话作业资源的特定细节之前，我们先来看看高层次流程。
 
-1. Check if the resource is ready for reconciliation or if there are any pending operations that should not be interrupted (manual savepoints for example)
-2. If this is the first deployment attempt for the resource, we simply deploy it. It’s important to note here that this is the only deploy operation where we use the `initialSavepointPath` provided in the spec.
-3. Next we determine if the desired spec changed and the type of change: `IGNORE, SCALE, UPGRADE`. Only for scale and upgrade type changes do we need to execute further reconciliation logic.
-4. If we have upgrade/scale spec changes we execute the upgrade logic specific for the resource type
-5. If we did not receive any spec change we still have to ensure that the currently deployed resources are fully reconciled:
-    1. We check if any previously deployed resources have failed / not stabilized and we have to perform a rollback operation.
-    2. We apply any further reconciliation steps specific to the individual resources (trigger savepoints, recover deployments, restart unhealthy clusters etc.)
+1. 检查资源是否准备好进行协调，或者是否有任何不应中断的待处理操作（例如手动保存点）。
+2. 如果这是资源的首次部署尝试，我们直接部署它。需要注意的是，这是唯一一个使用 spec 中提供的 `initialSavepointPath` 的部署操作。
+3. 接下来我们确定所需的 spec 是否发生变化以及变化的类型：`IGNORE, SCALE, UPGRADE`。仅在 `SCALE` 和 `UPGRADE` 类型的变化时，才需要执行进一步的协调逻辑。
+4. 如果我们有 `UPGRADE`/`SCALE` spec 变化，我们将执行特定于资源类型的升级逻辑。
+5. 如果我们没有收到任何 spec 变化，我们仍然需要确保当前部署的资源已完全协调：
+   1. 检查任何先前部署的资源是否失败/未稳定，如果需要，执行回滚操作。
+   2. 应用任何特定于各个资源的进一步协调步骤（触发保存点、恢复部署、重启不健康的集群等）。
 
-### A note on deploy operations
+### 关于部署操作的注意事项
 
-We have to take special care around deployment operations as they start clusters and jobs which might immediately start producing data and checkpoints. Therefore it’s critical to be able to recognize when a deployment has succeeded / failed. At the same time, the operator process can fail at any point in time making it difficult to always record the correct status.
+我们必须特别小心部署操作，因为它们会启动集群和作业，这些作业可能会立即开始生成数据和检查点。因此，能够识别部署是否成功/失败至关重要。同时，操作员进程可能会在任何时候失败，这使得始终记录正确状态变得困难。
 
-To ensure we can always recover the deployment status and what is running on the cluster, the to-be-deployed spec is always written to the status with the `UPGRADING` state before we attempt the deployment. Furthermore an annotation is added to the deployed Kubernetes Deployment resources to be able to distinguish the exact deployment attempt (we use the CR generation for this). For session jobs as we cannot add annotations we use a special way of generating the jobid to contain the same information.
+为了确保我们始终能够恢复部署状态以及集群上正在运行的内容，在尝试部署之前，将要部署的 spec 始终以 `UPGRADING` 状态写入状态。此外，向部署的 Kubernetes Deployment 资源添加注解，以便能够区分确切的部署尝试（我们使用 CR 生成版本来实现这一点）。对于会话作业，由于无法添加注解，我们使用一种特殊的方式生成包含相同信息的 jobid。
 
-### Base job reconciler
+### 基础作业协调器
 
-The AbstractJobReconciler is responsible for executing the shared logic for Flink resources that also manage jobs (Application and SessionJob clusters). Here the core part of the logic deals with managing job state and executing stateful job updates in a safe manner.
+`AbstractJobReconciler` 负责执行管理作业的 Flink 资源的共享逻辑（应用程序和会话作业集群）。这里的核心逻辑部分处理管理作业状态以及以安全方式执行有状态作业更新。
 
-Depending on the type of Spec change SCALE/UPGRADE the job reconciler has slightly different codepaths. For scale operations, if standalone mode and reactive scaling is enabled, we only need to rescale the taskmanagers. In the future we might also add more efficient rescaling here for other cluster types (such as using the rescale API once implemented in upstream Flink)
+根据 spec 变化的类型 `SCALE/UPGRADE`，作业协调器具有略有不同的代码路径。对于缩放操作，如果启用了独立模式和反应式缩放，我们只需要重新缩放 TaskManagers。未来我们可能会在此处为其他集群类型添加更高效的缩放（例如，一旦上游 Flink 实现了缩放 API）。
 
-If an UPGRADE type change is detected in the spec we execute the job upgrade flow:
+如果在 spec 中检测到 `UPGRADE` 类型的变化，我们将执行作业升级流程：
 
-1. If the job is currently running, suspend according to the desired (available upgrade mode), more on this later
-2. Mark upgrading state in status, and trigger a new reconciliation loop (this allows us to pick up new spec changes mid upgrade as the suspend can take a while)
-3. Restore job according to the new spec from either HA metadata or savepoint info recorded in status, or empty state (depending on upgrade mode setting)
+1. 如果作业当前正在运行，根据所需的（可用的升级模式）暂停，更多内容稍后介绍。
+2. 在状态中标记升级状态，并触发新的协调循环（这允许我们在升级过程中拾取新的 spec 变化，因为暂停可能需要一段时间）。
+3. 根据新的 spec 从 HA 元数据或状态中记录的保存点信息，或空状态（根据升级模式设置）恢复作业。
 
-#### UpgradeMode and suspend/cancel behaviour
+#### UpgradeMode 和暂停/取消行为
 
-The operator must always respect the upgrade mode setting when it comes to stateful upgrades to avoid data loss. There is however some flexibility in the mechanism to account for unhealthy jobs and to provide extra safeguards during version upgrades. The **getAvailableUpgradeMode** method is an important corner stone in the upgrade logic, and it is used to decide what actualy upgrade mode should be used given the request from the user and current cluster state.
+操作员必须始终尊重升级模式设置，以避免有状态升级时的数据丢失。然而，机制中有一些灵活性，可以处理不健康的作业，并在版本升级期间提供额外的保护。**getAvailableUpgradeMode** 方法是升级逻辑中的一个重要基石，用于根据用户的请求和当前集群状态决定实际使用的升级模式。
 
-In normal healthy cases, the available upgrade mode will be the same as what the user has in the spec. However, there are some cases where we have to change between savepoint and last-state upgrade mode. Savepoint upgrade mode can only be used if the job is healthy and running, for failing, restarting or otherwise unhealthy deployments, we are allowed to use last-state upgrade mode as long as HA metadata is available (and not explicitly configured otherwise). This allows us to have a robust upgrade flow even if a job failed, while keeping state consistency.
+在正常健康的情况下，可用的升级模式将与用户在 spec 中的设置相同。然而，在某些情况下，我们需要在保存点和最后状态升级模式之间进行切换。保存点升级模式仅在作业健康且正在运行时可以使用，对于失败、重启或其他不健康的部署，只要 HA 元数据可用（且未显式配置其他方式），我们可以使用最后状态升级模式。这使我们即使在作业失败的情况下也能拥有一个稳健的升级流程，同时保持状态一致性。
 
-Last-state upgrade mode refers to upgrading using the checkpoint information stored in the HA metadata. HA metadata format may not be compatible when upgrading between Flink minor versions therefore a version change must force savepoint upgrade mode and require a healthy running job.
+最后状态升级模式指的是使用 HA 元数据中存储的检查点信息进行升级。HA 元数据格式在升级 Flink 次要版本之间可能不兼容，因此版本更改必须强制使用保存点升级模式，并要求一个健康且正在运行的作业。
 
-It is very important to note that we NEVER change from last-state/savepoint upgrade mode to stateless as that would compromise the upgrade logic and lead to state loss.
+非常重要的是要注意，我们从不从最后状态/保存点升级模式切换到无状态模式，因为这会破坏升级逻辑并导致状态丢失。
 
-### Application reconciler
+### 应用程序协调器
 
-Application clusters have a few more extra config steps compared to session jobs that we need to take care of during deployment/upgrade/cancel operations. Here are some important things that the operator does to ensure robust behaviour:
+应用程序集群在部署/升级/取消操作期间需要处理一些比会话作业更多的额外配置步骤。以下是操作员为确保稳健行为所做的重要事情：
 
-**setRandomJobResultStorePath**: In order to avoid terminated applications being restarted on JM failover, we have to disable Job result cleanup. This forces us to create a random job result store path for each application deployment as described here: https://issues.apache.org/jira/browse/FLINK-27569 . Users need to manually clean up the jobresultstore later.
+**setRandomJobResultStorePath**: 为了防止终止的应用程序在 JM 故障转移时被重新启动，我们必须禁用作业结果清理。这迫使我们为每个应用程序部署创建一个随机的作业结果存储路径，如这里所述：https://issues.apache.org/jira/browse/FLINK-27569 。用户需要稍后手动清理 jobresultstore。
 
-**setJobIdIfNecessary**: Flink by default generates deterministic jobids based on the clusterId (which is the CR name in our case). This causes checkpoint path conflicts if the job is ever restarted from an empty state (stateless upgrade). We therefore generate a random jobid to avoid this.
+**setJobIdIfNecessary**: Flink 默认基于 clusterId（在我们的情况下是 CR 名称）生成确定性的 jobid。如果作业从空状态（无状态升级）重新启动，这会导致检查点路径冲突。因此，我们生成一个随机的 jobid 以避免这种情况。
 
-**cleanupTerminalJmAfterTtl**: Flink 1.15 and above we do not automatically terminate jobmanager processes after shutdown/failure to get a robust observer behaviour. However once the terminal state is observed we can clean up the JM process/deployment.
+**cleanupTerminalJmAfterTtl**: 在 Flink 1.15 及以上版本中，我们不会在关闭/失败后自动终止 JobManager 进程，以获得稳健的观察行为。然而，一旦观察到终端状态，我们可以清理 JM 进程/部署。
 
-## Custom Flink Resource Status update mechanism
+## 自定义 Flink 资源状态更新机制
 
-The JOSDK provides built in ways to update resource spec and status for the reconciler implementations however the Flink Operator does not use this and has a custom status update mechanism due to the following reasons.
+JOSDK 提供了内置的方法来更新协调器实现中的资源 spec 和状态，但 Flink 操作员不使用这些方法，而是使用自定义的状态更新机制，原因如下。
 
-When using the JOSDK, the status of a CR can only be updated at the end of the reconciliation method. In our case we often need to trigger status updates in the middle of the reconciliation flow to provide maximum robustness. One example of such case is recording the deployment information in the status before executing the deploy action.
+当使用 JOSDK 时，CR 的状态只能在协调方法结束时更新。在我们的情况下，我们经常需要在协调流程中间触发状态更新，以提供最大的稳健性。一个这样的例子是在执行部署操作之前记录部署信息到状态中。
 
-Another way to look at it is that the Flink Operator uses the resource status as a write ahead log for many actions to guarantee robustness in case of operator failures.
+另一种看待方式是，Flink 操作员将资源状态用作许多操作的预写日志，以保证在操作员失败时的稳健性。
 
-The status update mechanism is implemented in the StatusRecorder class, which serves both as a cache for the latest status and the updater logic. We need to always update our CR status from the cache in the beginning of the controller flow as we are bypassing the JOSDK update-mechanism/caches which can cause old status instances to be returned. For the actual status update we use a modified optimistic locking mechanism which only updates the status if the status has not been externally modified in the meantime.
+状态更新机制在 `StatusRecorder` 类中实现，该类同时作为最新状态的缓存和更新逻辑。我们需要始终从缓存中更新我们的 CR 状态，因为在控制器流程的开头我们绕过了 JOSDK 的更新机制/缓存，这可能导致返回旧的状态实例。对于实际的状态更新，我们使用一种修改后的乐观锁定机制，只有在状态在此期间未被外部修改时才更新状态。
 
-Under normal circumstances this assumption holds as the operator is the sole owner/updater of the status. Exceptions here might indicate that the user tampered with the status or another operator instance might be running at the same time managing the same resources, which can lead to serious issues.
+在正常情况下，这种假设成立，因为操作员是状态的唯一所有者/更新者。这里的异常可能表明用户篡改了状态，或者另一个操作员实例正在同时管理相同的资源，这可能导致严重问题。
 
-## JOSDK vs Operator interface naming conflicts
+## JOSDK 与操作员接口命名冲突
 
-In JOSDK world the Reconciler interface represents the whole control/reconciliation flow. In our case we call these classes controllers and reserve our own Reconciler interface to a specific part of this controller flow.
+在 JOSDK 世界中，Reconciler 接口代表整个控制/协调流程。在我们的情况下，我们将这些类称为控制器，并将我们自己的 Reconciler 接口保留为控制器流程的特定部分。
 
-Historically the JOSDK also called Reconciler interface Controller.
+历史上，JOSDK 也将 Reconciler 接口称为 Controller。
