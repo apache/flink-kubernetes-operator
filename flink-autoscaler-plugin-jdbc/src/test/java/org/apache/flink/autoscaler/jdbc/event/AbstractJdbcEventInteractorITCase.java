@@ -46,8 +46,7 @@ abstract class AbstractJdbcEventInteractorITCase implements DatabaseTest {
 
         // The datetime precision is seconds in MySQL by default.
         var createTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        try (var conn = getConnection()) {
-            var jdbcEventInteractor = new JdbcEventInteractor(conn);
+        try (var jdbcEventInteractor = new JdbcEventInteractor(getDataSource())) {
             jdbcEventInteractor.setClock(Clock.fixed(createTime, ZoneId.systemDefault()));
 
             jdbcEventInteractor.createEvent(

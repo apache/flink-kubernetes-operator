@@ -24,7 +24,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** The jdbc state store. */
-public class JdbcStateStore {
+public class JdbcStateStore implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(JdbcStateStore.class);
 
@@ -88,5 +88,10 @@ public class JdbcStateStore {
 
     private JobStateView createJobStateView(String jobKey) throws Exception {
         return new JobStateView(jdbcStateInteractor, jobKey);
+    }
+
+    @Override
+    public void close() throws Exception {
+        jdbcStateInteractor.close();
     }
 }

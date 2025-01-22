@@ -42,6 +42,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.annotation.Nonnull;
+import javax.sql.DataSource;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -73,20 +74,22 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
             generateScalingSummaries(currentParallelism, newParallelism, metricAvg, metricCurrent);
     private final Clock defaultClock = Clock.fixed(createTime, ZoneId.systemDefault());
 
+    private DataSource dataSource;
     private CountableJdbcEventInteractor jdbcEventInteractor;
     private JdbcAutoScalerEventHandler<JobID, JobAutoScalerContext<JobID>> eventHandler;
     private JobAutoScalerContext<JobID> ctx;
 
     @BeforeEach
     void beforeEach() throws Exception {
-        jdbcEventInteractor = new CountableJdbcEventInteractor(getConnection());
+        dataSource = getDataSource();
+        jdbcEventInteractor = new CountableJdbcEventInteractor(dataSource);
         jdbcEventInteractor.setClock(defaultClock);
         eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, Duration.ZERO);
         ctx = createDefaultJobAutoScalerContext();
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         eventHandler.close();
     }
 
@@ -459,7 +462,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
                         .max(Comparable::compareTo)
                         .orElseThrow();
 
-        try (Connection connection = getConnection();
+        try (Connection connection = dataSource.getConnection();
                 PreparedStatement ps =
                         connection.prepareStatement(
                                 "update t_flink_autoscaler_event_handler set id = ? where id = ?")) {
@@ -505,6 +508,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
             Duration eventHandlerTtl,
             int unexpiredRecordsNum)
             throws Exception {
+
         eventHandler = new JdbcAutoScalerEventHandler<>(jdbcEventInteractor, eventHandlerTtl);
 
         // Init the expired records.
@@ -525,7 +529,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
 
         eventHandler.cleanExpiredEvents();
 
-        try (Connection connection = getConnection();
+        try (Connection connection = dataSource.getConnection();
                 PreparedStatement ps =
                         connection.prepareStatement(
                                 "select count(1) from t_flink_autoscaler_event_handler");
@@ -542,7 +546,7 @@ abstract class AbstractJdbcAutoscalerEventHandlerITCase implements DatabaseTest 
         if (minId == null) {
             return;
         }
-        try (Connection connection = getConnection();
+        try (Connection connection = dataSource.getConnection();
                 PreparedStatement ps =
                         connection.prepareStatement(
                                 "delete from t_flink_autoscaler_event_handler where id = ?")) {

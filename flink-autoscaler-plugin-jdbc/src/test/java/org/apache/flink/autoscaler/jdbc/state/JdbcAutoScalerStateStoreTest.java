@@ -48,7 +48,7 @@ class JdbcAutoScalerStateStoreTest
 
     @Override
     protected void preSetup() throws Exception {
-        jdbcStateStore = new JdbcStateStore(new JdbcStateInteractor(getConnection()));
+        jdbcStateStore = new JdbcStateStore(new JdbcStateInteractor(getDataSource()));
         cachedStateStore = new JdbcAutoScalerStateStore<>(jdbcStateStore);
     }
 
@@ -56,7 +56,7 @@ class JdbcAutoScalerStateStoreTest
     protected AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>
             createPhysicalAutoScalerStateStore() throws Exception {
         return new JdbcAutoScalerStateStore<>(
-                new JdbcStateStore(new JdbcStateInteractor(getConnection())));
+                new JdbcStateStore(new JdbcStateInteractor(getDataSource())));
     }
 
     @Override

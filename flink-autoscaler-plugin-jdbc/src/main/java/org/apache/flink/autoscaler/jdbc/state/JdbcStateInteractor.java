@@ -20,7 +20,8 @@ package org.apache.flink.autoscaler.jdbc.state;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
+
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collections;
@@ -31,21 +32,22 @@ import java.util.Map;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Responsible for interacting with the database. */
-public class JdbcStateInteractor {
+public class JdbcStateInteractor implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(JdbcStateInteractor.class);
 
-    private final Connection conn;
+    private final DataSource dataSource;
 
-    public JdbcStateInteractor(Connection conn) {
-        this.conn = conn;
+    public JdbcStateInteractor(DataSource dataSource) {
+        this.dataSource = dataSource;
     }
 
     public Map<StateType, String> queryData(String jobKey) throws Exception {
         var query =
                 "select state_type, state_value from t_flink_autoscaler_state_store where job_key = ?";
         var data = new HashMap<StateType, String>();
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setString(1, jobKey);
             var rs = pstmt.executeQuery();
             while (rs.next()) {
@@ -63,7 +65,8 @@ public class JdbcStateInteractor {
                 String.format(
                         "DELETE FROM t_flink_autoscaler_state_store where job_key = ? and state_type in (%s)",
                         String.join(",", Collections.nCopies(deletedStateTypes.size(), "?")));
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setString(1, jobKey);
             int i = 2;
             for (var stateType : deletedStateTypes) {
@@ -80,7 +83,8 @@ public class JdbcStateInteractor {
         var query =
                 "INSERT INTO t_flink_autoscaler_state_store (update_time, job_key, state_type, state_value) values (?, ?, ?, ?)";
         var updateTime = Timestamp.from(Instant.now());
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             for (var stateType : createdStateTypes) {
                 pstmt.setTimestamp(1, updateTime);
                 pstmt.setString(2, jobKey);
@@ -106,7 +110,8 @@ public class JdbcStateInteractor {
                 "UPDATE t_flink_autoscaler_state_store set update_time = ?, state_value = ? where job_key = ? and state_type = ?";
 
         var updateTime = Timestamp.from(Instant.now());
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             for (var stateType : updatedStateTypes) {
                 pstmt.setTimestamp(1, updateTime);
 
@@ -121,6 +126,13 @@ public class JdbcStateInteractor {
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (dataSource instanceof AutoCloseable) {
+            ((AutoCloseable) dataSource).close();
         }
     }
 }

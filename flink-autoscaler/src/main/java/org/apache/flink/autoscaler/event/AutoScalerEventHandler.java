@@ -27,7 +27,6 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import javax.annotation.Nullable;
 
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -44,7 +43,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
  */
 @Experimental
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>>
-        extends Closeable {
+        extends AutoCloseable {
     String SCALING_SUMMARY_ENTRY =
             "{ Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f}";
     String SCALING_EXECUTION_DISABLED_REASON = "%s:%s, recommended parallelism change:";
@@ -100,9 +99,6 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                 SCALING_REPORT_KEY,
                 interval);
     }
-
-    /** Close the related resource. */
-    default void close() {}
 
     static String scalingReport(Map<JobVertexID, ScalingSummary> scalingSummaries, String message) {
         StringBuilder sb = new StringBuilder(message);

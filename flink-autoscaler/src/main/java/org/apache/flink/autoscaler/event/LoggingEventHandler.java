@@ -49,4 +49,7 @@ public class LoggingEventHandler<KEY, Context extends JobAutoScalerContext<KEY>>
                 messageKey,
                 interval);
     }
+
+    @Override
+    public void close() throws Exception {}
 }

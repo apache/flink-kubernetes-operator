@@ -21,14 +21,14 @@ import org.apache.flink.autoscaler.jdbc.testutils.databases.DatabaseTest;
 
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
 
 /** MySQL 8.x database for testing. */
 public interface MySQL8TestBase extends DatabaseTest {
 
     @RegisterExtension MySQLExtension MYSQL_EXTENSION = new MySQLExtension("8.0.32");
 
-    default Connection getConnection() throws Exception {
-        return MYSQL_EXTENSION.getConnection();
+    default DataSource getDataSource() throws Exception {
+        return MYSQL_EXTENSION.getDataSource();
     }
 }

@@ -17,10 +17,10 @@
 
 package org.apache.flink.autoscaler.jdbc.testutils.databases;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
 
 /** Database testing. */
 public interface DatabaseTest {
 
-    Connection getConnection() throws Exception;
+    DataSource getDataSource() throws Exception;
 }
