@@ -23,8 +23,8 @@ import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.sql.DataSource;
 
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -37,13 +37,13 @@ import java.util.Optional;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Responsible for interacting with the database. */
-public class JdbcEventInteractor {
+public class JdbcEventInteractor implements AutoCloseable {
 
-    private final Connection conn;
+    private final DataSource dataSource;
     private Clock clock = Clock.systemDefaultZone();
 
-    public JdbcEventInteractor(Connection conn) {
-        this.conn = conn;
+    public JdbcEventInteractor(DataSource dataSource) {
+        this.dataSource = dataSource;
     }
 
     public Optional<AutoScalerEvent> queryLatestEvent(String jobKey, String reason, String eventKey)
@@ -52,7 +52,8 @@ public class JdbcEventInteractor {
                 "select * from t_flink_autoscaler_event_handler "
                         + "where job_key = ? and reason = ? and event_key = ? ";
 
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setString(1, jobKey);
             pstmt.setString(2, reason);
             pstmt.setString(3, eventKey);
@@ -99,7 +100,8 @@ public class JdbcEventInteractor {
                         + " values (?, ?, ?, ?, ?, ?, ?, ?)";
 
         var createTime = Timestamp.from(clock.instant());
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setTimestamp(1, createTime);
             pstmt.setTimestamp(2, createTime);
             pstmt.setString(3, jobKey);
@@ -117,7 +119,8 @@ public class JdbcEventInteractor {
                 "UPDATE t_flink_autoscaler_event_handler set update_time = ?, message = ?, event_count = ? where id = ?";
 
         var updateTime = Timestamp.from(clock.instant());
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setTimestamp(1, updateTime);
             pstmt.setString(2, message);
             pstmt.setInt(3, eventCount);
@@ -136,7 +139,8 @@ public class JdbcEventInteractor {
                 "select * from t_flink_autoscaler_event_handler "
                         + "where job_key = ? and reason = ? ";
 
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setString(1, jobKey);
             pstmt.setString(2, reason);
 
@@ -160,7 +164,8 @@ public class JdbcEventInteractor {
                 "SELECT id from t_flink_autoscaler_event_handler "
                         + "           where id = (SELECT id FROM t_flink_autoscaler_event_handler order by id asc limit 1) "
                         + "           and create_time < ?";
-        try (var pstmt = conn.prepareStatement(sql)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(sql)) {
             pstmt.setObject(1, timestamp);
             ResultSet resultSet = pstmt.executeQuery();
             return resultSet.next() ? resultSet.getLong(1) : null;
@@ -171,11 +176,19 @@ public class JdbcEventInteractor {
             throws Exception {
         var query =
                 "delete from t_flink_autoscaler_event_handler where id >= ? and id < ? and create_time < ?";
-        try (var pstmt = conn.prepareStatement(query)) {
+        try (var conn = dataSource.getConnection();
+                var pstmt = conn.prepareStatement(query)) {
             pstmt.setObject(1, startId);
             pstmt.setObject(2, endId);
             pstmt.setObject(3, timestamp);
             return pstmt.executeUpdate();
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (dataSource instanceof AutoCloseable) {
+            ((AutoCloseable) dataSource).close();
         }
     }
 }

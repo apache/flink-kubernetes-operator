@@ -19,7 +19,8 @@ package org.apache.flink.autoscaler.jdbc.event;
 
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
+
 import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -34,8 +35,8 @@ class CountableJdbcEventInteractor extends JdbcEventInteractor {
     private final AtomicLong updateCounter;
     private final AtomicLong deleteExpiredCounter;
 
-    public CountableJdbcEventInteractor(Connection conn) {
-        super(conn);
+    public CountableJdbcEventInteractor(DataSource dataSource) {
+        super(dataSource);
         queryCounter = new AtomicLong();
         createCounter = new AtomicLong();
         updateCounter = new AtomicLong();

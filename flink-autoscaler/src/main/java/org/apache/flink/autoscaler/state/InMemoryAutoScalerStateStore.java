@@ -191,4 +191,7 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
                         delayedScaleDownStore)
                 .anyMatch(m -> m.containsKey(k));
     }
+
+    @Override
+    public void close() throws Exception {}
 }

@@ -103,4 +103,7 @@ public class KubernetesAutoScalerEventHandler
                     labels);
         }
     }
+
+    @Override
+    public void close() throws Exception {}
 }

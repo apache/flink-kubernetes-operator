@@ -17,12 +17,13 @@
 
 package org.apache.flink.autoscaler.jdbc.testutils.databases.derby;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.List;
@@ -34,8 +35,11 @@ public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, Afte
             List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
     private static final String JDBC_URL = "jdbc:derby:memory:test";
 
-    public Connection getConnection() throws Exception {
-        return DriverManager.getConnection(JDBC_URL);
+    public HikariDataSource getDataSource() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(JDBC_URL);
+        config.setValidationTimeout(1000);
+        return new HikariDataSource(config);
     }
 
     @Override
@@ -76,7 +80,8 @@ public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, Afte
         var jobKeyReasonCreateTimeIndex =
                 "CREATE INDEX job_key_reason_create_time_idx ON t_flink_autoscaler_event_handler (job_key, reason, create_time)";
 
-        try (var conn = getConnection();
+        try (var dataSource = getDataSource();
+                var conn = dataSource.getConnection();
                 var st = conn.createStatement()) {
             st.execute(stateStoreDDL);
             st.execute(createStateStoreIndex);
@@ -88,7 +93,8 @@ public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, Afte
 
     @Override
     public void afterAll(ExtensionContext extensionContext) throws Exception {
-        try (var conn = getConnection();
+        try (var dataSource = getDataSource();
+                var conn = dataSource.getConnection();
                 var st = conn.createStatement()) {
             for (var tableName : TABLES) {
                 st.executeUpdate(String.format("DROP TABLE %s", tableName));
@@ -103,7 +109,8 @@ public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, Afte
     @Override
     public void afterEach(ExtensionContext extensionContext) throws Exception {
         // Clean up all data
-        try (var conn = getConnection();
+        try (var dataSource = getDataSource();
+                var conn = dataSource.getConnection();
                 var st = conn.createStatement()) {
             for (var tableName : TABLES) {
                 st.executeUpdate(String.format("DELETE from %s", tableName));

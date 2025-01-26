@@ -33,7 +33,6 @@ import org.slf4j.MDC;
 
 import javax.annotation.Nonnull;
 
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -56,7 +55,7 @@ import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandalone
 
 /** The executor of the standalone autoscaler. */
 public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
-        implements Closeable {
+        implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(StandaloneAutoscalerExecutor.class);
 
@@ -113,7 +112,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public void close() {
+    public void close() throws Exception {
         scheduledExecutorService.shutdownNow();
         scalingThreadPool.shutdownNow();
         eventHandler.close();
