@@ -35,7 +35,9 @@ public enum ResourceLifecycleState {
     STABLE(true, "The resource deployment is considered to be stable and won’t be rolled back"),
     ROLLING_BACK(false, "The resource is being rolled back to the last stable spec"),
     ROLLED_BACK(true, "The resource is deployed with the last stable spec"),
-    FAILED(true, "The job terminally failed");
+    FAILED(true, "The job terminally failed"),
+    DELETING(false, "The resource is being deleted"),
+    DELETED(true, "The resource is deleted");
 
     @JsonIgnore private final boolean terminal;
     @JsonIgnore @Getter private final String description;

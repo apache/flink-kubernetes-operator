@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -104,6 +105,7 @@ public class FlinkDeploymentController
                 "Cleaning up FlinkDeployment",
                 josdkContext.getClient());
         statusRecorder.updateStatusFromCache(flinkApp);
+        flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
@@ -113,7 +115,8 @@ public class FlinkDeploymentController
 
         var deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
         if (deleteControl.isRemoveFinalizer()) {
-            statusRecorder.removeCachedStatus(flinkApp);
+            flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
+            statusRecorder.cleanupForDeletion(flinkApp);
             ctxFactory.cleanup(flinkApp);
         } else {
             statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());

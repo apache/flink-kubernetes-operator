@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -145,6 +146,8 @@ public class FlinkSessionJobController
                 EventRecorder.Component.Operator,
                 "Cleaning up FlinkSessionJob",
                 josdkContext.getClient());
+        statusRecorder.updateStatusFromCache(sessionJob);
+        sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(sessionJob, josdkContext);
         try {
             observer.observe(ctx);
@@ -154,8 +157,9 @@ public class FlinkSessionJobController
 
         var deleteControl = reconciler.cleanup(ctx);
         if (deleteControl.isRemoveFinalizer()) {
+            sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
             ctxFactory.cleanup(sessionJob);
-            statusRecorder.removeCachedStatus(sessionJob);
+            statusRecorder.cleanupForDeletion(sessionJob);
         } else {
             statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
         }

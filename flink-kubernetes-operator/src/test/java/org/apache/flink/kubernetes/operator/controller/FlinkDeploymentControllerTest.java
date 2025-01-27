@@ -153,6 +153,17 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+
+        testController.cleanup(appCluster, context);
+        // Make sure status is recorded and sent out at the end of cleanup
+        assertEquals(
+                ResourceLifecycleState.DELETED,
+                testController
+                        .getStatusUpdateCounter()
+                        .currentResource
+                        .getStatus()
+                        .getLifecycleState());
+        assertEquals(ResourceLifecycleState.DELETED, appCluster.getStatus().getLifecycleState());
     }
 
     @ParameterizedTest
