@@ -60,6 +60,7 @@ rbac:
 
 operatorPod:
   priorityClassName: null
+  hostNetwork: false
   annotations: {}
   labels: {}
   # The env variables only apply to the operator container in the operator pod
