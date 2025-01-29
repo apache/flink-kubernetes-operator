@@ -32,6 +32,7 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.KubernetesClusterDescriptor;
+import org.apache.flink.kubernetes.artifact.DefaultKubernetesArtifactUploader;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.Endpoint;
 import org.apache.flink.kubernetes.kubeclient.FlinkKubeClientFactory;
@@ -74,7 +75,10 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
 
     public KubernetesStandaloneClusterDescriptor(
             Configuration flinkConfig, FlinkStandaloneKubeClient client) {
-        super(flinkConfig, FlinkKubeClientFactory.getInstance());
+        super(
+                flinkConfig,
+                FlinkKubeClientFactory.getInstance(),
+                new DefaultKubernetesArtifactUploader());
         this.flinkConfig = checkNotNull(flinkConfig);
         this.standaloneKubeClient = checkNotNull(client);
         this.clusterId =

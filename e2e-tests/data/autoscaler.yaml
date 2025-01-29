@@ -22,8 +22,8 @@ metadata:
   namespace: default
   name: flink-autoscaler-e2e
 spec:
-  image: flink:1.18
-  flinkVersion: v1_18
+  image: flink:1.20
+  flinkVersion: v1_20
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"

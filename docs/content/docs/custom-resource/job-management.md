@@ -111,8 +111,8 @@ kind: FlinkDeployment
 metadata:
   name: basic-checkpoint-ha-example
 spec:
-  image: flink:1.17
-  flinkVersion: v1_17
+  image: flink:1.20
+  flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     state.savepoints.dir: file:///flink-data/savepoints
