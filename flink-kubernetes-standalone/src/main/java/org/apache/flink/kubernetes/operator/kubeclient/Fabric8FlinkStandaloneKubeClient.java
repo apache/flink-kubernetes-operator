@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.apps.D
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -41,7 +41,7 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
     public Fabric8FlinkStandaloneKubeClient(
             Configuration flinkConfig,
             NamespacedKubernetesClient client,
-            ExecutorService executorService) {
+            ScheduledExecutorService executorService) {
         super(flinkConfig, client, executorService);
         internalClient = checkNotNull(client);
     }
@@ -69,7 +69,7 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
     }
 
     public static Fabric8FlinkStandaloneKubeClient create(
-            Configuration conf, ExecutorService executorService) {
+            Configuration conf, ScheduledExecutorService executorService) {
         var client =
                 new DefaultKubernetesClient()
                         .inNamespace(conf.get(KubernetesConfigOptions.NAMESPACE));

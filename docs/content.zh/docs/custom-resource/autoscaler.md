@@ -177,7 +177,7 @@ We suggest setting this based on your actual objective, such us 10,30,60 minutes
 ### Basic configuration example
 ```yaml
 ...
-flinkVersion: v1_17
+flinkVersion: v1_20
 flinkConfiguration:
     job.autoscaler.enabled: "true"
     job.autoscaler.stabilization.interval: 1m

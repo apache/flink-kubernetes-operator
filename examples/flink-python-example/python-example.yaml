@@ -22,7 +22,7 @@ metadata:
   name: python-example
 spec:
   image: flink-python-example:latest
-  flinkVersion: v1_16
+  flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "1"
   serviceAccount: flink

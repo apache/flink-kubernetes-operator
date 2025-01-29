@@ -22,7 +22,7 @@ metadata:
   name: autoscaling-example
 spec:
   image: autoscaling-example
-  flinkVersion: v1_18
+  flinkVersion: v1_20
   flinkConfiguration:
     job.autoscaler.enabled: "true"
     job.autoscaler.stabilization.interval: "1m"

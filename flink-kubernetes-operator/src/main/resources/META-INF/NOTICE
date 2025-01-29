@@ -6,21 +6,24 @@ The Apache Software Foundation (http://www.apache.org/).
 
 This project bundles the following dependencies under the Apache Software License 2.0 (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
-- com.fasterxml.jackson.core:jackson-annotations:2.15.0
-- com.fasterxml.jackson.core:jackson-core:2.15.0
-- com.fasterxml.jackson.core:jackson-databind:2.15.0
-- com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.0
+- com.esotericsoftware.kryo:kryo:jar:2.24.0
+- com.esotericsoftware.minlog:minlog:jar:1.2
+- com.fasterxml.jackson.core:jackson-annotations:jar:2.15.0
+- com.fasterxml.jackson.core:jackson-core:jar:2.15.0
+- com.fasterxml.jackson.core:jackson-databind:jar:2.15.0
+- com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:jar:2.15.0
 - com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.15.0
-- com.google.code.findbugs:jsr305:1.3.9
-- com.squareup.okhttp3:logging-interceptor:4.12.0
-- com.squareup.okhttp3:okhttp:4.12.0
-- com.squareup.okio:okio-jvm:3.6.0
+- com.google.code.findbugs:jsr305:jar:1.3.9
+- com.squareup.okhttp3:logging-interceptor:jar:3.12.12
+- com.squareup.okhttp3:okhttp:jar:4.12.0
+- com.squareup.okio:okio-jvm:jar:3.6.0
 - com.squareup.okio:okio:jar:3.6.0
-- com.squareup:javapoet:1.13.0
-- com.twitter:chill-java:0.7.6
-- commons-cli:commons-cli:1.5.0
-- commons-collections:commons-collections:3.2.2
-- commons-io:commons-io:2.17.0
+- com.squareup:javapoet:jar:1.13.0
+- com.twitter:chill-java:jar:0.7.6
+- com.zaxxer:HikariCP:jar:5.1.0
+- commons-cli:commons-cli:jar:1.5.0
+- commons-collections:commons-collections:jar:3.2.2
+- commons-io:commons-io:jar:2.17.0
 - io.fabric8:kubernetes-client-api:jar:6.13.2
 - io.fabric8:kubernetes-client:jar:6.13.2
 - io.fabric8:kubernetes-httpclient-okhttp:jar:6.13.2
@@ -49,26 +52,28 @@ This project bundles the following dependencies under the Apache Software Licens
 - io.fabric8:zjsonpatch:jar:0.3.0
 - io.javaoperatorsdk:operator-framework-core:jar:4.9.4
 - io.javaoperatorsdk:operator-framework:jar:4.9.4
-- org.apache.commons:commons-compress:1.21
-- org.apache.commons:commons-lang3:3.14.0
-- org.apache.commons:commons-math3:3.6.1
+- org.apache.commons:commons-compress:jar:1.26.0
+- org.apache.commons:commons-lang3:jar:3.16.0
+- org.apache.commons:commons-math3:jar:3.6.1
 - org.apache.commons:commons-text:jar:1.10.0
-- org.apache.logging.log4j:log4j-1.2-api:2.23.1
-- org.apache.logging.log4j:log4j-api:2.23.1
-- org.apache.logging.log4j:log4j-core:2.23.1
-- org.apache.logging.log4j:log4j-slf4j-impl:2.23.1
-- org.javassist:javassist:3.24.0-GA
-- org.jetbrains.kotlin:kotlin-stdlib-common:1.9.10
-- org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.21
-- org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.21
-- org.jetbrains.kotlin:kotlin-stdlib:1.8.21
-- org.jetbrains:annotations:13.0
-- org.lz4:lz4-java:1.8.0
-- org.objenesis:objenesis:2.1
-- org.slf4j:slf4j-api:1.7.36
+- org.apache.logging.log4j:log4j-1.2-api:jar:2.23.1
+- org.apache.logging.log4j:log4j-api:jar:2.23.1
+- org.apache.logging.log4j:log4j-core:jar:2.23.1
+- org.apache.logging.log4j:log4j-slf4j-impl:jar:2.23.1
+- org.javassist:javassist:jar:3.24.0-GA
+- org.jetbrains.kotlin:kotlin-stdlib-common:jar:1.8.21
+- org.jetbrains.kotlin:kotlin-stdlib-jdk7:jar:1.8.21
+- org.jetbrains.kotlin:kotlin-stdlib-jdk8:jar:1.8.21
+- org.jetbrains.kotlin:kotlin-stdlib:jar:1.8.21
+- org.jetbrains:annotations:jar:13.0
+- org.lz4:lz4-java:jar:1.8.0
+- org.objenesis:objenesis:jar:2.1
+- org.quartz-scheduler:quartz:jar:2.4.0
+- org.slf4j:slf4j-api:jar:1.7.36
 - org.snakeyaml:snakeyaml-engine:jar:2.6
-- org.xerial.snappy:snappy-java:1.1.7
-- org.yaml:snakeyaml:2.0
+- org.xerial.snappy:snappy-java:jar:1.1.10.4
+- org.yaml:snakeyaml:jar:2.0
+- tools.profiler:async-profiler:jar:2.9
 
 This project bundles the following dependencies under the BSD License.
 See bundled license files for details.

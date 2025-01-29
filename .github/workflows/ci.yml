@@ -91,6 +91,7 @@ jobs:
         http-client: [ "okhttp" ]
         java-version: [ "11", "17"]
         flink-version:
+          - "v2_0"
           - "v1_20"
           - "v1_19"
           - "v1_18"
@@ -107,11 +108,11 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_0"
           - "v1_20"
           - "v1_19"
           - "v1_18"
           - "v1_17"
-          - "v1_16"
         mode:
          - "native"
          - "standalone"
@@ -143,11 +144,11 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_0"
           - "v1_20"
           - "v1_18"
           - "v1_19"
           - "v1_17"
-          - "v1_16"
         mode:
           - "native"
           - "standalone"

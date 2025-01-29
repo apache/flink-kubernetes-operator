@@ -34,11 +34,6 @@ class FlinkVersionTest {
     }
 
     @Test
-    void current() {
-        assertEquals(FlinkVersion.v1_20, FlinkVersion.current());
-    }
-
-    @Test
     void isSupported() {
         assertTrue(FlinkVersion.isSupported(FlinkVersion.v1_20));
     }

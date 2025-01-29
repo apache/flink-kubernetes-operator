@@ -112,11 +112,12 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | v1_13 | No longer supported since 1.7 operator release. |
 | v1_14 | No longer supported since 1.7 operator release. |
 | v1_15 | Deprecated since 1.10 operator release. |
-| v1_16 |  |
+| v1_16 | Deprecated since 1.11 operator release. |
 | v1_17 |  |
 | v1_18 |  |
 | v1_19 |  |
 | v1_20 |  |
+| v2_0 |  |
 | majorVersion | int | The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. |
 | minorVersion | int | The minor integer from the Flink semver. For example for Flink 1.18.1 this would be 18. |
 
