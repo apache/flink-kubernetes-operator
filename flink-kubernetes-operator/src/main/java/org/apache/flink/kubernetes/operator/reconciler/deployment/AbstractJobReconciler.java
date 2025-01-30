@@ -285,11 +285,13 @@ public abstract class AbstractJobReconciler<
 
             boolean cancellable = allowLastStateCancel(ctx);
             if (running) {
-                return getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
+                var mode = getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
+                LOG.info("Job is running, using {} for last-state upgrade", mode);
+                return mode;
             }
 
             if (cancellable) {
-                LOG.info("Using cancel to perform last-state upgrade");
+                LOG.info("Job is not running, using cancel to perform last-state upgrade");
                 return JobUpgrade.lastStateUsingCancel();
             }
         }
@@ -356,8 +358,11 @@ public abstract class AbstractJobReconciler<
         }
 
         var conf = ctx.getObserveConfig();
-        return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB)
-                || !ctx.getFlinkService().isHaMetadataAvailable(conf);
+        if (!ctx.getFlinkService().isHaMetadataAvailable(conf)) {
+            LOG.info("HA metadata not available, cancel will be used instead of last-state");
+            return true;
+        }
+        return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB);
     }
 
     protected void restoreJob(
