@@ -84,10 +84,19 @@ jobs:
           if [[ "${{ inputs.append-java-version }}" == "true" ]]; then
             FLINK_IMAGE=${FLINK_IMAGE}-java${{ inputs.java-version }}
           fi
+          
+          EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar"
+          if [[ ${{ inputs.flink-version }} == v2* ]]; then
+            EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/2.0-preview1/flink-examples-streaming-2.0-preview1.jar"
+          fi
+          ESCAPED_EXAMPLES_JAR=$(printf '%s\n' "$EXAMPLES_JAR" | sed -e 's/[\/&]/\\&/g')
+          
           echo FLINK_IMAGE=${FLINK_IMAGE}
+          echo EXAMPLES_JAR=${EXAMPLES_JAR}
           sed -i "s/image: flink:.*/image: ${FLINK_IMAGE}/" e2e-tests/data/*.yaml
           sed -i "s/flinkVersion: .*/flinkVersion: ${{ inputs.flink-version }}/" e2e-tests/data/*.yaml
           sed -i "s/mode: .*/mode: ${{ inputs.mode }}/" e2e-tests/data/*.yaml
+          sed -i "s/STREAMING_EXAMPLES_JAR_URL/${ESCAPED_EXAMPLES_JAR}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
           bash e2e-tests/${{ inputs.test }} || exit 1
