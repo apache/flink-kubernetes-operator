@@ -301,7 +301,7 @@ public class FlinkConfigBuilder {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
 
-            if (jobSpec.getJarURI() != null) {
+            if (deploymentMode == KubernetesDeploymentMode.NATIVE && jobSpec.getJarURI() != null) {
                 effectiveConfig.set(
                         PipelineOptions.JARS,
                         Collections.singletonList(new URI(jobSpec.getJarURI()).toString()));
