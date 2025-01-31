@@ -810,6 +810,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             JarRunHeaders headers = JarRunHeaders.getInstance();
             JarRunMessageParameters parameters = headers.getUnresolvedMessageParameters();
             parameters.jarIdPathParameter.resolve(jarId);
+            var flinkVersion = conf.get(FLINK_VERSION);
             JarRunRequestBody runRequestBody =
                     new JarRunRequestBody(
                             job.getEntryClass(),
@@ -819,7 +820,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                             jobID,
                             job.getAllowNonRestoredState(),
                             savepoint,
-                            RestoreMode.DEFAULT,
+                            flinkVersion.isEqualOrNewer(FlinkVersion.v1_20)
+                                    ? null
+                                    : RestoreMode.DEFAULT,
+                            flinkVersion.isEqualOrNewer(FlinkVersion.v1_20)
+                                    ? RestoreMode.DEFAULT
+                                    : null,
                             conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
                                     ? conf.toMap()
                                     : null);
