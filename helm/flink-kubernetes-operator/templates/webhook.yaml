@@ -23,6 +23,10 @@ kind: Service
 metadata:
   name: flink-operator-webhook-service
   namespace: {{ .Release.Namespace }}
+  labels:
+  {{- with .Values.webhook.serviceLabels}}
+    {{- toYaml . | indent 4}}
+  {{- end }}
 spec:
   ports:
   - port: 443

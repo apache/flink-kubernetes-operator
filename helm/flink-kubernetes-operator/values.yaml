@@ -151,6 +151,7 @@ webhook:
   # passwordSecretRef:
   #   name: jks-password-secret
   #   key: password-key
+  serviceLabels: {}
 
 defaultConfiguration:
   # If set to true, creates ConfigMaps/VolumeMounts. If set to false, no configuration will be created.
