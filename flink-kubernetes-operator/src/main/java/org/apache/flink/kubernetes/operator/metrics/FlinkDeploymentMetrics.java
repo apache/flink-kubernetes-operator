@@ -49,6 +49,8 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
     private final Map<String, Map<String, Double>> deploymentCpuUsage = new ConcurrentHashMap<>();
     // map(namespace, map(deployment, memory))
     private final Map<String, Map<String, Long>> deploymentMemoryUsage = new ConcurrentHashMap<>();
+    // map(namespace, map(deployment, stateSize))
+    private final Map<String, Map<String, Long>> deploymentStateSize = new ConcurrentHashMap<>();
     public static final String FLINK_VERSION_GROUP_NAME = "FlinkVersion";
     public static final String FLINK_MINOR_VERSION_GROUP_NAME = "FlinkMinorVersion";
     public static final String UNKNOWN_VERSION = "UNKNOWN";
@@ -58,6 +60,7 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
     public static final String COUNTER_NAME = "Count";
     public static final String CPU_NAME = "Cpu";
     public static final String MEMORY_NAME = "Memory";
+    public static final String STATE_SIZE = "StateSize";
 
     public FlinkDeploymentMetrics(
             KubernetesOperatorMetricGroup parentMetricGroup, Configuration configuration) {
@@ -144,6 +147,18 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                         NumberUtils.toLong(
                                 clusterInfo.getOrDefault(
                                         AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "0")));
+
+        long stateSize =
+                NumberUtils.toLong(
+                        clusterInfo.getOrDefault(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "0"));
+        deploymentStateSize
+                .computeIfAbsent(
+                        namespace,
+                        ns -> {
+                            initNamespaceStateSize(ns);
+                            return new ConcurrentHashMap<>();
+                        })
+                .put(deploymentName, stateSize > 0 ? stateSize : 0);
     }
 
     public void onRemove(FlinkDeployment flinkApp) {
@@ -167,6 +182,9 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
         }
         if (deploymentMemoryUsage.containsKey(namespace)) {
             deploymentMemoryUsage.get(namespace).remove(name);
+        }
+        if (deploymentStateSize.containsKey(namespace)) {
+            deploymentStateSize.get(namespace).remove(name);
         }
     }
 
@@ -229,6 +247,15 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                         () ->
                                 deploymentMemoryUsage.get(ns).values().stream()
                                         .reduce(0L, Long::sum));
+    }
+
+    private void initNamespaceStateSize(String ns) {
+        parentMetricGroup
+                .createResourceNamespaceGroup(configuration, FlinkDeployment.class, ns)
+                .addGroup(RESOURCE_USAGE_GROUP_NAME)
+                .gauge(
+                        STATE_SIZE,
+                        () -> deploymentStateSize.get(ns).values().stream().reduce(0L, Long::sum));
     }
 
     private Map<JobManagerDeploymentStatus, Set<String>> createDeploymentStatusMap() {

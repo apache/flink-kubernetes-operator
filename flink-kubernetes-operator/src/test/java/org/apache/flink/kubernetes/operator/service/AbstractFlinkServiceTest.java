@@ -50,6 +50,7 @@ import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.runtime.checkpoint.CheckpointStatsStatus;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.HardwareDescription;
@@ -64,8 +65,11 @@ import org.apache.flink.runtime.rest.messages.RequestBody;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerMessageParameters;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricCollectionResponseBody;
@@ -114,6 +118,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 
 import java.io.File;
 import java.io.IOException;
@@ -988,6 +993,35 @@ public class AbstractFlinkServiceTest {
                         null);
         var tmsInfo = new TaskManagersInfo(List.of(tmInfo));
 
+        var checkpointingStatistics =
+                new CheckpointingStatistics(
+                        new CheckpointingStatistics.Counts(-1, -1, -1, -1, -1),
+                        new CheckpointingStatistics.Summary(null, null, null, null, null, null),
+                        new CheckpointingStatistics.LatestCheckpoints(
+                                new CheckpointStatistics.CompletedCheckpointStatistics(
+                                        42,
+                                        CheckpointStatsStatus.COMPLETED,
+                                        false,
+                                        null,
+                                        123,
+                                        1234,
+                                        -1,
+                                        42424242,
+                                        -1,
+                                        -1,
+                                        -1,
+                                        -1,
+                                        0,
+                                        0,
+                                        CheckpointStatistics.RestAPICheckpointType.CHECKPOINT,
+                                        Map.of(),
+                                        "path",
+                                        false),
+                                null,
+                                null,
+                                null),
+                        List.of());
+
         var flinkService =
                 getTestingService(
                         (h, p, r) -> {
@@ -995,6 +1029,8 @@ public class AbstractFlinkServiceTest {
                                 return CompletableFuture.completedFuture(config);
                             } else if (h instanceof TaskManagersHeaders) {
                                 return CompletableFuture.completedFuture(tmsInfo);
+                            } else if (h instanceof CheckpointingStatisticsHeaders) {
+                                return CompletableFuture.completedFuture(checkpointingStatistics);
                             }
                             fail("unknown request");
                             return null;
@@ -1004,7 +1040,7 @@ public class AbstractFlinkServiceTest {
         conf.set(JobManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(1000));
         conf.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(1000));
 
-        assertEquals(
+        Map<String, String> expectedEntries =
                 Map.of(
                         DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
                         testVersion,
@@ -1013,8 +1049,16 @@ public class AbstractFlinkServiceTest {
                         AbstractFlinkService.FIELD_NAME_TOTAL_CPU,
                         "2.0",
                         AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
-                        "" + MemorySize.ofMebiBytes(1000).getBytes() * 2),
-                flinkService.getClusterInfo(conf));
+                        "" + MemorySize.ofMebiBytes(1000).getBytes() * 2);
+
+        assertEquals(expectedEntries, flinkService.getClusterInfo(conf, null));
+
+        assertEquals(
+                ImmutableMap.<String, String>builder()
+                        .putAll(expectedEntries)
+                        .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
+                        .build(),
+                flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
     }
 
     @Test

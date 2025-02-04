@@ -82,7 +82,10 @@ public abstract class AbstractFlinkDeploymentObserver
         var flinkApp = ctx.getResource();
         try {
             Map<String, String> clusterInfo =
-                    ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig());
+                    ctx.getFlinkService()
+                            .getClusterInfo(
+                                    ctx.getObserveConfig(),
+                                    flinkApp.getStatus().getJobStatus().getJobId());
             flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
         } catch (Exception e) {

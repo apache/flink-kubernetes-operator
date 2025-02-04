@@ -403,6 +403,28 @@ public class FlinkUtils {
         return tmTotalMemory + jmTotalMemory;
     }
 
+    public static Long calculateClusterStateSize(Configuration conf, int taskManagerReplicas) {
+        var clusterSpec = new KubernetesClusterClientFactory().getClusterSpecification(conf);
+
+        var jmParameters = new KubernetesJobManagerParameters(conf, clusterSpec);
+        var jmTotalMemory =
+                Math.round(
+                        jmParameters.getJobManagerMemoryMB()
+                                * Math.pow(1024, 2)
+                                * jmParameters.getJobManagerMemoryLimitFactor()
+                                * jmParameters.getReplicas());
+
+        var tmTotalMemory =
+                Math.round(
+                        clusterSpec.getTaskManagerMemoryMB()
+                                * Math.pow(1024, 2)
+                                * conf.getDouble(
+                                        KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
+                                * taskManagerReplicas);
+
+        return tmTotalMemory + jmTotalMemory;
+    }
+
     public static void setGenerationAnnotation(Configuration conf, Long generation) {
         if (generation == null) {
             return;

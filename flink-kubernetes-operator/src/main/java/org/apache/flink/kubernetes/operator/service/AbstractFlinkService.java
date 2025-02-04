@@ -73,6 +73,8 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusHeader
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -161,6 +163,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
+    public static final String FIELD_NAME_STATE_SIZE = "state-size";
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -735,9 +738,27 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
+    public Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId)
+            throws Exception {
         Map<String, String> clusterInfo = new HashMap<>();
 
+        populateFlinkVersion(conf, clusterInfo);
+
+        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_CPU,
+                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_MEMORY,
+                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
+
+        populateStateSize(conf, jobId, clusterInfo);
+
+        return clusterInfo;
+    }
+
+    private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
+            throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
 
             CustomDashboardConfiguration dashboardConfiguration =
@@ -757,16 +778,35 @@ public abstract class AbstractFlinkService implements FlinkService {
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     dashboardConfiguration.getFlinkRevision());
         }
+    }
 
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_CPU,
-                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_MEMORY,
-                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
+    private void populateStateSize(
+            Configuration conf, @Nullable String jobId, Map<String, String> clusterInfo)
+            throws Exception {
+        if (jobId != null) {
+            try (RestClusterClient<String> clusterClient = getClusterClient(conf)) {
+                var checkpointingStatisticsHeaders = CheckpointingStatisticsHeaders.getInstance();
+                var parameters = checkpointingStatisticsHeaders.getUnresolvedMessageParameters();
+                parameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
 
-        return clusterInfo;
+                CheckpointingStatistics checkpointingStatistics =
+                        clusterClient
+                                .sendRequest(
+                                        checkpointingStatisticsHeaders,
+                                        parameters,
+                                        EmptyRequestBody.getInstance())
+                                .get();
+                CheckpointStatistics.CompletedCheckpointStatistics completedCheckpointStatistics =
+                        checkpointingStatistics
+                                .getLatestCheckpoints()
+                                .getCompletedCheckpointStatistics();
+                if (completedCheckpointStatistics != null) {
+                    clusterInfo.put(
+                            FIELD_NAME_STATE_SIZE,
+                            String.valueOf(completedCheckpointStatistics.getStateSize()));
+                }
+            }
+        }
     }
 
     @Override
