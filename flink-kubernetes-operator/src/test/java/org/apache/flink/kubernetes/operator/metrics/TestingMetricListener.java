@@ -44,6 +44,11 @@ public class TestingMetricListener {
     private static final String HOST = "test-op-host";
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Map<String, Metric> metrics = new HashMap();
+
+    public Map<String, Metric> getMetrics() {
+        return metrics;
+    }
+
     private final ScheduledExecutorService executor;
     private Configuration configuration;
     private ViewUpdater viewUpdater;
