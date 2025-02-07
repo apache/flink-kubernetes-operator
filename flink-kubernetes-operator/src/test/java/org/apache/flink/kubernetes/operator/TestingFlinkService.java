@@ -648,7 +648,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf) throws TimeoutException {
+    public Map<String, String> getClusterInfo(Configuration conf, String jobId)
+            throws TimeoutException {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }

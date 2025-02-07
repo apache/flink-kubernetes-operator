@@ -38,6 +38,7 @@ import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetric
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_VERSION_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.MEMORY_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.RESOURCE_USAGE_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATE_SIZE;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATUS_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -339,7 +340,8 @@ public class FlinkDeploymentMetricsTest {
                 .putAll(
                         Map.of(
                                 AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "5",
-                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "1024"));
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "1024",
+                                AbstractFlinkService.FIELD_NAME_STATE_SIZE, "4096"));
 
         deployment2
                 .getStatus()
@@ -347,7 +349,8 @@ public class FlinkDeploymentMetricsTest {
                 .putAll(
                         Map.of(
                                 AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "10",
-                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "2048"));
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "2048",
+                                AbstractFlinkService.FIELD_NAME_STATE_SIZE, "8192"));
 
         deployment3
                 .getStatus()
@@ -355,7 +358,8 @@ public class FlinkDeploymentMetricsTest {
                 .putAll(
                         Map.of(
                                 AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "13",
-                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "4096"));
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "4096",
+                                AbstractFlinkService.FIELD_NAME_STATE_SIZE, "16384"));
 
         var cpuGroupId1 =
                 listener.getNamespaceMetricId(
@@ -363,17 +367,25 @@ public class FlinkDeploymentMetricsTest {
         var memoryGroupId1 =
                 listener.getNamespaceMetricId(
                         FlinkDeployment.class, namespace1, RESOURCE_USAGE_GROUP_NAME, MEMORY_NAME);
+        var stateSizeGroupId1 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace1, RESOURCE_USAGE_GROUP_NAME, STATE_SIZE);
         var cpuGroupId2 =
                 listener.getNamespaceMetricId(
                         FlinkDeployment.class, namespace2, RESOURCE_USAGE_GROUP_NAME, CPU_NAME);
         var memoryGroupId2 =
                 listener.getNamespaceMetricId(
                         FlinkDeployment.class, namespace2, RESOURCE_USAGE_GROUP_NAME, MEMORY_NAME);
+        var stateSizeGroupId2 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace2, RESOURCE_USAGE_GROUP_NAME, STATE_SIZE);
 
         assertTrue(listener.getGauge(cpuGroupId1).isEmpty());
         assertTrue(listener.getGauge(memoryGroupId1).isEmpty());
+        assertTrue(listener.getGauge(stateSizeGroupId1).isEmpty());
         assertTrue(listener.getGauge(cpuGroupId2).isEmpty());
         assertTrue(listener.getGauge(memoryGroupId2).isEmpty());
+        assertTrue(listener.getGauge(stateSizeGroupId2).isEmpty());
 
         metricManager.onUpdate(deployment1);
         metricManager.onUpdate(deployment2);
@@ -381,8 +393,10 @@ public class FlinkDeploymentMetricsTest {
 
         assertEquals(15D, listener.getGauge(cpuGroupId1).get().getValue());
         assertEquals(3072L, listener.getGauge(memoryGroupId1).get().getValue());
+        assertEquals(12288L, listener.getGauge(stateSizeGroupId1).get().getValue());
         assertEquals(13D, listener.getGauge(cpuGroupId2).get().getValue());
         assertEquals(4096L, listener.getGauge(memoryGroupId2).get().getValue());
+        assertEquals(16384L, listener.getGauge(stateSizeGroupId2).get().getValue());
     }
 
     @Test
