@@ -50,7 +50,6 @@ rules:
       - apps
     resources:
       - deployments
-      - deployments/scale
       - deployments/finalizers
       - replicasets
     verbs:
@@ -61,6 +60,14 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/scale
+    verbs:
+      - get
+      - update
+      - patch
   - apiGroups:
       - extensions
     resources:
@@ -82,7 +89,6 @@ rules:
       - flinksessionjobs
       - flinksessionjobs/finalizers
       - flinkstatesnapshots
-      - flinkstatesnapshots/status
       - flinkstatesnapshots/finalizers
     verbs:
       - get
@@ -97,6 +103,7 @@ rules:
     resources:
       - flinkdeployments/status
       - flinksessionjobs/status
+      - flinkstatesnapshots/status
     verbs:
       - get
       - update
@@ -248,7 +255,13 @@ rules:
     resources:
       - leases
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
 {{- end }}
 ---
 {{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
