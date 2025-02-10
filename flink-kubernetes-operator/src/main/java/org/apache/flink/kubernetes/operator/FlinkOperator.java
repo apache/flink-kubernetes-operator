@@ -24,6 +24,7 @@ import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -31,6 +32,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
+import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotController;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.health.HealthProbe;
 import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
@@ -41,8 +43,10 @@ import org.apache.flink.kubernetes.operator.metrics.OperatorJosdkMetrics;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
+import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
@@ -89,7 +93,9 @@ public class FlinkOperator {
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
-                        : new FlinkConfigManager(this::handleNamespaceChanges);
+                        : new FlinkConfigManager(
+                                this::handleNamespaceChanges,
+                                KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
 
         baseConfig = configManager.getDefaultConfig();
         this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig);
@@ -210,6 +216,32 @@ public class FlinkOperator {
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
+    @VisibleForTesting
+    void registerSnapshotController() {
+        if (!configManager.getOperatorConfiguration().isSnapshotResourcesEnabled()) {
+            LOG.warn(
+                    "Skipping registering snapshot controller as snapshot resources are disabled.");
+            return;
+        }
+        var metricManager =
+                MetricManager.createFlinkStateSnapshotMetricManager(baseConfig, metricGroup);
+        var statusRecorder =
+                StatusRecorder.createForFlinkStateSnapshot(client, metricManager, listeners);
+        var eventRecorder = EventRecorder.create(client, listeners);
+        var reconciler = new StateSnapshotReconciler(ctxFactory, eventRecorder);
+        var observer = new StateSnapshotObserver(ctxFactory, eventRecorder);
+        var controller =
+                new FlinkStateSnapshotController(
+                        validators,
+                        ctxFactory,
+                        reconciler,
+                        observer,
+                        eventRecorder,
+                        metricManager,
+                        statusRecorder);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
+    }
+
     private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
         var operatorConf = configManager.getOperatorConfiguration();
         var watchNamespaces = operatorConf.getWatchedNamespaces();
@@ -229,6 +261,7 @@ public class FlinkOperator {
     public void run() {
         registerDeploymentController();
         registerSessionJobController();
+        registerSnapshotController();
         operator.installShutdownHook(
                 baseConfig.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT));
         operator.start();

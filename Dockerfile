@@ -16,14 +16,16 @@
 # limitations under the License.
 ################################################################################
 # Build
-FROM maven:3.8.4-eclipse-temurin-11 AS build
+ARG JAVA_VERSION=11
+FROM maven:3.8.8-eclipse-temurin-${JAVA_VERSION} AS build
 ARG SKIP_TESTS=true
+ARG HTTP_CLIENT=okhttp
 
 WORKDIR /app
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS -Dfabric8.httpclient.impl="$HTTP_CLIENT"
 
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
@@ -33,10 +35,10 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
 
 # stage
-FROM eclipse-temurin:11-jre-jammy
+FROM eclipse-temurin:${JAVA_VERSION}-jre-jammy
 ENV FLINK_HOME=/opt/flink
 ENV FLINK_PLUGINS_DIR=$FLINK_HOME/plugins
-ENV OPERATOR_VERSION=1.10-SNAPSHOT
+ENV OPERATOR_VERSION=1.11-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar

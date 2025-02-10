@@ -64,6 +64,7 @@ public class JobSpec implements Diffable<JobSpec> {
      * savepoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
+    @Deprecated
     private Long savepointTriggerNonce;
 
     /**
@@ -78,6 +79,7 @@ public class JobSpec implements Diffable<JobSpec> {
      * checkpoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
+    @Deprecated
     private Long checkpointTriggerNonce;
 
     /** Upgrade mode of the Flink job. */
@@ -95,4 +97,13 @@ public class JobSpec implements Diffable<JobSpec> {
      */
     @SpecDiff(value = DiffType.SAVEPOINT_REDEPLOY, onNullIgnore = true)
     private Long savepointRedeployNonce;
+
+    /**
+     * Nonce used to reset the autoscaler metrics, parallelism overrides and history for the job.
+     * This can be used to quickly go back to the initial user-provided parallelism settings without
+     * having to toggle the autoscaler on and off. In order to trigger the reset behaviour simply
+     * change the nonce to a new non-null value.
+     */
+    @SpecDiff(value = DiffType.IGNORE)
+    private Long autoscalerResetNonce;
 }

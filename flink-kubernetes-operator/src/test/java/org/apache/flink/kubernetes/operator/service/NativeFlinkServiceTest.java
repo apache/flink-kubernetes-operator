@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -30,21 +31,19 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
-import org.apache.flink.runtime.rest.messages.JobPlanInfo;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
 import org.apache.flink.util.concurrent.Executors;
@@ -63,7 +62,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -88,9 +86,12 @@ public class NativeFlinkServiceTest {
     KubernetesClient client;
     KubernetesMockServer mockServer;
     private final Configuration configuration = new Configuration();
-    private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
+    private FlinkConfigManager configManager;
 
-    private final EventCollector eventCollector = new EventCollector();
+    private final FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
+    private final FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector =
+            new FlinkStateSnapshotEventCollector();
 
     private EventRecorder eventRecorder;
     private FlinkOperatorConfiguration operatorConfig;
@@ -98,10 +99,12 @@ public class NativeFlinkServiceTest {
 
     @BeforeEach
     public void setup() {
+        configManager = new FlinkConfigManager(configuration);
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
-        configuration.set(FLINK_VERSION, FlinkVersion.v1_19);
-        eventRecorder = new EventRecorder(eventCollector);
+        configuration.set(FLINK_VERSION, FlinkVersion.v1_20);
+        eventRecorder =
+                new EventRecorder(flinkResourceEventCollector, flinkStateSnapshotEventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
         executorService = Executors.newDirectExecutorService();
     }
@@ -200,19 +203,20 @@ public class NativeFlinkServiceTest {
                 new NativeFlinkService(
                         client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
-                    protected void cancelJob(
+                    protected CancelResult cancelJob(
                             FlinkDeployment deployment,
-                            UpgradeMode upgradeMode,
+                            SuspendMode upgradeMode,
                             Configuration conf,
-                            boolean deleteClusterAfterSavepoint) {
-                        assertEquals(false, deleteClusterAfterSavepoint);
+                            boolean deleteCluster) {
+                        assertFalse(deleteCluster);
                         tested.set(true);
+                        return CancelResult.completed(null);
                     }
                 };
 
         flinkService.cancelJob(
                 TestUtils.buildApplicationCluster(flinkVersion),
-                UpgradeMode.SAVEPOINT,
+                SuspendMode.SAVEPOINT,
                 new Configuration());
         assertTrue(tested.get());
     }
@@ -285,7 +289,7 @@ public class NativeFlinkServiceTest {
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
         spec.setFlinkConfiguration(appConfig.toMap());
 
-        flinkDep.getStatus().getJobStatus().setState("RUNNING");
+        flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
 
         current.set(
                 Map.of(
@@ -354,16 +358,22 @@ public class NativeFlinkServiceTest {
 
         // Make sure we only try to rescale non-terminal
         testScaleConditionDep(
-                flinkDep, service, d -> d.getStatus().getJobStatus().setState("FAILED"), false);
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState(JobStatus.FAILED),
+                false);
 
         testScaleConditionDep(
                 flinkDep,
                 service,
-                d -> d.getStatus().getJobStatus().setState("RECONCILING"),
+                d -> d.getStatus().getJobStatus().setState(JobStatus.RECONCILING),
                 false);
 
         testScaleConditionDep(
-                flinkDep, service, d -> d.getStatus().getJobStatus().setState("RUNNING"), true);
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState(JobStatus.RUNNING),
+                true);
 
         testScaleConditionDep(flinkDep, service, d -> d.getSpec().setJob(null), false);
 
@@ -547,24 +557,6 @@ public class NativeFlinkServiceTest {
                 testingClusterClient, deployment, reqs.getJobVertexParallelisms());
     }
 
-    public static JobDetailsInfo createJobDetailsFor(
-            List<JobDetailsInfo.JobVertexDetailsInfo> vertexInfos) {
-        return new JobDetailsInfo(
-                new JobID(),
-                "",
-                false,
-                org.apache.flink.api.common.JobStatus.RUNNING,
-                0,
-                0,
-                0,
-                0,
-                0,
-                Map.of(),
-                vertexInfos,
-                Map.of(),
-                new JobPlanInfo.RawJson(""));
-    }
-
     class TestingNativeFlinkService extends NativeFlinkService {
         private Configuration runtimeConfig;
 
@@ -583,7 +575,7 @@ public class NativeFlinkServiceTest {
         }
 
         @Override
-        protected void submitClusterInternal(Configuration conf) throws Exception {
+        protected void submitClusterInternal(Configuration conf) {
             this.runtimeConfig = conf;
         }
 
@@ -603,9 +595,6 @@ public class NativeFlinkServiceTest {
     }
 
     private Configuration createOperatorConfig() {
-        Map<String, String> configMap = Map.of(OPERATOR_HEALTH_PROBE_PORT.key(), "80");
-        Configuration deployConfig = Configuration.fromMap(configMap);
-
-        return deployConfig;
+        return Configuration.fromMap(Map.of(OPERATOR_HEALTH_PROBE_PORT.key(), "80"));
     }
 }

@@ -42,8 +42,7 @@ abstract class AbstractJdbcStateInteractorITCase implements DatabaseTest {
         var value1 = "value1";
         var value2 = "value2";
         var value3 = "value3";
-        try (var conn = getConnection()) {
-            var jdbcStateInteractor = new JdbcStateInteractor(conn);
+        try (var jdbcStateInteractor = new JdbcStateInteractor(getDataSource())) {
             assertThat(jdbcStateInteractor.queryData(jobKey)).isEmpty();
 
             // Test for creating data.

@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -27,14 +26,11 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -122,12 +118,8 @@ public abstract class AbstractFlinkResourceReconciler<
             var deployConfig = ctx.getDeployConfig(spec);
             updateStatusBeforeFirstDeployment(
                     cr, spec, deployConfig, status, ctx.getKubernetesClient());
-            deploy(
-                    ctx,
-                    spec,
-                    deployConfig,
-                    Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
-                    false);
+
+            deploy(ctx, spec, deployConfig, getInitialSnapshotPath(spec), false);
 
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return;
@@ -183,12 +175,36 @@ public abstract class AbstractFlinkResourceReconciler<
         }
     }
 
+    private Optional<String> getInitialSnapshotPath(AbstractFlinkSpec spec) {
+        if (spec.getJob() == null) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(spec.getJob().getInitialSavepointPath());
+    }
+
     private void applyAutoscaler(FlinkResourceContext<CR> ctx) throws Exception {
         var autoScalerCtx = ctx.getJobAutoScalerContext();
+        var resource = ctx.getResource();
         boolean autoscalerEnabled =
-                ctx.getResource().getSpec().getJob() != null
+                resource.getSpec().getJob() != null
                         && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
+
+        var reconStatus = resource.getStatus().getReconciliationStatus();
+        if (!reconStatus.isBeforeFirstDeployment() && autoscalerEnabled) {
+            var newResetNonce = resource.getSpec().getJob().getAutoscalerResetNonce();
+            // check if the nonce changed to a non-null value
+            if (newResetNonce != null
+                    && !newResetNonce.equals(
+                            reconStatus
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getAutoscalerResetNonce())) {
+                autoscaler.cleanup(autoScalerCtx);
+                ReconciliationUtils.updateLastReconciledAutoscalerResetNonce(resource);
+            }
+        }
 
         autoscaler.scale(autoScalerCtx);
     }
@@ -225,9 +241,7 @@ public abstract class AbstractFlinkResourceReconciler<
             var initialSp = spec.getJob().getInitialSavepointPath();
 
             if (initialSp != null) {
-                status.getJobStatus()
-                        .getSavepointInfo()
-                        .setLastSavepoint(Savepoint.of(initialSp, SnapshotTriggerType.UNKNOWN));
+                status.getJobStatus().setUpgradeSavepointPath(initialSp);
                 initialUpgradeMode = UpgradeMode.SAVEPOINT;
             }
 
@@ -278,7 +292,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     @Override
     public DeleteControl cleanup(FlinkResourceContext<CR> ctx) {
-        autoscaler.cleanup(ResourceID.fromResource(ctx.getResource()));
+        autoscaler.cleanup(ctx.getJobAutoScalerContext());
         return cleanupInternal(ctx);
     }
 
@@ -512,7 +526,7 @@ public abstract class AbstractFlinkResourceReconciler<
         boolean nonTerminalApplication =
                 !sessionCluster
                         && deployedJob.getState() == JobState.RUNNING
-                        && !JobStatus.valueOf(jobStatus.getState()).isGloballyTerminalState();
+                        && !jobStatus.getState().isGloballyTerminalState();
         boolean jmShouldBeRunning = sessionCluster || nonTerminalApplication;
         return jmShouldBeRunning
                 && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING);

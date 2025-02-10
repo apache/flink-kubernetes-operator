@@ -25,32 +25,62 @@ import org.apache.flink.annotation.Experimental;
 public enum FlinkVersion {
     /** No longer supported since 1.7 operator release. */
     @Deprecated
-    v1_13,
+    v1_13(1, 13),
     /** No longer supported since 1.7 operator release. */
     @Deprecated
-    v1_14,
+    v1_14(1, 14),
     /** Deprecated since 1.10 operator release. */
     @Deprecated
-    v1_15,
-    v1_16,
-    v1_17,
-    v1_18,
-    v1_19;
+    v1_15(1, 15),
+    /** Deprecated since 1.11 operator release. */
+    @Deprecated
+    v1_16(1, 16),
+    v1_17(1, 17),
+    v1_18(1, 18),
+    v1_19(1, 19),
+    v1_20(1, 20),
+    v2_0(2, 0);
 
-    public boolean isEqualOrNewer(FlinkVersion otherVersion) {
-        return this.ordinal() >= otherVersion.ordinal();
+    /** The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. */
+    private final int majorVersion;
+
+    /** The minor integer from the Flink semver. For example for Flink 1.18.1 this would be 18. */
+    private final int minorVersion;
+
+    FlinkVersion(int major, int minor) {
+        this.majorVersion = major;
+        this.minorVersion = minor;
     }
 
-    /**
-     * Returns the current version.
-     *
-     * @return The current version.
-     */
-    public static FlinkVersion current() {
-        return values()[values().length - 1];
+    public boolean isEqualOrNewer(FlinkVersion otherVersion) {
+        if (this.majorVersion > otherVersion.majorVersion) {
+            return true;
+        }
+        if (this.majorVersion == otherVersion.majorVersion) {
+            return this.minorVersion >= otherVersion.minorVersion;
+        }
+        return false;
     }
 
     public static boolean isSupported(FlinkVersion version) {
         return version != null && version.isEqualOrNewer(FlinkVersion.v1_15);
+    }
+
+    /**
+     * Returns the FlinkVersion associated with the supplied major and minor version integers.
+     *
+     * @param major The major part of the Flink version (e.g. 1 for 1.18.1).
+     * @param minor The minor part of the Flink version (e.g. 18 for 1.18.1).
+     * @throws IllegalArgumentException If the supplied major and minor version do not correspond to
+     *     a supported FlinkVersion.
+     * @return The FlinkVersion associated with the supplied major and minor version integers.
+     */
+    public static FlinkVersion fromMajorMinor(int major, int minor) {
+        for (FlinkVersion version : values()) {
+            if (version.majorVersion == major && version.minorVersion == minor) {
+                return version;
+            }
+        }
+        throw new IllegalArgumentException("Unknown Flink version: " + major + "." + minor);
     }
 }

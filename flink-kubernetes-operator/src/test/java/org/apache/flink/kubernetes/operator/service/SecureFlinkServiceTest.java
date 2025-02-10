@@ -27,8 +27,9 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.concurrent.Executors;
 
@@ -56,7 +57,10 @@ public class SecureFlinkServiceTest {
     KubernetesClient client;
     private final Configuration configuration = new Configuration();
 
-    private final EventCollector eventCollector = new EventCollector();
+    private final FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
+    private final FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector =
+            new FlinkStateSnapshotEventCollector();
 
     private EventRecorder eventRecorder;
     private FlinkOperatorConfiguration operatorConfig;
@@ -67,7 +71,8 @@ public class SecureFlinkServiceTest {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(FLINK_VERSION, FlinkVersion.v1_18);
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(flinkResourceEventCollector, flinkStateSnapshotEventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
         executorService = Executors.newDirectExecutorService();
     }

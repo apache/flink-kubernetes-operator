@@ -95,9 +95,10 @@ public class BacklogBasedScalingTest {
         defaultConf.set(AutoScalerOptions.SCALING_ENABLED, true);
         defaultConf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         defaultConf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
-        defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.8);
-        defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
-        defaultConf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_TARGET, 0.8);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_MAX, 0.9);
+        defaultConf.set(AutoScalerOptions.UTILIZATION_MIN, 0.7);
+        defaultConf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         defaultConf.set(AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD, Duration.ofSeconds(1));
 
         autoscaler =
@@ -416,7 +417,6 @@ public class BacklogBasedScalingTest {
 
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
-        metricsCollector.setClock(clock);
         autoscaler.setClock(clock);
     }
 

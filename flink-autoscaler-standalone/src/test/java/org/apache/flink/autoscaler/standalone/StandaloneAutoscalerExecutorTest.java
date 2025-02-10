@@ -80,7 +80,7 @@ class StandaloneAutoscalerExecutorTest {
                     }
 
                     @Override
-                    public void cleanup(JobID jobKey) {
+                    public void cleanup(JobAutoScalerContext<JobID> context) {
                         fail("Should be called.");
                     }
                 };
@@ -110,7 +110,7 @@ class StandaloneAutoscalerExecutorTest {
     }
 
     @Test
-    void testFetchException() {
+    void testFetchException() throws Exception {
         var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
@@ -126,7 +126,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -137,7 +137,7 @@ class StandaloneAutoscalerExecutorTest {
     }
 
     @Test
-    void testScalingParallelism() {
+    void testScalingParallelism() throws Exception {
         var parallelism = 10;
 
         var jobList = new ArrayList<JobAutoScalerContext<JobID>>();
@@ -164,7 +164,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -221,7 +221,7 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
                                 fail("Should be called.");
                             }
                         })) {
@@ -255,7 +255,8 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
+                                var jobID = context.getJobKey();
                                 cleanupCounter.put(
                                         jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
                             }
@@ -346,7 +347,8 @@ class StandaloneAutoscalerExecutorTest {
                             }
 
                             @Override
-                            public void cleanup(JobID jobID) {
+                            public void cleanup(JobAutoScalerContext<JobID> context) {
+                                var jobID = context.getJobKey();
                                 cleanupCounter.put(
                                         jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
                             }

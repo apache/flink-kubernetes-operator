@@ -23,14 +23,16 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
-import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -40,7 +42,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class SessionJobReconciler
@@ -93,15 +94,17 @@ public class SessionJobReconciler
                         savepoint.orElse(null));
 
         var status = ctx.getResource().getStatus();
-        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
     }
 
     @Override
-    protected void cancelJob(FlinkResourceContext<FlinkSessionJob> ctx, UpgradeMode upgradeMode)
+    protected boolean cancelJob(FlinkResourceContext<FlinkSessionJob> ctx, SuspendMode suspendMode)
             throws Exception {
-        ctx.getFlinkService()
-                .cancelSessionJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
-        ctx.getResource().getStatus().getJobStatus().setJobId(null);
+        var result =
+                ctx.getFlinkService()
+                        .cancelSessionJob(ctx.getResource(), suspendMode, ctx.getObserveConfig());
+        result.getSavepointPath().ifPresent(location -> setUpgradeSavepointPath(ctx, location));
+        return result.isPending();
     }
 
     @Override
@@ -111,6 +114,25 @@ public class SessionJobReconciler
 
     @Override
     public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
+        var status = ctx.getResource().getStatus();
+        long delay = ctx.getOperatorConfig().getProgressCheckInterval().toMillis();
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()
+                || ReconciliationUtils.isJobInTerminalState(status)
+                || status.getReconciliationStatus()
+                                .deserializeLastReconciledSpec()
+                                .getJob()
+                                .getState()
+                        == JobState.SUSPENDED
+                || JobStatusObserver.JOB_NOT_FOUND_ERR.equals(status.getError())) {
+            // Job is not running, nothing to do...
+            return DeleteControl.defaultDelete();
+        }
+
+        if (ReconciliationUtils.isJobCancelling(status)) {
+            LOG.info("Waiting for pending cancellation");
+            return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
+        }
+
         Optional<FlinkDeployment> flinkDepOptional =
                 ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class);
 
@@ -119,25 +141,21 @@ public class SessionJobReconciler
             if (jobID != null) {
                 try {
                     var observeConfig = ctx.getObserveConfig();
-                    UpgradeMode upgradeMode =
+                    var suspendMode =
                             observeConfig.getBoolean(
                                             KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
-                                    ? UpgradeMode.SAVEPOINT
-                                    : UpgradeMode.STATELESS;
-                    cancelJob(ctx, upgradeMode);
-                } catch (ExecutionException e) {
-                    if (AbstractFlinkService.isJobMissingOrTerminated(e)) {
-                        return DeleteControl.defaultDelete();
+                                    ? SuspendMode.SAVEPOINT
+                                    : SuspendMode.STATELESS;
+                    if (cancelJob(ctx, suspendMode)) {
+                        LOG.info("Waiting for pending cancellation");
+                        return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
                     }
-                    long delay = ctx.getOperatorConfig().getProgressCheckInterval().toMillis();
+                } catch (Exception e) {
                     LOG.error(
-                            "Failed to cancel job {}, will reschedule after {} milliseconds.",
-                            jobID,
+                            "Failed to cancel job, will reschedule after {} milliseconds.",
                             delay,
                             e);
                     return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
-                } catch (Exception e) {
-                    LOG.error("Failed to cancel job {}.", jobID, e);
                 }
             }
         } else {

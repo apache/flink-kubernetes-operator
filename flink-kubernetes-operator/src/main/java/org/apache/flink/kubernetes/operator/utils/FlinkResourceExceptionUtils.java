@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.FlinkResourceException;
@@ -44,23 +45,7 @@ public final class FlinkResourceExceptionUtils {
 
     public static <R extends AbstractFlinkResource> void updateFlinkResourceException(
             Throwable throwable, R resource, FlinkOperatorConfiguration conf) {
-
-        boolean stackTraceEnabled = conf.isExceptionStackTraceEnabled();
-        int stackTraceLengthThreshold = conf.getExceptionStackTraceLengthThreshold();
-        int lengthThreshold = conf.getExceptionFieldLengthThreshold();
-        int throwableCountThreshold = conf.getExceptionThrowableCountThreshold();
-        Map<String, String> labelMapper = conf.getExceptionLabelMapper();
-
-        Preconditions.checkNotNull(stackTraceEnabled);
-
-        FlinkResourceException flinkResourceException =
-                getFlinkResourceException(
-                        throwable,
-                        stackTraceEnabled,
-                        stackTraceLengthThreshold,
-                        lengthThreshold,
-                        throwableCountThreshold,
-                        labelMapper);
+        FlinkResourceException flinkResourceException = getFlinkResourceException(throwable, conf);
 
         try {
             ((AbstractFlinkResource<?, ?>) resource)
@@ -77,18 +62,38 @@ public final class FlinkResourceExceptionUtils {
         }
     }
 
+    public static void updateFlinkStateSnapshotException(
+            Throwable throwable, FlinkStateSnapshot resource, FlinkOperatorConfiguration conf) {
+
+        FlinkResourceException flinkResourceException = getFlinkResourceException(throwable, conf);
+
+        try {
+            resource.getStatus().setError(convertToJson(flinkResourceException));
+        } catch (Exception e) {
+            // Rollback to setting error string/message to CRD
+            resource.getStatus()
+                    .setError(
+                            (e instanceof ReconciliationException)
+                                    ? e.getCause().toString()
+                                    : e.toString());
+        }
+    }
+
     private static FlinkResourceException getFlinkResourceException(
-            Throwable throwable,
-            boolean isStackTraceEnabled,
-            int stackTraceLengthThreshold,
-            int lengthThreshold,
-            int throwableCountThreshold,
-            Map<String, String> labelMapper) {
+            Throwable throwable, FlinkOperatorConfiguration conf) {
+
+        boolean stackTraceEnabled = conf.isExceptionStackTraceEnabled();
+        int stackTraceLengthThreshold = conf.getExceptionStackTraceLengthThreshold();
+        int lengthThreshold = conf.getExceptionFieldLengthThreshold();
+        int throwableCountThreshold = conf.getExceptionThrowableCountThreshold();
+        Map<String, String> labelMapper = conf.getExceptionLabelMapper();
+
+        Preconditions.checkNotNull(stackTraceEnabled);
 
         FlinkResourceException flinkResourceException =
                 convertToFlinkResourceException(
                         throwable,
-                        isStackTraceEnabled,
+                        stackTraceEnabled,
                         stackTraceLengthThreshold,
                         lengthThreshold,
                         labelMapper);

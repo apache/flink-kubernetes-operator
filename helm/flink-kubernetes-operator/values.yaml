@@ -62,6 +62,8 @@ operatorPod:
   priorityClassName: null
   annotations: {}
   labels: {}
+  # The env variables only apply to the operator container in the operator pod
+  # TODO: consider making this pod level env variables
   env:
   # - name: ""
   #   value: ""
@@ -72,12 +74,14 @@ operatorPod:
   #       key: ""
   # dnsPolicy: ""
   # dnsConfig: {}
-  # Node labels for operator pod assignment
+  # Node labels and affinity for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
   envFrom:
   # - configMapRef:
   #     name: ""
   nodeSelector: {}
+
+  affinity: {}
   # Node tolerations for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
@@ -94,6 +98,10 @@ operatorPod:
   #     memory: "512Mi"
   webhook:
     resources: {}
+    container:
+      env:
+      # - name: ""
+      #   value: ""
 
 operatorServiceAccount:
   create: true
@@ -143,6 +151,7 @@ webhook:
   # passwordSecretRef:
   #   name: jks-password-secret
   #   key: password-key
+  serviceLabels: {}
 
 defaultConfiguration:
   # If set to true, creates ConfigMaps/VolumeMounts. If set to false, no configuration will be created.

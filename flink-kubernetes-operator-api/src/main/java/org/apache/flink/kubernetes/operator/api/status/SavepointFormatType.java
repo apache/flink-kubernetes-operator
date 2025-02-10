@@ -17,7 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.api.status;
 
+import org.apache.flink.annotation.Experimental;
+
 /** Savepoint format type. */
+@Experimental
 public enum SavepointFormatType {
 
     /** A canonical, common for all state backends format. */

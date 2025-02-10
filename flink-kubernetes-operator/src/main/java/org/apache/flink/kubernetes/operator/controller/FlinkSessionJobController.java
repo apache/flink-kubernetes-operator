@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -28,6 +30,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -45,6 +48,8 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -134,20 +139,31 @@ public class FlinkSessionJobController
         if (canaryResourceManager.handleCanaryResourceDeletion(sessionJob)) {
             return DeleteControl.defaultDelete();
         }
-
-        String msg = "Cleaning up " + FlinkSessionJob.class.getSimpleName();
-
-        LOG.info(msg);
         eventRecorder.triggerEvent(
                 sessionJob,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg,
+                "Cleaning up FlinkSessionJob",
                 josdkContext.getClient());
-        statusRecorder.removeCachedStatus(sessionJob);
+        statusRecorder.updateStatusFromCache(sessionJob);
+        sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(sessionJob, josdkContext);
-        return reconciler.cleanup(ctx);
+        try {
+            observer.observe(ctx);
+        } catch (Exception err) {
+            LOG.error("Error while observing for cleanup", err);
+        }
+
+        var deleteControl = reconciler.cleanup(ctx);
+        if (deleteControl.isRemoveFinalizer()) {
+            sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
+            ctxFactory.cleanup(sessionJob);
+            statusRecorder.cleanupForDeletion(sessionJob);
+        } else {
+            statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
+        }
+        return deleteControl;
     }
 
     @Override
@@ -160,8 +176,18 @@ public class FlinkSessionJobController
     @Override
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkSessionJob> context) {
-        return EventSourceInitializer.nameEventSources(
-                EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
+        List<EventSource> eventSources = new ArrayList<>();
+        eventSources.add(EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
+
+        if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
+            eventSources.add(
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
+        } else {
+            LOG.warn(
+                    "Could not initialize informer for snapshots as the CRD has not been installed!");
+        }
+
+        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
     }
 
     private boolean validateSessionJob(FlinkResourceContext<FlinkSessionJob> ctx) {

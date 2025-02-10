@@ -147,16 +147,16 @@
             <td>Maximum cap for the observed restart time when 'job.autoscaler.restart.time-tracking.enabled' is set to true.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scale-down.interval</h5></td>
+            <td style="word-wrap: break-word;">1 h</td>
+            <td>Duration</td>
+            <td>The delay time for scale down to be executed. If it is greater than 0, the scale down will be delayed. Delayed rescale can merge multiple scale downs within `scale-down.interval` into a scale down, thereby reducing the number of rescales. Reducing the frequency of job restarts can improve job availability. Scale down can be executed directly if it's less than or equal 0.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.scale-down.max-factor</h5></td>
             <td style="word-wrap: break-word;">0.6</td>
             <td>Double</td>
             <td>Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.</td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.scale-up.grace-period</h5></td>
-            <td style="word-wrap: break-word;">1 h</td>
-            <td>Duration</td>
-            <td>Duration in which no scale down of a vertex is allowed after it has been scaled up.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.scale-up.max-factor</h5></td>
@@ -189,22 +189,34 @@
             <td>Time interval to resend the identical event</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scaling.key-group.partitions.adjust.mode</h5></td>
+            <td style="word-wrap: break-word;">EVENLY_SPREAD</td>
+            <td><p>Enum</p></td>
+            <td>How to adjust the parallelism of Source vertex or upstream shuffle is keyBy<br /><br />Possible values:<ul><li>"EVENLY_SPREAD": This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks. It is particularly effective for source vertices that are aware of partition counts or vertices after 'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew.</li><li>"MAXIMIZE_UTILISATION": This model is to maximize resource utilization. In this mode, an attempt is made to set the parallelism that meets the current consumption rate requirements. It is not enforced that the number of key groups or partitions is divisible by the parallelism.</li></ul></td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.stabilization.interval</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>
             <td>Stabilization period in which no new scaling will be executed</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.target.utilization</h5></td>
+            <td><h5>job.autoscaler.utilization.max</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Double</td>
+            <td>Max vertex utilization</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.utilization.min</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Double</td>
+            <td>Min vertex utilization</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.utilization.target</h5></td>
             <td style="word-wrap: break-word;">0.7</td>
             <td>Double</td>
             <td>Target vertex utilization</td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.target.utilization.boundary</h5></td>
-            <td style="word-wrap: break-word;">0.3</td>
-            <td>Double</td>
-            <td>Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.vertex.exclude.ids</h5></td>

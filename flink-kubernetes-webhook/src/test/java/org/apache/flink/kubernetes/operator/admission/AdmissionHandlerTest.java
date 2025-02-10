@@ -71,10 +71,11 @@ public class AdmissionHandlerTest {
     private AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            ValidatorUtils.discoverValidators(new FlinkConfigManager(ns -> {})),
+                            ValidatorUtils.discoverValidators(
+                                    new FlinkConfigManager(ns -> {}, true)),
                             new InformerManager(null)),
                     new FlinkMutator(
-                            MutatorUtils.discoverMutators(new FlinkConfigManager(ns -> {})),
+                            MutatorUtils.discoverMutators(new FlinkConfigManager(ns -> {}, true)),
                             new InformerManager(kubernetesClient)));
 
     @Test
@@ -148,10 +149,12 @@ public class AdmissionHandlerTest {
         admissionHandler =
                 new AdmissionHandler(
                         new FlinkValidator(
-                                ValidatorUtils.discoverValidators(new FlinkConfigManager(ns -> {})),
+                                ValidatorUtils.discoverValidators(
+                                        new FlinkConfigManager(ns -> {}, true)),
                                 new InformerManager(null)),
                         new FlinkMutator(
-                                MutatorUtils.discoverMutators(new FlinkConfigManager(ns -> {})),
+                                MutatorUtils.discoverMutators(
+                                        new FlinkConfigManager(ns -> {}, true)),
                                 informerManager));
 
         final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);

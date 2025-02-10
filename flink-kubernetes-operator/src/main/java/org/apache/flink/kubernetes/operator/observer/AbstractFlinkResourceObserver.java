@@ -61,6 +61,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
      */
     protected boolean isResourceReadyToBeObserved(FlinkResourceContext<CR> ctx) {
         var resource = ctx.getResource();
+        var status = resource.getStatus();
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
 
         if (reconciliationStatus.isBeforeFirstDeployment()) {
@@ -73,18 +74,18 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
             return false;
         }
 
+        if (ReconciliationUtils.isJobCancelling(status)) {
+            return true;
+        }
+
         // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             // We must check if the upgrade went through without the status upgrade for some reason
-
-            if (reconciliationStatus.scalingInProgress()) {
-                // Keep this for backward compatibility
-                reconciliationStatus.setState(ReconciliationState.DEPLOYED);
-            } else if (checkIfAlreadyUpgraded(ctx)) {
+            if (checkIfAlreadyUpgraded(ctx)) {
                 ReconciliationUtils.updateStatusForAlreadyUpgraded(resource);
             } else {
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(resource);
-                logger.debug("Skipping observe before resource is deployed during upgrade");
+                logger.info("Skipping observe before resource is deployed during upgrade");
                 return false;
             }
         }

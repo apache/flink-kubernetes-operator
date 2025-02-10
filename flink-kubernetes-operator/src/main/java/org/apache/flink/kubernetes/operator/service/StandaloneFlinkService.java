@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
@@ -80,9 +79,10 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void cancelJob(FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    public CancelResult cancelJob(
+            FlinkDeployment deployment, SuspendMode suspendMode, Configuration conf)
             throws Exception {
-        cancelJob(deployment, upgradeMode, conf, true);
+        return cancelJob(deployment, suspendMode, conf, true);
     }
 
     @Override
@@ -94,22 +94,13 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .list();
     }
 
-    @Override
-    protected PodList getTmPodList(String namespace, String clusterId) {
-        return kubernetesClient
-                .pods()
-                .inNamespace(namespace)
-                .withLabels(StandaloneKubernetesUtils.getTaskManagerSelectors(clusterId))
-                .list();
-    }
-
     @VisibleForTesting
     protected FlinkStandaloneKubeClient createNamespacedKubeClient(Configuration configuration) {
         final int poolSize =
                 configuration.get(KubernetesConfigOptions.KUBERNETES_CLIENT_IO_EXECUTOR_POOL_SIZE);
 
-        ExecutorService executorService =
-                Executors.newFixedThreadPool(
+        var executorService =
+                Executors.newScheduledThreadPool(
                         poolSize,
                         new ExecutorThreadFactory("flink-kubeclient-io-for-standalone-service"));
 

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -67,7 +68,16 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
                 return false;
             }
             var jobId = JobID.fromHexString(jobStatus.getJobId());
-            if (ctx.getFlinkService().getJobStatus(ctx.getObserveConfig(), jobId).isPresent()) {
+            var deployed =
+                    ctx.getFlinkService()
+                            .getJobStatus(ctx.getObserveConfig(), jobId)
+                            .map(
+                                    jsm ->
+                                            !JobStatus.CANCELLING.equals(jsm.getJobState())
+                                                    && !JobStatus.CANCELED.equals(
+                                                            jsm.getJobState()))
+                            .orElse(false);
+            if (deployed) {
                 LOG.info("Job with id {} is already deployed.", jobId);
                 return true;
             } else {

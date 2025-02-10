@@ -42,7 +42,8 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
  * @param <Context> Instance of JobAutoScalerContext.
  */
 @Experimental
-public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
+public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>>
+        extends AutoCloseable {
     String SCALING_SUMMARY_ENTRY =
             "{ Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f}";
     String SCALING_EXECUTION_DISABLED_REASON = "%s:%s, recommended parallelism change:";

@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -48,20 +49,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.flink.configuration.CheckpointingOptions.SAVEPOINT_DIRECTORY;
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.applyJobConfig;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX;
 
 /** Configuration manager for the Flink operator. */
@@ -72,24 +82,39 @@ public class FlinkConfigManager {
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration defaultOperatorConfiguration;
+    // TODO: From 1.11 release, snapshot CRD should be mandatory and this can be removed.
+    private final boolean snapshotCrdInstalled;
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
+    private volatile ConcurrentHashMap<FlinkVersion, List<String>> relevantFlinkVersionPrefixes;
+
+    protected static final Pattern FLINK_VERSION_PATTERN =
+            Pattern.compile(
+                    VERSION_CONF_PREFIX.replaceAll("\\.", "\\\\\\.")
+                            + "v(?<major>\\d+)_(?<minor>\\d+)(?<gt>\\"
+                            + KubernetesOperatorConfigOptions.FLINK_VERSION_GREATER_THAN_SUFFIX
+                            + ")?\\..*");
 
     @VisibleForTesting
     public FlinkConfigManager(Configuration defaultConfig) {
-        this(defaultConfig, ns -> {});
-    }
-
-    public FlinkConfigManager(Consumer<Set<String>> namespaceListener) {
-        this(loadGlobalConfiguration(), namespaceListener);
+        this(defaultConfig, ns -> {}, true);
     }
 
     public FlinkConfigManager(
-            Configuration defaultConfig, Consumer<Set<String>> namespaceListener) {
+            Consumer<Set<String>> namespaceListener, boolean snapshotCrdInstalled) {
+        this(loadGlobalConfiguration(), namespaceListener, snapshotCrdInstalled);
+    }
+
+    public FlinkConfigManager(
+            Configuration defaultConfig,
+            Consumer<Set<String>> namespaceListener,
+            boolean snapshotCrdInstalled) {
+        this.snapshotCrdInstalled = snapshotCrdInstalled;
         this.namespaceListener = namespaceListener;
         Duration cacheTimeout =
                 defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
+        this.relevantFlinkVersionPrefixes = new ConcurrentHashMap<>();
         this.cache =
                 CacheBuilder.newBuilder()
                         .maximumSize(
@@ -137,6 +162,15 @@ public class FlinkConfigManager {
             LOG.info("Setting default configuration to {}", newConf);
         }
 
+        // Even if snapshot resources are enabled, we need to disable them if the CRD was not
+        // installed in the current Kubernetes cluster.
+        if (newConf.get(SNAPSHOT_RESOURCE_ENABLED) && !snapshotCrdInstalled) {
+            LOG.warn(
+                    "{} CRD was not installed, snapshot resources will be disabled!",
+                    FlinkStateSnapshot.class.getSimpleName());
+            newConf.set(SNAPSHOT_RESOURCE_ENABLED, false);
+        }
+
         var oldNs =
                 Optional.ofNullable(this.defaultOperatorConfiguration)
                         .map(FlinkOperatorConfiguration::getWatchedNamespaces)
@@ -151,6 +185,11 @@ public class FlinkConfigManager {
         // We do not invalidate the cache to avoid deleting currently used temp files,
         // simply bump the version
         this.defaultConfigVersion.incrementAndGet();
+
+        // We clear the cached relevant Flink version prefixes as the base config may include new
+        // version overrides.
+        // This will trigger a regeneration of the prefixes in the next call to getDefaultConfig.
+        relevantFlinkVersionPrefixes = new ConcurrentHashMap<>();
     }
 
     /**
@@ -185,6 +224,65 @@ public class FlinkConfigManager {
     }
 
     /**
+     * This method will search the keys of the supplied map and find any that contain a flink
+     * version string that is relevant to the supplied flink version.
+     *
+     * <p>Relevance is defined as any key with the {@link
+     * KubernetesOperatorConfigOptions#VERSION_CONF_PREFIX} followed by either the supplied flink
+     * version (with or without the {@link
+     * KubernetesOperatorConfigOptions#FLINK_VERSION_GREATER_THAN_SUFFIX}) or a lower flink version
+     * string followed by the {@link
+     * KubernetesOperatorConfigOptions#FLINK_VERSION_GREATER_THAN_SUFFIX}.
+     *
+     * <p>Prefixes are returned in ascending order of flink version.
+     *
+     * @param baseConfMap The configuration map that should be searched for relevant Flink version
+     *     prefixes.
+     * @return A list of relevant Flink version prefixes in order of ascending Flink version.
+     */
+    protected static List<String> getRelevantVersionPrefixes(
+            Map<String, String> baseConfMap, FlinkVersion flinkVersion) {
+        SortedMap<FlinkVersion, String> greaterThanVersionPrefixes = new TreeMap<>();
+
+        for (Map.Entry<String, String> entry : baseConfMap.entrySet()) {
+            Matcher versionMatcher = FLINK_VERSION_PATTERN.matcher(entry.getKey());
+            if (versionMatcher.matches() && versionMatcher.group("gt") != null) {
+                try {
+                    FlinkVersion keyFlinkVersion =
+                            FlinkVersion.fromMajorMinor(
+                                    Integer.parseInt(versionMatcher.group("major")),
+                                    Integer.parseInt(versionMatcher.group("minor")));
+                    if (flinkVersion.isEqualOrNewer(keyFlinkVersion)) {
+                        greaterThanVersionPrefixes.put(
+                                keyFlinkVersion,
+                                VERSION_CONF_PREFIX
+                                        + keyFlinkVersion
+                                        + KubernetesOperatorConfigOptions
+                                                .FLINK_VERSION_GREATER_THAN_SUFFIX
+                                        + ".");
+                    }
+                } catch (NumberFormatException numberFormatException) {
+                    LOG.warn("Unable to parse version number in config key: {}", entry.getKey());
+                } catch (IllegalArgumentException illegalArgumentException) {
+                    LOG.warn("Unknown Flink version in config key: {}", entry.getKey());
+                }
+            }
+        }
+
+        // Extract the prefixes from the sorted map, these will be ascending Flink version order
+        List<String> sortedRelevantVersionPrefixes =
+                new ArrayList<>(greaterThanVersionPrefixes.values());
+
+        // Add the current flink version prefix (without the greater than symbol) to the set.
+        // Any current flink version prefix with the greater than symbol would already have been
+        // added
+        // in the loop above.
+        sortedRelevantVersionPrefixes.add(VERSION_CONF_PREFIX + flinkVersion + ".");
+
+        return sortedRelevantVersionPrefixes;
+    }
+
+    /**
      * Get the base configuration for the given namespace and flink version combination. This is
      * different from the platform level base config as it may contain namespaces or version
      * overrides.
@@ -202,7 +300,20 @@ public class FlinkConfigManager {
         }
 
         if (flinkVersion != null) {
-            applyDefault(VERSION_CONF_PREFIX + flinkVersion + ".", baseConfMap, conf);
+            // Fetch or create a list of Flink version configs that apply to this current
+            // FlinkVersion. That will include all versions that are equal to or lower than
+            // the current one that are suffixed by a `+`
+            List<String> versionPrefixes =
+                    relevantFlinkVersionPrefixes.computeIfAbsent(
+                            flinkVersion,
+                            fv -> getRelevantVersionPrefixes(baseConfMap, flinkVersion));
+
+            // The version prefixes are returned in ascending order of Flink version, so configs
+            // attached to newer versions will override older ones. For example v1_16+.conf1 will
+            // be overridden if a key containing v1_18+.conf1 is present.
+            for (String versionPrefix : versionPrefixes) {
+                applyDefault(versionPrefix, baseConfMap, conf);
+            }
         }
 
         return conf;
@@ -275,7 +386,7 @@ public class FlinkConfigManager {
      * @return Session job config
      */
     public Configuration getSessionJobConfig(
-            FlinkDeployment deployment, FlinkSessionJobSpec sessionJobSpec) {
+            String name, FlinkDeployment deployment, FlinkSessionJobSpec sessionJobSpec) {
         Configuration sessionJobConfig = getObserveConfig(deployment);
 
         // merge session job specific config
@@ -283,6 +394,7 @@ public class FlinkConfigManager {
         if (sessionJobFlinkConfiguration != null) {
             sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
         }
+        applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;
     }
 

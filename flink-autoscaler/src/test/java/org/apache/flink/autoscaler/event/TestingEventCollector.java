@@ -77,6 +77,9 @@ public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY
         return context.getJobID() + type.name() + reason + message;
     }
 
+    @Override
+    public void close() throws Exception {}
+
     /** The collected event. */
     public static class Event<KEY, Context extends JobAutoScalerContext<KEY>> {
 

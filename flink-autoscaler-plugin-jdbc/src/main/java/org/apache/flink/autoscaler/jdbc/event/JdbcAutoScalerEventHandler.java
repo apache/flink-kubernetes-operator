@@ -18,18 +18,27 @@
 package org.apache.flink.autoscaler.jdbc.event;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.util.Preconditions;
+
+import org.apache.flink.shaded.guava31.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.Nullable;
 
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The event handler which persists its event in JDBC related database.
@@ -38,13 +47,34 @@ import java.util.Objects;
  * @param <Context> The job autoscaler context.
  */
 @Experimental
+@Slf4j
 public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>>
         implements AutoScalerEventHandler<KEY, Context> {
 
     private final JdbcEventInteractor jdbcEventInteractor;
+    private final Duration eventHandlerTtl;
+    @Nullable private final ScheduledExecutorService scheduledEventHandlerCleaner;
 
-    public JdbcAutoScalerEventHandler(JdbcEventInteractor jdbcEventInteractor) {
+    public JdbcAutoScalerEventHandler(
+            JdbcEventInteractor jdbcEventInteractor, Duration eventHandlerTtl) {
         this.jdbcEventInteractor = jdbcEventInteractor;
+        this.eventHandlerTtl = Preconditions.checkNotNull(eventHandlerTtl);
+
+        if (eventHandlerTtl.toMillis() <= 0) {
+            this.scheduledEventHandlerCleaner = null;
+            return;
+        }
+        this.scheduledEventHandlerCleaner =
+                Executors.newSingleThreadScheduledExecutor(
+                        new ThreadFactoryBuilder()
+                                .setNameFormat("jdbc-autoscaler-events-cleaner")
+                                .setDaemon(true)
+                                .build());
+        this.scheduledEventHandlerCleaner.scheduleAtFixedRate(
+                this::cleanExpiredEvents,
+                Duration.ofDays(1).toMillis(),
+                Duration.ofDays(1).toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     @SneakyThrows
@@ -101,6 +131,51 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                     AutoScalerEventHandler.scalingReport(scalingSummaries, message),
                     AutoScalerEventHandler.getParallelismHashCode(scalingSummaries),
                     interval);
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (Objects.nonNull(scheduledEventHandlerCleaner)
+                && !scheduledEventHandlerCleaner.isShutdown()) {
+            scheduledEventHandlerCleaner.shutdownNow();
+        }
+        jdbcEventInteractor.close();
+    }
+
+    @VisibleForTesting
+    void cleanExpiredEvents() {
+        final var batchSize = 2000;
+        final var sleepMs = 1000;
+
+        var date =
+                Timestamp.from(
+                        jdbcEventInteractor
+                                .getCurrentInstant()
+                                .minusMillis(eventHandlerTtl.toMillis()));
+        try {
+            var deletedTotalCount = 0L;
+            while (true) {
+                Long minId = jdbcEventInteractor.queryMinEventIdByCreateTime(date);
+                if (Objects.isNull(minId)) {
+                    log.info(
+                            "Deleted expired {} event handler records successfully",
+                            deletedTotalCount);
+                    break;
+                }
+
+                boolean cleanable = true;
+                for (long startId = minId; cleanable; startId += batchSize) {
+                    int deleted =
+                            jdbcEventInteractor.deleteExpiredEventsByIdRangeAndDate(
+                                    startId, startId + batchSize, date);
+                    cleanable = deleted == batchSize;
+                    deletedTotalCount += deleted;
+                    Thread.sleep(sleepMs);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error in cleaning expired event handler records.", e);
         }
     }
 

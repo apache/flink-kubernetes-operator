@@ -37,6 +37,9 @@ With these two Custom Resources, we can support two different operational models
 - Flink application managed by the `FlinkDeployment`
 - Empty Flink session managed by the `FlinkDeployment` + multiple jobs managed by the `FlinkSessionJobs`. The operations on the session jobs are independent of each other.
 
+To help managing snapshots, there is another CR called FlinkStateSnapshot. This can be created by the operator in case of periodic and upgrade savepoints/checkpoints, or manually by the user to trigger a savepoint/checkpoint for a job.
+FlinkStateSnapshots will always have a FlinkDeployment or FlinkSessionJob linked to them in their spec.
+
 ## FlinkDeployment
 
 FlinkDeployment objects are defined in YAML format by the user and must contain the following required fields:
@@ -114,8 +117,8 @@ metadata:
   namespace: default
   name: basic-example
 spec:
-  image: flink:1.17
-  flinkVersion: v1_17
+  image: flink:1.20
+  flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
   serviceAccount: flink
@@ -212,12 +215,9 @@ COPY flink-hadoop-fs-1.19-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
 
 Alternatively, if you use helm to install flink-kubernetes-operator, it allows you to specify a postStart hook to download the required plugins.
 
-### Limitations
-
-- Last-state upgradeMode is currently not supported for FlinkSessionJobs
-
 ## Further information
 
+ - [Snapshots]({{< ref "docs/custom-resource/snapshots" >}})
  - [Job Management and Stateful upgrades]({{< ref "docs/custom-resource/job-management" >}})
  - [Deployment customization and pod templates]({{< ref "docs/custom-resource/pod-template" >}})
  - [Full Reference]({{< ref "docs/custom-resource/reference" >}})

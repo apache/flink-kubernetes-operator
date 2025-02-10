@@ -118,12 +118,17 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     }
 
     @Override
-    public void cleanup(KEY jobKey) {
+    public void cleanup(Context ctx) {
         LOG.info("Cleaning up autoscaling meta data");
-        metricsCollector.cleanup(jobKey);
-        lastEvaluatedMetrics.remove(jobKey);
-        flinkMetrics.remove(jobKey);
-        stateStore.removeInfoFromCache(jobKey);
+        metricsCollector.cleanup(ctx.getJobKey());
+        lastEvaluatedMetrics.remove(ctx.getJobKey());
+        flinkMetrics.remove(ctx.getJobKey());
+        try {
+            stateStore.clearAll(ctx);
+            stateStore.flush(ctx);
+        } catch (Exception e) {
+            LOG.error("Error cleaning up autoscaling meta data for {}", ctx.getJobKey(), e);
+        }
     }
 
     @VisibleForTesting
@@ -214,9 +219,20 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             return;
         }
 
+        var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
         var parallelismChanged =
                 scalingExecutor.scaleResource(
-                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now, jobTopology);
+                        ctx,
+                        evaluatedMetrics,
+                        scalingHistory,
+                        scalingTracking,
+                        now,
+                        jobTopology,
+                        delayedScaleDown);
+
+        if (delayedScaleDown.isUpdated()) {
+            stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
+        }
 
         if (parallelismChanged) {
             autoscalerMetrics.incrementScaling();
@@ -240,5 +256,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @VisibleForTesting
     void setClock(Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
+        this.metricsCollector.setClock(clock);
+        this.scalingExecutor.setClock(clock);
     }
 }

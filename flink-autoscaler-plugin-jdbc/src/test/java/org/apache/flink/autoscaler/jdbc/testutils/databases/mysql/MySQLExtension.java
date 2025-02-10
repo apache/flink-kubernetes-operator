@@ -17,14 +17,14 @@
 
 package org.apache.flink.autoscaler.jdbc.testutils.databases.mysql;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.MySQLContainer;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.util.List;
 
 /** The extension of MySQL. */
@@ -34,7 +34,8 @@ class MySQLExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCa
     private static final String DATABASE_NAME = "flink_autoscaler";
     private static final String USER_NAME = "root";
     private static final String PASSWORD = "123456";
-    private static final List<String> TABLES = List.of("t_flink_autoscaler_state_store");
+    private static final List<String> TABLES =
+            List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
 
     private final MySQLContainer<?> container;
 
@@ -49,9 +50,13 @@ class MySQLExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCa
                         .withEnv("MYSQL_ROOT_HOST", "%");
     }
 
-    public Connection getConnection() throws Exception {
-        return DriverManager.getConnection(
-                container.getJdbcUrl(), container.getUsername(), container.getPassword());
+    public HikariDataSource getDataSource() throws Exception {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(container.getJdbcUrl());
+        config.setUsername(container.getUsername());
+        config.setPassword(container.getPassword());
+        config.setValidationTimeout(1000);
+        return new HikariDataSource(config);
     }
 
     @Override
@@ -66,7 +71,8 @@ class MySQLExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCa
 
     @Override
     public void afterEach(ExtensionContext extensionContext) throws Exception {
-        try (var conn = getConnection();
+        try (var dataSource = getDataSource();
+                var conn = dataSource.getConnection();
                 var st = conn.createStatement()) {
             for (var tableName : TABLES) {
                 st.executeUpdate(String.format("DELETE from %s", tableName));

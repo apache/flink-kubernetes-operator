@@ -28,7 +28,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
+
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -45,21 +46,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 abstract class AbstractJdbcStateStoreITCase implements DatabaseTest {
 
     private static final String DEFAULT_JOB_KEY = "jobKey";
-    private Connection conn;
+    private DataSource dataSource;
     private CountableJdbcStateInteractor jdbcStateInteractor;
     private JdbcStateStore jdbcStateStore;
 
     @BeforeEach
     void beforeEach() throws Exception {
-        this.conn = getConnection();
-        this.jdbcStateInteractor = new CountableJdbcStateInteractor(conn);
+        this.dataSource = getDataSource();
+        this.jdbcStateInteractor = new CountableJdbcStateInteractor(dataSource);
         this.jdbcStateStore = new JdbcStateStore(jdbcStateInteractor);
     }
 
     @AfterEach
-    void afterEach() throws SQLException {
-        if (conn != null) {
-            conn.close();
+    void afterEach() throws Exception {
+        if (dataSource instanceof AutoCloseable) {
+            ((AutoCloseable) dataSource).close();
         }
     }
 
@@ -178,7 +179,7 @@ abstract class AbstractJdbcStateStoreITCase implements DatabaseTest {
         assertThat(jdbcStateStore.getSerializedState(DEFAULT_JOB_KEY, COLLECTED_METRICS)).isEmpty();
 
         // Modify the database directly.
-        var tmpJdbcInteractor = new JdbcStateInteractor(conn);
+        var tmpJdbcInteractor = new JdbcStateInteractor(dataSource);
         tmpJdbcInteractor.createData(
                 DEFAULT_JOB_KEY, List.of(COLLECTED_METRICS), Map.of(COLLECTED_METRICS, value1));
         assertThat(getValueFromDatabase(DEFAULT_JOB_KEY, COLLECTED_METRICS)).hasValue(value1);
@@ -205,7 +206,7 @@ abstract class AbstractJdbcStateStoreITCase implements DatabaseTest {
         final var expectedException = new RuntimeException("Database isn't stable.");
 
         var exceptionableJdbcStateInteractor =
-                new CountableJdbcStateInteractor(conn) {
+                new CountableJdbcStateInteractor(dataSource) {
                     private final AtomicBoolean isFirst = new AtomicBoolean(true);
 
                     @Override
@@ -282,7 +283,7 @@ abstract class AbstractJdbcStateStoreITCase implements DatabaseTest {
 
     private Optional<String> getValueFromDatabase(String jobKey, StateType stateType)
             throws Exception {
-        var jdbcInteractor = new JdbcStateInteractor(conn);
+        var jdbcInteractor = new JdbcStateInteractor(dataSource);
         return Optional.ofNullable(jdbcInteractor.queryData(jobKey).get(stateType));
     }
 }

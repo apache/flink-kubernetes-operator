@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.exception;
+package org.apache.flink.kubernetes.operator.api.spec;
 
-/** Exception to signal non-terminal deployment failure. */
-public class RecoveryFailureException extends RuntimeException {
-    private final String reason;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 
-    public RecoveryFailureException(String message, String reason) {
-        super(message);
-        this.reason = reason;
-    }
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-    public String getReason() {
-        return reason;
-    }
+/** Describes the Kubernetes kind of job reference. */
+public enum JobKind {
+    /** FlinkDeployment CR kind. */
+    @JsonProperty(CrdConstants.KIND_FLINK_DEPLOYMENT)
+    FLINK_DEPLOYMENT,
+
+    /** FlinkSessionJob CR kind. */
+    @JsonProperty(CrdConstants.KIND_SESSION_JOB)
+    FLINK_SESSION_JOB
 }

@@ -23,28 +23,29 @@
 name: Flink Kubernetes Operator CI
 on:
   push:
+    branches:
+      - main
+      - release-*
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
 jobs:
   test_ci:
     runs-on: ubuntu-latest
-    name: test_ci
+    name: maven build
     strategy:
       matrix:
         java-version: [ 11, 17, 21 ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: 'adopt'
-      - name: Cache local Maven repository
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          distribution: 'temurin'
+          cache: 'maven'
       - name: Build with Maven
         run: |
           mvn -B clean install javadoc:javadoc -Pgenerate-docs
@@ -70,135 +71,124 @@ jobs:
           cd flink-autoscaler-plugin-jdbc
           mvn -B verify -Dit.skip=false
           cd ..
-  e2e_ci:
-    runs-on: ubuntu-latest
+  e2e_smoke_test:
+    name: Smoke test
     strategy:
       matrix:
-        version: ["v1_19","v1_18","v1_17","v1_16","v1_15"]
-        namespace: ["default","flink"]
-        mode: ["native", "standalone"]
-        java-version: [ 11, 17, 21 ]
+        http-client: [ "okhttp", "jdk", "jetty", "vertx" ]
+        java-version: [ "11", "17", "21" ]
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: ${{ matrix.java-version }}
+      flink-version: "v1_20"
+      http-client: ${{ matrix.http-client }}
+      test: test_application_operations.sh
+  java_runtimes:
+    name: Java runtimes smoke test
+    needs: e2e_smoke_test
+    strategy:
+      matrix:
+        http-client: [ "okhttp" ]
+        java-version: [ "11", "17"]
+        flink-version:
+          - "v2_0"
+          - "v1_20"
+          - "v1_19"
+          - "v1_18"
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: ${{ matrix.java-version }}
+      flink-version: ${{ matrix.flink-version }}
+      http-client: ${{ matrix.http-client }}
+      test: test_application_operations.sh
+      append-java-version: true
+  e2e_namespace_tests:
+    name: Alternative namespace tests
+    needs: e2e_smoke_test
+    strategy:
+      matrix:
+        flink-version:
+          - "v2_0"
+          - "v1_20"
+          - "v1_19"
+          - "v1_18"
+          - "v1_17"
+        mode:
+         - "native"
+         - "standalone"
+        test:
+          - test_application_operations.sh
+          - test_multi_sessionjob.sh
+          - test_autoscaler.sh
+          - test_dynamic_config.sh
+        exclude:
+          - mode: standalone
+            test: test_autoscaler.sh
+          - mode: standalone
+            test: test_dynamic_config.sh
+          - flink-version: v1_16
+            test: test_autoscaler.sh
+          - flink-version: v1_16
+            test: test_dynamic_config.sh
+
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: 11
+      flink-version: ${{ matrix.flink-version }}
+      test: ${{ matrix.test }}
+      namespace: "flink"
+      create-namespace: true
+      mode: ${{ matrix.mode }}
+  e2e_ci:
+    needs: e2e_smoke_test
+    strategy:
+      matrix:
+        flink-version:
+          - "v2_0"
+          - "v1_20"
+          - "v1_18"
+          - "v1_19"
+          - "v1_17"
+        mode:
+          - "native"
+          - "standalone"
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
           - test_dynamic_config.sh
           - test_sessionjob_kubernetes_ha.sh
           - test_sessionjob_operations.sh
-          - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_flink_operator_ha.sh
-        include:
-          - namespace: flink
-            extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
-          - version: v1_19
-            image: flink:1.19
-          - version: v1_18
-            image: flink:1.18
-          - version: v1_17
-            image: flink:1.17
-          - version: v1_16
-            image: flink:1.16
-          - version: v1_15
-            image: flink:1.15
+          - test_snapshot.sh
         exclude:
-          - namespace: default
-            test: test_multi_sessionjob.sh
-          - namespace: default
-            test: test_autoscaler.sh
-          - namespace: default
-            test: test_dynamic_config.sh
-          - mode: standalone
+          - flink-version: v1_16
             test: test_autoscaler.sh
           - mode: standalone
-            test: test_dynamic_config.sh
-          - version: v1_15
             test: test_autoscaler.sh
-          - version: v1_15
+          - flink-version: v1_16
             test: test_dynamic_config.sh
-          - version: v1_15
+          - flink-version: v1_16
             test: test_flink_operator_ha.sh
-          - version: v1_16
-            test: test_autoscaler.sh
-          - version: v1_16
+          - flink-version: v1_16
+            test: test_snapshot.sh
+          - flink-version: v1_17
             test: test_dynamic_config.sh
-          - version: v1_16
+          - flink-version: v1_17
             test: test_flink_operator_ha.sh
-          - version: v1_17
+          - flink-version: v1_17
+            test: test_snapshot.sh
+          - flink-version: v1_18
             test: test_dynamic_config.sh
-          - version: v1_17
+          - flink-version: v1_18
             test: test_flink_operator_ha.sh
-          - version: v1_18
-            test: test_dynamic_config.sh
-          - version: v1_18
-            test: test_flink_operator_ha.sh
-          - version: v1_15
-            java-version: 17
-          - version: v1_16
-            java-version: 17
-          - version: v1_17
-            java-version: 17
-          - version: v1_15
-            java-version: 21
-          - version: v1_16
-            java-version: 21
-          - version: v1_17
-            java-version: 21
-          - version: v1_18
-            java-version: 21
-    name: e2e_ci
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v2
-        with:
-          java-version: ${{ matrix.java-version }}
-          distribution: 'adopt'
-      - name: Cache local Maven repository
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      - name: Start minikube
-        run: |
-          source e2e-tests/utils.sh
-          start_minikube
-      - name: Install cert-manager
-        run: |
-          kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-          kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
-      - name: Build image
-        run: |
-          export SHELL=/bin/bash
-          export DOCKER_BUILDKIT=1
-          eval $(minikube -p minikube docker-env)
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain .
-          docker images
-      - name: Start the operator
-        run: |
-          if [[ "${{ matrix.test }}" == "test_flink_operator_ha.sh" ]]; then
-            sed -i "s/# kubernetes.operator.leader-election.enabled: false/kubernetes.operator.leader-election.enabled: true/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
-            sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
-            sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
-          fi
-          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
-          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
-          kubectl get pods -n ${{ matrix.namespace }}
-      - name: Run Flink e2e tests
-        run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
-          sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
-          git diff HEAD
-          echo "Running e2e-tests/$test"
-          bash e2e-tests/${{ matrix.test }} || exit 1
-          git reset --hard
-      - name: Stop the operator
-        run: |
-          helm uninstall -n ${{ matrix.namespace }} flink-kubernetes-operator
-      - name: Stop minikube
-        run: |
-          source e2e-tests/utils.sh
-          stop_minikube
+          - flink-version: v1_18
+            test: test_snapshot.sh
+          - flink-version: v1_19
+            test: test_snapshot.sh
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: 11
+      flink-version: ${{ matrix.flink-version }}
+      test: ${{ matrix.test }}
+      mode: ${{ matrix.mode }}

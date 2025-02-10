@@ -204,7 +204,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         Set<JobVertexID> vertexSet = Set.copyOf(t.getVerticesInTopologicalOrder());
         updateVertexList(stateStore, ctx, clock.instant(), vertexSet);
-        updateKafkaPulsarSourceMaxParallelisms(ctx, jobDetailsInfo.getJobId(), t);
+        updateKafkaPulsarSourceNumPartitions(ctx, jobDetailsInfo.getJobId(), t);
         excludeVerticesFromScaling(ctx.getConfiguration(), t.getFinishedVertices());
         return t;
     }
@@ -249,7 +249,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                 json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
     }
 
-    private void updateKafkaPulsarSourceMaxParallelisms(
+    private void updateKafkaPulsarSourceNumPartitions(
             Context ctx, JobID jobId, JobTopology topology) throws Exception {
         try (var restClient = ctx.getRestClusterClient()) {
             Pattern partitionRegex =
@@ -284,7 +284,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                 "Updating source {} max parallelism based on available partitions to {}",
                                 sourceVertex,
                                 numPartitions);
-                        topology.get(sourceVertex).updateMaxParallelism((int) numPartitions);
+                        topology.get(sourceVertex).setNumSourcePartitions((int) numPartitions);
                     }
                 }
             }

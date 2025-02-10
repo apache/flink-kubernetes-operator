@@ -19,7 +19,9 @@ package org.apache.flink.autoscaler.jdbc.event;
 
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
+
+import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,12 +33,14 @@ class CountableJdbcEventInteractor extends JdbcEventInteractor {
     private final AtomicLong queryCounter;
     private final AtomicLong createCounter;
     private final AtomicLong updateCounter;
+    private final AtomicLong deleteExpiredCounter;
 
-    public CountableJdbcEventInteractor(Connection conn) {
-        super(conn);
+    public CountableJdbcEventInteractor(DataSource dataSource) {
+        super(dataSource);
         queryCounter = new AtomicLong();
         createCounter = new AtomicLong();
         updateCounter = new AtomicLong();
+        deleteExpiredCounter = new AtomicLong();
     }
 
     @Override
@@ -64,10 +68,21 @@ class CountableJdbcEventInteractor extends JdbcEventInteractor {
         super.updateEvent(id, message, eventCount);
     }
 
+    @Override
+    int deleteExpiredEventsByIdRangeAndDate(long startId, long endId, Timestamp timestamp)
+            throws Exception {
+        deleteExpiredCounter.incrementAndGet();
+        return super.deleteExpiredEventsByIdRangeAndDate(startId, endId, timestamp);
+    }
+
     public void assertCounters(
             long expectedQueryCounter, long expectedUpdateCounter, long expectedCreateCounter) {
         assertThat(queryCounter).hasValue(expectedQueryCounter);
         assertThat(updateCounter).hasValue(expectedUpdateCounter);
         assertThat(createCounter).hasValue(expectedCreateCounter);
+    }
+
+    public void assertDeleteExpiredCounter(long expectedCounter) {
+        assertThat(deleteExpiredCounter).hasValue(expectedCounter);
     }
 }

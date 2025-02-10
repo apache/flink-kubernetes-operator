@@ -19,30 +19,44 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.util.CollectionUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Iterator;
-import java.util.List;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.isSnapshotTriggeringSupported;
@@ -52,6 +66,10 @@ public class SnapshotObserver<
         CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnapshotObserver.class);
+    public static final Function<FlinkStateSnapshot, Instant> EXTRACT_SNAPSHOT_TIME =
+            s -> DateTimeUtils.parseKubernetes(s.getMetadata().getCreationTimestamp());
+    private static final Set<SnapshotTriggerType> CLEAN_UP_SNAPSHOT_TRIGGER_TYPES =
+            Set.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE);
 
     private final EventRecorder eventRecorder;
 
@@ -60,10 +78,9 @@ public class SnapshotObserver<
     }
 
     public void observeSavepointStatus(FlinkResourceContext<CR> ctx) {
-
+        LOG.debug("Observing savepoint status");
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        var savepointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
 
         // If any manual or periodic savepoint is in progress, observe it
@@ -73,11 +90,10 @@ public class SnapshotObserver<
 
         // If job is in globally terminal state, observe last savepoint
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
-            observeLatestSavepoint(
-                    ctx.getFlinkService(), savepointInfo, jobId, ctx.getObserveConfig());
+            observeLatestCheckpoint(ctx, jobId);
         }
 
-        cleanupSavepointHistory(ctx, savepointInfo);
+        cleanupSavepointHistory(ctx);
     }
 
     public void observeCheckpointStatus(FlinkResourceContext<CR> ctx) {
@@ -99,7 +115,7 @@ public class SnapshotObserver<
 
         var savepointInfo = resource.getStatus().getJobStatus().getSavepointInfo();
 
-        LOG.info("Observing savepoint status.");
+        LOG.debug("Observing in-progress savepoint");
         var savepointFetchResult =
                 ctx.getFlinkService()
                         .fetchSavepointInfo(
@@ -122,7 +138,9 @@ public class SnapshotObserver<
                         "Savepoint attempt failed after grace period. Won't be retried again: "
                                 + err);
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        savepointInfo, (AbstractFlinkResource) resource, SAVEPOINT);
+                        savepointInfo.getTriggerType(),
+                        (AbstractFlinkResource) resource,
+                        SAVEPOINT);
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
@@ -149,7 +167,9 @@ public class SnapshotObserver<
                                 : null);
 
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                savepointInfo, resource, SAVEPOINT);
+                savepointInfo.getTriggerType(), resource, SAVEPOINT);
+
+        // In case of periodic and manual savepoint, we still use lastSavepoint
         savepointInfo.updateLastSavepoint(savepoint);
     }
 
@@ -181,7 +201,9 @@ public class SnapshotObserver<
                         "Checkpoint attempt failed after grace period. Won't be retried again: "
                                 + err);
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        checkpointInfo, (AbstractFlinkResource) resource, CHECKPOINT);
+                        checkpointInfo.getTriggerType(),
+                        (AbstractFlinkResource) resource,
+                        CHECKPOINT);
             } else {
                 LOG.warn("Checkpoint failed within grace period, retrying: " + err);
             }
@@ -207,84 +229,233 @@ public class SnapshotObserver<
                                 : null);
 
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                checkpointInfo, resource, CHECKPOINT);
+                checkpointInfo.getTriggerType(), resource, CHECKPOINT);
         checkpointInfo.updateLastCheckpoint(checkpoint);
     }
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
+    private void cleanupSavepointHistory(FlinkResourceContext<CR> ctx) {
+        var snapshots = FlinkStateSnapshotUtils.getFlinkStateSnapshotsSupplier(ctx).get();
+
+        cleanupSavepointHistoryLegacy(ctx, snapshots);
+
+        if (CollectionUtil.isNullOrEmpty(snapshots)) {
+            return;
+        }
+        if (ctx.getObserveConfig().get(OPERATOR_SAVEPOINT_CLEANUP_ENABLED)) {
+            var savepointsToDelete =
+                    getFlinkStateSnapshotsToCleanUp(
+                            snapshots, ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+            var checkpointsToDelete =
+                    getFlinkStateSnapshotsToCleanUp(
+                            snapshots, ctx.getObserveConfig(), ctx.getOperatorConfig(), CHECKPOINT);
+            Stream.concat(savepointsToDelete.stream(), checkpointsToDelete.stream())
+                    .forEach(
+                            snapshot ->
+                                    ctx.getKubernetesClient()
+                                            .resource(snapshot)
+                                            .withTimeoutInMillis(0L)
+                                            .delete());
+        }
+    }
+
+    /**
+     * Returns a list of FlinkStateSnapshot resources that should be cleaned up based on age/count
+     * policies.
+     *
+     * @param snapshots list of all snapshots
+     * @param observeConfig observe config
+     * @param operatorConfig operator config
+     * @param snapshotType checkpoint or savepoint
+     * @return set of FlinkStateSnapshot resources to delete
+     */
     @VisibleForTesting
-    void cleanupSavepointHistory(FlinkResourceContext<CR> ctx, SavepointInfo currentSavepointInfo) {
+    Set<FlinkStateSnapshot> getFlinkStateSnapshotsToCleanUp(
+            Collection<FlinkStateSnapshot> snapshots,
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        var snapshotList =
+                snapshots.stream()
+                        .filter(s -> !s.isMarkedForDeletion())
+                        .filter(
+                                s ->
+                                        CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
+                                                FlinkStateSnapshotUtils.getSnapshotTriggerType(s)))
+                        .filter(s -> (s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT)))
+                        .sorted(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
+                        .collect(Collectors.toList());
 
-        var observeConfig = ctx.getObserveConfig();
-        var flinkService = ctx.getFlinkService();
-        boolean savepointCleanupEnabled =
-                observeConfig.getBoolean(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
+        var lastCompleteSnapshot =
+                snapshotList.stream()
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
+                        .max(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
+                        .orElse(null);
 
-        // maintain history
-        List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
-        if (savepointHistory.size() < 2) {
+        var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        var maxTms = getMinAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        var result = new HashSet<FlinkStateSnapshot>();
+
+        if (snapshotList.size() < 2) {
+            return result;
+        }
+
+        for (var snapshot : snapshotList) {
+            if (snapshot.equals(lastCompleteSnapshot)) {
+                continue;
+            }
+
+            // We should keep the last snapshot, even if not complete.
+            if (result.size() == snapshotList.size() - 1) {
+                break;
+            }
+
+            var ts = EXTRACT_SNAPSHOT_TIME.apply(snapshot).toEpochMilli();
+            if (snapshotList.size() - result.size() > maxCount || ts < maxTms) {
+                result.add(snapshot);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Cleans up the savepoint history of a Flink resource from the old, deprecated
+     * savepoint-history. Secondary resources of FlinkStateSnapshot are used to determine count of
+     * completed savepoints to be able to properly clean old savepoints based on the count policy.
+     *
+     * @param ctx flink resource context
+     * @param allSecondarySnapshotResources all snapshot resources linked to this Flink resource
+     */
+    @VisibleForTesting
+    void cleanupSavepointHistoryLegacy(
+            FlinkResourceContext<CR> ctx, Set<FlinkStateSnapshot> allSecondarySnapshotResources) {
+        var maxTms =
+                getMinAgeForSnapshotType(
+                        ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+        var maxCount =
+                getMaxCountForSnapshotType(
+                        ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+
+        var completedSavepointCrs =
+                allSecondarySnapshotResources.stream()
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
+                        .filter(s -> s.getSpec().isSavepoint())
+                        .count();
+        maxCount = Math.max(0, maxCount - completedSavepointCrs);
+
+        var savepointHistory =
+                ctx.getResource()
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory();
+
+        var savepointCleanupEnabled =
+                ctx.getObserveConfig().get(OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
+
+        // If we have a single new FlinkStateSnapshot CR, we can clean up the last entry.
+        if (savepointHistory.isEmpty()
+                || (savepointHistory.size() == 1 && completedSavepointCrs == 0)) {
             return;
         }
         var lastSavepoint = savepointHistory.get(savepointHistory.size() - 1);
 
-        int maxCount =
-                Math.max(
-                        1,
-                        ConfigOptionUtils.getValueWithThreshold(
-                                observeConfig,
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                                ctx.getOperatorConfig().getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
-            Savepoint sp = savepointHistory.remove(0);
+            var sp = savepointHistory.remove(0);
             if (savepointCleanupEnabled) {
-                disposeSavepointQuietly(flinkService, sp, observeConfig);
+                disposeSavepointQuietly(ctx, sp.getLocation());
             }
         }
 
-        Duration maxAge =
-                ConfigOptionUtils.getValueWithThreshold(
-                        observeConfig,
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        ctx.getOperatorConfig().getSavepointHistoryAgeThreshold());
-        long maxTms = System.currentTimeMillis() - maxAge.toMillis();
-        Iterator<Savepoint> it = savepointHistory.iterator();
+        var it = savepointHistory.iterator();
         while (it.hasNext()) {
-            Savepoint sp = it.next();
-            if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
+            var sp = it.next();
+            if (sp == lastSavepoint && completedSavepointCrs == 0) {
+                continue;
+            }
+            if (sp.getTimeStamp() < maxTms) {
                 it.remove();
                 if (savepointCleanupEnabled) {
-                    disposeSavepointQuietly(flinkService, sp, observeConfig);
+                    disposeSavepointQuietly(ctx, sp.getLocation());
                 }
             }
         }
     }
 
-    private void disposeSavepointQuietly(
-            FlinkService flinkService, Savepoint sp, Configuration conf) {
+    private void disposeSavepointQuietly(FlinkResourceContext<CR> ctx, String path) {
         try {
-            LOG.info("Disposing savepoint {}", sp);
-            flinkService.disposeSavepoint(sp.getLocation(), conf);
+            LOG.info("Disposing savepoint {}", path);
+            ctx.getFlinkService().disposeSavepoint(path, ctx.getObserveConfig());
         } catch (Exception e) {
             // savepoint dispose error should not affect the deployment
-            LOG.error("Exception while disposing savepoint {}", sp.getLocation(), e);
+            LOG.error("Exception while disposing savepoint {}", path, e);
         }
     }
 
-    private void observeLatestSavepoint(
-            FlinkService flinkService,
-            SavepointInfo savepointInfo,
-            String jobID,
-            Configuration observeConfig) {
-        try {
-            flinkService
-                    .getLastCheckpoint(JobID.fromHexString(jobID), observeConfig)
-                    .ifPresent(savepointInfo::updateLastSavepoint);
-        } catch (Exception e) {
-            LOG.error("Could not observe latest savepoint information.", e);
-            throw new ReconciliationException(e);
+    private long getMinAgeForSnapshotType(
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case CHECKPOINT:
+                return 0;
+            case SAVEPOINT:
+                var maxAge =
+                        ConfigOptionUtils.getValueWithThreshold(
+                                observeConfig,
+                                OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                                operatorConfig.getSavepointHistoryAgeThreshold());
+                return System.currentTimeMillis() - maxAge.toMillis();
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Unknown snapshot type %s", snapshotType.name()));
         }
+    }
+
+    private long getMaxCountForSnapshotType(
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case CHECKPOINT:
+                return Math.max(1, observeConfig.get(MAX_RETAINED_CHECKPOINTS));
+            case SAVEPOINT:
+                return Math.max(
+                        1,
+                        ConfigOptionUtils.getValueWithThreshold(
+                                observeConfig,
+                                OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                                operatorConfig.getSavepointHistoryCountThreshold()));
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Unknown snapshot type %s", snapshotType.name()));
+        }
+    }
+
+    private void observeLatestCheckpoint(FlinkResourceContext<CR> ctx, String jobId) {
+
+        var status = ctx.getResource().getStatus();
+        var jobStatus = status.getJobStatus();
+
+        ctx.getFlinkService()
+                .getLastCheckpoint(JobID.fromHexString(jobId), ctx.getObserveConfig())
+                .ifPresentOrElse(
+                        snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()),
+                        () -> {
+                            if (ReconciliationUtils.isJobCancelled(status)) {
+                                // For cancelled jobs the observed savepoint is always definite,
+                                // so if empty we know the job doesn't have any
+                                // checkpoints/savepoints
+                                jobStatus.setUpgradeSavepointPath(null);
+                            }
+                        });
     }
 }

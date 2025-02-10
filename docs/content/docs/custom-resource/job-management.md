@@ -84,13 +84,13 @@ Supported values: `stateless`, `savepoint`, `last-state`
 
 The `upgradeMode` setting controls both the stop and restore mechanisms as detailed in the following table:
 
-|                        | Stateless               | Last State                                 | Savepoint                              |
-|------------------------|-------------------------|--------------------------------------------|----------------------------------------|
-| Config Requirement     | None                    | Checkpointing & HA Enabled                 | Checkpoint/Savepoint directory defined |
-| Job Status Requirement | None                    | HA metadata available                      | Job Running*                           |
-| Suspend Mechanism      | Cancel / Delete         | Delete Flink deployment (keep HA metadata) | Cancel with savepoint                  |
-| Restore Mechanism      | Deploy from empty state | Recover last state using HA metadata       | Restore From savepoint                 |
-| Production Use         | Not recommended         | Recommended                                | Recommended                            |
+|                        | Stateless       | Last State                         | Savepoint                              |
+|------------------------|-----------------|------------------------------------|----------------------------------------|
+| Config Requirement     | None            | Checkpointing Enabled              | Checkpoint/Savepoint directory defined |
+| Job Status Requirement | None            | Job or HA metadata accessible      | Job Running*                           |
+| Suspend Mechanism      | Cancel / Delete | Cancel / Delete (keep HA metadata) | Cancel with savepoint                  |
+| Restore Mechanism      | Empty state     | Use HA metadata or last cp/sp      | Restore From savepoint                 |
+| Production Use         | Not recommended | Recommended                        | Recommended                            |
 
 
 *\* When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behaviour in cases where the job is in an unhealthy state.*
@@ -111,8 +111,8 @@ kind: FlinkDeployment
 metadata:
   name: basic-checkpoint-ha-example
 spec:
-  image: flink:1.17
-  flinkVersion: v1_17
+  image: flink:1.20
+  flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     state.savepoints.dir: file:///flink-data/savepoints
@@ -149,10 +149,6 @@ spec:
     state: running
 ```
 
-{{< hint warning >}}
-Last state upgrade mode is currently only supported for `FlinkDeployments`.
-{{< /hint >}}
-
 ### Application restarts without spec change
 
 There are cases when users would like to restart the Flink deployments to deal with some transient problem.
@@ -166,56 +162,6 @@ For this purpose you can use the `restartNonce` top level field in the spec. Set
 ```
 
 Restarts work exactly the same way as other application upgrades and follow the semantics detailed in the previous section.
-
-## Savepoint management
-
-Savepoints are triggered automatically by the system during the upgrade process as we have seen in the previous sections.
-
-For backup, job forking and other purposes savepoints can be triggered manually or periodically by the operator, however generally speaking these will not be used during upgrades and are not required for the correct operation.
-
-### Manual Savepoint Triggering
-
-Users can trigger savepoints manually by defining a new (different/random) value to the variable `savepointTriggerNonce` in the job specification:
-
-```yaml
- job:
-    ...
-    savepointTriggerNonce: 123
-```
-
-Changing the nonce value will trigger a new savepoint. Information about pending and last savepoint is stored in the resource status.
-
-### Periodic Savepoint Triggering
-
-The operator also supports periodic savepoint triggering through the following config option which can be configured on a per job level:
-
-```yaml
- flinkConfiguration:
-    ...
-    kubernetes.operator.periodic.savepoint.interval: 6h
-```
-
-There is no guarantee on the timely execution of the periodic savepoints as they might be delayed by unhealthy job status or other interfering user operation.
-
-### Savepoint History
-
-The operator automatically keeps track of the savepoint history triggered by upgrade or manual savepoint operations.
-This is necessary so cleanup can be performed by the operator for old savepoints.
-
-Users can control the cleanup behaviour by specifying a maximum age and maximum count for the savepoints in the history.
-
-```
-kubernetes.operator.savepoint.history.max.age: 24 h
-kubernetes.operator.savepoint.history.max.count: 5
-```
-
-{{< hint info >}}
-Savepoint cleanup happens lazily and only when the application is running.
-It is therefore very likely that savepoints live beyond the max age configuration.  
-{{< /hint >}}
-
-To disable savepoint cleanup by the operator you can set `kubernetes.operator.savepoint.cleanup.enabled: false`.
-When savepoint cleanup is disabled the operator will still collect and populate the savepoint history but not perform any dispose operations.
 
 ## Recovery of missing job deployments
 
@@ -320,7 +266,7 @@ However, this also means that savepoint history is lost and the operator won't c
  1. Locate the latest checkpoint/savepoint metafile in your configured checkpoint/savepoint directory.
  2. Delete the `FlinkDeployment` resource for your application
  3. Check that you have the current savepoint, and that your `FlinkDeployment` is deleted completely
- 4. Modify your `FlinkDeployment` JobSpec and set the `initialSavepointPath` to your last checkpoint location
+ 4. Modify your `FlinkDeployment` JobSpec and set `initialSavepointPath` to your last checkpoint location
  5. Recreate the deployment
 
 These steps ensure that the operator will start completely fresh from the user defined savepoint path and can hopefully fully recover.

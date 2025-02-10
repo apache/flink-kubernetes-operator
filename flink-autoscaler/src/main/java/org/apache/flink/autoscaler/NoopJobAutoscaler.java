@@ -24,5 +24,5 @@ public class NoopJobAutoscaler<KEY, Context extends JobAutoScalerContext<KEY>>
     public void scale(Context context) throws Exception {}
 
     @Override
-    public void cleanup(KEY jobKey) {}
+    public void cleanup(Context jobKey) {}
 }

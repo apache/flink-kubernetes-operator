@@ -20,26 +20,34 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.JobAutoScaler;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotTriggerTimestampStore;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.StringUtils;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Value;
@@ -52,6 +60,8 @@ import java.util.function.Predicate;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
@@ -66,6 +76,9 @@ public abstract class AbstractJobReconciler<
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
 
     public static final String LAST_STATE_DUMMY_SP_PATH = "KUBERNETES_OPERATOR_LAST_STATE";
+
+    private final SnapshotTriggerTimestampStore snapshotTriggerTimestampStore =
+            new SnapshotTriggerTimestampStore();
 
     public AbstractJobReconciler(
             EventRecorder eventRecorder,
@@ -115,33 +128,60 @@ public abstract class AbstractJobReconciler<
         }
 
         if (currentJobState == JobState.RUNNING) {
-            if (desiredJobState == JobState.RUNNING) {
-                LOG.info("Upgrading/Restarting running job, suspending first...");
+            var jobUpgrade = getJobUpgrade(ctx, deployConfig);
+            if (!jobUpgrade.isAvailable()) {
+                // If job upgrade is currently not available for some reason we must still check if
+                // other reconciliation action may be taken while we wait...
+                LOG.info(
+                        "Job is not running and checkpoint information is not available for executing the upgrade, waiting for upgradeable state");
+                return !jobUpgrade.allowOtherReconcileActions;
             }
-            AvailableUpgradeMode availableUpgradeMode = getAvailableUpgradeMode(ctx, deployConfig);
-            if (!availableUpgradeMode.isAvailable()) {
-                return false;
+            LOG.debug("Job upgrade available: {}", jobUpgrade);
+
+            var suspendMode = jobUpgrade.getSuspendMode();
+            if (suspendMode != SuspendMode.NOOP) {
+                eventRecorder.triggerEvent(
+                        resource,
+                        EventRecorder.Type.Normal,
+                        EventRecorder.Reason.Suspended,
+                        EventRecorder.Component.JobManagerDeployment,
+                        MSG_SUSPENDED,
+                        ctx.getKubernetesClient());
             }
 
-            eventRecorder.triggerEvent(
-                    resource,
-                    EventRecorder.Type.Normal,
-                    EventRecorder.Reason.Suspended,
-                    EventRecorder.Component.JobManagerDeployment,
-                    MSG_SUSPENDED,
-                    ctx.getKubernetesClient());
-
-            UpgradeMode upgradeMode = availableUpgradeMode.getUpgradeMode().get();
+            boolean async = cancelJob(ctx, suspendMode);
+            if (async) {
+                // Async cancellation will be completed in the background, so we must exit
+                // reconciliation early and wait until it completes to finish the upgrade.
+                resource.getStatus()
+                        .getReconciliationStatus()
+                        .setState(ReconciliationState.UPGRADING);
+                ReconciliationUtils.updateLastReconciledSpec(
+                        resource,
+                        (s, m) -> {
+                            s.getJob().setUpgradeMode(jobUpgrade.getRestoreMode());
+                            m.setFirstDeployment(false);
+                        });
+                return true;
+            }
 
             // We must record the upgrade mode used to the status later
-            currentDeploySpec.getJob().setUpgradeMode(upgradeMode);
+            currentDeploySpec.getJob().setUpgradeMode(jobUpgrade.getRestoreMode());
 
-            cancelJob(ctx, upgradeMode);
             if (desiredJobState == JobState.RUNNING) {
                 ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                         resource, deployConfig, clock);
             } else {
                 ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
+            }
+
+            if (suspendMode == SuspendMode.NOOP) {
+                // If already cancelled we want to restore immediately so we modify the current
+                // state
+                // We don't do this when we actually performed a potentially lengthy cancel action
+                // to allow reconciling the spec
+                lastReconciledSpec.getJob().setUpgradeMode(jobUpgrade.getRestoreMode());
+                currentJobState = JobState.SUSPENDED;
             }
         }
 
@@ -168,65 +208,107 @@ public abstract class AbstractJobReconciler<
         return true;
     }
 
-    protected AvailableUpgradeMode getAvailableUpgradeMode(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception {
+    protected JobUpgrade getJobUpgrade(FlinkResourceContext<CR> ctx, Configuration deployConfig)
+            throws Exception {
         var resource = ctx.getResource();
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
+        boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
 
         if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
-            return AvailableUpgradeMode.of(UpgradeMode.STATELESS);
+            return JobUpgrade.stateless(terminal);
         }
 
         var flinkService = ctx.getFlinkService();
-        if (ReconciliationUtils.isJobInTerminalState(status)
-                && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig())) {
+        if (ReconciliationUtils.isJobCancelled(status)
+                || (terminal && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig()))) {
 
             if (!SnapshotUtils.lastSavepointKnown(status)) {
-                throw new RecoveryFailureException(
+                throw new UpgradeFailureException(
                         "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. Manual restore required.",
                         "UpgradeFailed");
             }
-            LOG.info(
-                    "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
-            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
+            LOG.info("Job is in terminal state, ready for upgrade from observed latest state");
+            return JobUpgrade.savepoint(true);
         }
 
-        if (ReconciliationUtils.isJobRunning(status)) {
-            LOG.info("Job is in running state, ready for upgrade with {}", upgradeMode);
-            var changedToLastStateWithoutHa =
-                    ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            resource, ctx.getObserveConfig());
-            if (changedToLastStateWithoutHa) {
-                LOG.info(
-                        "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
-                return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
-            }
-
-            if (flinkVersionChanged(
-                    ReconciliationUtils.getDeployedSpec(resource), resource.getSpec())) {
-                LOG.info("Using savepoint upgrade mode when upgrading Flink version");
-                return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
-            }
-
-            if (upgradeMode == UpgradeMode.LAST_STATE) {
-                return changeLastStateIfCheckpointTooOld(ctx, deployConfig);
-            }
-
-            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
+        if (ReconciliationUtils.isJobCancelling(status)) {
+            LOG.info("Cancellation is in progress. Waiting for cancelled state.");
+            return JobUpgrade.pendingCancellation();
         }
 
-        return AvailableUpgradeMode.unavailable();
+        boolean running = ReconciliationUtils.isJobRunning(status);
+        boolean versionChanged =
+                flinkVersionChanged(
+                        ReconciliationUtils.getDeployedSpec(resource), resource.getSpec());
+
+        if (upgradeMode == UpgradeMode.SAVEPOINT) {
+            if (running) {
+                LOG.info("Job is in running state, ready for upgrade with savepoint");
+                return JobUpgrade.savepoint(false);
+            } else if (versionChanged
+                    || deployConfig.get(
+                            KubernetesOperatorConfigOptions
+                                    .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)) {
+                LOG.info("Falling back to last-state upgrade mode from savepoint");
+                ctx.getResource()
+                        .getSpec()
+                        .getJob()
+                        .setUpgradeMode(upgradeMode = UpgradeMode.LAST_STATE);
+            } else {
+                LOG.info("Last-state fallback is disabled, waiting for upgradable state");
+                return JobUpgrade.pendingUpgrade();
+            }
+        }
+
+        if (upgradeMode == UpgradeMode.LAST_STATE) {
+            if (versionChanged) {
+                // We need some special handling in case of version upgrades where HA based
+                // last-state upgrade is not possible
+                boolean savepointPossible =
+                        !StringUtils.isNullOrWhitespaceOnly(
+                                ctx.getObserveConfig()
+                                        .getString(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+                if (running && savepointPossible) {
+                    LOG.info("Using savepoint to upgrade Flink version");
+                    return JobUpgrade.savepoint(false);
+                } else if (ReconciliationUtils.isJobCancellable(resource.getStatus())) {
+                    LOG.info("Using last-state upgrade with cancellation to upgrade Flink version");
+                    return JobUpgrade.lastStateUsingCancel();
+                } else {
+                    LOG.info(
+                            "Neither savepoint nor cancellation is possible, cannot perform stateful version upgrade");
+                    return JobUpgrade.pendingUpgrade();
+                }
+            }
+
+            boolean cancellable = allowLastStateCancel(ctx);
+            if (running) {
+                var mode = getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
+                LOG.info("Job is running, using {} for last-state upgrade", mode);
+                return mode;
+            }
+
+            if (cancellable) {
+                LOG.info("Job is not running, using cancel to perform last-state upgrade");
+                return JobUpgrade.lastStateUsingCancel();
+            }
+        }
+
+        return JobUpgrade.unavailable();
     }
 
     @VisibleForTesting
-    protected AvailableUpgradeMode changeLastStateIfCheckpointTooOld(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception {
+    protected JobUpgrade getUpgradeModeBasedOnStateAge(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, boolean cancellable)
+            throws Exception {
 
+        var defaultMode =
+                cancellable ? JobUpgrade.lastStateUsingCancel() : JobUpgrade.lastStateUsingHaMeta();
         var maxAge = deployConfig.get(OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE);
         if (maxAge == null) {
-            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+            return defaultMode;
         }
 
         var jobStatus = ctx.getResource().getStatus().getJobStatus();
@@ -238,7 +320,7 @@ public abstract class AbstractJobReconciler<
 
         // If job started recently, no need to query checkpoint
         if (withinMaxAge.test(startTime)) {
-            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+            return defaultMode;
         }
 
         var chkInfo = ctx.getFlinkService().getCheckpointInfo(jobId, ctx.getObserveConfig());
@@ -255,15 +337,32 @@ public abstract class AbstractJobReconciler<
 
         if (withinMaxAge.test(completedTs)) {
             // We have a recent enough checkpoint
-            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+            return defaultMode;
         } else if (withinMaxAge.test(pendingTs)) {
             LOG.info("Waiting for pending checkpoint to complete before upgrading.");
-            return AvailableUpgradeMode.pendingUpgrade();
+            return JobUpgrade.pendingUpgrade();
         } else {
             LOG.info(
                     "Using savepoint upgrade mode because latest checkpoint is too old for last-state upgrade");
-            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
+            return JobUpgrade.savepoint(false);
         }
+    }
+
+    private boolean allowLastStateCancel(FlinkResourceContext<CR> ctx) {
+        var resource = ctx.getResource();
+        if (!ReconciliationUtils.isJobCancellable(resource.getStatus())) {
+            return false;
+        }
+        if (resource instanceof FlinkSessionJob) {
+            return true;
+        }
+
+        var conf = ctx.getObserveConfig();
+        if (!ctx.getFlinkService().isHaMetadataAvailable(conf)) {
+            LOG.info("HA metadata not available, cancel will be used instead of last-state");
+            return true;
+        }
+        return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB);
     }
 
     protected void restoreJob(
@@ -277,22 +376,56 @@ public abstract class AbstractJobReconciler<
         if (spec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT) {
             savepointOpt =
                     Optional.ofNullable(
-                                    ctx.getResource()
-                                            .getStatus()
-                                            .getJobStatus()
-                                            .getSavepointInfo()
-                                            .getLastSavepoint())
-                            .flatMap(s -> Optional.ofNullable(s.getLocation()));
+                            ctx.getResource().getStatus().getJobStatus().getUpgradeSavepointPath());
+            if (savepointOpt.isEmpty()) {
+                savepointOpt =
+                        Optional.ofNullable(
+                                        ctx.getResource()
+                                                .getStatus()
+                                                .getJobStatus()
+                                                .getSavepointInfo()
+                                                .getLastSavepoint())
+                                .flatMap(s -> Optional.ofNullable(s.getLocation()));
+            }
         }
 
         deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
     }
 
+    /**
+     * Updates the upgrade savepoint field in the JobSpec of the current Flink resource and if
+     * snapshot resources are enabled, a new FlinkStateSnapshot will be created.
+     *
+     * @param ctx context
+     * @param savepointLocation location of savepoint taken
+     */
+    protected void setUpgradeSavepointPath(FlinkResourceContext<?> ctx, String savepointLocation) {
+        var conf = ctx.getObserveConfig();
+        var savepointFormatType =
+                ctx.getObserveConfig()
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+
+        FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
+                conf,
+                ctx.getOperatorConfig(),
+                ctx.getKubernetesClient(),
+                ctx.getResource(),
+                SavepointFormatType.valueOf(savepointFormatType.name()),
+                savepointLocation);
+        ctx.getResource().getStatus().getJobStatus().setUpgradeSavepointPath(savepointLocation);
+    }
+
+    /**
+     * Triggers any pending manual or periodic snapshots and updates the status accordingly.
+     *
+     * @param ctx Reconciliation context.
+     * @return True if a snapshot was triggered.
+     * @throws Exception An error during snapshot triggering.
+     */
     @Override
     public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception {
         var status = ctx.getResource().getStatus();
-        var jobStatus =
-                org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
+        var jobStatus = status.getJobStatus().getState();
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
                 && ctx.getObserveConfig().getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");
@@ -301,38 +434,130 @@ public abstract class AbstractJobReconciler<
             resubmitJob(ctx, false);
             return true;
         } else {
-            boolean savepointTriggered =
-                    SnapshotUtils.triggerSnapshotIfNeeded(
-                            ctx.getFlinkService(),
-                            ctx.getResource(),
-                            ctx.getObserveConfig(),
-                            SnapshotType.SAVEPOINT);
-            boolean checkpointTriggered =
-                    SnapshotUtils.triggerSnapshotIfNeeded(
-                            ctx.getFlinkService(),
-                            ctx.getResource(),
-                            ctx.getObserveConfig(),
-                            SnapshotType.CHECKPOINT);
+            boolean savepointTriggered = triggerSnapshotIfNeeded(ctx, SAVEPOINT);
+            boolean checkpointTriggered = triggerSnapshotIfNeeded(ctx, CHECKPOINT);
 
             return savepointTriggered || checkpointTriggered;
         }
+    }
+
+    /**
+     * Triggers specified snapshot type if needed. When using FlinkStateSnapshot resources this can
+     * only be periodic snapshot. If using the legacy snapshot system, this can be manual as well.
+     *
+     * @param ctx Flink resource context
+     * @param snapshotType type of snapshot
+     * @return true if a snapshot was triggered
+     * @throws Exception snapshot error
+     */
+    private boolean triggerSnapshotIfNeeded(FlinkResourceContext<CR> ctx, SnapshotType snapshotType)
+            throws Exception {
+        var resource = ctx.getResource();
+        var conf = ctx.getObserveConfig();
+
+        var lastTrigger =
+                snapshotTriggerTimestampStore.getLastPeriodicTriggerInstant(
+                        resource,
+                        snapshotType,
+                        FlinkStateSnapshotUtils.getFlinkStateSnapshotsSupplier(ctx));
+
+        var triggerOpt =
+                SnapshotUtils.shouldTriggerSnapshot(resource, conf, snapshotType, lastTrigger);
+        if (triggerOpt.isEmpty()) {
+            return false;
+        }
+        var triggerType = triggerOpt.get();
+
+        if (SnapshotTriggerType.PERIODIC.equals(triggerType)) {
+            snapshotTriggerTimestampStore.updateLastPeriodicTriggerTimestamp(
+                    resource, snapshotType, Instant.now());
+        }
+
+        var createSnapshotResource =
+                FlinkStateSnapshotUtils.isSnapshotResourceEnabled(ctx.getOperatorConfig(), conf);
+
+        String jobId = resource.getStatus().getJobStatus().getJobId();
+        switch (snapshotType) {
+            case SAVEPOINT:
+                var savepointFormatType =
+                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+                var savepointDirectory =
+                        Preconditions.checkNotNull(
+                                conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+
+                if (createSnapshotResource) {
+                    FlinkStateSnapshotUtils.createSavepointResource(
+                            ctx.getKubernetesClient(),
+                            resource,
+                            savepointDirectory,
+                            triggerType,
+                            SavepointFormatType.valueOf(savepointFormatType.name()),
+                            conf.getBoolean(
+                                    KubernetesOperatorConfigOptions
+                                            .OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE));
+
+                    ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                            triggerType, resource, SAVEPOINT);
+                } else {
+                    var triggerId =
+                            ctx.getFlinkService()
+                                    .triggerSavepoint(
+                                            jobId, savepointFormatType, savepointDirectory, conf);
+                    resource.getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .setTrigger(
+                                    triggerId,
+                                    triggerType,
+                                    SavepointFormatType.valueOf(savepointFormatType.name()));
+                }
+
+                break;
+            case CHECKPOINT:
+                if (createSnapshotResource) {
+                    FlinkStateSnapshotUtils.createCheckpointResource(
+                            ctx.getKubernetesClient(), resource, triggerType);
+
+                    ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                            triggerType, resource, CHECKPOINT);
+                } else {
+                    var checkpointType =
+                            conf.get(KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_TYPE);
+                    var triggerId =
+                            ctx.getFlinkService()
+                                    .triggerCheckpoint(
+                                            jobId,
+                                            org.apache.flink.core.execution.CheckpointType.valueOf(
+                                                    checkpointType.name()),
+                                            conf);
+                    resource.getStatus()
+                            .getJobStatus()
+                            .getCheckpointInfo()
+                            .setTrigger(triggerId, triggerType, checkpointType);
+                }
+
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
+        return true;
     }
 
     protected void resubmitJob(FlinkResourceContext<CR> ctx, boolean requireHaMetadata)
             throws Exception {
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
-        Optional<Savepoint> lastSavepoint =
-                Optional.ofNullable(
-                        ctx.getResource()
-                                .getStatus()
-                                .getJobStatus()
-                                .getSavepointInfo()
-                                .getLastSavepoint());
+
+        var upgradeStatePath =
+                ctx.getResource().getStatus().getJobStatus().getUpgradeSavepointPath();
+        var savepointLegacy =
+                ctx.getResource().getStatus().getJobStatus().getSavepointInfo().getLastSavepoint();
+        var lastSavepointKnown = upgradeStatePath != null || savepointLegacy != null;
+
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         } else if (ctx.getResource().getSpec().getJob().getUpgradeMode() != UpgradeMode.STATELESS
-                && lastSavepoint.isPresent()) {
+                && lastSavepointKnown) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
         restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
@@ -347,19 +572,19 @@ public abstract class AbstractJobReconciler<
             JobState desiredJobState)
             throws Exception {
         LOG.info("Redeploying from savepoint");
-        cancelJob(ctx, UpgradeMode.STATELESS);
-        var savepoint = currentDeploySpec.getJob().getInitialSavepointPath();
+        cancelJob(ctx, SuspendMode.STATELESS);
         currentDeploySpec.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
-        status.getJobStatus()
-                .getSavepointInfo()
-                .setLastSavepoint(Savepoint.of(savepoint, SnapshotTriggerType.UNKNOWN));
+
+        Optional<String> savepointPath =
+                Optional.ofNullable(currentDeploySpec.getJob().getInitialSavepointPath());
+        status.getJobStatus().setUpgradeSavepointPath(savepointPath.orElse(null));
 
         if (desiredJobState == JobState.RUNNING) {
             deploy(
                     ctx,
                     currentDeploySpec,
                     ctx.getDeployConfig(currentDeploySpec),
-                    Optional.of(savepoint),
+                    savepointPath,
                     false);
         }
         ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
@@ -370,10 +595,11 @@ public abstract class AbstractJobReconciler<
      * Cancel the job for the given resource using the specified upgrade mode.
      *
      * @param ctx Reconciler context.
-     * @param upgradeMode Upgrade mode used during cancel.
+     * @param suspendMode Suspend mode used during cancel.
      * @throws Exception Error during cancellation.
+     * @return True if this is an async cancellation
      */
-    protected abstract void cancelJob(FlinkResourceContext<CR> ctx, UpgradeMode upgradeMode)
+    protected abstract boolean cancelJob(FlinkResourceContext<CR> ctx, SuspendMode suspendMode)
             throws Exception;
 
     /**
@@ -386,24 +612,50 @@ public abstract class AbstractJobReconciler<
 
     /** Object to capture available upgrade mode. */
     @Value
-    public static class AvailableUpgradeMode {
-        Optional<UpgradeMode> upgradeMode;
+    public static class JobUpgrade {
+        SuspendMode suspendMode;
+        UpgradeMode restoreMode;
+        boolean available;
         boolean allowFallback;
+        boolean allowOtherReconcileActions;
 
-        public boolean isAvailable() {
-            return upgradeMode.isPresent();
+        static JobUpgrade stateless(boolean terminal) {
+            return new JobUpgrade(
+                    terminal ? SuspendMode.NOOP : SuspendMode.STATELESS,
+                    UpgradeMode.STATELESS,
+                    true,
+                    false,
+                    false);
         }
 
-        static AvailableUpgradeMode of(UpgradeMode upgradeMode) {
-            return new AvailableUpgradeMode(Optional.of(upgradeMode), false);
+        static JobUpgrade savepoint(boolean terminal) {
+            return new JobUpgrade(
+                    terminal ? SuspendMode.NOOP : SuspendMode.SAVEPOINT,
+                    UpgradeMode.SAVEPOINT,
+                    true,
+                    false,
+                    false);
         }
 
-        static AvailableUpgradeMode unavailable() {
-            return new AvailableUpgradeMode(Optional.empty(), true);
+        static JobUpgrade lastStateUsingHaMeta() {
+            return new JobUpgrade(
+                    SuspendMode.LAST_STATE, UpgradeMode.LAST_STATE, true, false, false);
         }
 
-        static AvailableUpgradeMode pendingUpgrade() {
-            return new AvailableUpgradeMode(Optional.empty(), false);
+        static JobUpgrade lastStateUsingCancel() {
+            return new JobUpgrade(SuspendMode.CANCEL, UpgradeMode.SAVEPOINT, true, false, false);
+        }
+
+        static JobUpgrade pendingCancellation() {
+            return new JobUpgrade(null, null, false, false, false);
+        }
+
+        static JobUpgrade pendingUpgrade() {
+            return new JobUpgrade(null, null, false, false, true);
+        }
+
+        static JobUpgrade unavailable() {
+            return new JobUpgrade(null, null, false, true, true);
         }
     }
 }

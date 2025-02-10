@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_KUBERNETES_SLOW_REQUEST_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.utils.EnvUtils.ENV_WATCH_NAMESPACES;
 
 /** Configuration class for operator. */
@@ -74,6 +75,8 @@ public class FlinkOperatorConfiguration {
     String labelSelector;
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
+    boolean snapshotResourcesEnabled;
+    Duration slowRequestThreshold;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -114,6 +117,7 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD);
+
         Boolean exceptionStackTraceEnabled =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_ENABLED);
@@ -185,6 +189,12 @@ public class FlinkOperatorConfiguration {
         DeletionPropagation deletionPropagation =
                 operatorConfig.get(KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION);
 
+        boolean snapshotResourcesEnabled =
+                operatorConfig.get(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED);
+
+        Duration slowRequestThreshold =
+                operatorConfig.get(OPERATOR_KUBERNETES_SLOW_REQUEST_THRESHOLD);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -212,7 +222,9 @@ public class FlinkOperatorConfiguration {
                 exceptionLabelMapper,
                 labelSelector,
                 getLeaderElectionConfig(operatorConfig),
-                deletionPropagation);
+                deletionPropagation,
+                snapshotResourcesEnabled,
+                slowRequestThreshold);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {

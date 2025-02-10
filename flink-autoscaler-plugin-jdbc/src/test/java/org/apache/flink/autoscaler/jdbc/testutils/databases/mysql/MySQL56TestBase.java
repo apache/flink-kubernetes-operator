@@ -21,14 +21,14 @@ import org.apache.flink.autoscaler.jdbc.testutils.databases.DatabaseTest;
 
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
 
 /** MySQL 5.6.x database for testing. */
 public interface MySQL56TestBase extends DatabaseTest {
 
     @RegisterExtension MySQLExtension MYSQL_EXTENSION = new MySQLExtension("5.6.51");
 
-    default Connection getConnection() throws Exception {
-        return MYSQL_EXTENSION.getConnection();
+    default DataSource getDataSource() throws Exception {
+        return MYSQL_EXTENSION.getDataSource();
     }
 }

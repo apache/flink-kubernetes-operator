@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.Config;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.ConfigBuilder;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.NamespacedKubernetesClient;
-import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -39,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.Executors;
 
 import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.TEST_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,7 +61,7 @@ public class Fabric8FlinkStandaloneKubeClientTest {
 
         flinkKubeClient =
                 new Fabric8FlinkStandaloneKubeClient(
-                        flinkConfig, getClient(), Executors.newDirectExecutorService());
+                        flinkConfig, getClient(), Executors.newSingleThreadScheduledExecutor());
         clusterSpecification = TestUtils.createClusterSpecification();
 
         taskManagerParameters =

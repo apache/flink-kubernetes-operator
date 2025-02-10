@@ -60,6 +60,9 @@ spec:
       {{- if .Values.operatorPod.nodeSelector }}
       nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
       {{- end }}
+      {{- if .Values.operatorPod.affinity }}
+      affinity: {{ toYaml .Values.operatorPod.affinity | nindent 8 }}
+      {{- end }}
       {{- with .Values.operatorPod.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -204,6 +207,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- with .Values.operatorPod.webhook.container.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.operatorPod.webhook.resources | nindent 12 }}
           securityContext:

@@ -39,6 +39,12 @@
             <td>The port of flink cluster when the flink-cluster fetcher is used.</td>
         </tr>
         <tr>
+            <td><h5>autoscaler.standalone.jdbc.event-handler.ttl</h5></td>
+            <td style="word-wrap: break-word;">90 d</td>
+            <td>Duration</td>
+            <td>The time to live based on create time for the JDBC event handler records. When the config is set as '0', the ttl strategy for the records would be disabled.</td>
+        </tr>
+        <tr>
             <td><h5>autoscaler.standalone.jdbc.password-env-variable</h5></td>
             <td style="word-wrap: break-word;">"JDBC_PWD"</td>
             <td>String</td>

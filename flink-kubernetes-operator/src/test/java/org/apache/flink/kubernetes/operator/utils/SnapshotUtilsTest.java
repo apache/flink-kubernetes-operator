@@ -23,10 +23,13 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 
 import org.apache.logging.log4j.core.util.CronExpression;
 import org.junit.jupiter.api.Test;
@@ -74,7 +77,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
 
         deployment.getSpec().getFlinkConfiguration().put(PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
         reconcileSpec(deployment);
@@ -82,21 +88,30 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
 
         setTriggerNonce(deployment, snapshotType, 123L);
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
 
-        setupCronTrigger(snapshotType, deployment);
+        var instant = setupCronTrigger(snapshotType, deployment);
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        instant));
         resetTrigger(deployment, snapshotType);
     }
 
@@ -108,7 +123,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
 
         deployment
                 .getSpec()
@@ -119,7 +137,10 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.of(SnapshotTriggerType.PERIODIC),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
         deployment.getSpec().getFlinkConfiguration().put(periodicSnapshotIntervalOption.key(), "0");
         reconcileSpec(deployment);
@@ -128,15 +149,21 @@ public class SnapshotUtilsTest {
         assertEquals(
                 Optional.of(SnapshotTriggerType.MANUAL),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        Instant.MIN));
         resetTrigger(deployment, snapshotType);
         reconcileSpec(deployment);
 
-        setupCronTrigger(snapshotType, deployment);
+        var instant = setupCronTrigger(snapshotType, deployment);
         assertEquals(
                 Optional.of(SnapshotTriggerType.PERIODIC),
                 SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+                        deployment,
+                        configManager.getObserveConfig(deployment),
+                        snapshotType,
+                        instant));
     }
 
     @Test
@@ -277,6 +304,28 @@ public class SnapshotUtilsTest {
         assertTrue(shouldTrigger);
     }
 
+    @Test
+    public void testLastSavepointKnown() {
+        var status = new FlinkDeploymentStatus();
+
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        var sp = new Savepoint();
+        sp.setLocation("sp1");
+        status.getJobStatus().getSavepointInfo().setLastSavepoint(sp);
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        sp.setLocation(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        assertFalse(SnapshotUtils.lastSavepointKnown(status));
+
+        status.getJobStatus().setUpgradeSavepointPath("sp1");
+        assertTrue(SnapshotUtils.lastSavepointKnown(status));
+
+        status.getJobStatus()
+                .setUpgradeSavepointPath(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        assertFalse(SnapshotUtils.lastSavepointKnown(status));
+    }
+
     private static void resetTrigger(FlinkDeployment deployment, SnapshotType snapshotType) {
         switch (snapshotType) {
             case SAVEPOINT:
@@ -310,7 +359,7 @@ public class SnapshotUtilsTest {
                 .getMetadata()
                 .setCreationTimestamp(Instant.now().minus(Duration.ofMinutes(15)).toString());
 
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconcileSpec(deployment);
         return deployment;

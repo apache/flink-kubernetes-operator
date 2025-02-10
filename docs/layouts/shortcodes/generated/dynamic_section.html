@@ -123,6 +123,12 @@
             <td>Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.upgrade.last-state.job-cancel.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.upgrade.last-state.max.allowed.checkpoint.age</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Duration</td>
@@ -156,7 +162,13 @@
             <td><h5>kubernetes.operator.savepoint.cleanup.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
-            <td>Whether to enable clean up of savepoint history.</td>
+            <td>Whether to enable clean up of savepoint FlinkStateSnapshot resources. Savepoint state will be disposed of as well if the snapshot CR spec is configured as such. For automatic savepoints this can be configured via the kubernetes.operator.savepoint.dispose-on-delete config option.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.savepoint.dispose-on-delete</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Savepoint data for FlinkStateSnapshot resources created by the operator during upgrades and periodic savepoints will be disposed of automatically when the generated Kubernetes resource is deleted.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.format.type</h5></td>
@@ -168,19 +180,25 @@
             <td><h5>kubernetes.operator.savepoint.history.max.age</h5></td>
             <td style="word-wrap: break-word;">1 d</td>
             <td>Duration</td>
-            <td>Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.</td>
+            <td>Maximum age for savepoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.history.max.count</h5></td>
             <td style="word-wrap: break-word;">10</td>
             <td>Integer</td>
-            <td>Maximum number of savepoint history entries to retain.</td>
+            <td>Maximum number of savepoint FlinkStateSnapshot resources entries to retain.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.trigger.grace-period</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Create new FlinkStateSnapshot resources for storing snapshots. Disable if you wish to use the deprecated mode and save snapshot results to FlinkDeployment/FlinkSessionJob status fields. The Operator will fallback to legacy mode during runtime if the CRD is not found, even if this value is true.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>

@@ -39,8 +39,8 @@ CSV_TEMPLATE_DIR="${BASEDIR}/csv-template"
 
 # Generate bundle in a docker container
 generate_olm_bundle() {
-  uid="$(id -g ${USER})"
-  gid="$(id -u ${USER})"
+  uid="$(id -u ${USER})"
+  gid="$(id -g ${USER})"
   cp -r ../../helm ./
   docker build -t "${OLMTOOL_IMG}" -f utils.Dockerfile ${BASEDIR}
   docker run --user="${uid}:${gid}" -v ${BASEDIR}:/olm  "${OLMTOOL_IMG}"

@@ -17,8 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -27,20 +32,55 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
+import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Utility class to locate secondary resources. */
 public class EventSourceUtils {
 
     private static final String FLINK_DEPLOYMENT_IDX = FlinkDeploymentController.class.getName();
     private static final String FLINK_SESSIONJOB_IDX = FlinkSessionJobController.class.getName();
+    private static final String FLINK_STATE_SNAPSHOT_IDX = FlinkStateSnapshot.class.getName();
+
+    public static <T extends AbstractFlinkResource<?, ?>>
+            InformerEventSource<FlinkStateSnapshot, T>
+                    getStateSnapshotForFlinkResourceInformerEventSource(
+                            EventSourceContext<T> context) {
+        var labelFilters =
+                Stream.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE)
+                        .map(Enum::name)
+                        .collect(Collectors.joining(","));
+        var labelSelector =
+                String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, labelFilters);
+        var configuration =
+                InformerConfiguration.from(FlinkStateSnapshot.class, context)
+                        .withLabelSelector(labelSelector)
+                        .withSecondaryToPrimaryMapper(
+                                snapshot -> {
+                                    var jobRef = snapshot.getSpec().getJobReference();
+                                    if (jobRef == null || jobRef.getName() == null) {
+                                        return Collections.emptySet();
+                                    }
+                                    return Set.of(
+                                            new ResourceID(
+                                                    snapshot.getSpec().getJobReference().getName(),
+                                                    snapshot.getMetadata().getNamespace()));
+                                })
+                        .withNamespacesInheritedFromController(context)
+                        .followNamespaceChanges(true)
+                        .build();
+        return new InformerEventSource<>(configuration, context);
+    }
 
     public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
             EventSourceContext<FlinkDeployment> context) {
@@ -143,6 +183,104 @@ public class EventSourceUtils {
                         .followNamespaceChanges(true)
                         .build();
         return new InformerEventSource<>(configuration, context);
+    }
+
+    public static EventSource[] getFlinkStateSnapshotInformerEventSources(
+            EventSourceContext<FlinkStateSnapshot> context) {
+        context.getPrimaryCache()
+                .addIndexer(
+                        FLINK_STATE_SNAPSHOT_IDX,
+                        savepoint -> {
+                            if (savepoint.getSpec().getJobReference() == null
+                                    || savepoint.getSpec().getJobReference().getName() == null) {
+                                return Collections.emptyList();
+                            }
+                            return List.of(
+                                    indexKey(
+                                            savepoint.getSpec().getJobReference().toString(),
+                                            savepoint.getMetadata().getNamespace()));
+                        });
+
+        InformerConfiguration<FlinkSessionJob> configurationFlinkSessionJob =
+                InformerConfiguration.from(FlinkSessionJob.class, context)
+                        .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
+                        .withPrimaryToSecondaryMapper(
+                                (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
+                                        snapshot -> {
+                                            if (!JobKind.FLINK_SESSION_JOB.equals(
+                                                    snapshot.getSpec()
+                                                            .getJobReference()
+                                                            .getKind())) {
+                                                return Set.of();
+                                            }
+                                            return Set.of(
+                                                    FlinkStateSnapshotUtils
+                                                            .getSnapshotJobReferenceResourceId(
+                                                                    snapshot));
+                                        })
+                        .withNamespacesInheritedFromController(context)
+                        .followNamespaceChanges(true)
+                        .build();
+        var flinkSessionJobEventSource =
+                new InformerEventSource<>(configurationFlinkSessionJob, context);
+
+        InformerConfiguration<FlinkDeployment> configurationFlinkDeployment =
+                InformerConfiguration.from(FlinkDeployment.class, context)
+                        .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
+                        .withPrimaryToSecondaryMapper(
+                                (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
+                                        snapshot -> {
+                                            if (JobKind.FLINK_SESSION_JOB.equals(
+                                                    snapshot.getSpec()
+                                                            .getJobReference()
+                                                            .getKind())) {
+
+                                                // If FlinkSessionJob, retrieve deployment
+                                                var resourceId =
+                                                        FlinkStateSnapshotUtils
+                                                                .getSnapshotJobReferenceResourceId(
+                                                                        snapshot);
+                                                var flinkSessionJob =
+                                                        flinkSessionJobEventSource
+                                                                .get(resourceId)
+                                                                .orElseThrow();
+                                                return Set.of(
+                                                        new ResourceID(
+                                                                flinkSessionJob
+                                                                        .getSpec()
+                                                                        .getDeploymentName(),
+                                                                flinkSessionJob
+                                                                        .getMetadata()
+                                                                        .getNamespace()));
+                                            }
+                                            return Set.of(
+                                                    FlinkStateSnapshotUtils
+                                                            .getSnapshotJobReferenceResourceId(
+                                                                    snapshot));
+                                        })
+                        .withNamespacesInheritedFromController(context)
+                        .followNamespaceChanges(true)
+                        .build();
+        var flinkDeploymentEventSource =
+                new InformerEventSource<>(configurationFlinkDeployment, context);
+
+        return new EventSource[] {flinkSessionJobEventSource, flinkDeploymentEventSource};
+    }
+
+    private static <T extends AbstractFlinkResource<?, ?>>
+            SecondaryToPrimaryMapper<T> getSnapshotPrimaryMapper(
+                    EventSourceContext<FlinkStateSnapshot> ctx) {
+        return flinkResource ->
+                ctx
+                        .getPrimaryCache()
+                        .byIndex(
+                                FLINK_STATE_SNAPSHOT_IDX,
+                                indexKey(
+                                        flinkResource.getMetadata().getName(),
+                                        flinkResource.getMetadata().getNamespace()))
+                        .stream()
+                        .map(ResourceID::fromResource)
+                        .collect(Collectors.toSet());
     }
 
     private static String indexKey(String name, String namespace) {

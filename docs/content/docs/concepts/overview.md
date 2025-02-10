@@ -36,7 +36,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Stateful and stateless application upgrades
   - Triggering and managing savepoints
   - Handling errors, rolling-back broken upgrades
-- Multiple Flink version support: v1.16, v1.17, v1.18, v1.19
+- Multiple Flink version support: v1.16, v1.17, v1.18, v1.19, v1.20
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application cluster
   - Session cluster
@@ -56,6 +56,8 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Collect lag and utilization metrics
   - Scale job vertices to the ideal parallelism
   - Scale up and down as the load changes
+- [Snapshot management]({{< ref "docs/custom-resource/snapshots" >}})
+  - Manage snapshots via Kubernetes CRs
 ### Operations
 - Operator [Metrics]({{< ref "docs/operations/metrics-logging#metrics" >}})
   - Utilizes the well-established [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics)

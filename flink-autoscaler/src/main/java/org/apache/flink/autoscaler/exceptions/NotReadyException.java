@@ -23,4 +23,8 @@ public class NotReadyException extends RuntimeException {
     public NotReadyException(Exception cause) {
         super(cause);
     }
+
+    public NotReadyException(String message) {
+        super(message);
+    }
 }

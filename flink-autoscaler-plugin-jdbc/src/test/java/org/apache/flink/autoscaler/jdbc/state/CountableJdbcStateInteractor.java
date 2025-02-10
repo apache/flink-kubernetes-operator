@@ -17,7 +17,8 @@
 
 package org.apache.flink.autoscaler.jdbc.state;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
+
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,8 +33,8 @@ public class CountableJdbcStateInteractor extends JdbcStateInteractor {
     private final AtomicLong createCounter;
     private final AtomicLong updateCounter;
 
-    public CountableJdbcStateInteractor(Connection conn) {
-        super(conn);
+    public CountableJdbcStateInteractor(DataSource dataSource) {
+        super(dataSource);
         queryCounter = new AtomicLong();
         deleteCounter = new AtomicLong();
         createCounter = new AtomicLong();

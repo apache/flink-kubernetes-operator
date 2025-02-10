@@ -44,6 +44,8 @@ spec:
                 - v1_17
                 - v1_18
                 - v1_19
+                - v1_20
+                - v2_0
                 type: string
               image:
                 type: string
@@ -83,6 +85,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  autoscalerResetNonce:
+                    type: integer
                   checkpointTriggerNonce:
                     type: integer
                   entryClass:
@@ -886,6 +890,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -1031,6 +1042,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -1429,6 +1442,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -1576,6 +1596,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -1978,6 +2000,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -2123,6 +2152,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -2193,6 +2224,13 @@ spec:
                             type: array
                           securityContext:
                             properties:
+                              appArmorProfile:
+                                properties:
+                                  localhostProfile:
+                                    type: string
+                                  type:
+                                    type: string
+                                type: object
                               fsGroup:
                                 type: integer
                               fsGroupChangePolicy:
@@ -3121,6 +3159,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           ephemeralContainerStatuses:
@@ -3235,6 +3286,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           hostIP:
@@ -3358,6 +3422,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           message:
@@ -4190,6 +4267,13 @@ spec:
                               properties:
                                 allowPrivilegeEscalation:
                                   type: boolean
+                                appArmorProfile:
+                                  properties:
+                                    localhostProfile:
+                                      type: string
+                                    type:
+                                      type: string
+                                  type: object
                                 capabilities:
                                   properties:
                                     add:
@@ -4335,6 +4419,8 @@ spec:
                                     type: string
                                   readOnly:
                                     type: boolean
+                                  recursiveReadOnly:
+                                    type: string
                                   subPath:
                                     type: string
                                   subPathExpr:
@@ -4733,6 +4819,13 @@ spec:
                               properties:
                                 allowPrivilegeEscalation:
                                   type: boolean
+                                appArmorProfile:
+                                  properties:
+                                    localhostProfile:
+                                      type: string
+                                    type:
+                                      type: string
+                                  type: object
                                 capabilities:
                                   properties:
                                     add:
@@ -4880,6 +4973,8 @@ spec:
                                     type: string
                                   readOnly:
                                     type: boolean
+                                  recursiveReadOnly:
+                                    type: string
                                   subPath:
                                     type: string
                                   subPathExpr:
@@ -5282,6 +5377,13 @@ spec:
                               properties:
                                 allowPrivilegeEscalation:
                                   type: boolean
+                                appArmorProfile:
+                                  properties:
+                                    localhostProfile:
+                                      type: string
+                                    type:
+                                      type: string
+                                  type: object
                                 capabilities:
                                   properties:
                                     add:
@@ -5427,6 +5529,8 @@ spec:
                                     type: string
                                   readOnly:
                                     type: boolean
+                                  recursiveReadOnly:
+                                    type: string
                                   subPath:
                                     type: string
                                   subPathExpr:
@@ -5497,6 +5601,13 @@ spec:
                         type: array
                       securityContext:
                         properties:
+                          appArmorProfile:
+                            properties:
+                              localhostProfile:
+                                type: string
+                              type:
+                                type: string
+                            type: object
                           fsGroup:
                             type: integer
                           fsGroupChangePolicy:
@@ -6425,6 +6536,19 @@ spec:
                                       type: string
                                   type: object
                               type: object
+                            volumeMounts:
+                              items:
+                                properties:
+                                  mountPath:
+                                    type: string
+                                  name:
+                                    type: string
+                                  readOnly:
+                                    type: boolean
+                                  recursiveReadOnly:
+                                    type: string
+                                type: object
+                              type: array
                           type: object
                         type: array
                       ephemeralContainerStatuses:
@@ -6539,6 +6663,19 @@ spec:
                                       type: string
                                   type: object
                               type: object
+                            volumeMounts:
+                              items:
+                                properties:
+                                  mountPath:
+                                    type: string
+                                  name:
+                                    type: string
+                                  readOnly:
+                                    type: boolean
+                                  recursiveReadOnly:
+                                    type: string
+                                type: object
+                              type: array
                           type: object
                         type: array
                       hostIP:
@@ -6662,6 +6799,19 @@ spec:
                                       type: string
                                   type: object
                               type: object
+                            volumeMounts:
+                              items:
+                                properties:
+                                  mountPath:
+                                    type: string
+                                  name:
+                                    type: string
+                                  readOnly:
+                                    type: boolean
+                                  recursiveReadOnly:
+                                    type: string
+                                type: object
+                              type: array
                           type: object
                         type: array
                       message:
@@ -7479,6 +7629,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -7624,6 +7781,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -8022,6 +8181,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -8169,6 +8335,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -8571,6 +8739,13 @@ spec:
                                   properties:
                                     allowPrivilegeEscalation:
                                       type: boolean
+                                    appArmorProfile:
+                                      properties:
+                                        localhostProfile:
+                                          type: string
+                                        type:
+                                          type: string
+                                      type: object
                                     capabilities:
                                       properties:
                                         add:
@@ -8716,6 +8891,8 @@ spec:
                                         type: string
                                       readOnly:
                                         type: boolean
+                                      recursiveReadOnly:
+                                        type: string
                                       subPath:
                                         type: string
                                       subPathExpr:
@@ -8786,6 +8963,13 @@ spec:
                             type: array
                           securityContext:
                             properties:
+                              appArmorProfile:
+                                properties:
+                                  localhostProfile:
+                                    type: string
+                                  type:
+                                    type: string
+                                type: object
                               fsGroup:
                                 type: integer
                               fsGroupChangePolicy:
@@ -9714,6 +9898,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           ephemeralContainerStatuses:
@@ -9828,6 +10025,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           hostIP:
@@ -9951,6 +10161,19 @@ spec:
                                           type: string
                                       type: object
                                   type: object
+                                volumeMounts:
+                                  items:
+                                    properties:
+                                      mountPath:
+                                        type: string
+                                      name:
+                                        type: string
+                                      readOnly:
+                                        type: boolean
+                                      recursiveReadOnly:
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           message:
@@ -10135,13 +10358,29 @@ spec:
                   startTime:
                     type: string
                   state:
+                    enum:
+                    - CANCELED
+                    - CANCELLING
+                    - CREATED
+                    - FAILED
+                    - FAILING
+                    - FINISHED
+                    - INITIALIZING
+                    - RECONCILING
+                    - RESTARTING
+                    - RUNNING
+                    - SUSPENDED
                     type: string
                   updateTime:
+                    type: string
+                  upgradeSavepointPath:
                     type: string
                 type: object
               lifecycleState:
                 enum:
                 - CREATED
+                - DELETED
+                - DELETING
                 - DEPLOYED
                 - FAILED
                 - ROLLED_BACK

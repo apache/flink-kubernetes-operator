@@ -1,0 +1,111 @@
+name: E2E test workflow
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        required: true
+        type: string
+      flink-version:
+        required: true
+        type: string
+      http-client:
+        required: false
+        type: string
+        default: "okhttp"
+      namespace:
+        required: false
+        type: string
+        default: "default"
+      mode:
+        required: false
+        type: string
+        default: "native"
+      test:
+        required: true
+        type: string
+      create-namespace:
+        type: boolean
+        default: false
+      append-java-version:
+        type: boolean
+        default: false
+
+jobs:
+  e2e_test:
+    name: ${{ inputs.test }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK ${{ inputs.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Start minikube
+        run: |
+          source e2e-tests/utils.sh
+          start_minikube
+      - name: Install cert-manager
+        run: |
+          kubectl get pods -A
+          kubectl apply -f e2e-tests/cert-manager.yaml
+          kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
+      - name: Build image
+        run: |
+          export SHELL=/bin/bash
+          export DOCKER_BUILDKIT=1
+          eval $(minikube -p minikube docker-env)
+          JAVA_VERSION=${{ inputs.java-version }}
+          HTTP_CLIENT=${{ inputs.http-client }}
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT="${HTTP_CLIENT:-okhttp}" .
+          docker images
+      - name: Create ${{ inputs.namespace }} == ${{ inputs.create-namespace }}
+        id: namespace-creator
+        if: ${{ inputs.create-namespace }}
+        run: |
+          source e2e-tests/utils.sh
+          create_namespace ${{ inputs.namespace }}
+          echo 'EXTRA_HELM_INSTALL_ARGS=--set "watchNamespaces={default,flink}"' >> $GITHUB_OUTPUT
+      - name: Start the operator
+        run: |
+          if [[ "${{ inputs.test }}" == "test_flink_operator_ha.sh" ]]; then
+           sed -i "s/# kubernetes.operator.leader-election.enabled: false/kubernetes.operator.leader-election.enabled: true/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
+           sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
+           sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
+          fi
+          helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ steps.namespace-creator.outputs.EXTRA_HELM_INSTALL_ARGS }} 
+          kubectl wait --for=condition=Available --timeout=120s -n ${{ inputs.namespace }} deploy/flink-kubernetes-operator
+          kubectl get pods -n ${{ inputs.namespace }}
+      - name: Run Flink e2e tests
+        run: |
+          FLINK_IMAGE=$(sed --regexp-extended 's/v([0-9]+)_([0-9]+)/flink:\1.\2/g' <<< ${{ inputs.flink-version }} )
+          if [[ "${{ inputs.append-java-version }}" == "true" ]]; then
+            FLINK_IMAGE=${FLINK_IMAGE}-java${{ inputs.java-version }}
+          fi
+          
+          EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar"
+          if [[ ${{ inputs.flink-version }} == v2* ]]; then
+            EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/2.0-preview1/flink-examples-streaming-2.0-preview1.jar"
+          fi
+          ESCAPED_EXAMPLES_JAR=$(printf '%s\n' "$EXAMPLES_JAR" | sed -e 's/[\/&]/\\&/g')
+          
+          echo FLINK_IMAGE=${FLINK_IMAGE}
+          echo EXAMPLES_JAR=${EXAMPLES_JAR}
+          sed -i "s/image: flink:.*/image: ${FLINK_IMAGE}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ inputs.flink-version }}/" e2e-tests/data/*.yaml
+          sed -i "s/mode: .*/mode: ${{ inputs.mode }}/" e2e-tests/data/*.yaml
+          sed -i "s/STREAMING_EXAMPLES_JAR_URL/${ESCAPED_EXAMPLES_JAR}/" e2e-tests/data/*.yaml
+          git diff HEAD
+          echo "Running e2e-tests/$test"
+          bash e2e-tests/${{ inputs.test }} || exit 1
+          git reset --hard
+      - name: Stop the operator
+        run: |
+          helm uninstall -n ${{ inputs.namespace }} flink-kubernetes-operator
+      - name: Stop minikube
+        run: |
+          source e2e-tests/utils.sh
+          stop_minikube
+

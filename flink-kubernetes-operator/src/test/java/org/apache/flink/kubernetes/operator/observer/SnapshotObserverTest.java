@@ -17,35 +17,50 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
-import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
+import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
-import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
+import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
-import java.util.Collections;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
+import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.MANUAL;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.UPGRADE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for {@link SnapshotObserver}. */
 @EnableKubernetesMockClient(crud = true)
@@ -60,212 +75,219 @@ public class SnapshotObserverTest extends OperatorTestBase {
     }
 
     @Test
-    public void testBasicObserve() {
-        var deployment = TestUtils.buildApplicationCluster();
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        SavepointInfo spInfo = new SavepointInfo();
-        Assertions.assertTrue(spInfo.getSavepointHistory().isEmpty());
+    public void testSnapshotTypeCleanup() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        Savepoint sp =
-                new Savepoint(
-                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
-        spInfo.updateLastSavepoint(sp);
-        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
+        var testData =
+                List.of(
+                        createSnapshot(CHECKPOINT, 0, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 1, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 2, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 4, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 5, PERIODIC, COMPLETED));
 
-        Assertions.assertNotNull(spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp), spInfo.getSavepointHistory());
+        var savepointResult =
+                observer.getFlinkStateSnapshotsToCleanUp(testData, conf, operatorConfig, SAVEPOINT);
+        assertThat(savepointResult).containsExactlyInAnyOrder(testData.get(3), testData.get(4));
+
+        var checkpointResult =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testData, conf, operatorConfig, CHECKPOINT);
+        assertThat(checkpointResult).containsExactlyInAnyOrder(testData.get(0), testData.get(1));
     }
 
     @Test
-    public void testAgeBasedDispose() {
-        var cr = TestUtils.buildSessionCluster();
-        cr.getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(cr.getSpec(), cr);
-        Configuration conf = new Configuration();
-        conf.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                Duration.ofMillis(5));
-        configManager.updateDefaultConfig(conf);
+    public void testSnapshotKeepOneCompleted() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        SavepointInfo spInfo = new SavepointInfo();
+        var testData =
+                List.of(
+                        createSnapshot(SAVEPOINT, 0, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, FAILED),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, FAILED),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, FAILED));
 
-        Savepoint sp1 =
-                new Savepoint(
-                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
-        spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp1), spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.emptyList(), flinkService.getDisposedSavepoints());
+        var savepointResult =
+                observer.getFlinkStateSnapshotsToCleanUp(testData, conf, operatorConfig, SAVEPOINT);
+        assertThat(savepointResult)
+                .containsExactlyInAnyOrder(testData.get(1), testData.get(2), testData.get(3));
+    }
 
-        Savepoint sp2 =
-                new Savepoint(
-                        2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
-        spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp2), spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp1.getLocation()), flinkService.getDisposedSavepoints());
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testAgeBasedCleanupSavepoint(boolean setThreshold) {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000);
+
+        if (setThreshold) {
+            conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD, Duration.ofMillis(5));
+            conf.set(
+                    OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                    Duration.ofMillis(System.currentTimeMillis() * 2));
+        } else {
+            conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
+        }
+
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var testDataSavepoints =
+                List.of(
+                        createSnapshot(SAVEPOINT, 0, MANUAL, COMPLETED),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, ABANDONED),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 4, UPGRADE, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE, PERIODIC, COMPLETED));
+
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataSavepoints, conf, operatorConfig, SAVEPOINT);
+        assertThat(removedSavepoints)
+                .containsExactlyInAnyOrder(
+                        testDataSavepoints.get(1),
+                        testDataSavepoints.get(2),
+                        testDataSavepoints.get(3),
+                        testDataSavepoints.get(4));
     }
 
     @Test
-    public void testAgeBasedDisposeWithAgeThreshold() {
-        var deployment = TestUtils.buildApplicationCluster();
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        Configuration conf = new Configuration();
-        conf.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                Duration.ofMillis(System.currentTimeMillis() * 2));
-        conf.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
-                Duration.ofMillis(5));
-        configManager.updateDefaultConfig(conf);
-        SavepointInfo spInfo = new SavepointInfo();
+    public void testAgeBasedCleanupSavepointKeepOne() {
+        var conf =
+                new Configuration()
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000)
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
 
-        Savepoint sp1 =
-                new Savepoint(
-                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
-        spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp1), spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.emptyList(), flinkService.getDisposedSavepoints());
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        Savepoint sp2 =
-                new Savepoint(
-                        2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
-        spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp2), spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.singletonList(sp1.getLocation()), flinkService.getDisposedSavepoints());
+        var testDataSavepoints =
+                List.of(
+                        createSnapshot(SAVEPOINT, 0, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, IN_PROGRESS));
 
-        configManager.updateDefaultConfig(new Configuration());
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataSavepoints, conf, operatorConfig, SAVEPOINT);
+        assertThat(removedSavepoints)
+                .containsExactlyInAnyOrder(
+                        testDataSavepoints.get(0),
+                        testDataSavepoints.get(1),
+                        testDataSavepoints.get(2));
     }
 
     @Test
-    public void testDisabledDispose() {
-        var deployment = TestUtils.buildApplicationCluster();
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        Configuration conf = new Configuration();
-        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED, false);
-        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1000);
-        conf.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                Duration.ofDays(100L));
+    public void testAgeBasedCleanupCheckpoint() {
+        var conf = new Configuration().set(MAX_RETAINED_CHECKPOINTS, 10000);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        configManager.updateDefaultConfig(conf);
+        var testDataCheckpoints =
+                List.of(
+                        createSnapshot(CHECKPOINT, 0, MANUAL, COMPLETED),
+                        createSnapshot(CHECKPOINT, 1, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 2, PERIODIC, ABANDONED),
+                        createSnapshot(CHECKPOINT, 3, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, 4, UPGRADE, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE, PERIODIC, COMPLETED));
 
-        SavepointInfo spInfo = new SavepointInfo();
-
-        Savepoint sp1 =
-                new Savepoint(
-                        9999999999999998L,
-                        "sp1",
-                        SnapshotTriggerType.MANUAL,
-                        SavepointFormatType.CANONICAL,
-                        123L);
-        spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
-
-        Savepoint sp2 =
-                new Savepoint(
-                        9999999999999999L,
-                        "sp2",
-                        SnapshotTriggerType.MANUAL,
-                        SavepointFormatType.CANONICAL,
-                        123L);
-        spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
-        Assertions.assertIterableEquals(List.of(sp1, sp2), spInfo.getSavepointHistory());
-        Assertions.assertIterableEquals(
-                Collections.emptyList(), flinkService.getDisposedSavepoints());
+        var removedCheckpoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataCheckpoints, conf, operatorConfig, CHECKPOINT);
+        assertThat(removedCheckpoints).isEmpty();
     }
 
-    @Test
-    public void testPeriodicSavepoint() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testCountBasedCleanupSavepoint(boolean setThreshold) {
         var conf = new Configuration();
-        var deployment = TestUtils.buildApplicationCluster();
-        var status = deployment.getStatus();
-        var jobStatus = status.getJobStatus();
-        status.getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        jobStatus.setState("RUNNING");
 
-        var savepointInfo = jobStatus.getSavepointInfo();
-        flinkService.triggerSavepoint(null, SnapshotTriggerType.PERIODIC, savepointInfo, conf);
+        if (setThreshold) {
+            conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD, 2);
+            conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000);
+        } else {
+            conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
+        }
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        var triggerTs = savepointInfo.getTriggerTimestamp();
-        assertEquals(0L, savepointInfo.getLastPeriodicSavepointTimestamp());
-        assertEquals(SnapshotTriggerType.PERIODIC, savepointInfo.getTriggerType());
-        assertTrue(SnapshotUtils.savepointInProgress(jobStatus));
-        assertEquals(
-                SnapshotStatus.PENDING, SnapshotUtils.getLastSnapshotStatus(deployment, SAVEPOINT));
-        assertTrue(triggerTs > 0);
+        var testDataSavepoints =
+                List.of(
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 1, MANUAL, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 3, PERIODIC, ABANDONED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 4, UPGRADE, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 5, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 6, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 7, PERIODIC, COMPLETED));
 
-        // Pending
-        observer.observeSavepointStatus(getResourceContext(deployment));
-        // Completed
-        observer.observeSavepointStatus(getResourceContext(deployment));
-        assertEquals(triggerTs, savepointInfo.getLastPeriodicSavepointTimestamp());
-        assertFalse(SnapshotUtils.savepointInProgress(jobStatus));
-        assertEquals(
-                SnapshotUtils.getLastSnapshotStatus(deployment, SAVEPOINT),
-                SnapshotStatus.SUCCEEDED);
-        assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
-        assertEquals(
-                SnapshotTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
-        assertNull(savepointInfo.getLastSavepoint().getTriggerNonce());
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataSavepoints, conf, operatorConfig, SAVEPOINT);
+        assertThat(removedSavepoints)
+                .containsExactlyInAnyOrder(
+                        testDataSavepoints.get(6),
+                        testDataSavepoints.get(5),
+                        testDataSavepoints.get(4),
+                        testDataSavepoints.get(3));
     }
 
     @Test
-    public void testPeriodicCheckpoint() {
-        var conf = new Configuration();
-        var deployment = TestUtils.buildApplicationCluster();
-        var status = deployment.getStatus();
-        var jobStatus = status.getJobStatus();
-        status.getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        jobStatus.setState("RUNNING");
+    public void testCountBasedCleanupCheckpoint() {
+        var conf = new Configuration().set(MAX_RETAINED_CHECKPOINTS, 2);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
 
-        var checkpointInfo = jobStatus.getCheckpointInfo();
-        flinkService.triggerCheckpoint(null, SnapshotTriggerType.PERIODIC, checkpointInfo, conf);
+        var testDataCheckpoints =
+                List.of(
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 1, MANUAL, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 3, PERIODIC, ABANDONED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 4, UPGRADE, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 5, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 6, PERIODIC, COMPLETED),
+                        createSnapshot(CHECKPOINT, Long.MAX_VALUE - 7, PERIODIC, COMPLETED));
 
-        var triggerTs = checkpointInfo.getTriggerTimestamp();
-        assertEquals(0L, checkpointInfo.getLastPeriodicTriggerTimestamp());
-        assertEquals(SnapshotTriggerType.PERIODIC, checkpointInfo.getTriggerType());
-        assertTrue(SnapshotUtils.checkpointInProgress(jobStatus));
-        assertEquals(
-                SnapshotStatus.PENDING,
-                SnapshotUtils.getLastSnapshotStatus(deployment, CHECKPOINT));
-        assertTrue(triggerTs > 0);
+        var removedCheckpoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        testDataCheckpoints, conf, operatorConfig, CHECKPOINT);
+        assertThat(removedCheckpoints)
+                .containsExactlyInAnyOrder(
+                        testDataCheckpoints.get(6),
+                        testDataCheckpoints.get(5),
+                        testDataCheckpoints.get(4),
+                        testDataCheckpoints.get(3));
+    }
 
-        // Pending
-        observer.observeCheckpointStatus(getResourceContext(deployment));
-        // Completed
-        observer.observeCheckpointStatus(getResourceContext(deployment));
-        assertEquals(triggerTs, checkpointInfo.getLastPeriodicTriggerTimestamp());
-        assertFalse(SnapshotUtils.checkpointInProgress(jobStatus));
-        assertEquals(
-                SnapshotUtils.getLastSnapshotStatus(deployment, CHECKPOINT),
-                SnapshotStatus.SUCCEEDED);
-        assertEquals(
-                SnapshotTriggerType.PERIODIC, checkpointInfo.getLastCheckpoint().getTriggerType());
-        assertNull(checkpointInfo.getLastCheckpoint().getTriggerNonce());
+    private static FlinkStateSnapshot createSnapshot(
+            SnapshotType snapshotType,
+            long timestamp,
+            SnapshotTriggerType triggerType,
+            FlinkStateSnapshotStatus.State snapshotState) {
+        var metadata =
+                new ObjectMetaBuilder()
+                        .withName(UUID.randomUUID().toString())
+                        .withLabels(
+                                Map.of(
+                                        CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE,
+                                        triggerType.name()))
+                        .withCreationTimestamp(
+                                DateTimeUtils.kubernetes(Instant.ofEpochMilli(timestamp)))
+                        .build();
+
+        var spec = new FlinkStateSnapshotSpec();
+        if (snapshotType == SAVEPOINT) {
+            spec.setSavepoint(new SavepointSpec());
+        } else if (snapshotType == CHECKPOINT) {
+            spec.setCheckpoint(new CheckpointSpec());
+        }
+
+        var status = FlinkStateSnapshotStatus.builder().state(snapshotState).build();
+
+        var snapshot = new FlinkStateSnapshot();
+        snapshot.setMetadata(metadata);
+        snapshot.setSpec(spec);
+        snapshot.setStatus(status);
+
+        return snapshot;
     }
 }

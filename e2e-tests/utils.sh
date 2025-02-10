@@ -97,6 +97,25 @@ function wait_for_event {
   exit 1
 }
 
+function wait_for_snapshot {
+  local job_name=$1
+  local snapshot_type=$2
+  local trigger_type=$3
+  local timeout=$4
+  local prefix="$job_name-$snapshot_type-$trigger_type"
+
+  for i in $(seq 1 ${timeout}); do
+    snapshot_name=$(kubectl get flinksnp --sort-by=.metadata.creationTimestamp | grep $prefix | awk '{print $1}' | tail -n 1)
+    if [ "$snapshot_name" ]; then
+      kubectl wait --timeout=${timeout}s --for=jsonpath='{.status.state}'=COMPLETED flinksnp/$snapshot_name > /dev/null || return 1
+      echo "$snapshot_name"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 function assert_available_slots() {
   expected=$1
   CLUSTER_ID=$2
@@ -212,8 +231,14 @@ function delete_operator_pod_with_leadership() {
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
+    kubectl get flinkdeployments
+    kubectl get flinksessionjobs
     kubectl get all
+    kubectl get configmaps
+    kubectl describe flinkdeployments
+    kubectl describe flinksessionjobs
     kubectl describe all
+    kubectl describe configmaps
 
     operator_pod_namespace=$(get_operator_pod_namespace)
     operator_pod_names=$(get_operator_pod_name)
@@ -329,6 +354,18 @@ function operator_cleanup_and_exit() {
   if [ $TRAPPED_EXIT_CODE != 0 ];then
     debug_and_show_logs
   fi
+}
+
+function cleanup_snapshots() {
+    echo "Starting cleanup of FlinkStateSnapshot resources"
+
+    CLUSTER_ID=$1
+    TIMEOUT=$2
+
+    kubectl get flinksnp | grep "^${CLUSTER_ID}" | awk '{print $1}' | xargs -n 1 -P 5 kubectl patch flinksnp -p '{"metadata":{"finalizers":null}}' --type=merge
+    kubectl get flinksnp | grep "^${CLUSTER_ID}" | awk '{print $1}' | xargs -n 1 -P 5 kubectl delete --timeout=${TIMEOUT}s flinksnp
+
+    echo "Finished cleaning up FlinkStateSnapshot resources"
 }
 
 function _on_exit_callback {

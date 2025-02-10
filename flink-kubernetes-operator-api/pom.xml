@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.10-SNAPSHOT</version>
+        <version>1.11-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -32,7 +32,6 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
-        <awaitility.version>4.1.0</awaitility.version>
         <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
     </properties>
 
@@ -56,6 +55,18 @@ under the License.
             </exclusions>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core-api</artifactId>
+            <version>${flink.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Fabric 8 -->
         <dependency>
             <groupId>io.fabric8</groupId>
@@ -67,15 +78,8 @@ under the License.
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
-            <version>${fabric8.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp3</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
-
+        
         <!-- Utils -->
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -107,6 +111,11 @@ under the License.
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>${log4j.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
 
         <!-- Test -->
@@ -202,6 +211,7 @@ under the License.
                                     <includes>
                                         <include>flinkdeployments.flink.apache.org-v1.yml</include>
                                         <include>flinksessionjobs.flink.apache.org-v1.yml</include>
+                                        <include>flinkstatesnapshots.flink.apache.org-v1.yml</include>
                                     </includes>
                                     <filtering>false</filtering>
                                 </resource>
@@ -225,7 +235,7 @@ under the License.
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.6.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -242,7 +252,7 @@ under the License.
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.6.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>

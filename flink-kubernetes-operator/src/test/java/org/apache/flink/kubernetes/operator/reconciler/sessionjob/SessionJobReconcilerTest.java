@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -35,6 +36,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -46,6 +48,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
@@ -70,8 +73,10 @@ import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -99,10 +104,15 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                                 eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
     }
 
-    @Test
-    public void testSubmitAndCleanUpWithSavepoint() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSubmitAndCleanUpWithSavepoint(boolean legacySnapshots) throws Exception {
         var conf = configManager.getDefaultConfig();
         conf.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
+        if (legacySnapshots) {
+            conf.set(SNAPSHOT_RESOURCE_ENABLED, false);
+        }
+
         configManager.updateDefaultConfig(conf);
 
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
@@ -112,47 +122,66 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         // clean up
         reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                sessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+
+        if (legacySnapshots) {
+            assertEquals(
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        } else {
+            var snapshots =
+                    TestUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), sessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
+            assertEquals(
+                    snapshots.get(0).getSpec().getSavepoint().getPath(),
+                    sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        }
     }
 
-    @Test
-    public void testSubmitAndCleanUpWithSavepointOnResource() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSubmitAndCleanUpWithSavepointOnResource(boolean legacySnapshots)
+            throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         sessionJob
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
 
+        if (legacySnapshots) {
+            sessionJob
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        }
+
         // session ready
         reconciler.reconcile(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         // clean up
         reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                sessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+        if (legacySnapshots) {
+            assertEquals(
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        } else {
+            var snapshots =
+                    TestUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), sessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
+            assertEquals(
+                    "savepoint_0", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        }
     }
 
     @Test
@@ -172,11 +201,11 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
         // clean up
         reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+        assertEquals(CANCELED, flinkService.listJobs().get(0).f1.getJobState());
     }
 
     @Test
@@ -188,7 +217,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
         // clean up
         flinkService.setPortReady(false);
         var deleteControl =
@@ -199,36 +228,18 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
 
         flinkService.setPortReady(true);
-        deleteControl =
-                reconciler.cleanup(
-                        sessionJob,
-                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(true, deleteControl.isRemoveFinalizer());
-        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
-    }
-
-    @Test
-    public void testCancelJobNotFound() throws Exception {
-        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-
-        // session ready
-        reconciler.reconcile(
+        reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(1, flinkService.listJobs().size());
-        verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
-        // clean up
-        flinkService.setFlinkJobNotFound(true);
-        var deleteControl =
-                reconciler.cleanup(
-                        sessionJob,
-                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
         deleteControl =
                 reconciler.cleanup(
                         sessionJob,
                         TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(true, deleteControl.isRemoveFinalizer());
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(CANCELED, flinkService.listJobs().get(0).f1.getJobState());
     }
 
     @Test
@@ -240,13 +251,17 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
         // clean up
         flinkService.setFlinkJobTerminatedWithoutCancellation(true);
         var deleteControl =
                 reconciler.cleanup(
                         sessionJob,
                         TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
 
         deleteControl =
                 reconciler.cleanup(
@@ -264,15 +279,19 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
         sessionJob.getSpec().setRestartNonce(2L);
         reconciler.reconcile(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+        assertEquals(CANCELED, flinkService.listJobs().get(0).f1.getJobState());
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
         reconciler.reconcile(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
     }
 
     @Test
@@ -284,9 +303,9 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
-        sessionJob.getStatus().getJobStatus().setState(FAILED.name());
+        sessionJob.getStatus().getJobStatus().setState(FAILED);
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(2, flinkService.listJobs().size());
         assertEquals(RUNNING, flinkService.listJobs().get(1).f1.getJobState());
@@ -303,7 +322,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                RECONCILING.name(),
+                RECONCILING,
                 initSavepointPath,
                 flinkService.listJobs());
     }
@@ -316,30 +335,40 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         var statelessSessionJob = ReconciliationUtils.clone(sessionJob);
         statelessSessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessSessionJob.getSpec().getJob().setParallelism(2);
         // job suspended first
         reconciler.reconcile(statelessSessionJob, readyContext);
-        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
-        verifyJobState(statelessSessionJob, JobState.SUSPENDED, "FINISHED");
+        assertEquals(CANCELED, flinkService.listJobs().get(0).f1.getJobState());
+        verifyJobState(
+                statelessSessionJob,
+                JobState.RUNNING,
+                org.apache.flink.api.common.JobStatus.CANCELLING);
+        statelessSessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
 
         flinkService.clear();
         reconciler.reconcile(statelessSessionJob, readyContext);
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                statelessSessionJob,
-                JobState.RUNNING,
-                RECONCILING.name(),
-                null,
-                flinkService.listJobs());
+                statelessSessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
     }
 
-    @Test
-    public void testSavepointUpgrade() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSavepointUpgrade(boolean legacySnapshots) throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        if (legacySnapshots) {
+            sessionJob
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        }
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         reconciler.reconcile(sessionJob, readyContext);
@@ -359,33 +388,33 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         statefulSessionJob.getSpec().getJob().setParallelism(3);
 
         verifyAndSetRunningJobsToStatus(
-                statefulSessionJob,
-                JobState.RUNNING,
-                RECONCILING.name(),
-                null,
-                flinkService.listJobs());
+                statefulSessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         reconciler.reconcile(statefulSessionJob, readyContext);
 
         // job suspended first
         assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
-        verifyJobState(statefulSessionJob, JobState.SUSPENDED, "FINISHED");
-        assertEquals(
-                1,
-                statefulSessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getSavepointHistory()
-                        .size());
-        assertEquals(
-                SnapshotTriggerType.UPGRADE,
-                statefulSessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerType());
+        verifyJobState(statefulSessionJob, JobState.SUSPENDED, FINISHED);
+        if (legacySnapshots) {
+            assertEquals(
+                    "savepoint_0",
+                    statefulSessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        } else {
+            var snapshots =
+                    TestUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), statefulSessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals(
+                    SnapshotTriggerType.UPGRADE.name(),
+                    snapshots
+                            .get(0)
+                            .getMetadata()
+                            .getLabels()
+                            .get(CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE));
+            assertEquals(
+                    snapshots.get(0).getSpec().getSavepoint().getPath(),
+                    statefulSessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+        }
 
         flinkService.clear();
         // upgraded
@@ -394,20 +423,22 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(
                 statefulSessionJob,
                 JobState.RUNNING,
-                RECONCILING.name(),
+                RECONCILING,
                 "savepoint_0",
                 flinkService.listJobs());
     }
 
     @Test
-    public void testTriggerSavepoint() throws Exception {
+    public void testTriggerSavepointLegacyLegacy() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+
         assertFalse(SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         assertFalse(SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
@@ -419,12 +450,12 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertFalse(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
-        sp1SessionJob.getStatus().getJobStatus().setState(CREATED.name());
+        sp1SessionJob.getStatus().getJobStatus().setState(CREATED);
         reconciler.reconcile(sp1SessionJob, readyContext);
         // do not trigger savepoint if job is not running
         assertFalse(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
-        sp1SessionJob.getStatus().getJobStatus().setState(RUNNING.name());
+        sp1SessionJob.getStatus().getJobStatus().setState(RUNNING);
 
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertTrue(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
@@ -475,12 +506,16 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerType(),
                 sp1SessionJob,
                 SAVEPOINT);
 
         // running -> suspended
         reconciler.reconcile(sp1SessionJob, readyContext);
+        sp1SessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
         // suspended -> running
         reconciler.reconcile(sp1SessionJob, readyContext);
         // parallelism changed
@@ -493,11 +528,11 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                         .getJob()
                         .getParallelism());
         verifyAndSetRunningJobsToStatus(
-                sp1SessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sp1SessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerType(),
                 sp1SessionJob,
                 SAVEPOINT);
 
@@ -510,7 +545,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerType(),
                 sp1SessionJob,
                 SAVEPOINT);
 
@@ -523,12 +558,14 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     @Test
     public void testTriggerCheckpoint() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sessionJob)));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sessionJob)));
 
@@ -540,12 +577,12 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
 
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(2L);
-        getJobStatus(sp1SessionJob).setState(CREATED.name());
+        getJobStatus(sp1SessionJob).setState(CREATED);
         reconciler.reconcile(sp1SessionJob, readyContext);
         // do not trigger checkpoint if job is not running
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
 
-        getJobStatus(sp1SessionJob).setState(RUNNING.name());
+        getJobStatus(sp1SessionJob).setState(RUNNING);
 
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertTrue(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
@@ -565,7 +602,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
 
         getCheckpointInfo(sp1SessionJob).resetTrigger();
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                getCheckpointInfo(sp1SessionJob), sp1SessionJob, CHECKPOINT);
+                getCheckpointInfo(sp1SessionJob).getTriggerType(), sp1SessionJob, CHECKPOINT);
 
         // don't trigger when nonce is cleared
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(null);
@@ -573,33 +610,17 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
     }
 
-    private static Stream<Arguments> cancelStatelessSessionJobParams() {
-        return Stream.of(
-                Arguments.of(INITIALIZING, true),
-                Arguments.of(CREATED, true),
-                Arguments.of(RUNNING, true),
-                Arguments.of(FAILING, true),
-                Arguments.of(FAILED, false),
-                Arguments.of(CANCELLING, true),
-                Arguments.of(CANCELED, false),
-                Arguments.of(FINISHED, false),
-                Arguments.of(RESTARTING, true),
-                Arguments.of(SUSPENDED, true),
-                Arguments.of(RECONCILING, true));
+    @Test
+    public void testCancelStatelessSessionJob() throws Exception {
+        testCancelStatelessSessionJob(SuspendMode.STATELESS);
     }
 
     @Test
-    public void testCancelStatelessSessionJobParams() {
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.values().length,
-                cancelStatelessSessionJobParams().count());
+    public void testCancelSessionJob() throws Exception {
+        testCancelStatelessSessionJob(SuspendMode.CANCEL);
     }
 
-    @ParameterizedTest
-    @MethodSource("cancelStatelessSessionJobParams")
-    public void testCancelStatelessSessionJob(
-            org.apache.flink.api.common.JobStatus fromJobStatus, boolean shouldCallCancel)
-            throws Exception {
+    public void testCancelStatelessSessionJob(SuspendMode suspendMode) throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
@@ -607,7 +628,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         var job = flinkService.listJobs().get(0);
         var jobStatusMessage = job.f1;
@@ -620,21 +641,19 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 new JobStatusMessage(
                         jobStatusMessage.getJobId(),
                         jobStatusMessage.getJobName(),
-                        fromJobStatus,
+                        RUNNING,
                         jobStatusMessage.getStartTime());
         // Set state which must be overwritten by cancelSessionJob
-        sessionJob.getStatus().getJobStatus().setState(fromJobStatus.name());
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RUNNING);
 
-        flinkService.cancelSessionJob(sessionJob, UpgradeMode.STATELESS, jobConfig);
+        flinkService.cancelSessionJob(sessionJob, suspendMode, jobConfig);
 
-        if (!shouldCallCancel) {
-            assertEquals(0, flinkService.getCancelJobCallCount());
-            assertEquals(fromJobStatus, job.f1.getJobState());
-        } else {
-            assertEquals(1, flinkService.getCancelJobCallCount());
-            assertEquals(FINISHED, job.f1.getJobState());
-        }
-        assertEquals(FINISHED.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(1, flinkService.getCancelJobCallCount());
+        assertEquals(CANCELED, job.f1.getJobState());
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
     }
 
     private static Stream<Arguments> cancelSavepointSessionJobParams() {
@@ -643,10 +662,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 Arguments.of(CREATED, true, false),
                 Arguments.of(RUNNING, false, true),
                 Arguments.of(FAILING, true, false),
-                Arguments.of(FAILED, false, false),
                 Arguments.of(CANCELLING, true, false),
-                Arguments.of(CANCELED, false, false),
-                Arguments.of(FINISHED, false, false),
+                Arguments.of(CANCELED, true, false),
+                Arguments.of(FINISHED, true, false),
+                Arguments.of(FAILED, true, false),
                 Arguments.of(RESTARTING, true, false),
                 Arguments.of(SUSPENDED, true, false),
                 Arguments.of(RECONCILING, true, false));
@@ -677,7 +696,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listJobs().size());
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         var job = flinkService.listJobs().get(0);
         var jobStatusMessage = job.f1;
@@ -693,18 +712,18 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                         fromJobStatus,
                         jobStatusMessage.getStartTime());
         // Set state which must be overwritten by cancelSessionJob
-        sessionJob.getStatus().getJobStatus().setState(fromJobStatus.name());
+        sessionJob.getStatus().getJobStatus().setState(fromJobStatus);
 
         if (!shouldThrowException) {
-            flinkService.cancelSessionJob(sessionJob, UpgradeMode.SAVEPOINT, jobConfig);
+            flinkService.cancelSessionJob(sessionJob, SuspendMode.SAVEPOINT, jobConfig);
         } else {
             var e =
                     assertThrows(
                             RuntimeException.class,
                             () ->
                                     flinkService.cancelSessionJob(
-                                            sessionJob, UpgradeMode.SAVEPOINT, jobConfig));
-            Assertions.assertTrue(e.getMessage().contains("Unexpected non-terminal status"));
+                                            sessionJob, SuspendMode.SAVEPOINT, jobConfig));
+            Assertions.assertTrue(e.getMessage().contains("Unexpected job status"));
         }
 
         if (!shouldCallCancel) {
@@ -717,7 +736,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
             assertEquals(FINISHED, job.f1.getJobState());
         }
         if (!shouldThrowException) {
-            assertEquals(FINISHED.name(), sessionJob.getStatus().getJobStatus().getState());
+            assertEquals(FINISHED, sessionJob.getStatus().getJobStatus().getState());
         }
     }
 
@@ -734,7 +753,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     private void verifyAndSetRunningJobsToStatus(
             FlinkSessionJob sessionJob,
             JobState expectedState,
-            String jobStatusObserved,
+            org.apache.flink.api.common.JobStatus jobStatusObserved,
             @Nullable String expectedSavepointPath,
             List<Tuple3<String, JobStatusMessage, Configuration>> jobs) {
 
@@ -744,11 +763,13 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         verifyJobState(sessionJob, expectedState, jobStatusObserved);
         JobStatus jobStatus = sessionJob.getStatus().getJobStatus();
         jobStatus.setJobName(submittedJobInfo.f1.getJobName());
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING);
     }
 
     private void verifyJobState(
-            FlinkSessionJob sessionJob, JobState expectedState, String jobStatusObserved) {
+            FlinkSessionJob sessionJob,
+            JobState expectedState,
+            org.apache.flink.api.common.JobStatus jobStatusObserved) {
         assertEquals(
                 expectedState,
                 sessionJob
@@ -767,9 +788,13 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
 
         FlinkSessionJob spSessionJob = ReconciliationUtils.clone(sessionJob);
+        spSessionJob
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         spSessionJob
                 .getSpec()
                 .getJob()
@@ -778,7 +803,9 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertEquals(
                 "savepoint_trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
-        assertEquals(JobState.RUNNING.name(), spSessionJob.getStatus().getJobStatus().getState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                spSessionJob.getStatus().getJobStatus().getState());
 
         configManager.updateDefaultConfig(
                 Configuration.fromMap(
@@ -792,7 +819,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertEquals(
                 "savepoint_trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
-        assertEquals("FINISHED", spSessionJob.getStatus().getJobStatus().getState());
+        assertEquals(CANCELLING, spSessionJob.getStatus().getJobStatus().getState());
     }
 
     @Test
@@ -806,8 +833,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 ReconciliationState.DEPLOYED,
                 sessionJob.getStatus().getReconciliationStatus().getState());
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
-        Assertions.assertEquals(
-                RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+        Assertions.assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
         Assertions.assertEquals(jobID, flinkService.listJobs().get(0).f1.getJobId().toString());
 
         flinkService.setSessionJobSubmittedCallback(
@@ -821,6 +847,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 () -> {
                     // suspend
                     reconciler.reconcile(sessionJob, readyContext);
+                    sessionJob
+                            .getStatus()
+                            .getJobStatus()
+                            .setState(org.apache.flink.api.common.JobStatus.CANCELED);
                     // upgrade
                     reconciler.reconcile(sessionJob, readyContext);
                 });

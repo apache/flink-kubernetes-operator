@@ -31,6 +31,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Deprecated
 public class CheckpointInfo implements SnapshotInfo {
     /** Last completed checkpoint by the operator. */
     private Checkpoint lastCheckpoint;

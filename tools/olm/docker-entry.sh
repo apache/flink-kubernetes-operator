@@ -85,7 +85,7 @@ generate_olm_bundle() {
 
   yq ea -i ".spec.install.spec.deployments[0].spec.template.spec.initContainers = load(\"${INIT_CONT}\").initContainers" "${CSV_FILE}"
 
-  yq ea -i '.spec.install.spec.deployments[0].spec.template.spec.volumes[1] = {"name": "keystore","emptyDir": {}}' "${CSV_FILE}"
+  yq ea -i '(.spec.install.spec.deployments[0].spec.template.spec.volumes[] | select(.name == "keystore")) = {"name": "keystore","emptyDir": {}}' "${CSV_FILE}"
 
   yq ea -i "(... | select(has(\"image\"))).image =\"${OPERATOR_IMG}\"" "${CSV_FILE}"
 
@@ -98,7 +98,10 @@ generate_olm_bundle() {
   yq ea -i "del(.subjects[0].namespace)" "${ROLE_BINDING}"
 
   # Needed to replace description with new bundle values
-  sed -i "s/RELEASE_VERSION/${BUNDLE_VERSION}/" "${CSV_FILE}"
+  sed --in-place=.old "s/RELEASE_VERSION/${BUNDLE_VERSION}/" "${CSV_FILE}"
+  # Ensure that file permissions are preserved
+  chmod --reference="${CSV_FILE}".old "${CSV_FILE}"
+  rm "${CSV_FILE}".old
 }
 
 validate_olm_bundle() {

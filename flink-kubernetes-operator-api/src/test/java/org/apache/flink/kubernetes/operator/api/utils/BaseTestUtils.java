@@ -23,15 +23,21 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
+import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 
@@ -202,5 +208,65 @@ public class BaseTestUtils {
         pod.setSpec(podTemplate.getSpec());
         pod.setMetadata(podTemplate.getMetadata());
         return pod;
+    }
+
+    public static FlinkStateSnapshot buildFlinkStateSnapshotSavepoint(
+            boolean alreadyExists, JobReference jobReference) {
+        return buildFlinkStateSnapshotSavepoint(
+                "test-savepoint", "test", "test-path", alreadyExists, jobReference);
+    }
+
+    public static FlinkStateSnapshot buildFlinkStateSnapshotSavepoint(
+            String name,
+            String namespace,
+            String path,
+            boolean alreadyExists,
+            JobReference jobReference) {
+        var savepointSpec = SavepointSpec.builder().path(path).alreadyExists(alreadyExists).build();
+        var spec =
+                FlinkStateSnapshotSpec.builder()
+                        .jobReference(jobReference)
+                        .savepoint(savepointSpec)
+                        .build();
+        var snapshot = new FlinkStateSnapshot();
+        snapshot.setSpec(spec);
+
+        snapshot.setMetadata(
+                new ObjectMetaBuilder()
+                        .withName(name)
+                        .withNamespace(namespace)
+                        .withCreationTimestamp(Instant.now().toString())
+                        .withUid(UUID.randomUUID().toString())
+                        .withGeneration(1L)
+                        .withResourceVersion("1")
+                        .build());
+
+        return snapshot;
+    }
+
+    public static FlinkStateSnapshot buildFlinkStateSnapshotCheckpoint(
+            String name,
+            String namespace,
+            CheckpointType checkpointType,
+            JobReference jobReference) {
+        var spec =
+                FlinkStateSnapshotSpec.builder()
+                        .jobReference(jobReference)
+                        .checkpoint(new CheckpointSpec())
+                        .build();
+        var snapshot = new FlinkStateSnapshot();
+        snapshot.setSpec(spec);
+
+        snapshot.setMetadata(
+                new ObjectMetaBuilder()
+                        .withName(name)
+                        .withNamespace(namespace)
+                        .withCreationTimestamp(Instant.now().toString())
+                        .withUid(UUID.randomUUID().toString())
+                        .withGeneration(1L)
+                        .withResourceVersion("1")
+                        .build());
+
+        return snapshot;
     }
 }

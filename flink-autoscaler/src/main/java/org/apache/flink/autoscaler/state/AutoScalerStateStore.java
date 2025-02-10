@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.state;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.autoscaler.DelayedScaleDown;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.ScalingTracking;
@@ -38,7 +39,8 @@ import java.util.SortedMap;
  * @param <Context> Instance of JobAutoScalerContext.
  */
 @Experimental
-public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<KEY>> {
+public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<KEY>>
+        extends AutoCloseable {
 
     void storeScalingHistory(
             Context jobContext, Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory)
@@ -77,6 +79,12 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     void removeConfigChanges(Context jobContext) throws Exception;
 
+    void storeDelayedScaleDown(Context jobContext, DelayedScaleDown delayedScaleDown)
+            throws Exception;
+
+    @Nonnull
+    DelayedScaleDown getDelayedScaleDown(Context jobContext) throws Exception;
+
     /** Removes all data from this context. Flush stil needs to be called. */
     void clearAll(Context jobContext) throws Exception;
 
@@ -86,7 +94,4 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
      * was changed through this interface.
      */
     void flush(Context jobContext) throws Exception;
-
-    /** Clean up all information related to the current job. */
-    void removeInfoFromCache(KEY jobKey);
 }

@@ -19,11 +19,13 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -31,6 +33,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -49,6 +52,8 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -92,26 +97,31 @@ public class FlinkDeploymentController
         if (canaryResourceManager.handleCanaryResourceDeletion(flinkApp)) {
             return DeleteControl.defaultDelete();
         }
-
-        String msg = "Cleaning up " + FlinkDeployment.class.getSimpleName();
-        LOG.info(msg);
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg,
+                "Cleaning up FlinkDeployment",
                 josdkContext.getClient());
         statusRecorder.updateStatusFromCache(flinkApp);
+        flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
         } catch (Exception err) {
-            // ignore during cleanup
+            LOG.error("Error while observing for cleanup", err);
         }
-        statusRecorder.removeCachedStatus(flinkApp);
-        ctxFactory.cleanup(flinkApp);
-        return reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+
+        var deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        if (deleteControl.isRemoveFinalizer()) {
+            flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
+            statusRecorder.cleanupForDeletion(flinkApp);
+            ctxFactory.cleanup(flinkApp);
+        } else {
+            statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
+        }
+        return deleteControl;
     }
 
     @Override
@@ -143,8 +153,8 @@ public class FlinkDeploymentController
             }
             statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
             reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
-        } catch (RecoveryFailureException rfe) {
-            handleRecoveryFailed(ctx, rfe);
+        } catch (UpgradeFailureException ufe) {
+            handleUpgradeFailure(ctx, ufe);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(ctx, dfe);
         } catch (Exception e) {
@@ -169,7 +179,7 @@ public class FlinkDeploymentController
         var flinkApp = ctx.getResource();
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
         ReconciliationUtils.updateForReconciliationError(ctx, dfe);
         eventRecorder.triggerEvent(
                 flinkApp,
@@ -180,16 +190,16 @@ public class FlinkDeploymentController
                 ctx.getKubernetesClient());
     }
 
-    private void handleRecoveryFailed(
-            FlinkResourceContext<FlinkDeployment> ctx, RecoveryFailureException rfe) {
-        LOG.error("Flink recovery failed", rfe);
+    private void handleUpgradeFailure(
+            FlinkResourceContext<FlinkDeployment> ctx, UpgradeFailureException ufe) {
+        LOG.error("Error while upgrading Flink Deployment", ufe);
         var flinkApp = ctx.getResource();
-        ReconciliationUtils.updateForReconciliationError(ctx, rfe);
+        ReconciliationUtils.updateForReconciliationError(ctx, ufe);
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Warning,
-                rfe.getReason(),
-                rfe.getMessage(),
+                ufe.getReason(),
+                ufe.getMessage(),
                 EventRecorder.Component.JobManagerDeployment,
                 ctx.getKubernetesClient());
     }
@@ -197,9 +207,19 @@ public class FlinkDeploymentController
     @Override
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkDeployment> context) {
-        return EventSourceInitializer.nameEventSources(
-                EventSourceUtils.getSessionJobInformerEventSource(context),
-                EventSourceUtils.getDeploymentInformerEventSource(context));
+        List<EventSource> eventSources = new ArrayList<>();
+        eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
+        eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
+
+        if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
+            eventSources.add(
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
+        } else {
+            LOG.warn(
+                    "Could not initialize informer for snapshots as the CRD has not been installed!");
+        }
+
+        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
     }
 
     @Override

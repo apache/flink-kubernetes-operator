@@ -45,6 +45,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  autoscalerResetNonce:
+                    type: integer
                   checkpointTriggerNonce:
                     type: integer
                   entryClass:
@@ -197,13 +199,29 @@ spec:
                   startTime:
                     type: string
                   state:
+                    enum:
+                    - CANCELED
+                    - CANCELLING
+                    - CREATED
+                    - FAILED
+                    - FAILING
+                    - FINISHED
+                    - INITIALIZING
+                    - RECONCILING
+                    - RESTARTING
+                    - RUNNING
+                    - SUSPENDED
                     type: string
                   updateTime:
+                    type: string
+                  upgradeSavepointPath:
                     type: string
                 type: object
               lifecycleState:
                 enum:
                 - CREATED
+                - DELETED
+                - DELETING
                 - DEPLOYED
                 - FAILED
                 - ROLLED_BACK

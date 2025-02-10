@@ -18,12 +18,10 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.annotation.Internal;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -62,6 +60,11 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 
     public ResourceLifecycleState getLifecycleState() {
+        if (ResourceLifecycleState.DELETING == lifecycleState
+                || ResourceLifecycleState.DELETED == lifecycleState) {
+            return lifecycleState;
+        }
+
         var reconciliationStatus = getReconciliationStatus();
 
         if (reconciliationStatus.isBeforeFirstDeployment()) {
@@ -83,10 +86,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             return ResourceLifecycleState.SUSPENDED;
         }
 
-        var jobState = getJobStatus().getState();
-        if (jobState != null
-                && org.apache.flink.api.common.JobStatus.valueOf(jobState)
-                        .equals(org.apache.flink.api.common.JobStatus.FAILED)) {
+        if (getJobStatus().getState() == org.apache.flink.api.common.JobStatus.FAILED) {
             return ResourceLifecycleState.FAILED;
         }
 
@@ -98,10 +98,4 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
         return ResourceLifecycleState.DEPLOYED;
     }
-
-    /**
-     * Internal flag to signal that due to some condition we need to schedule a new reconciliation
-     * loop immediately. For example autoscaler overrides have changed and we need to apply them.
-     */
-    @JsonIgnore @Internal private boolean immediateReconciliationNeeded = false;
 }
