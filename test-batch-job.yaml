@@ -1,0 +1,48 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: test-batch-job
+spec:
+  flinkVersion: v1_18
+  image: localhost/flink-python:1.18
+  imagePullPolicy: Never
+  serviceAccount: flink
+  flinkConfiguration:
+    # Core Flink configs
+    state.backend: rocksdb
+    state.backend.incremental: "true"
+    state.backend.local-recovery: "false"
+    state.backend.rocksdb.predefined-options: FLASH_SSD_OPTIMIZED
+    state.backend.rocksdb.thread.num: "4"
+    state.checkpoints.dir: "file:///tmp/flink-checkpoints"
+    state.savepoints.dir: "file:///tmp/flink-savepoints"
+    high-availability.type: kubernetes
+    high-availability.storageDir: "file:///tmp/flink-ha"
+
+    # Important operator configs from production
+    kubernetes.operator.periodic.savepoint.interval: "7d"
+    kubernetes.operator.savepoint.cleanup.enabled: "true"
+    kubernetes.operator.savepoint.history.max.age: "30d"
+
+    # Basic resource configs
+    taskmanager.numberOfTaskSlots: "2"
+    pipeline.max-parallelism: "1260"
+
+  jobManager:
+    resource:
+      memory: "2600mb"
+      cpu: 0.325
+    replicas: 2
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  job:
+    jarURI: local:///opt/flink/lib/a.jar
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - "-py"
+      - "/opt/flink/examples/python/table/word_count.py"
+    parallelism: 2
+    upgradeMode: stateless
+    allowNonRestoredState: true

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-operator-config
+data:
+  flink-conf.yaml: |+
+    # Core production configs that might affect the issue
+    kubernetes.operator.periodic.checkpoint.interval: 7d
+    kubernetes.operator.reconcile.interval: 15s
+    kubernetes.operator.observer.progress-check.interval: 5s
+    kubernetes.operator.deployment.readiness.timeout: 10m
+    kubernetes.operator.jm-deployment.shutdown-ttl: 5s
+    kubernetes.operator.pod-template.merge-arrays-by-name: true
+    kubernetes.operator.deployment.rollback.enabled: true
+
+  log4j-operator.properties: |+
+    rootLogger.level = INFO
+    rootLogger.appenderRef.console.ref = ConsoleAppender
+    appender.console.name = ConsoleAppender
+    appender.console.type = CONSOLE
+    appender.console.layout.type = JSONLayout
+    appender.console.layout.compact = true
+    appender.console.layout.eventEol = true
+    appender.console.layout.stacktraceAsString = true
+    appender.console.layout.properties = true
+
+  log4j-console.properties: |+
+    rootLogger.level = INFO
+    rootLogger.appenderRef.console.ref = ConsoleAppender
+    appender.console.name = ConsoleAppender
+    appender.console.type = CONSOLE
+    appender.console.layout.type = JSONLayout
+    appender.console.layout.compact = true
