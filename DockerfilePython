@@ -29,7 +29,7 @@ RUN apt-get update -y && \
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
 
 # Install PyFlink
-RUN pip3 install apache-flink==1.18.0
+RUN pip3 install apache-flink==1.20.0
 
 # Add python script
 USER flink
