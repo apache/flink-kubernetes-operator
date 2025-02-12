@@ -4,7 +4,7 @@ metadata:
   name: test-batch-job
 spec:
   flinkVersion: v1_18
-  image: localhost/flink-python:1.18
+  image: localhost/flink-python:1.20
   imagePullPolicy: Never
   serviceAccount: flink
   flinkConfiguration:
@@ -38,11 +38,12 @@ spec:
       memory: "2048m"
       cpu: 1
   job:
-    jarURI: local:///opt/flink/lib/a.jar
+#    jarURI: local:///opt/flink/lib/a.jar
     entryClass: org.apache.flink.client.python.PythonDriver
     args:
       - "-py"
       - "/opt/flink/examples/python/table/word_count.py"
+#    jarURI: local:///opt/flink/examples/streaming/WordCount.jar
     parallelism: 2
     upgradeMode: stateless
     allowNonRestoredState: true

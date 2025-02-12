@@ -16,17 +16,27 @@
 # limitations under the License.
 ################################################################################
 
-rootLogger.level = DEBUG
-rootLogger.appenderRef.console.ref = ConsoleAppender
-
-# Log all infos to the console
-appender.console.name = ConsoleAppender
-appender.console.type = CONSOLE
-appender.console.layout.type = PatternLayout
-appender.console.layout.pattern = %style{%d}{yellow} %style{%-30c{1.}}{cyan} %highlight{[%-5level] [%X{resource.namespace}.%X{resource.name}] %msg%n%throwable}
-
-logger.conf.name = org.apache.flink.configuration.GlobalConfiguration
-logger.conf.level = WARN
-
-logger.event.name = org.apache.flink.kubernetes.operator.listener.AuditUtils
-logger.event.level = INFO
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: basic-example
+spec:
+  image: docker.io/library/flink:1.20
+  flinkVersion: v1_20
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    high-availability.type: kubernetes
+    high-availability.storageDir: "file:///tmp/flink-ha"
+  serviceAccount: flink
+  jobManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  job:
+    jarURI: local:///opt/flink/examples/streaming/WordCount.jar
+    parallelism: 2
+    upgradeMode: stateless

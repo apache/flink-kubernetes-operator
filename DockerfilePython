@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 
-FROM flink:1.18.0
+FROM flink:1.20.0
 
 # Install python3 and pip3
 RUN apt-get update -y && \

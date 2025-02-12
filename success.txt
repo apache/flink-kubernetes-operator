@@ -1,0 +1,23 @@
+2025-02-11 14:27:24,678 o.a.f.k.o.o.d.ApplicationObserver [INFO ] [default.basic-example] Observing JobManager deployment. Previous status: DEPLOYED_NOT_READY
+2025-02-11 14:27:24,678 o.a.f.k.o.o.d.ApplicationObserver [INFO ] [default.basic-example] JobManager deployment is ready
+2025-02-11 14:27:24,678 o.a.f.k.o.o.d.ApplicationObserver [DEBUG] [default.basic-example] Observing application cluster
+2025-02-11 14:27:24,679 o.a.f.k.o.o.JobStatusObserver  [DEBUG] [default.basic-example] Observing job status
+2025-02-11 14:27:24,681 o.a.f.r.r.RestClient           [DEBUG] [default.basic-example] Rest client endpoint started.
+2025-02-11 14:27:24,697 o.a.f.r.r.RestClient           [DEBUG] [default.basic-example] Sending request of class class org.apache.flink.runtime.rest.messages.EmptyRequestBody to localhost:8081/v1/jobs/overview
+2025-02-11 14:27:24,707 o.a.f.s.n.i.n.b.AbstractByteBuf [DEBUG] [default.basic-example] -Dorg.apache.flink.shaded.netty4.io.netty.buffer.checkAccessible: true
+2025-02-11 14:27:24,707 o.a.f.s.n.i.n.b.AbstractByteBuf [DEBUG] [default.basic-example] -Dorg.apache.flink.shaded.netty4.io.netty.buffer.checkBounds: true
+2025-02-11 14:27:24,708 o.a.f.s.n.i.n.u.ResourceLeakDetectorFactory [DEBUG] [default.basic-example] Loaded default ResourceLeakDetector: org.apache.flink.shaded.netty4.io.netty.util.ResourceLeakDetector@64a09226
+2025-02-11 14:27:24,746 o.a.f.s.n.i.n.u.Recycler       [DEBUG] [.] -Dio.netty.recycler.maxCapacityPerThread: 4096
+2025-02-11 14:27:24,746 o.a.f.s.n.i.n.u.Recycler       [DEBUG] [.] -Dio.netty.recycler.ratio: 8
+2025-02-11 14:27:24,746 o.a.f.s.n.i.n.u.Recycler       [DEBUG] [.] -Dio.netty.recycler.chunkSize: 32
+2025-02-11 14:27:24,746 o.a.f.s.n.i.n.u.Recycler       [DEBUG] [.] -Dio.netty.recycler.blocking: false
+2025-02-11 14:27:24,746 o.a.f.s.n.i.n.u.Recycler       [DEBUG] [.] -Dio.netty.recycler.batchFastThreadLocalOnly: true
+2025-02-11 14:27:24,774 o.a.f.r.r.RestClient           [DEBUG] [.] Received response {"jobs":[{"jid":"613968e95cef356e8368713559fa2777","name":"WordCount","start-time":1739301933563,"end-time":1739301939550,"duration":5987,"state":"FINISHED","last-modification":1739301939550,"tasks":{"running":0,"canceling":0,"canceled":0,"total":5,"created":0,"scheduled":0,"deploying":0,"reconciling":0,"finished":5,"initializing":0,"failed":0}}]}.
+2025-02-11 14:27:24,799 o.a.f.r.r.RestClient           [DEBUG] [default.basic-example] Shutting down rest endpoint.
+2025-02-11 14:27:24,800 o.a.f.s.n.i.n.b.PoolThreadCache [DEBUG] [.] Freed 2 thread-local buffer(s) from thread: flink-rest-client-netty-thread-1
+2025-02-11 14:27:24,800 o.a.f.r.r.RestClient           [DEBUG] [default.basic-example] Rest endpoint shutdown complete.
+2025-02-11 14:27:24,800 i.f.k.c.Config                 [DEBUG] [default.basic-example] Trying to configure client from Kubernetes config...
+2025-02-11 14:27:24,801 i.f.k.c.Config                 [DEBUG] [default.basic-example] Found for Kubernetes config at: [/Users/luca/.kube/config.shopify.cloudplatform].
+2025-02-11 14:27:24,819 i.f.k.c.Config                 [DEBUG] [default.basic-example] Trying to configure client from Kubernetes config...
+2025-02-11 14:27:24,819 i.f.k.c.Config                 [DEBUG] [default.basic-example] Found for Kubernetes config at: [/Users/luca/.kube/config.shopify.cloudplatform].
+2025-02-11 14:27:24,836 o.a.f.k.o.l.AuditUtils         [INFO ] [default.basic-example] >>> Event[Job]       | Info    | JOBSTATUSCHANGED | Job status changed from RECONCILING to FINISHED
