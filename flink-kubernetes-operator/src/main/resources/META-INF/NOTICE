@@ -6,8 +6,6 @@ The Apache Software Foundation (http://www.apache.org/).
 
 This project bundles the following dependencies under the Apache Software License 2.0 (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
-- com.esotericsoftware.kryo:kryo:jar:2.24.0
-- com.esotericsoftware.minlog:minlog:jar:1.2
 - com.fasterxml.jackson.core:jackson-annotations:jar:2.15.0
 - com.fasterxml.jackson.core:jackson-core:jar:2.15.0
 - com.fasterxml.jackson.core:jackson-databind:jar:2.15.0
@@ -78,5 +76,5 @@ This project bundles the following dependencies under the Apache Software Licens
 This project bundles the following dependencies under the BSD License.
 See bundled license files for details.
 
-- com.esotericsoftware.kryo:kryo:2.24.0
-- com.esotericsoftware.minlog:minlog:1.2
+- com.esotericsoftware.kryo:kryo:jar:2.24.0
+- com.esotericsoftware.minlog:minlog:jar:1.2
