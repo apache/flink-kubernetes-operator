@@ -876,4 +876,26 @@ public class ApplicationObserverTest extends OperatorTestBase {
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertTrue(reconStatus.isBeforeFirstDeployment());
     }
+
+    @Test
+    public void jobStatusNotOverwrittenWhenTerminal() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        bringToReadyStatus(deployment);
+
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FINISHED);
+
+        // Simulate missing deployment
+        var emptyContext = TestUtils.createEmptyContext();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        observer.observe(deployment, emptyContext);
+
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED,
+                deployment.getStatus().getJobStatus().getState());
+    }
 }

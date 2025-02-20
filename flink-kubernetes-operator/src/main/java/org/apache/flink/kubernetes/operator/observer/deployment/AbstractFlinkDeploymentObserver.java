@@ -152,7 +152,10 @@ public abstract class AbstractFlinkDeploymentObserver
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING);
+
+        if (!ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
+            deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING);
+        }
 
         if (previousJmStatus != JobManagerDeploymentStatus.MISSING
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
