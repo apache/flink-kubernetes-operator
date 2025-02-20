@@ -129,13 +129,13 @@ public class MetricsCollectionAndEvaluationTest {
 
         setDefaultMetrics(metricsCollector);
 
-        // We haven't left the stabilization period
-        // => no metrics reporting and collection should take place
+        // We haven't left the stabilization period, but we're collecting and returning the metrics
+        // for reporting
         var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+        assertEquals(1, collectedMetrics.getMetricHistory().size());
 
-        // We haven't collected a full window yet, no metrics should be reported but metrics should
-        // still get collected.
+        // We haven't collected a full window yet, but we're collecting and returning the metrics
+        // for reporting
         clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
@@ -294,12 +294,12 @@ public class MetricsCollectionAndEvaluationTest {
     public void testMetricCollectorWindow() throws Exception {
         setDefaultMetrics(metricsCollector);
         var metricsHistory = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(0, metricsHistory.getMetricHistory().size());
+        assertEquals(1, metricsHistory.getMetricHistory().size());
 
-        // Not stable, nothing should be collected
+        // Not stable, metrics collected and reported
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
         metricsHistory = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(0, metricsHistory.getMetricHistory().size());
+        assertEquals(2, metricsHistory.getMetricHistory().size());
 
         // Update clock to stable time
         var conf = context.getConfiguration();
@@ -336,10 +336,10 @@ public class MetricsCollectionAndEvaluationTest {
         metricsHistory = metricsCollector.updateMetrics(context, stateStore);
         assertEquals(1, metricsHistory.getMetricHistory().size());
 
-        // Existing metrics should be cleared on job updates
+        // Existing metrics should be cleared on job updates, and start collecting from fresh
         metricsCollector.setJobUpdateTs(clock.instant().plus(Duration.ofDays(10)));
         metricsHistory = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(0, metricsHistory.getMetricHistory().size());
+        assertEquals(1, metricsHistory.getMetricHistory().size());
     }
 
     @Test
@@ -351,10 +351,11 @@ public class MetricsCollectionAndEvaluationTest {
 
         setDefaultMetrics(metricsCollector);
 
-        // We haven't left the stabilization period
-        // => no metrics reporting and collection should take place
+        // We haven't left the stabilization period, we're returning the metrics
+        // but don't act on it since the metric window is not full yet
         var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+        assertFalse(collectedMetrics.getMetricHistory().isEmpty());
+        assertFalse(collectedMetrics.isFullyCollected());
     }
 
     @Test
@@ -571,19 +572,18 @@ public class MetricsCollectionAndEvaluationTest {
                 .set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMillis(100));
         context.getConfiguration().set(AutoScalerOptions.METRICS_WINDOW, Duration.ofMillis(100));
 
-        // Within stabilization period we simply collect metrics but do not return them
+        // Until window is full (time=200) we keep returning stabilizing metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(50), ZoneId.systemDefault()));
-        assertTrue(
-                metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
+        assertEquals(
+                1, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
         assertEquals(1, stateStore.getCollectedMetrics(context).size());
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(60), ZoneId.systemDefault()));
-        assertTrue(
-                metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
+        assertEquals(
+                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
         assertEquals(2, stateStore.getCollectedMetrics(context).size());
 
         testTolerateMetricsMissingDuringStabilizationPhase(topology);
 
-        // Until window is full (time=200) we keep returning stabilizing metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(150), ZoneId.systemDefault()));
         assertEquals(
                 3, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
