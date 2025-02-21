@@ -21,6 +21,7 @@ github:
     release-1.8: {}
     release-1.9: {}
     release-1.10: {}
+    release-1.11: {}
 
 notifications:
   commits:      commits@flink.apache.org
