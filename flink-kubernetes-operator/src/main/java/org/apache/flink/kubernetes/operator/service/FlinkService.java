@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobmaster.JobResult;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -126,6 +127,8 @@ public interface FlinkService {
             throws Exception;
 
     RestClusterClient<String> getClusterClient(Configuration conf) throws Exception;
+
+    JobDetailsInfo getJobDetails(JobID jobId, Configuration conf) throws Exception;
 
     /** Result of a cancel operation. */
     @AllArgsConstructor

@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.util.CollectionUtil;
 
 import org.slf4j.Logger;
@@ -82,6 +83,11 @@ public class SnapshotObserver<
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         var jobId = jobStatus.getJobId();
+
+        if (isBatchJob(ctx, jobId)) {
+            LOG.debug("Skipping checkpoint observation for BATCH job");
+            return;
+        }
 
         // If any manual or periodic savepoint is in progress, observe it
         if (SnapshotUtils.savepointInProgress(jobStatus)) {
@@ -457,5 +463,17 @@ public class SnapshotObserver<
                                 jobStatus.setUpgradeSavepointPath(null);
                             }
                         });
+    }
+
+    private boolean isBatchJob(FlinkResourceContext<CR> ctx, String jobId) {
+        try {
+            var jobDetails =
+                    ctx.getFlinkService()
+                            .getJobDetails(JobID.fromHexString(jobId), ctx.getObserveConfig());
+            return jobDetails.getJobType() == JobType.BATCH;
+        } catch (Exception e) {
+            LOG.debug("Could not determine job type, assuming streaming job", e);
+            return false;
+        }
     }
 }

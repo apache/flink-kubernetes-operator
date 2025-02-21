@@ -23,6 +23,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.NoOpMetricRegistry;
 import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
@@ -96,6 +97,7 @@ public class TestingAutoscalerUtils {
                                         "",
                                         false,
                                         JobStatus.RUNNING,
+                                        JobType.STREAMING,
                                         0,
                                         0,
                                         0,
