@@ -898,4 +898,35 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 org.apache.flink.api.common.JobStatus.FINISHED,
                 deployment.getStatus().getJobStatus().getState());
     }
+
+    @Test
+    public void observeLatestCheckpointShouldSkipWhenCheckpointingDisabled() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        bringToReadyStatus(deployment);
+
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FINISHED);
+        var jobs = flinkService.listJobs();
+        var oldStatus = jobs.get(0).f1;
+        jobs.get(0).f1 =
+                new JobStatusMessage(
+                        oldStatus.getJobId(),
+                        oldStatus.getJobName(),
+                        org.apache.flink.api.common.JobStatus.FINISHED,
+                        oldStatus.getStartTime());
+
+        flinkService.setThrowCheckpointingDisabledError(true);
+        observer.observe(deployment, readyContext);
+
+        assertEquals(
+                0,
+                countErrorEvents(
+                        EventRecorder.Reason.CheckpointError.name(),
+                        deployment.getMetadata().getNamespace(),
+                        "Checkpointing has not been enabled"));
+    }
 }

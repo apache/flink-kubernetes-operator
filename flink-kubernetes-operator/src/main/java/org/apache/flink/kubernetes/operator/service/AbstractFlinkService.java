@@ -75,7 +75,6 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeade
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -836,15 +835,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                 operatorRestConf,
                 clusterId,
                 (c, e) -> new StandaloneClientHAServices(restServerAddress));
-    }
-
-    @Override
-    public JobDetailsInfo getJobDetails(JobID jobId, Configuration conf) throws Exception {
-        try (var clusterClient = getClusterClient(conf)) {
-            return clusterClient
-                    .getJobDetails(jobId)
-                    .get(operatorConfig.getFlinkClientTimeout().getSeconds(), TimeUnit.SECONDS);
-        }
     }
 
     @VisibleForTesting

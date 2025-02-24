@@ -43,6 +43,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
@@ -138,6 +139,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private final Map<String, Boolean> savepointTriggers = new HashMap<>();
     @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
     private final Map<Long, String> checkpointStats = new HashMap<>();
+    @Setter private boolean throwCheckpointingDisabledError = false;
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -574,6 +576,13 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) {
+        if (throwCheckpointingDisabledError) {
+            throw new ReconciliationException(
+                    "Could not observe latest savepoint information",
+                    new RestClientException(
+                            "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST));
+        }
+
         jobs.stream()
                 .filter(js -> js.f1.getJobId().equals(jobId))
                 .findAny()
