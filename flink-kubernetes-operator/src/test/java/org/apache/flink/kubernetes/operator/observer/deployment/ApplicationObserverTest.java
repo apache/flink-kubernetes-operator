@@ -900,7 +900,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     }
 
     @Test
-    public void observeLatestCheckpointShouldSkipWhenCheckpointingDisabled() throws Exception {
+    public void getLastCheckpointShouldHandleCheckpointingNotEnabled() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);

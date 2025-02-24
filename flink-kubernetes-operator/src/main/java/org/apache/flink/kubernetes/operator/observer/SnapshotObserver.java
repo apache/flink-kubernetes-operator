@@ -37,9 +37,7 @@ import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
-import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.util.CollectionUtil;
-import org.apache.flink.util.ExceptionUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -446,30 +444,17 @@ public class SnapshotObserver<
         var status = ctx.getResource().getStatus();
         var jobStatus = status.getJobStatus();
 
-        try {
-            ctx.getFlinkService()
-                    .getLastCheckpoint(JobID.fromHexString(jobId), ctx.getObserveConfig())
-                    .ifPresentOrElse(
-                            snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()),
-                            () -> {
-                                if (ReconciliationUtils.isJobCancelled(status)) {
-                                    // For cancelled jobs the observed savepoint is always definite,
-                                    // so if empty we know the job doesn't have any
-                                    // checkpoints/savepoints
-                                    jobStatus.setUpgradeSavepointPath(null);
-                                }
-                            });
-        } catch (Exception e) {
-            if (ExceptionUtils.findThrowable(e, RestClientException.class)
-                    .map(ex -> ex.getMessage().contains("Checkpointing has not been enabled"))
-                    .orElse(false)) {
-                LOG.warn(
-                        "Checkpointing not enabled for job {}, skipping checkpoint observation",
-                        jobId,
-                        e);
-                return;
-            }
-            throw e;
-        }
+        ctx.getFlinkService()
+                .getLastCheckpoint(JobID.fromHexString(jobId), ctx.getObserveConfig())
+                .ifPresentOrElse(
+                        snapshot -> jobStatus.setUpgradeSavepointPath(snapshot.getLocation()),
+                        () -> {
+                            if (ReconciliationUtils.isJobCancelled(status)) {
+                                // For cancelled jobs the observed savepoint is always definite,
+                                // so if empty we know the job doesn't have any
+                                // checkpoints/savepoints
+                                jobStatus.setUpgradeSavepointPath(null);
+                            }
+                        });
     }
 }
