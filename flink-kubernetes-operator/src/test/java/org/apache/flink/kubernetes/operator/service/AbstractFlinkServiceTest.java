@@ -425,6 +425,52 @@ public class AbstractFlinkServiceTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
+    public void savepointErrorTest(boolean deserializable) throws Exception {
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        var savepointPath = "file:///path/of/svp-1";
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
+
+        var savepointErr = new SerializedThrowable(new Exception("sp test err"));
+        if (!deserializable) {
+            var cachedException = SerializedThrowable.class.getDeclaredField("cachedException");
+            cachedException.setAccessible(true);
+            cachedException.set(savepointErr, null);
+
+            var bytes = SerializedThrowable.class.getDeclaredField("serializedException");
+            bytes.setAccessible(true);
+            bytes.set(savepointErr, new byte[] {1, 2, 3});
+        }
+
+        testingClusterClient.setStopWithSavepointFunction(
+                (jobID, advanceToEndOfEventTime, savepointDir) -> {
+                    CompletableFuture<String> result = new CompletableFuture<>();
+                    result.completeExceptionally(savepointErr);
+                    return result;
+                });
+
+        var flinkService = new TestingService(testingClusterClient);
+
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(JobID.generate().toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        assertThrows(
+                UpgradeFailureException.class,
+                () ->
+                        flinkService.cancelJob(
+                                deployment,
+                                SuspendMode.SAVEPOINT,
+                                configManager.getObserveConfig(deployment),
+                                true),
+                "sp test err");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
     public void cancelJobWithDrainOnSavepointUpgradeModeTest(boolean drainOnSavepoint)
             throws Exception {
         var testingClusterClient =
@@ -737,11 +783,14 @@ public class AbstractFlinkServiceTest {
         testingClusterClient.setStopWithSavepointFormat(
                 (id, formatType, savepointDir) -> {
                     if (failAfterSavepointCompletes) {
-                        stopWithSavepointFuture.completeExceptionally(
+                        CompletableFuture<String> result = new CompletableFuture<>();
+                        stopWithSavepointFuture.completeExceptionally(new Exception());
+                        result.completeExceptionally(
                                 new CompletionException(
                                         new SerializedThrowable(
                                                 new StopWithSavepointStoppingException(
                                                         savepointPath, jobID))));
+                        return result;
                     } else {
                         stopWithSavepointFuture.complete(
                                 new Tuple3<>(id, formatType, savepointDir));
