@@ -441,7 +441,6 @@ public class SnapshotObserver<
     }
 
     private void observeLatestCheckpoint(FlinkResourceContext<CR> ctx, String jobId) {
-
         var status = ctx.getResource().getStatus();
         var jobStatus = status.getJobStatus();
 
