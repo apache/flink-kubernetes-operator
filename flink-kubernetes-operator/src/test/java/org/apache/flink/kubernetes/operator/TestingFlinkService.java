@@ -138,6 +138,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private final Map<String, Boolean> savepointTriggers = new HashMap<>();
     @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
     private final Map<Long, String> checkpointStats = new HashMap<>();
+    @Setter private boolean throwCheckpointingDisabledError = false;
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -593,6 +594,10 @@ public class TestingFlinkService extends AbstractFlinkService {
                     Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
                     Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
             getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
+        if (throwCheckpointingDisabledError) {
+            throw new RestClientException(
+                    "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST);
+        }
 
         if (checkpointInfo != null) {
             return checkpointInfo;
