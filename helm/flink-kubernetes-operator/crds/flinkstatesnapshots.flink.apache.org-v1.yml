@@ -17,17 +17,14 @@ spec:
     - description: Final path of the snapshot.
       jsonPath: .status.path
       name: Path
-      priority: 0
       type: string
     - description: Timestamp when the snapshot was last created/failed.
       jsonPath: .status.resultTimestamp
       name: Result Timestamp
-      priority: 0
       type: string
     - description: Current state of the snapshot.
       jsonPath: .status.state
       name: Snapshot State
-      priority: 0
       type: string
     name: v1beta1
     schema:
