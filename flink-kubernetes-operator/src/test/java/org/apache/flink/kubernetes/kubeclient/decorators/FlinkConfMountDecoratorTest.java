@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.kubeclient.decorators;
 
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.YamlParserUtils;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -92,6 +94,38 @@ class FlinkConfMountDecoratorTest {
         } else {
             assertFalse(conf.containsKey("kubernetes"));
             assertTrue(conf.containsKey("kubernetes.cluster-id"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testOverlappingKeyDetection(boolean standardYaml) throws IOException {
+
+        flinkConfig.set(
+                FlinkConfigBuilder.FLINK_VERSION,
+                standardYaml ? FlinkVersion.v2_0 : FlinkVersion.v1_20);
+        flinkConfig.setString("k", "v");
+        flinkConfig.setString("kv", "v2");
+
+        // Non overlapping keys
+        flinkConfMountDecorator.buildAccompanyingKubernetesResources();
+        flinkConfig.setString("k.v", "v3");
+
+        IllegalConfigurationException err = null;
+        try {
+            var additionalResources =
+                    flinkConfMountDecorator.buildAccompanyingKubernetesResources();
+            assertThat(additionalResources).hasSize(1);
+        } catch (IllegalConfigurationException e) {
+            err = e;
+        }
+
+        if (standardYaml) {
+            assertThat(err)
+                    .isNotNull()
+                    .hasMessageContaining("Overlapping key prefixes detected (k -> k.v)");
+        } else {
+            assertThat(err).isNull();
         }
     }
 
