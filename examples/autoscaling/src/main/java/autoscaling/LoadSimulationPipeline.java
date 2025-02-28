@@ -78,11 +78,25 @@ public class LoadSimulationPipeline {
         for (String branch : maxLoadPerTask.split("\n")) {
             String[] taskLoads = branch.split(";");
 
-            // Creates a continuous, unbounded stream of constant values (42L).
-            // Instead of manually controlling emission with Thread.sleep(), this uses Flink's
-            // built-in DataGeneratorSource
-            // with RateLimiterStrategy to achieve the same effect.
-            // The rate is dynamically calculated based on samplingIntervalMs.
+            /*
+             * Creates an unbounded stream that continuously emits the constant value 42L.
+             * Flink's DataGeneratorSource with RateLimiterStrategy is used to control the emission rate.
+             *
+             * Rate Calculation:
+             * - samplingIntervalMs / 10 gives maxSleepTimeMs, which represents the interval between emissions.
+             * - To determine the number of records emitted per second:
+             *      1000 / maxSleepTimeMs
+             *   Since 1000 ms equals 1 second, this formula calculates the emission rate.
+             *
+             * Example:
+             * - If samplingIntervalMs = 1000 ms:
+             *      maxSleepTimeMs = 100 ms
+             * - This results in:
+             *      1000 ms / 100 ms = 10 records per second.
+             *
+             * RateLimiterStrategy.perSecond((double) 1000 / ((double) samplingIntervalMs / 10))
+             * ensures this rate is maintained efficiently without blocking execution.
+             */
             DataStream<Long> stream =
                     env.fromSource(
                             new DataGeneratorSource<>(
