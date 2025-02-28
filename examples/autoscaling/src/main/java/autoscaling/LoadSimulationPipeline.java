@@ -18,12 +18,16 @@
 
 package autoscaling;
 
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
-import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.util.Collector;
 
 import org.slf4j.Logger;
@@ -74,8 +78,38 @@ public class LoadSimulationPipeline {
         for (String branch : maxLoadPerTask.split("\n")) {
             String[] taskLoads = branch.split(";");
 
+            /*
+             * Creates an unbounded stream that continuously emits the constant value 42L.
+             * Flink's DataGeneratorSource with RateLimiterStrategy is used to control the emission rate.
+             *
+             * Rate Calculation:
+             * - samplingIntervalMs / 10 gives maxSleepTimeMs, which represents the interval between emissions.
+             * - To determine the number of records emitted per second:
+             *      1000 / maxSleepTimeMs
+             *   Since 1000 ms equals 1 second, this formula calculates the emission rate.
+             *
+             * Example:
+             * - If samplingIntervalMs = 1000 ms:
+             *      maxSleepTimeMs = 100 ms
+             * - This results in:
+             *      1000 ms / 100 ms = 10 records per second.
+             *
+             * RateLimiterStrategy.perSecond((double) 1000 / ((double) samplingIntervalMs / 10))
+             * ensures this rate is maintained efficiently without blocking execution.
+             */
             DataStream<Long> stream =
-                    env.addSource(new ImpulseSource(samplingIntervalMs)).name("ImpulseSource");
+                    env.fromSource(
+                            new DataGeneratorSource<>(
+                                    (GeneratorFunction<Long, Long>)
+                                            (index) -> 42L, // Emits constant value 42
+                                    Long.MAX_VALUE, // Unbounded stream
+                                    RateLimiterStrategy.perSecond(
+                                            (double) 1000
+                                                    / ((double) samplingIntervalMs
+                                                            / 10)), // Controls rate
+                                    Types.LONG),
+                            WatermarkStrategy.noWatermarks(),
+                            "ImpulseSource (Using DataGeneratorSource)");
 
             for (String load : taskLoads) {
                 double maxLoad = Double.parseDouble(load);
@@ -95,31 +129,6 @@ public class LoadSimulationPipeline {
                 "Load Simulation (repeats after "
                         + Duration.of(repeatsAfterMs, ChronoUnit.MILLIS)
                         + ")");
-    }
-
-    private static class ImpulseSource implements SourceFunction<Long> {
-        private final int maxSleepTimeMs;
-        volatile boolean canceled;
-
-        public ImpulseSource(int samplingInterval) {
-            this.maxSleepTimeMs = samplingInterval / 10;
-        }
-
-        @Override
-        public void run(SourceContext<Long> sourceContext) throws Exception {
-            while (!canceled) {
-                synchronized (sourceContext.getCheckpointLock()) {
-                    sourceContext.collect(42L);
-                }
-                // Provide an impulse to keep the load simulation active
-                Thread.sleep(maxSleepTimeMs);
-            }
-        }
-
-        @Override
-        public void cancel() {
-            canceled = true;
-        }
     }
 
     private static class LoadSimulationFn extends RichFlatMapFunction<Long, Long> {
