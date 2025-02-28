@@ -20,7 +20,11 @@ package autoscaling;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
@@ -74,11 +78,24 @@ public class LoadSimulationPipeline {
         for (String branch : maxLoadPerTask.split("\n")) {
             String[] taskLoads = branch.split(";");
 
+            // Creates a continuous, unbounded stream of constant values (42L).
+            // Instead of manually controlling emission with Thread.sleep(), this uses Flink's
+            // built-in DataGeneratorSource
+            // with RateLimiterStrategy to achieve the same effect.
+            // The rate is dynamically calculated based on samplingIntervalMs.
             DataStream<Long> stream =
                     env.fromSource(
-                            new ImpulseSource(samplingIntervalMs),
+                            new DataGeneratorSource<>(
+                                    (GeneratorFunction<Long, Long>)
+                                            (index) -> 42L, // Emits constant value 42
+                                    Long.MAX_VALUE, // Unbounded stream
+                                    RateLimiterStrategy.perSecond(
+                                            (double) 1000
+                                                    / ((double) samplingIntervalMs
+                                                            / 10)), // Controls rate
+                                    Types.LONG),
                             WatermarkStrategy.noWatermarks(),
-                            "ImpulseSource");
+                            "ImpulseSource (Using DataGeneratorSource)");
 
             for (String load : taskLoads) {
                 double maxLoad = Double.parseDouble(load);
