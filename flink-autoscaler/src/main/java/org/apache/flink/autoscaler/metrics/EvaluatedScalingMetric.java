@@ -40,4 +40,10 @@ public class EvaluatedScalingMetric {
     public static EvaluatedScalingMetric avg(double average) {
         return new EvaluatedScalingMetric(Double.NaN, average);
     }
+
+    public EvaluatedScalingMetric merge(EvaluatedScalingMetric other) {
+        return new EvaluatedScalingMetric(
+                !Double.isNaN(other.current) ? other.current : this.current,
+                !Double.isNaN(other.average) ? other.average : this.average);
+    }
 }

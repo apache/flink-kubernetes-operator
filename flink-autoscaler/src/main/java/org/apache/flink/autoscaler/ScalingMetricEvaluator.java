@@ -25,6 +25,7 @@ import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookSession;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
@@ -72,7 +73,10 @@ public class ScalingMetricEvaluator {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     public EvaluatedMetrics evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
+            Configuration conf,
+            CollectedMetricHistory collectedMetrics,
+            Duration restartTime,
+            @Nullable ScalingMetricEvaluatorHookSession evaluatorHookSession) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -90,7 +94,8 @@ public class ScalingMetricEvaluator {
                             topology,
                             vertex,
                             processingBacklog,
-                            restartTime));
+                            restartTime,
+                            evaluatorHookSession));
         }
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
@@ -132,7 +137,8 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             JobVertexID vertex,
             boolean processingBacklog,
-            Duration restartTime) {
+            Duration restartTime,
+            @Nullable ScalingMetricEvaluatorHookSession evaluatorHookSession) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -150,31 +156,61 @@ public class ScalingMetricEvaluator {
                 scalingOutput,
                 metricsHistory,
                 latestVertexMetrics,
-                evaluatedMetrics);
+                evaluatedMetrics,
+                evaluatorHookSession);
 
         double busyTimeAvg =
                 computeBusyTimeAvg(conf, metricsHistory, vertex, vertexInfo.getParallelism());
-        evaluatedMetrics.put(
+
+        putAndEvaluateHook(
                 TRUE_PROCESSING_RATE,
                 EvaluatedScalingMetric.avg(
                         computeTrueProcessingRate(
-                                busyTimeAvg, inputRateAvg, metricsHistory, vertex, conf)));
+                                busyTimeAvg, inputRateAvg, metricsHistory, vertex, conf)),
+                evaluatedMetrics,
+                vertex,
+                evaluatorHookSession);
 
-        evaluatedMetrics.put(LOAD, EvaluatedScalingMetric.avg(busyTimeAvg / 1000.));
+        putAndEvaluateHook(
+                LOAD,
+                EvaluatedScalingMetric.avg(busyTimeAvg / 1000.),
+                evaluatedMetrics,
+                vertex,
+                evaluatorHookSession);
 
         Optional.ofNullable(latestVertexMetrics.get(LAG))
-                .ifPresent(l -> evaluatedMetrics.put(LAG, EvaluatedScalingMetric.of(l)));
+                .ifPresent(
+                        l ->
+                                putAndEvaluateHook(
+                                        LAG,
+                                        EvaluatedScalingMetric.of(l),
+                                        evaluatedMetrics,
+                                        vertex,
+                                        evaluatorHookSession));
 
-        evaluatedMetrics.put(PARALLELISM, EvaluatedScalingMetric.of(vertexInfo.getParallelism()));
+        putAndEvaluateHook(
+                PARALLELISM,
+                EvaluatedScalingMetric.of(vertexInfo.getParallelism()),
+                evaluatedMetrics,
+                vertex,
+                evaluatorHookSession);
 
-        evaluatedMetrics.put(
-                MAX_PARALLELISM, EvaluatedScalingMetric.of(vertexInfo.getMaxParallelism()));
+        putAndEvaluateHook(
+                MAX_PARALLELISM,
+                EvaluatedScalingMetric.of(vertexInfo.getMaxParallelism()),
+                evaluatedMetrics,
+                vertex,
+                evaluatorHookSession);
 
-        evaluatedMetrics.put(
+        putAndEvaluateHook(
                 NUM_SOURCE_PARTITIONS,
-                EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()));
+                EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()),
+                evaluatedMetrics,
+                vertex,
+                evaluatorHookSession);
 
-        computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
+        computeProcessingRateThresholds(
+                evaluatedMetrics, conf, processingBacklog, restartTime, evaluatorHookSession);
         return evaluatedMetrics;
     }
 
@@ -284,7 +320,8 @@ public class ScalingMetricEvaluator {
             Map<ScalingMetric, EvaluatedScalingMetric> metrics,
             Configuration conf,
             boolean processingBacklog,
-            Duration restartTime) {
+            Duration restartTime,
+            @Nullable ScalingMetricEvaluatorHookSession evaluatorHookSession) {
 
         double targetUtilization = conf.get(UTILIZATION_TARGET);
         double utilizationBoundary = conf.get(TARGET_UTILIZATION_BOUNDARY);
@@ -314,8 +351,18 @@ public class ScalingMetricEvaluator {
                 AutoScalerUtils.getTargetProcessingCapacity(
                         metrics, conf, lowerUtilization, true, restartTime);
 
-        metrics.put(SCALE_UP_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleUpThreshold));
-        metrics.put(SCALE_DOWN_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleDownThreshold));
+        putAndEvaluateHook(
+                SCALE_UP_RATE_THRESHOLD,
+                EvaluatedScalingMetric.of(scaleUpThreshold),
+                metrics,
+                null,
+                evaluatorHookSession);
+        putAndEvaluateHook(
+                SCALE_DOWN_RATE_THRESHOLD,
+                EvaluatedScalingMetric.of(scaleDownThreshold),
+                metrics,
+                null,
+                evaluatorHookSession);
     }
 
     private void computeTargetDataRate(
@@ -326,7 +373,8 @@ public class ScalingMetricEvaluator {
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> alreadyEvaluated,
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             Map<ScalingMetric, Double> latestVertexMetrics,
-            Map<ScalingMetric, EvaluatedScalingMetric> out) {
+            Map<ScalingMetric, EvaluatedScalingMetric> out,
+            @Nullable ScalingMetricEvaluatorHookSession evaluatorHookSession) {
 
         if (topology.isSource(vertex)) {
             double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
@@ -338,7 +386,12 @@ public class ScalingMetricEvaluator {
                         "Cannot evaluate metrics without ingestion rate information");
             }
 
-            out.put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(ingestionDataRate));
+            putAndEvaluateHook(
+                    TARGET_DATA_RATE,
+                    EvaluatedScalingMetric.avg(ingestionDataRate),
+                    out,
+                    vertex,
+                    evaluatorHookSession);
 
             double lag = latestVertexMetrics.getOrDefault(LAG, 0.);
             double catchUpInputRate = catchUpTargetSec == 0 ? 0 : lag / catchUpTargetSec;
@@ -348,7 +401,13 @@ public class ScalingMetricEvaluator {
                         vertex,
                         catchUpInputRate);
             }
-            out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpInputRate));
+
+            putAndEvaluateHook(
+                    CATCH_UP_DATA_RATE,
+                    EvaluatedScalingMetric.of(catchUpInputRate),
+                    out,
+                    vertex,
+                    evaluatorHookSession);
         } else {
             var inputs = topology.get(vertex).getInputs().keySet();
             double sumAvgTargetRate = 0;
@@ -367,8 +426,18 @@ public class ScalingMetricEvaluator {
                 sumCatchUpDataRate +=
                         inputEvaluatedMetrics.get(CATCH_UP_DATA_RATE).getCurrent() * outputRatio;
             }
-            out.put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(sumAvgTargetRate));
-            out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(sumCatchUpDataRate));
+            putAndEvaluateHook(
+                    TARGET_DATA_RATE,
+                    EvaluatedScalingMetric.avg(sumAvgTargetRate),
+                    out,
+                    vertex,
+                    evaluatorHookSession);
+            putAndEvaluateHook(
+                    CATCH_UP_DATA_RATE,
+                    EvaluatedScalingMetric.of(sumCatchUpDataRate),
+                    out,
+                    vertex,
+                    evaluatorHookSession);
         }
     }
 
@@ -584,5 +653,34 @@ public class ScalingMetricEvaluator {
                 from,
                 to);
         return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
+    }
+
+    private static void putAndEvaluateHook(
+            ScalingMetric scalingMetric,
+            EvaluatedScalingMetric evaluatedScalingMetric,
+            Map<ScalingMetric, EvaluatedScalingMetric> out,
+            @Nullable JobVertexID vertex,
+            @Nullable ScalingMetricEvaluatorHookSession evaluatorHookSession) {
+
+        out.put(scalingMetric, evaluatedScalingMetric);
+
+        Optional<EvaluatedScalingMetric> evaluatedMetricFromHook =
+                Optional.ofNullable(evaluatorHookSession)
+                        .map(ScalingMetricEvaluatorHookSession::getEvaluatorHook)
+                        .flatMap(
+                                hook ->
+                                        Optional.ofNullable(
+                                                        evaluatorHookSession
+                                                                .getEvaluatorHookContext())
+                                                .map(
+                                                        ctx ->
+                                                                hook.evaluate(
+                                                                        scalingMetric,
+                                                                        evaluatedScalingMetric,
+                                                                        ctx,
+                                                                        vertex)));
+
+        evaluatedMetricFromHook.ifPresent(
+                metric -> out.put(scalingMetric, evaluatedScalingMetric.merge(metric)));
     }
 }
