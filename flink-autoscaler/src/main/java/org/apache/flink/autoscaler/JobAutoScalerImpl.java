@@ -24,8 +24,13 @@ import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHook;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookConfig;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookContext;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookSession;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.util.Preconditions;
@@ -36,13 +41,16 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_METRIC_EVALUATOR_HOOK_NAME;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingTracking;
+import static org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookOptions.SCALING_METRIC_EVALUATOR_HOOK_CLASS;
 
 /** The default implementation of {@link JobAutoScaler}. */
 public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -58,6 +66,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final ScalingRealizer<KEY, Context> scalingRealizer;
     private final AutoScalerStateStore<KEY, Context> stateStore;
+    private final Map<String, ScalingMetricEvaluatorHook> scalingMetricEvaluatorHooks;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -73,13 +82,15 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             ScalingExecutor<KEY, Context> scalingExecutor,
             AutoScalerEventHandler<KEY, Context> eventHandler,
             ScalingRealizer<KEY, Context> scalingRealizer,
-            AutoScalerStateStore<KEY, Context> stateStore) {
+            AutoScalerStateStore<KEY, Context> stateStore,
+            Map<String, ScalingMetricEvaluatorHook> scalingMetricEvaluatorHooks) {
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
         this.eventHandler = eventHandler;
         this.scalingRealizer = scalingRealizer;
         this.stateStore = stateStore;
+        this.scalingMetricEvaluatorHooks = scalingMetricEvaluatorHooks;
     }
 
     @Override
@@ -203,8 +214,15 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         // Scaling tracking data contains previous restart times that are taken into account
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(ctx.getConfiguration());
+        var scalingMetricEvaluatorHookSession =
+                prepareScalingMetricEvaluatorHookSession(ctx, jobTopology);
+
         var evaluatedMetrics =
-                evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
+                evaluator.evaluate(
+                        ctx.getConfiguration(),
+                        collectedMetrics,
+                        restartTime,
+                        scalingMetricEvaluatorHookSession);
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
         lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
 
@@ -258,5 +276,39 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         this.clock = Preconditions.checkNotNull(clock);
         this.metricsCollector.setClock(clock);
         this.scalingExecutor.setClock(clock);
+    }
+
+    private ScalingMetricEvaluatorHookSession prepareScalingMetricEvaluatorHookSession(
+            Context ctx, JobTopology topology) {
+        var scalingMetricEvaluatorHookName =
+                ctx.getConfiguration().get(SCALING_METRIC_EVALUATOR_HOOK_NAME);
+        var scalingMetricEvaluatorHookDelegationConf =
+                AutoScalerOptions.forScalingMetricEvaluatorHook(
+                        ctx.getConfiguration(), scalingMetricEvaluatorHookName);
+
+        ScalingMetricEvaluatorHookConfig scalingMetricEvaluatorHookConfig =
+                new ScalingMetricEvaluatorHookConfig();
+        scalingMetricEvaluatorHookDelegationConf.addAllToProperties(
+                scalingMetricEvaluatorHookConfig);
+
+        return Optional.ofNullable(
+                        scalingMetricEvaluatorHookConfig.getString(
+                                SCALING_METRIC_EVALUATOR_HOOK_CLASS.key(), ""))
+                .filter(hookClass -> !hookClass.isBlank())
+                .map(
+                        hookClass ->
+                                new ScalingMetricEvaluatorHookContext(
+                                        topology,
+                                        hookClass,
+                                        scalingMetricEvaluatorHookName,
+                                        scalingMetricEvaluatorHookConfig))
+                .map(
+                        context ->
+                                new ScalingMetricEvaluatorHookSession(
+                                        this.scalingMetricEvaluatorHooks.get(
+                                                context.getEvaluatorHookClass()),
+                                        context))
+                .filter(session -> session.getEvaluatorHook() != null)
+                .orElse(null);
     }
 }
