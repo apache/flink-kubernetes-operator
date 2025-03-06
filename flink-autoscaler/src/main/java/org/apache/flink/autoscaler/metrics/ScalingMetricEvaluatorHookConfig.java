@@ -20,6 +20,12 @@ package org.apache.flink.autoscaler.metrics;
 
 import java.util.Properties;
 
+/**
+ * A configuration class for {@link ScalingMetricEvaluatorHook}, extending {@link Properties}.
+ *
+ * <p>This class provides utility methods for retrieving configuration values from properties,
+ * including string and integer values, with support for default values.
+ */
 public class ScalingMetricEvaluatorHookConfig extends Properties {
     public String getString(String key, String defaultValue) {
         return getProperty(key, defaultValue);

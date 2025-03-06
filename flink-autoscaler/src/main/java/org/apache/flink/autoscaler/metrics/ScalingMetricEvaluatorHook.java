@@ -23,7 +23,24 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
+/**
+ * A hook interface for evaluating scaling metrics in the Flink Autoscaler. Implementations of this
+ * interface can modify or override the default scaling metric evaluation logic.
+ *
+ * <p>Hooks implementing this interface are loaded as plugins.
+ */
 public interface ScalingMetricEvaluatorHook extends Plugin {
+
+    /**
+     * Evaluates the given scaling metric and provides a new {@link EvaluatedScalingMetric}.
+     *
+     * @param scalingMetric The scaling metric being evaluated.
+     * @param evaluatedScalingMetric The currently evaluated scaling metric by autoscaler.
+     * @param evaluatorHookContext Context containing additional metadata about the evaluation.
+     * @param vertex The job vertex ID associated with the metric, or {@code null} if not
+     *     applicable.
+     * @return The evaluated scaling metric from the hook.
+     */
     EvaluatedScalingMetric evaluate(
             ScalingMetric scalingMetric,
             EvaluatedScalingMetric evaluatedScalingMetric,

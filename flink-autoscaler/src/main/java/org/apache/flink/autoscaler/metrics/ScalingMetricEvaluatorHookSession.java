@@ -20,11 +20,27 @@ package org.apache.flink.autoscaler.metrics;
 
 import lombok.Getter;
 
+/**
+ * Represents a session for a {@link ScalingMetricEvaluatorHook}.
+ *
+ * <p>This class encapsulates an evaluator hook instance along with its associated context,
+ * providing a structured way to manage scaling metric evaluations within a session.
+ */
 @Getter
 public class ScalingMetricEvaluatorHookSession {
+
+    /** The scaling metric evaluator hook instance. */
     private final ScalingMetricEvaluatorHook evaluatorHook;
+
+    /** The context associated with the evaluator hook. */
     private final ScalingMetricEvaluatorHookContext evaluatorHookContext;
 
+    /**
+     * Constructs a new session for the given evaluator hook and its context.
+     *
+     * @param evaluatorHook the scaling metric evaluator hook.
+     * @param evaluatorHookContext the context providing metadata for evaluation.
+     */
     public ScalingMetricEvaluatorHookSession(
             ScalingMetricEvaluatorHook evaluatorHook,
             ScalingMetricEvaluatorHookContext evaluatorHookContext) {

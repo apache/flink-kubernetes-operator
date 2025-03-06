@@ -30,10 +30,18 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+/** Scaling metric evaluator hook utilities. */
 public class ScalingMetricEvaluatorHookUtils {
     private static final Logger LOG =
             LoggerFactory.getLogger(ScalingMetricEvaluatorHookUtils.class);
 
+    /**
+     * discovers scaling metric evaluator hooks.
+     *
+     * @param configManager Flink Config manager
+     * @return A map of discovered scaling metric evaluator hooks, where the key is the fully
+     *     qualified class name of the hook and the value is the corresponding instance.
+     */
     public static Map<String, ScalingMetricEvaluatorHook> discoverScalingMetricEvaluatorHooks(
             FlinkConfigManager configManager) {
         var conf = configManager.getDefaultConfig();

@@ -22,14 +22,40 @@ import org.apache.flink.autoscaler.topology.JobTopology;
 
 import lombok.Getter;
 
+/**
+ * Context class providing metadata and configuration details for a {@link
+ * ScalingMetricEvaluatorHook}.
+ *
+ * <p>This class encapsulates information about the Flink job topology, the hook's name, its
+ * configuration, and the implementing class. It is passed to scaling metric evaluators to provide
+ * context for their decision-making process.
+ *
+ * @see ScalingMetricEvaluatorHook
+ */
 @Getter
 public class ScalingMetricEvaluatorHookContext {
 
+    /** The job topology representing the structure of the Flink job. */
     private final JobTopology topology;
+
+    /** The name of the evaluator hook. */
     private final String evaluatorHookName;
+
+    /** The configuration associated with the evaluator hook. */
     private final ScalingMetricEvaluatorHookConfig evaluatorHookConfig;
+
+    /** The fully qualified class name of the evaluator hook implementation. */
     private final String evaluatorHookClass;
 
+    /**
+     * Constructs a new {@code ScalingMetricEvaluatorHookContext}.
+     *
+     * @param topology The job topology representing the structure of the Flink job.
+     * @param evaluatorHookClass The fully qualified class name of the evaluator hook
+     *     implementation.
+     * @param evaluatorHookName The name of the evaluator hook.
+     * @param evaluatorHookConfig The configuration for the evaluator hook.
+     */
     public ScalingMetricEvaluatorHookContext(
             JobTopology topology,
             String evaluatorHookClass,

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.ConfigOption;
 
 import static org.apache.flink.configuration.ConfigOptions.key;
 
+/** Defines configuration options for the {@link ScalingMetricEvaluatorHook}. */
 public class ScalingMetricEvaluatorHookOptions {
     public static final ConfigOption<String> SCALING_METRIC_EVALUATOR_HOOK_CLASS =
             key("class")
