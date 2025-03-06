@@ -82,20 +82,32 @@ public class LoadSimulationPipeline {
              * Creates an unbounded stream that continuously emits the constant value 42L.
              * Flink's DataGeneratorSource with RateLimiterStrategy is used to control the emission rate.
              *
-             * Rate Calculation:
-             * - samplingIntervalMs / 10 gives maxSleepTimeMs, which represents the interval between emissions.
-             * - To determine the number of records emitted per second:
-             *      1000 / maxSleepTimeMs
-             *   Since 1000 ms equals 1 second, this formula calculates the emission rate.
+             * Emission Rate Logic:
+             * - The goal is to generate a fixed number of impulses per sampling interval.
+             * - `samplingIntervalMs` defines the duration of one sampling interval in milliseconds.
+             * - We define `IMPULSES_PER_SAMPLING_INTERVAL = 10`, meaning that for every sampling interval,
+             *   exactly 10 impulses should be generated.
              *
-             * Example:
-             * - If samplingIntervalMs = 1000 ms:
-             *      maxSleepTimeMs = 100 ms
-             * - This results in:
-             *      1000 ms / 100 ms = 10 records per second.
+             * To calculate the total number of records emitted per second:
+             * 1. Determine how many sampling intervals fit within one second:
+             *      samplingIntervalsPerSecond = 1000 / samplingIntervalMs;
+             * 2. Multiply this by the number of impulses per interval to get the total rate:
+             *      impulsesPerSecond = IMPULSES_PER_SAMPLING_INTERVAL * samplingIntervalsPerSecond;
              *
-             * RateLimiterStrategy.perSecond((double) 1000 / ((double) samplingIntervalMs / 10))
-             * ensures this rate is maintained efficiently without blocking execution.
+             * Example Calculations:
+             * - If `samplingIntervalMs = 1000 ms`:
+             *      - `samplingIntervalsPerSecond = 1000 / 1000 = 1`
+             *      - `impulsesPerSecond = 10 * 1 = 10 records per second`
+             * - If `samplingIntervalMs = 500 ms`:
+             *      - `samplingIntervalsPerSecond = 1000 / 500 = 2`
+             *      - `impulsesPerSecond = 10 * 2 = 20 records per second`
+             * - If `samplingIntervalMs = 2000 ms`:
+             *      - `samplingIntervalsPerSecond = 1000 / 2000 = 0.5`
+             *      - `impulsesPerSecond = 10 * 0.5 = 5 records per second`
+             *
+             * This approach ensures that the number of records emitted dynamically scales
+             * based on the sampling interval while maintaining the target of 10 impulses per interval.
+             * RateLimiterStrategy internally distributes these emissions efficiently over time.
              */
             DataStream<Long> stream =
                     env.fromSource(
@@ -109,7 +121,7 @@ public class LoadSimulationPipeline {
                                                             / 10)), // Controls rate
                                     Types.LONG),
                             WatermarkStrategy.noWatermarks(),
-                            "ImpulseSource (Using DataGeneratorSource)");
+                            "ImpulseSource");
 
             for (String load : taskLoads) {
                 double maxLoad = Double.parseDouble(load);
