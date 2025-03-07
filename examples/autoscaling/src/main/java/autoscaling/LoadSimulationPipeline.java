@@ -94,20 +94,9 @@ public class LoadSimulationPipeline {
              * 2. Multiply this by the number of impulses per interval to get the total rate:
              *      impulsesPerSecond = IMPULSES_PER_SAMPLING_INTERVAL * samplingIntervalsPerSecond;
              *
-             * Example Calculations:
-             * - If `samplingIntervalMs = 1000 ms`:
-             *      - `samplingIntervalsPerSecond = 1000 / 1000 = 1`
-             *      - `impulsesPerSecond = 10 * 1 = 10 records per second`
-             * - If `samplingIntervalMs = 500 ms`:
-             *      - `samplingIntervalsPerSecond = 1000 / 500 = 2`
-             *      - `impulsesPerSecond = 10 * 2 = 20 records per second`
-             * - If `samplingIntervalMs = 2000 ms`:
-             *      - `samplingIntervalsPerSecond = 1000 / 2000 = 0.5`
-             *      - `impulsesPerSecond = 10 * 0.5 = 5 records per second`
-             *
-             * This approach ensures that the number of records emitted dynamically scales
-             * based on the sampling interval while maintaining the target of 10 impulses per interval.
-             * RateLimiterStrategy internally distributes these emissions efficiently over time.
+             * Example:
+             * - If `samplingIntervalMs = 500 ms` and `IMPULSES_PER_SAMPLING_INTERVAL = 10`:
+             *      impulsesPerSecond = (1000 / 500) * 10 = 2 * 10 = 20 records per second.
              */
             DataStream<Long> stream =
                     env.fromSource(
@@ -116,9 +105,7 @@ public class LoadSimulationPipeline {
                                             (index) -> 42L, // Emits constant value 42
                                     Long.MAX_VALUE, // Unbounded stream
                                     RateLimiterStrategy.perSecond(
-                                            (double) 1000
-                                                    / ((double) samplingIntervalMs
-                                                            / 10)), // Controls rate
+                                            (1000.0 / samplingIntervalMs) * 10), // Controls rate
                                     Types.LONG),
                             WatermarkStrategy.noWatermarks(),
                             "ImpulseSource");
