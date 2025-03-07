@@ -278,7 +278,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         this.scalingExecutor.setClock(clock);
     }
 
-    private ScalingMetricEvaluatorHookSession prepareScalingMetricEvaluatorHookSession(
+    @VisibleForTesting
+    protected ScalingMetricEvaluatorHookSession prepareScalingMetricEvaluatorHookSession(
             Context ctx, JobTopology topology) {
         var scalingMetricEvaluatorHookName =
                 ctx.getConfiguration().get(SCALING_METRIC_EVALUATOR_HOOK_NAME);

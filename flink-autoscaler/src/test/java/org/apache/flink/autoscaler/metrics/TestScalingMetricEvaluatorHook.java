@@ -30,7 +30,9 @@ public class TestScalingMetricEvaluatorHook implements ScalingMetricEvaluatorHoo
             EvaluatedScalingMetric evaluatedScalingMetric,
             ScalingMetricEvaluatorHookContext evaluatorHookContext,
             @Nullable JobVertexID vertex) {
-        if (vertex != null && evaluatorHookContext.getTopology().isSource(vertex) && scalingMetric.equals(ScalingMetric.TARGET_DATA_RATE)) {
+        if (vertex != null
+                && evaluatorHookContext.getTopology().isSource(vertex)
+                && scalingMetric.equals(ScalingMetric.TARGET_DATA_RATE)) {
             return EvaluatedScalingMetric.avg(100000.0);
         }
         return evaluatedScalingMetric;

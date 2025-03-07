@@ -31,6 +31,7 @@ import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -69,7 +70,6 @@ public class AutoScalerEvaluatorHookTest {
 
         var scalingMetricEvaluatorHooks = createTestScalingMetricEvaluatorHooks();
 
-
         source1 = new JobVertexID();
         sink = new JobVertexID();
 
@@ -98,19 +98,19 @@ public class AutoScalerEvaluatorHookTest {
         defaultConf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         defaultConf.set(AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD, Duration.ofSeconds(1));
 
-
-        defaultConf.set(AutoScalerOptions.SCALING_METRIC_EVALUATOR_HOOK_NAME, testEvaluatorHookName);
+        defaultConf.set(
+                AutoScalerOptions.SCALING_METRIC_EVALUATOR_HOOK_NAME, testEvaluatorHookName);
 
         defaultConf.set(
                 ConfigOptions.key(
                                 AutoScalerOptions.AUTOSCALER_CONF_PREFIX
-                                        + AutoScalerOptions.SCALING_METRIC_EVALUATOR_HOOK_CONF_PREFIX
+                                        + AutoScalerOptions
+                                                .SCALING_METRIC_EVALUATOR_HOOK_CONF_PREFIX
                                         + testEvaluatorHookName // Hook name
                                         + ".class")
                         .stringType()
                         .noDefaultValue(),
-                testEvaluatorHookClassName
-        );
+                testEvaluatorHookClassName);
 
         autoscaler =
                 new JobAutoScalerImpl<>(
@@ -179,7 +179,7 @@ public class AutoScalerEvaluatorHookTest {
         var testScalingMetricEvaluatorHook = new TestScalingMetricEvaluatorHook();
         testScalingMetricEvaluatorHook.configure(new Configuration());
         return Map.of(
-                testScalingMetricEvaluatorHook.getClass().getName(), testScalingMetricEvaluatorHook
-        );
+                testScalingMetricEvaluatorHook.getClass().getName(),
+                testScalingMetricEvaluatorHook);
     }
 }

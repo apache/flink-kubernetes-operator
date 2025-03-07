@@ -24,11 +24,10 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookContext;
 import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookConfig;
-import org.apache.flink.autoscaler.metrics.TestScalingMetricEvaluatorHook;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookContext;
 import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookSession;
-
+import org.apache.flink.autoscaler.metrics.TestScalingMetricEvaluatorHook;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
@@ -270,6 +269,100 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 EvaluatedScalingMetric.avg(200),
                 evaluatedMetrics.get(sink).get(ScalingMetric.TARGET_DATA_RATE));
+    }
+
+    @Test
+    public void testEvaluateWithHook() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        0.,
+                                        ScalingMetric.LOAD,
+                                        .1),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 0., ScalingMetric.LOAD, .1)),
+                        Map.of()));
+
+        metricHistory.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        100.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        200.,
+                                        ScalingMetric.LOAD,
+                                        .4),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 200., ScalingMetric.LOAD, .2)),
+                        Map.of()));
+
+        var conf = new Configuration();
+
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
+        TestScalingMetricEvaluatorHook evaluatorHook = new TestScalingMetricEvaluatorHook();
+        ScalingMetricEvaluatorHookContext mockContext =
+                new ScalingMetricEvaluatorHookContext(
+                        topology,
+                        TestScalingMetricEvaluatorHook.class.getName(),
+                        "mockHook",
+                        new ScalingMetricEvaluatorHookConfig());
+
+        var evaluatedMetrics =
+                evaluator
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
+                                Duration.ZERO,
+                                new ScalingMetricEvaluatorHookSession(evaluatorHook, mockContext))
+                        .getVertexMetrics();
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(.25),
+                evaluatedMetrics.get(source).get(ScalingMetric.LOAD));
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(.15),
+                evaluatedMetrics.get(sink).get(ScalingMetric.LOAD));
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(100000.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.CATCH_UP_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.avg(200000.0),
+                evaluatedMetrics.get(sink).get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(sink).get(ScalingMetric.CATCH_UP_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.LAG));
+        assertFalse(evaluatedMetrics.get(sink).containsKey(ScalingMetric.LAG));
     }
 
     @Test
@@ -860,15 +953,24 @@ public class ScalingMetricEvaluatorTest {
 
         TestScalingMetricEvaluatorHook evaluatorHook = new TestScalingMetricEvaluatorHook();
         var source = new JobVertexID();
-        var scalingMetricEvaluatorHookSession = getScalingMetricEvaluatorHookSession(source, evaluatorHook);
+        var scalingMetricEvaluatorHookSession =
+                getScalingMetricEvaluatorHookSession(source, evaluatorHook);
 
-        putAndEvaluateHook(scalingMetric, initialMetric, evaluatedMetrics, source, scalingMetricEvaluatorHookSession);
+        putAndEvaluateHook(
+                scalingMetric,
+                initialMetric,
+                evaluatedMetrics,
+                source,
+                scalingMetricEvaluatorHookSession);
 
         assertTrue(evaluatedMetrics.containsKey(scalingMetric));
-        assertEquals(100000.0, evaluatedMetrics.get(scalingMetric).getAverage()); // No change in metric expected
+        assertEquals(
+                100000.0,
+                evaluatedMetrics.get(scalingMetric).getAverage()); // No change in metric expected
     }
 
-    private static @NotNull ScalingMetricEvaluatorHookSession getScalingMetricEvaluatorHookSession(JobVertexID source, TestScalingMetricEvaluatorHook evaluatorHook) {
+    private static @NotNull ScalingMetricEvaluatorHookSession getScalingMetricEvaluatorHookSession(
+            JobVertexID source, TestScalingMetricEvaluatorHook evaluatorHook) {
         var sink = new JobVertexID();
 
         var topology =
@@ -876,13 +978,12 @@ public class ScalingMetricEvaluatorTest {
                         new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
                         new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
 
-        // Mock ScalingMetricEvaluatorHookContext
-        ScalingMetricEvaluatorHookContext mockContext = new ScalingMetricEvaluatorHookContext(
-                topology,
-                TestScalingMetricEvaluatorHook.class.getName(),
-                "mockHook",
-                new ScalingMetricEvaluatorHookConfig()
-        );
+        ScalingMetricEvaluatorHookContext mockContext =
+                new ScalingMetricEvaluatorHookContext(
+                        topology,
+                        TestScalingMetricEvaluatorHook.class.getName(),
+                        "mockHook",
+                        new ScalingMetricEvaluatorHookConfig());
 
         return new ScalingMetricEvaluatorHookSession(evaluatorHook, mockContext);
     }

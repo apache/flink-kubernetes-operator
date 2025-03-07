@@ -24,7 +24,10 @@ import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHook;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookSession;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
+import org.apache.flink.autoscaler.metrics.TestScalingMetricEvaluatorHook;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
@@ -32,6 +35,8 @@ import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.Gauge;
@@ -53,6 +58,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static java.util.Map.entry;
@@ -61,9 +67,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_EN
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /** Tests for JobAutoScalerImpl. */
 public class JobAutoScalerImplTest {
@@ -454,5 +458,126 @@ public class JobAutoScalerImplTest {
     @Nullable
     private TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> getEvent() {
         return scalingRealizer.events.poll();
+    }
+
+    @Test
+    void testPrepareScalingMetricEvaluatorHookSessionWithHookConfigured() {
+        var topology = new JobTopology();
+
+        ScalingMetricEvaluatorHook testScalingMetricEvaluatorHook =
+                new TestScalingMetricEvaluatorHook();
+        testScalingMetricEvaluatorHook.configure(new Configuration());
+        var testEvaluatorHooks =
+                Map.of(
+                        testScalingMetricEvaluatorHook.getClass().getName(),
+                        testScalingMetricEvaluatorHook);
+
+        String testEvaluatorHookName = "testHook";
+        String testEvaluatorHookClassName = TestScalingMetricEvaluatorHook.class.getName();
+
+        var defaultConf = context.getConfiguration();
+        defaultConf.set(
+                AutoScalerOptions.SCALING_METRIC_EVALUATOR_HOOK_NAME, testEvaluatorHookName);
+
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                                        + AutoScalerOptions
+                                                .SCALING_METRIC_EVALUATOR_HOOK_CONF_PREFIX
+                                        + testEvaluatorHookName // Hook name
+                                        + ".class")
+                        .stringType()
+                        .noDefaultValue(),
+                testEvaluatorHookClassName);
+
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                                        + AutoScalerOptions
+                                                .SCALING_METRIC_EVALUATOR_HOOK_CONF_PREFIX
+                                        + testEvaluatorHookName // Hook name
+                                        + ".k1")
+                        .stringType()
+                        .noDefaultValue(),
+                "v1");
+
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                                        + AutoScalerOptions
+                                                .SCALING_METRIC_EVALUATOR_HOOK_CONF_PREFIX
+                                        + testEvaluatorHookName // Hook name
+                                        + ".k2")
+                        .stringType()
+                        .noDefaultValue(),
+                "v2");
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        testEvaluatorHooks);
+
+        ScalingMetricEvaluatorHookSession session =
+                autoscaler.prepareScalingMetricEvaluatorHookSession(context, topology);
+        Assertions.assertNotNull(session);
+        assertInstanceOf(ScalingMetricEvaluatorHookSession.class, session);
+        var evaluatorHookConfig = session.getEvaluatorHookContext().getEvaluatorHookConfig();
+        assertNotNull(evaluatorHookConfig);
+        int expectedKeyCount = 3;
+        assertEquals(expectedKeyCount, evaluatorHookConfig.size());
+
+        Set<String> expectedKeys = Set.of("class", "k1", "k2");
+        assertTrue(evaluatorHookConfig.keySet().containsAll(expectedKeys));
+    }
+
+    @Test
+    void testPrepareScalingMetricEvaluatorHookSessionWithoutHook() {
+        var topology = new JobTopology();
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyMap());
+
+        ScalingMetricEvaluatorHookSession session =
+                autoscaler.prepareScalingMetricEvaluatorHookSession(context, topology);
+        assertNull(session);
+    }
+
+    @Test
+    void testPrepareScalingMetricEvaluatorHookSessionWithHookButNotConfigured() {
+        var topology = new JobTopology();
+
+        ScalingMetricEvaluatorHook testScalingMetricEvaluatorHook =
+                new TestScalingMetricEvaluatorHook();
+        testScalingMetricEvaluatorHook.configure(new Configuration());
+        var testEvaluatorHooks =
+                Map.of(
+                        testScalingMetricEvaluatorHook.getClass().getName(),
+                        testScalingMetricEvaluatorHook);
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        testEvaluatorHooks);
+
+        ScalingMetricEvaluatorHookSession session =
+                autoscaler.prepareScalingMetricEvaluatorHookSession(context, topology);
+        assertNull(session);
     }
 }
