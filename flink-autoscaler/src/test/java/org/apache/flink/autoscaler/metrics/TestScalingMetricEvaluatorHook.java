@@ -22,35 +22,15 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
-/**
- * Default implementation of {@link ScalingMetricEvaluatorHook}.
- *
- * <p>This hook provides a basic evaluation of scaling metrics. If the metric is {@link
- * ScalingMetric#TARGET_DATA_RATE}, it returns a fixed average value. Otherwise, it returns the
- * existing evaluated metric.
- */
-public class DefaultScalingMetricEvaluatorHook implements ScalingMetricEvaluatorHook {
-    /**
-     * Evaluates the given scaling metric and provides a new {@link EvaluatedScalingMetric}.
-     *
-     * <p>If the scaling metric is {@link ScalingMetric#TARGET_DATA_RATE}, this implementation
-     * returns a constant average value of 100000.0. For all other metrics, it returns the
-     * previously evaluated metric unchanged.
-     *
-     * @param scalingMetric The scaling metric being evaluated.
-     * @param evaluatedScalingMetric The currently evaluated scaling metric by autoscaler.
-     * @param evaluatorHookContext Context containing additional metadata about the evaluation.
-     * @param vertex The job vertex ID associated with the metric, or {@code null} if not
-     *     applicable.
-     * @return The evaluated scaling metric from the hook.
-     */
+/** Test implementation for {@link ScalingMetricEvaluatorHook}. */
+public class TestScalingMetricEvaluatorHook implements ScalingMetricEvaluatorHook {
     @Override
     public EvaluatedScalingMetric evaluate(
             ScalingMetric scalingMetric,
             EvaluatedScalingMetric evaluatedScalingMetric,
             ScalingMetricEvaluatorHookContext evaluatorHookContext,
             @Nullable JobVertexID vertex) {
-        if (scalingMetric.equals(ScalingMetric.TARGET_DATA_RATE)) {
+        if (vertex != null && evaluatorHookContext.getTopology().isSource(vertex) && scalingMetric.equals(ScalingMetric.TARGET_DATA_RATE)) {
             return EvaluatedScalingMetric.avg(100000.0);
         }
         return evaluatedScalingMetric;

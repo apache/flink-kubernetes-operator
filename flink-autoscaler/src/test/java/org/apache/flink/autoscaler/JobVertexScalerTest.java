@@ -1153,7 +1153,8 @@ public class JobVertexScalerTest {
                 new EvaluatedScalingMetric(trueProcessingRate, trueProcessingRate));
         metrics.put(ScalingMetric.GC_PRESSURE, EvaluatedScalingMetric.of(Double.NaN));
         metrics.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, EvaluatedScalingMetric.of(Double.NaN));
-        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf, false, restartTime);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(
+                metrics, conf, false, restartTime, null);
         return metrics;
     }
 }

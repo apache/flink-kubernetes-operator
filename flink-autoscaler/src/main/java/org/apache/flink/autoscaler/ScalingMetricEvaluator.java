@@ -655,7 +655,8 @@ public class ScalingMetricEvaluator {
         return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
     }
 
-    private static void putAndEvaluateHook(
+    @VisibleForTesting
+    protected static void putAndEvaluateHook(
             ScalingMetric scalingMetric,
             EvaluatedScalingMetric evaluatedScalingMetric,
             Map<ScalingMetric, EvaluatedScalingMetric> out,

@@ -111,7 +111,8 @@ public class JobAutoScalerImplTest {
                         scalingExecutor,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         autoscaler.scale(context);
 
@@ -147,7 +148,13 @@ public class JobAutoScalerImplTest {
     void testErrorReporting() throws Exception {
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyMap());
 
         autoscaler.scale(context);
         Assertions.assertEquals(
@@ -182,7 +189,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         // Should not produce an error
         autoscaler.scale(context);
@@ -219,7 +227,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         realizeParallelismOverridesWithExceptionsScalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         // Should produce an error
         autoscaler.scale(context);
@@ -236,7 +245,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         // Initially we should return empty overrides, do not crate any state
         assertThat(autoscaler.getParallelismOverrides(context)).isEmpty();
@@ -304,7 +314,13 @@ public class JobAutoScalerImplTest {
         var overrides = new HashMap<String, String>();
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore) {
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyMap()) {
                     public Map<String, String> getParallelismOverrides(
                             JobAutoScalerContext<JobID> ctx) {
                         return new HashMap<>(overrides);
@@ -354,7 +370,13 @@ public class JobAutoScalerImplTest {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyMap());
 
         // Initially we should return empty overrides, do not crate any state
         assertThat(stateStore.getConfigChanges(context).getOverrides()).isEmpty();
@@ -402,7 +424,13 @@ public class JobAutoScalerImplTest {
 
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyMap());
         autoscaler.scale(context);
 
         assertTrue(stateStore.getScalingHistory(context).isEmpty());

@@ -24,11 +24,17 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookContext;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookConfig;
+import org.apache.flink.autoscaler.metrics.TestScalingMetricEvaluatorHook;
+import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHookSession;
+
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -38,6 +44,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
+import static org.apache.flink.autoscaler.ScalingMetricEvaluator.putAndEvaluateHook;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKED_RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
@@ -112,7 +119,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
 
         assertEquals(
@@ -146,7 +154,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -169,7 +178,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -191,7 +201,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -250,7 +261,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(100),
@@ -833,9 +845,60 @@ public class ScalingMetricEvaluatorTest {
         map.put(ScalingMetric.TARGET_DATA_RATE, EvaluatedScalingMetric.avg(inputTargetRate));
         map.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
-        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf, catchingUp, restartTime);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(
+                map, conf, catchingUp, restartTime, null);
         return Tuple2.of(
                 map.get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
+    }
+
+    @Test
+    void testPutAndEvaluateHookWithEvaluator() {
+        var scalingMetric = ScalingMetric.TARGET_DATA_RATE;
+        EvaluatedScalingMetric initialMetric = EvaluatedScalingMetric.avg(200.0);
+        Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics = new HashMap<>();
+
+        TestScalingMetricEvaluatorHook evaluatorHook = new TestScalingMetricEvaluatorHook();
+        var source = new JobVertexID();
+        var scalingMetricEvaluatorHookSession = getScalingMetricEvaluatorHookSession(source, evaluatorHook);
+
+        putAndEvaluateHook(scalingMetric, initialMetric, evaluatedMetrics, source, scalingMetricEvaluatorHookSession);
+
+        assertTrue(evaluatedMetrics.containsKey(scalingMetric));
+        assertEquals(100000.0, evaluatedMetrics.get(scalingMetric).getAverage()); // No change in metric expected
+    }
+
+    private static @NotNull ScalingMetricEvaluatorHookSession getScalingMetricEvaluatorHookSession(JobVertexID source, TestScalingMetricEvaluatorHook evaluatorHook) {
+        var sink = new JobVertexID();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
+
+        // Mock ScalingMetricEvaluatorHookContext
+        ScalingMetricEvaluatorHookContext mockContext = new ScalingMetricEvaluatorHookContext(
+                topology,
+                TestScalingMetricEvaluatorHook.class.getName(),
+                "mockHook",
+                new ScalingMetricEvaluatorHookConfig()
+        );
+
+        return new ScalingMetricEvaluatorHookSession(evaluatorHook, mockContext);
+    }
+
+    @Test
+    void testPutAndEvaluateHookWithoutHookSession() {
+        ScalingMetric scalingMetric = ScalingMetric.LOAD;
+        EvaluatedScalingMetric initialMetric = EvaluatedScalingMetric.avg(200.0);
+        Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics = new HashMap<>();
+        JobVertexID vertex = new JobVertexID();
+
+        // Call the method without a hook session
+        putAndEvaluateHook(scalingMetric, initialMetric, evaluatedMetrics, vertex, null);
+
+        // Ensure the metric is stored as-is
+        assertTrue(evaluatedMetrics.containsKey(scalingMetric));
+        assertEquals(200.0, evaluatedMetrics.get(scalingMetric).getAverage(), 0.01);
     }
 }

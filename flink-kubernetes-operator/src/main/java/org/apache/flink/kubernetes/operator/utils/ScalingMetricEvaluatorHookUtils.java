@@ -18,7 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.autoscaler.metrics.DefaultScalingMetricEvaluatorHook;
 import org.apache.flink.autoscaler.metrics.ScalingMetricEvaluatorHook;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginUtils;
@@ -46,13 +45,6 @@ public class ScalingMetricEvaluatorHookUtils {
             FlinkConfigManager configManager) {
         var conf = configManager.getDefaultConfig();
         Map<String, ScalingMetricEvaluatorHook> scalingMetricEvaluatorHooks = new HashMap<>();
-
-        DefaultScalingMetricEvaluatorHook defaultScalingMetricEvaluatorHook =
-                new DefaultScalingMetricEvaluatorHook();
-        defaultScalingMetricEvaluatorHook.configure(conf);
-        scalingMetricEvaluatorHooks.put(
-                defaultScalingMetricEvaluatorHook.getClass().getName(),
-                defaultScalingMetricEvaluatorHook);
 
         PluginUtils.createPluginManagerFromRootFolder(conf)
                 .load(ScalingMetricEvaluatorHook.class)
