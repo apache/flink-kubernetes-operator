@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -984,7 +985,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         config.toMap()
                 .forEach(
                         (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
+                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                                 newConfig.setString(k, v);
                             }
                         });
