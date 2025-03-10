@@ -64,6 +64,11 @@ public class LoadSimulationPipeline {
 
     private static final Logger LOG = LoggerFactory.getLogger(LoadSimulationPipeline.class);
 
+    // Number of impulses (records) emitted per sampling interval.
+    // This value determines how many records should be generated within each `samplingIntervalMs`
+    // period.
+    private static final int IMPULSES_PER_SAMPLING_INTERVAL = 10;
+
     public static void main(String[] args) throws Exception {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.disableOperatorChaining();
@@ -105,7 +110,9 @@ public class LoadSimulationPipeline {
                                             (index) -> 42L, // Emits constant value 42
                                     Long.MAX_VALUE, // Unbounded stream
                                     RateLimiterStrategy.perSecond(
-                                            (1000.0 / samplingIntervalMs) * 10), // Controls rate
+                                            (1000.0 / samplingIntervalMs)
+                                                    * IMPULSES_PER_SAMPLING_INTERVAL), // Controls
+                                    // rate
                                     Types.LONG),
                             WatermarkStrategy.noWatermarks(),
                             "ImpulseSource");
