@@ -21,12 +21,15 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.autoscaler.metrics.CustomEvaluator;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.Test;
@@ -112,7 +115,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
 
         assertEquals(
@@ -146,7 +150,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -169,7 +174,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -191,7 +197,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(150),
@@ -250,7 +257,8 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                                Duration.ZERO,
+                                null)
                         .getVertexMetrics();
         assertEquals(
                 EvaluatedScalingMetric.avg(100),
@@ -258,6 +266,95 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 EvaluatedScalingMetric.avg(200),
                 evaluatedMetrics.get(sink).get(ScalingMetric.TARGET_DATA_RATE));
+    }
+
+    @Test
+    public void testEvaluateWithCustomEvaluator() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        0.,
+                                        ScalingMetric.LOAD,
+                                        .1),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 0., ScalingMetric.LOAD, .1)),
+                        Map.of()));
+
+        metricHistory.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        100.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        200.,
+                                        ScalingMetric.LOAD,
+                                        .4),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 200., ScalingMetric.LOAD, .2)),
+                        Map.of()));
+
+        var conf = new Configuration();
+
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
+        CustomEvaluator customEvaluator = new TestCustomEvaluator();
+        var customEvaluatorWithConfig = new Tuple2<>(customEvaluator, new Configuration());
+
+        var evaluatedMetrics =
+                evaluator
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
+                                Duration.ZERO,
+                                customEvaluatorWithConfig)
+                        .getVertexMetrics();
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(.25),
+                evaluatedMetrics.get(source).get(ScalingMetric.LOAD));
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(.15),
+                evaluatedMetrics.get(sink).get(ScalingMetric.LOAD));
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(100000.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.CATCH_UP_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.avg(200000.0),
+                evaluatedMetrics.get(sink).get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(sink).get(ScalingMetric.CATCH_UP_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(0.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.LAG));
+        assertFalse(evaluatedMetrics.get(sink).containsKey(ScalingMetric.LAG));
     }
 
     @Test
@@ -837,5 +934,159 @@ public class ScalingMetricEvaluatorTest {
         return Tuple2.of(
                 map.get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
+    }
+
+    @Test
+    public void testRunCustomEvaluator() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        0.,
+                                        ScalingMetric.LOAD,
+                                        .1),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 0., ScalingMetric.LOAD, .1)),
+                        Map.of()));
+
+        metricHistory.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        100.,
+                                        ScalingMetric.NUM_RECORDS_OUT,
+                                        200.,
+                                        ScalingMetric.LOAD,
+                                        .4),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 200., ScalingMetric.LOAD, .2)),
+                        Map.of()));
+
+        var conf = new Configuration();
+        CustomEvaluator customEvaluator = new TestCustomEvaluator();
+        var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
+
+        var testCustomEvaluationSession =
+                Tuple2.of(
+                        customEvaluator,
+                        new CustomEvaluator.Context(
+                                new UnmodifiableConfiguration(conf),
+                                Collections.unmodifiableSortedMap(metricHistory),
+                                Collections.unmodifiableMap(
+                                        new HashMap<
+                                                JobVertexID,
+                                                Map<ScalingMetric, EvaluatedScalingMetric>>()),
+                                topology,
+                                false,
+                                Duration.ZERO,
+                                new Configuration()));
+
+        var testCustomEvaluatorResult =
+                ScalingMetricEvaluator.runCustomEvaluator(
+                        source, evaluatedMetrics, testCustomEvaluationSession);
+
+        assertFalse(testCustomEvaluatorResult.isEmpty());
+
+        assertTrue(testCustomEvaluatorResult.containsKey(ScalingMetric.TARGET_DATA_RATE));
+
+        assertEquals(
+                EvaluatedScalingMetric.avg(100000.0),
+                testCustomEvaluatorResult.get(ScalingMetric.TARGET_DATA_RATE));
+    }
+
+    @Test
+    public void testMergeEvaluatedMetricsMaps() {
+        Map<ScalingMetric, EvaluatedScalingMetric> actual = new HashMap<>();
+        actual.put(ScalingMetric.TARGET_DATA_RATE, EvaluatedScalingMetric.avg(50000.0));
+        actual.put(ScalingMetric.LOAD, EvaluatedScalingMetric.avg(0.5));
+
+        // Case 1: Merge with null (should not modify actual)
+        ScalingMetricEvaluator.mergeEvaluatedMetricsMaps(actual, null);
+        assertEquals(2, actual.size());
+        assertEquals(
+                EvaluatedScalingMetric.avg(50000.0), actual.get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(EvaluatedScalingMetric.avg(0.5), actual.get(ScalingMetric.LOAD));
+
+        // Case 2: Merge with an empty map (should not modify actual)
+        ScalingMetricEvaluator.mergeEvaluatedMetricsMaps(actual, Collections.emptyMap());
+        assertEquals(2, actual.size());
+        assertEquals(
+                EvaluatedScalingMetric.avg(50000.0), actual.get(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(EvaluatedScalingMetric.avg(0.5), actual.get(ScalingMetric.LOAD));
+
+        // Case 3: Merge with an incoming map
+        Map<ScalingMetric, EvaluatedScalingMetric> incoming = new HashMap<>();
+        incoming.put(ScalingMetric.TARGET_DATA_RATE, EvaluatedScalingMetric.avg(100000.0));
+        incoming.put(ScalingMetric.LAG, new EvaluatedScalingMetric(10.0, 10.0));
+
+        ScalingMetricEvaluator.mergeEvaluatedMetricsMaps(actual, incoming);
+        assertEquals(3, actual.size());
+
+        assertTrue(actual.containsKey(ScalingMetric.LAG));
+        assertEquals(new EvaluatedScalingMetric(10.0, 10.0), actual.get(ScalingMetric.LAG));
+
+        assertTrue(actual.containsKey(ScalingMetric.TARGET_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.avg(100000.0), actual.get(ScalingMetric.TARGET_DATA_RATE));
+
+        assertTrue(actual.containsKey(ScalingMetric.LOAD));
+        assertEquals(EvaluatedScalingMetric.avg(0.5), actual.get(ScalingMetric.LOAD));
+    }
+
+    @Test
+    public void testMergeEvaluatedScalingMetric() {
+        // Case 1
+        EvaluatedScalingMetric actual = new EvaluatedScalingMetric(50.0, 100.0);
+        EvaluatedScalingMetric incoming = new EvaluatedScalingMetric(60.0, 120.0);
+
+        EvaluatedScalingMetric result =
+                ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actual, incoming);
+
+        assertEquals(60.0, result.getCurrent());
+        assertEquals(120.0, result.getAverage());
+
+        // Case 2
+        EvaluatedScalingMetric incomingWithNaN = new EvaluatedScalingMetric(Double.NaN, Double.NaN);
+        result = ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actual, incomingWithNaN);
+
+        assertEquals(50.0, result.getCurrent());
+        assertEquals(100.0, result.getAverage());
+
+        // Case 3
+        EvaluatedScalingMetric incomingWithPartialNaN =
+                new EvaluatedScalingMetric(Double.NaN, 130.0);
+        result = ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actual, incomingWithPartialNaN);
+
+        assertEquals(50.0, result.getCurrent(), "Current value should remain unchanged");
+        assertEquals(130.0, result.getAverage(), "Average value should be updated from incoming");
+
+        // Case 4
+        EvaluatedScalingMetric actualWithNaN = new EvaluatedScalingMetric(Double.NaN, Double.NaN);
+        result = ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actualWithNaN, incoming);
+
+        assertEquals(60.0, result.getCurrent(), "Current value should be updated from incoming");
+        assertEquals(120.0, result.getAverage(), "Average value should be updated from incoming");
     }
 }

@@ -21,6 +21,8 @@ import org.apache.flink.autoscaler.JobVertexScaler;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DelegatingConfiguration;
 import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
@@ -31,6 +33,7 @@ public class AutoScalerOptions {
 
     public static final String OLD_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+    public static final String CUSTOM_EVALUATOR_CONF_PREFIX = "metrics.custom-evaluator.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -382,4 +385,19 @@ public class AutoScalerOptions {
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
                                     "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
+
+    public static final ConfigOption<String> CUSTOM_EVALUATOR_NAME =
+            autoScalerConfig(CUSTOM_EVALUATOR_CONF_PREFIX + "name")
+                    .stringType()
+                    .defaultValue(null)
+                    .withFallbackKeys(oldOperatorConfigKey(CUSTOM_EVALUATOR_CONF_PREFIX + "name"))
+                    .withDescription("Name of the custom evaluator to be used.");
+
+    public static Configuration forCustomEvaluator(
+            Configuration configuration, String customEvaluatorName) {
+
+        return new DelegatingConfiguration(
+                configuration,
+                AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + customEvaluatorName + ".");
+    }
 }
