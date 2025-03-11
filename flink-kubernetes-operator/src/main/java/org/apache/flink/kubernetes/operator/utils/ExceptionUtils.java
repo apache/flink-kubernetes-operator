@@ -25,6 +25,8 @@ import java.util.Optional;
 /** Exception utils. * */
 public class ExceptionUtils {
 
+    private static final int EXCEPTION_LIMIT_FOR_EVENT_MESSAGE = 3;
+
     /**
      * Based on the flink ExceptionUtils#findThrowableSerializedAware but fixes an infinite loop bug
      * resulting from SerializedThrowable deserialization errors.
@@ -56,5 +58,57 @@ public class ExceptionUtils {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * traverse the throwable and extract useful information for up to the first 3 possible
+     * exceptions in the hierarchy.
+     *
+     * @param throwable the throwable to be processed
+     * @return the exception message, which will have a format similar to "cause1 -> cause2 ->
+     *     cause3"
+     */
+    public static String getExceptionMessage(Throwable throwable) {
+        return getExceptionMessage(throwable, 0);
+    }
+
+    /**
+     * Helper for recursion for `getExceptionMessage`.
+     *
+     * @param throwable the throwable to be processed
+     * @param level the level we are in. The caller will set this value to 0, and we will be
+     *     incrementing it with each recursive call
+     * @return the exception message, which will have a format similar to "cause1 -> cause2 ->
+     *     cause3"
+     */
+    private static String getExceptionMessage(Throwable throwable, int level) {
+        if (throwable == null) {
+            return null;
+        }
+
+        if (throwable instanceof SerializedThrowable) {
+            var deserialized =
+                    ((SerializedThrowable) throwable)
+                            .deserializeError(Thread.currentThread().getContextClassLoader());
+            if (deserialized == throwable) {
+                return "Unknown Error (SerializedThrowable)";
+            } else {
+                return getExceptionMessage(deserialized, level);
+            }
+        }
+
+        var msg =
+                Optional.ofNullable(throwable.getMessage())
+                        .orElse(throwable.getClass().getSimpleName());
+        level++;
+        if (level == EXCEPTION_LIMIT_FOR_EVENT_MESSAGE) {
+            return msg;
+        }
+
+        if (throwable.getCause() == null) {
+            return msg;
+        } else {
+            return msg + " -> " + getExceptionMessage(throwable.getCause(), level);
+        }
     }
 }

@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkR
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -985,6 +986,33 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
+    public void testEventOfNonDeploymentFailedChainedException() {
+        assertTrue(testController.flinkResourceEvents().isEmpty());
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+
+        flinkService.setMakeItFailWith(
+                new RuntimeException(
+                        "Deployment Failure",
+                        new IllegalStateException(
+                                null,
+                                new SerializedThrowable(new Exception("actual failure reason")))));
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.flinkResourceEvents().size());
+
+        var event = testController.flinkResourceEvents().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.flinkResourceEvents().remove();
+        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals(
+                "Deployment Failure -> IllegalStateException -> actual failure reason",
+                event.getMessage());
+    }
+
+    @Test
     public void cleanUpNewDeployment() {
         FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
         var resourceMetricGroup =
@@ -1062,6 +1090,32 @@ public class FlinkDeploymentControllerTest {
         flinkService.setDeployFailure(false);
         testController.reconcile(flinkDeployment, context);
         assertEquals("msp", flinkService.listJobs().get(0).f0);
+    }
+
+    @Test
+    public void testErrorOnReconcileWithChainedExceptions() throws Exception {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        flinkDeployment.getSpec().getJob().setInitialSavepointPath("msp");
+        flinkService.setMakeItFailWith(
+                new RuntimeException(
+                        "Deployment Failure",
+                        new IllegalStateException(
+                                null,
+                                new SerializedThrowable(new Exception("actual failure reason")))));
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.flinkResourceEvents().size());
+
+        var event = testController.flinkResourceEvents().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.flinkResourceEvents().remove();
+        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals(
+                "Deployment Failure -> IllegalStateException -> actual failure reason",
+                event.getMessage());
     }
 
     @Test

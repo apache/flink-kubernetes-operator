@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -124,7 +125,7 @@ public class FlinkSessionJobController
                     flinkSessionJob,
                     EventRecorder.Type.Warning,
                     "SessionJobException",
-                    e.getMessage(),
+                    ExceptionUtils.getExceptionMessage(e),
                     EventRecorder.Component.Job,
                     josdkContext.getClient());
             throw new ReconciliationException(e);
