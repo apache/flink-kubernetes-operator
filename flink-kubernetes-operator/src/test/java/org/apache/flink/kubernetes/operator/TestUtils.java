@@ -74,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -478,7 +479,19 @@ public class TestUtils extends BaseTestUtils {
 
         @Override
         public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
-            return null;
+            // TODO: improve this, even if we only support FlinkDeployment as a secondary resource
+            if (aClass.getSimpleName().equals(FlinkDeployment.class.getSimpleName())) {
+                KubernetesClient client = getClient();
+                var hasMetadata =
+                        new HashSet<>(
+                                client.resources(FlinkDeployment.class)
+                                        .inAnyNamespace()
+                                        .list()
+                                        .getItems());
+                return (Set<T1>) hasMetadata;
+            } else {
+                return null;
+            }
         }
 
         @Override

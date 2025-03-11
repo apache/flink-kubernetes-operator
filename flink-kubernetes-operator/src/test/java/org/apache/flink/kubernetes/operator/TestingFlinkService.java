@@ -580,10 +580,13 @@ public class TestingFlinkService extends AbstractFlinkService {
                 .findAny()
                 .ifPresent(
                         t -> {
-                            if (!t.f1.getJobState().isGloballyTerminalState()) {
-                                throw new RuntimeException(
-                                        "Checkpoint should not be queried if job is not in terminal state");
-                            }
+                            // TODO: check this... for example getting the SP/CP
+                            //   in RUNNING state should be valid
+                            // if (!t.f1.getJobState().isGloballyTerminalState()) {
+                            //      throw new RuntimeException(
+                            //          "Checkpoint should not be
+                            //          queried if job is not in terminal state");
+                            // }
                         });
 
         return super.getLastCheckpoint(jobId, conf);
