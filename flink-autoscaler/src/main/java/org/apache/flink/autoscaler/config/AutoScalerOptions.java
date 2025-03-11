@@ -395,7 +395,7 @@ public class AutoScalerOptions {
 
     public static Configuration forCustomEvaluator(
             Configuration configuration, String customEvaluatorName) {
-
+        // add support for fallBackKey with DelegatingConfiguration.
         return new DelegatingConfiguration(
                 configuration,
                 AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + customEvaluatorName + ".");
