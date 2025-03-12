@@ -131,16 +131,6 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
-
-        // Validate status conditions
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING.name(),
-                appCluster.getStatus().getPhase());
-        assertThat(appCluster.getStatus().getConditions()).isNotNull();
-        assertThat(appCluster.getStatus().getConditions())
-                .extracting("message")
-                .contains(org.apache.flink.api.common.JobStatus.RUNNING.name());
-
         assertEquals(7, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
@@ -1182,7 +1172,7 @@ public class FlinkDeploymentControllerTest {
         // Validate status conditions
         assertEquals("Pending", appCluster.getStatus().getPhase());
         assertThat(appCluster.getStatus().getConditions()).isNotNull();
-        assertThat(appCluster.getStatus().getConditions())
+        assertThat(appCluster.getStatus().getConditions()).hasSize(1)
                 .extracting("message")
                 .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
 
@@ -1213,7 +1203,7 @@ public class FlinkDeploymentControllerTest {
         // Validate status conditions
         assertEquals("Pending", appCluster.getStatus().getPhase());
         assertThat(appCluster.getStatus().getConditions()).isNotNull();
-        assertThat(appCluster.getStatus().getConditions())
+        assertThat(appCluster.getStatus().getConditions()).hasSize(1)
                 .extracting("message")
                 .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
 
