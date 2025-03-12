@@ -99,6 +99,28 @@ public class SpecUtils {
         }
     }
 
+    public static String serializeObject(Object object, String wrapperKey) {
+        ObjectNode wrapper = objectMapper.createObjectNode();
+        wrapper.set(wrapperKey, objectMapper.valueToTree(checkNotNull(object)));
+
+        try {
+            return objectMapper.writeValueAsString(wrapper);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(
+                    "Could not serialize " + wrapperKey + ", this indicates a bug...", e);
+        }
+    }
+
+    public static <T> T deserializeObject(String serialized, String wrapperKey, Class<T> valueType)
+            throws JsonProcessingException {
+        try {
+            ObjectNode wrapper = (ObjectNode) objectMapper.readTree(serialized);
+            return objectMapper.treeToValue(wrapper.get(wrapperKey), valueType);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
+        }
+    }
+
     // We do not have access to  Flink's Preconditions from here
     private static <T> T checkNotNull(T object) {
         if (object == null) {
