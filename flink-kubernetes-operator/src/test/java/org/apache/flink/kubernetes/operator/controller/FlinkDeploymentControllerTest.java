@@ -69,6 +69,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -130,6 +131,16 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RUNNING.name());
+
         assertEquals(7, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
@@ -1167,6 +1178,14 @@ public class FlinkDeploymentControllerTest {
                 org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(4, testController.getInternalStatusUpdateCount());
+
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -1190,6 +1209,14 @@ public class FlinkDeploymentControllerTest {
                 org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(5, testController.getInternalStatusUpdateCount());
+
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -1203,6 +1230,16 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
                 appCluster.getStatus().getJobStatus().getState());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RUNNING.name());
+
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -1224,6 +1261,15 @@ public class FlinkDeploymentControllerTest {
                 Optional.of(
                         configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RUNNING.name());
 
         // Validate job status
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();
