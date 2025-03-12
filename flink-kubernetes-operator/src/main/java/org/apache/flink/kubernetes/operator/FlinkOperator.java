@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotController;
@@ -239,6 +240,12 @@ public class FlinkOperator {
                         eventRecorder,
                         metricManager,
                         statusRecorder);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
+    }
+
+    @VisibleForTesting
+    void registerBlueGreenController() {
+        var controller = new FlinkBlueGreenDeploymentController(ctxFactory);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
