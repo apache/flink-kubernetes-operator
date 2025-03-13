@@ -66,7 +66,6 @@ public class RestClientProxy extends RestClient {
             terminationFutureField.setAccessible(true);
             groupField.setAccessible(true);
 
-            // TODO check null
             this.terminationFuture = (CompletableFuture<Void>) terminationFutureField.get(this);
             this.bootstrap = (Bootstrap) bootstrapField.get(this);
             this.groupField = groupField;
