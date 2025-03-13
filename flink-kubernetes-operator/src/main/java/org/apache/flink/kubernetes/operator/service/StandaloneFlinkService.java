@@ -39,6 +39,8 @@ import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfi
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import org.apache.flink.shaded.netty4.io.netty.channel.EventLoopGroup;
+
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -61,7 +63,21 @@ public class StandaloneFlinkService extends AbstractFlinkService {
             ArtifactManager artifactManager,
             ExecutorService executorService,
             FlinkOperatorConfiguration operatorConfig) {
-        super(kubernetesClient, artifactManager, executorService, operatorConfig);
+        this(kubernetesClient, artifactManager, executorService, operatorConfig, null);
+    }
+
+    public StandaloneFlinkService(
+            KubernetesClient kubernetesClient,
+            ArtifactManager artifactManager,
+            ExecutorService executorService,
+            FlinkOperatorConfiguration operatorConfig,
+            EventLoopGroup flinkClientEventLoopGroup) {
+        super(
+                kubernetesClient,
+                artifactManager,
+                executorService,
+                operatorConfig,
+                flinkClientEventLoopGroup);
     }
 
     @Override

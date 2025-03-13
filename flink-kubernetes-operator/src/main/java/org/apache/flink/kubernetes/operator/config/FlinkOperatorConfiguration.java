@@ -53,6 +53,7 @@ public class FlinkOperatorConfiguration {
     Duration progressCheckInterval;
     Duration restApiReadyDelay;
     Duration flinkClientTimeout;
+    int flinkClientIOThreads;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
     boolean dynamicNamespacesEnabled;
@@ -98,6 +99,10 @@ public class FlinkOperatorConfiguration {
 
         Duration flinkClientTimeout =
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_TIMEOUT);
+
+        int flinkClientIOThreads =
+                operatorConfig.getInteger(
+                        KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_IO_THREADS);
 
         Duration flinkCancelJobTimeout =
                 operatorConfig.get(
@@ -209,6 +214,7 @@ public class FlinkOperatorConfiguration {
                 progressCheckInterval,
                 restApiReadyDelay,
                 flinkClientTimeout,
+                flinkClientIOThreads,
                 flinkServiceHostOverride,
                 watchedNamespaces,
                 dynamicNamespacesEnabled,
