@@ -117,7 +117,7 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Integer> OPERATOR_FLINK_CLIENT_IO_THREADS =
-            operatorConfig("kubernetes.operator.flink.client.io.threads")
+            operatorConfig("flink.client.io.threads")
                     .intType()
                     .defaultValue(60)
                     .withDescription(
