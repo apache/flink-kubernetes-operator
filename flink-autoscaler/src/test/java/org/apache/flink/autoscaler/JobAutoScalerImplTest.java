@@ -466,28 +466,14 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testGetCustomEvaluatorIfRequiredWithCustomEvaluator() {
-        var topology = new JobTopology();
-
         CustomEvaluator testCustomEvaluator = new TestCustomEvaluator();
         testCustomEvaluator.configure(new Configuration());
-        var testCustomEvaluators =
-                Map.of(testCustomEvaluator.getClass().getName(), testCustomEvaluator);
+        var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
 
-        String testCustomEvaluatorName = "testCustomEvaluator";
-        String testCustomEvaluatorClassName = TestCustomEvaluator.class.getName();
+        String testCustomEvaluatorName = "test-custom-evaluator";
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATOR_NAME, testCustomEvaluatorName);
-
-        defaultConf.set(
-                ConfigOptions.key(
-                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
-                                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
-                                        + testCustomEvaluatorName
-                                        + ".class")
-                        .stringType()
-                        .noDefaultValue(),
-                testCustomEvaluatorClassName);
 
         defaultConf.set(
                 ConfigOptions.key(
@@ -525,17 +511,15 @@ public class JobAutoScalerImplTest {
         assertInstanceOf(CustomEvaluator.class, customEvaluatorWithConfig.f0);
         var customEvaluatorConfig = customEvaluatorWithConfig.f1;
         assertNotNull(customEvaluatorConfig);
-        int expectedKeyCount = 3;
+        int expectedKeyCount = 2;
         assertEquals(expectedKeyCount, customEvaluatorConfig.keySet().size());
 
-        Set<String> expectedKeys = Set.of("class", "k1", "k2");
+        Set<String> expectedKeys = Set.of("k1", "k2");
         assertTrue(customEvaluatorConfig.keySet().containsAll(expectedKeys));
     }
 
     @Test
     void testGetCustomEvaluatorIfRequiredWithoutCustomEvaluator() {
-        var topology = new JobTopology();
-
         var autoscaler =
                 new JobAutoScalerImpl<>(
                         null,
@@ -555,8 +539,7 @@ public class JobAutoScalerImplTest {
     void testGetCustomEvaluatorIfRequiredWithCustomEvaluatorButNotConfigured() {
         CustomEvaluator testCustomEvaluator = new TestCustomEvaluator();
         testCustomEvaluator.configure(new Configuration());
-        var testCustomEvaluators =
-                Map.of(testCustomEvaluator.getClass().getName(), testCustomEvaluator);
+        var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
 
         var autoscaler =
                 new JobAutoScalerImpl<>(
@@ -571,5 +554,65 @@ public class JobAutoScalerImplTest {
         var customEvaluatorWithConfig =
                 autoscaler.getCustomEvaluatorIfRequired(context.getConfiguration());
         assertNull(customEvaluatorWithConfig);
+    }
+
+    @Test
+    void testGetCustomEvaluatorIfRequiredWithCustomEvaluatorButNoMatches() {
+        CustomEvaluator testCustomEvaluator = new TestCustomEvaluator();
+        testCustomEvaluator.configure(new Configuration());
+        var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
+
+        String testCustomEvaluatorName = "test-custom-evaluator-no-match";
+
+        var defaultConf = context.getConfiguration();
+        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATOR_NAME, testCustomEvaluatorName);
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        testCustomEvaluators);
+
+        var customEvaluatorWithConfig =
+                autoscaler.getCustomEvaluatorIfRequired(context.getConfiguration());
+        assertNull(customEvaluatorWithConfig);
+    }
+
+    @Test
+    void testGetCustomEvaluatorIfRequiredWithCustomEvaluatorNoConfig() {
+        CustomEvaluator testCustomEvaluator = new TestCustomEvaluator();
+        testCustomEvaluator.configure(new Configuration());
+        var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
+
+        String testCustomEvaluatorName = "test-custom-evaluator";
+
+        var defaultConf = context.getConfiguration();
+        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATOR_NAME, testCustomEvaluatorName);
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        testCustomEvaluators);
+
+        var customEvaluatorWithConfig =
+                autoscaler.getCustomEvaluatorIfRequired(context.getConfiguration());
+        assertNotNull(customEvaluatorWithConfig);
+        assertInstanceOf(CustomEvaluator.class, customEvaluatorWithConfig.f0);
+        var customEvaluatorConfig = customEvaluatorWithConfig.f1;
+        assertNotNull(customEvaluatorConfig);
+        int expectedKeyCount = 0;
+        assertEquals(expectedKeyCount, customEvaluatorConfig.keySet().size());
+
+        Set<String> expectedKeys = Set.of();
+        assertTrue(customEvaluatorConfig.keySet().containsAll(expectedKeys));
     }
 }

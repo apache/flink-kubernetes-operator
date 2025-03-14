@@ -631,6 +631,16 @@ public class ScalingMetricEvaluator {
         return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
     }
 
+    /**
+     * Executes the provided custom evaluator for the given job vertex. Calls {@link
+     * CustomEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
+     *
+     * @param vertex The job vertex being evaluated.
+     * @param evaluatedMetrics Current evaluated metrics.
+     * @param customEvaluationSession A tuple containing the custom evaluator and evaluation
+     *     context.
+     * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
+     */
     @VisibleForTesting
     protected static Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
             JobVertexID vertex,
@@ -654,6 +664,13 @@ public class ScalingMetricEvaluator {
         return Collections.emptyMap();
     }
 
+    /**
+     * Merges the incoming evaluated metrics into actual evaluated metrics.
+     *
+     * @param actual The target evaluated metrics map to merge into.
+     * @param incoming The incoming map containing new evaluated metrics map to be merged
+     *     (nullable).
+     */
     @VisibleForTesting
     protected static void mergeEvaluatedMetricsMaps(
             Map<ScalingMetric, EvaluatedScalingMetric> actual,
@@ -670,6 +687,13 @@ public class ScalingMetricEvaluator {
                                                                 ::mergeEvaluatedScalingMetric)));
     }
 
+    /**
+     * Merges two {@link EvaluatedScalingMetric} instances.
+     *
+     * @param actual The existing evaluated scaling metric.
+     * @param incoming The incoming evaluated scaling metric.
+     * @return A new {@link EvaluatedScalingMetric} instance with merged values.
+     */
     @VisibleForTesting
     protected static EvaluatedScalingMetric mergeEvaluatedScalingMetric(
             EvaluatedScalingMetric actual, EvaluatedScalingMetric incoming) {

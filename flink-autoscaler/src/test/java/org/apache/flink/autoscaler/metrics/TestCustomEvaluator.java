@@ -30,6 +30,11 @@ import java.util.Map;
  */
 public class TestCustomEvaluator implements CustomEvaluator {
     @Override
+    public String getName() {
+        return "test-custom-evaluator";
+    }
+
+    @Override
     public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,

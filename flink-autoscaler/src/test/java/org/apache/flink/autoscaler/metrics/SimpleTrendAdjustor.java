@@ -33,6 +33,11 @@ import java.util.SortedMap;
  */
 public class SimpleTrendAdjustor implements CustomEvaluator {
     @Override
+    public String getName() {
+        return "simple-trend-adjustor";
+    }
+
+    @Override
     public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,

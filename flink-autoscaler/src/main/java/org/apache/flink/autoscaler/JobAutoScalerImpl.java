@@ -46,7 +46,6 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_EN
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATOR_NAME;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
-import static org.apache.flink.autoscaler.metrics.CustomEvaluatorOptions.CUSTOM_EVALUATOR_CLASS;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingTracking;
 
@@ -279,13 +278,16 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @VisibleForTesting
     protected Tuple2<CustomEvaluator, Configuration> getCustomEvaluatorIfRequired(
             Configuration conf) {
-        var customEvaluatorName = conf.get(CUSTOM_EVALUATOR_NAME);
-        var customEvaluatorConfig = AutoScalerOptions.forCustomEvaluator(conf, customEvaluatorName);
-        CustomEvaluator evaluator =
-                Optional.ofNullable(customEvaluatorConfig.get(CUSTOM_EVALUATOR_CLASS))
-                        .map(this.customEvaluators::get)
-                        .orElse(null);
-
-        return evaluator != null ? new Tuple2<>(evaluator, customEvaluatorConfig) : null;
+        return Optional.ofNullable(conf.get(CUSTOM_EVALUATOR_NAME))
+                .map(
+                        name -> {
+                            CustomEvaluator evaluator = customEvaluators.get(name);
+                            return evaluator != null
+                                    ? new Tuple2<>(
+                                            evaluator,
+                                            AutoScalerOptions.forCustomEvaluator(conf, name))
+                                    : null;
+                        })
+                .orElse(null);
     }
 }

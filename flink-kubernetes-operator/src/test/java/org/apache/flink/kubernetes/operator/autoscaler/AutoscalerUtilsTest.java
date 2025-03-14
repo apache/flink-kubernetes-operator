@@ -18,7 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -56,7 +55,7 @@ public class AutoscalerUtilsTest {
                                     new FlinkConfigManager(new Configuration()))
                             .keySet();
             // Expected evaluators
-            var expectedEvaluators = new HashSet<>(List.of(TestCustomEvaluator.class.getName()));
+            var expectedEvaluators = new HashSet<>(List.of("test-custom-evaluator"));
 
             assertEquals(expectedEvaluators, discoveredEvaluators);
         } finally {
