@@ -98,6 +98,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -595,8 +596,9 @@ public class TestingFlinkService extends AbstractFlinkService {
                     Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
             getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
         if (throwCheckpointingDisabledError) {
-            throw new RestClientException(
-                    "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST);
+            throw new ExecutionException(
+                    new RestClientException(
+                            "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST));
         }
 
         if (checkpointInfo != null) {

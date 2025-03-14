@@ -142,6 +142,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -546,7 +547,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         try {
             latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
         } catch (Exception e) {
-            if (e instanceof RestClientException
+            if (e instanceof ExecutionException
                     && e.getMessage() != null
                     && e.getMessage().contains("Checkpointing has not been enabled")) {
                 LOG.warn("Checkpointing not enabled for job {}", jobId, e);

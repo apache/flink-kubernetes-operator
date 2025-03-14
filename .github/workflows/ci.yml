@@ -161,6 +161,7 @@ jobs:
           - test_autoscaler.sh
           - test_flink_operator_ha.sh
           - test_snapshot.sh
+          - test_batch_job.sh
         exclude:
           - flink-version: v1_16
             test: test_autoscaler.sh
