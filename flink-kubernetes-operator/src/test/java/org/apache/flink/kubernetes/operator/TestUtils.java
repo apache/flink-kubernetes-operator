@@ -117,7 +117,7 @@ public class TestUtils extends BaseTestUtils {
         String nowTs = Instant.now().toString();
         var status = new DeploymentStatus();
         status.setAvailableReplicas(ready ? 1 : 0);
-        status.setReplicas(1);
+        status.setReplicas(2);
         var availableCondition = new DeploymentCondition();
         availableCondition.setType("Available");
         availableCondition.setStatus(ready ? "True" : "False");
@@ -125,7 +125,7 @@ public class TestUtils extends BaseTestUtils {
         status.setConditions(List.of(availableCondition));
 
         DeploymentSpec spec = new DeploymentSpec();
-        spec.setReplicas(1);
+        spec.setReplicas(3);
 
         var meta = new ObjectMeta();
         meta.setCreationTimestamp(nowTs);

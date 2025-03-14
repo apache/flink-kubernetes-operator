@@ -38,7 +38,6 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,11 +116,11 @@ public abstract class AbstractFlinkDeploymentObserver
                 ctx.getJosdkContext().getSecondaryResource(Deployment.class);
         if (deployment.isPresent()) {
             DeploymentStatus status = deployment.get().getStatus();
-            DeploymentSpec spec = deployment.get().getSpec();
             if (status != null
                     && status.getAvailableReplicas() != null
-                    && spec.getReplicas().intValue() == status.getReplicas()
-                    && spec.getReplicas().intValue() == status.getAvailableReplicas()
+                    // One available JM is enough to run the job correctly
+                    && status.getReplicas() > 0
+                    && status.getAvailableReplicas() > 0
                     && ctx.getFlinkService().isJobManagerPortReady(ctx.getObserveConfig())) {
 
                 // typically it takes a few seconds for the REST server to be ready
