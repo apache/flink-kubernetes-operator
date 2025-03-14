@@ -25,6 +25,7 @@
 # 5. Verifies that the job remains in the FINISHED state (second check).
 # 6. Checks the operator logs for the expected job state transition message.
 # 7. Checks the JobManager logs for successful application completion.
+# 8. Applies a spec change to the FlinkDeployment and verifies the job re-runs successfully.
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 source "${SCRIPT_DIR}/utils.sh"
 
@@ -56,5 +57,10 @@ wait_for_operator_logs "$operator_pod_name" "Job status changed from .* to FINIS
 # Verify the job completed successfully in the job manager logs.
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 wait_for_logs "$jm_pod_name" "Application completed SUCCESSFULLY" ${TIMEOUT} || exit 1
+
+# Apply a spec change; verify the job re-runs and reaches the FINISHED state.
+kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RECONCILING $TIMEOUT || exit 1
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' FINISHED $TIMEOUT || exit 1
 
 echo "Successfully ran the batch job test"

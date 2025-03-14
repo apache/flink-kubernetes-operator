@@ -31,10 +31,6 @@ spec:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
-    high-availability.type: kubernetes
-    high-availability.storageDir: file:///opt/flink/volume/flink-ha
-    state.checkpoints.dir: file:///opt/flink/volume/flink-cp
-    state.savepoints.dir: file:///opt/flink/volume/flink-sp
     kubernetes.operator.snapshot.resource.enabled: "false"
   serviceAccount: flink
   podTemplate:
@@ -59,14 +55,9 @@ spec:
           volumeMounts:
             - mountPath: /opt/flink/usrlib
               name: flink-artifact
-            - mountPath: /opt/flink/volume
-              name: flink-volume
       volumes:
         - name: flink-artifact
           emptyDir: { }
-        - name: flink-volume
-          persistentVolumeClaim:
-            claimName: flink-example-wordcount-batch
   jobManager:
     resource:
       memory: "1024m"
@@ -82,19 +73,6 @@ spec:
     parallelism: 2
     upgradeMode: stateless
   mode: native
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: flink-example-wordcount-batch
-spec:
-  accessModes:
-    - ReadWriteOnce
-  volumeMode: Filesystem
-  resources:
-    requests:
-      storage: 1Gi
 
 ---
 apiVersion: networking.k8s.io/v1
