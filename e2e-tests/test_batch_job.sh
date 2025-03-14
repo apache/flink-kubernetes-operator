@@ -20,12 +20,11 @@
 # This script tests basic Flink batch job operations on Kubernetes:
 # 1. Deploys a FlinkDeployment for a batch job.
 # 2. Waits for the JobManager to become ready.
-# 3. Verifies that the job reaches the FINISHED state (first check).
-# 4. Sleeps for a configurable duration to test for state persistence.
-# 5. Verifies that the job remains in the FINISHED state (second check).
-# 6. Checks the operator logs for the expected job state transition message.
-# 7. Checks the JobManager logs for successful application completion.
-# 8. Applies a spec change to the FlinkDeployment and verifies the job re-runs successfully.
+# 3. Verifies that the job reaches the FINISHED state.
+# 4. Applies a no-op spec change and verifies the job remains in the FINISHED state.
+# 5. Checks the operator logs for the expected job state transition message.
+# 6. Checks the JobManager logs for successful application completion.
+# 7. Applies a spec change and verifies the job re-runs successfully.
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 source "${SCRIPT_DIR}/utils.sh"
 
@@ -33,7 +32,6 @@ CLUSTER_ID="flink-example-wordcount-batch"
 APPLICATION_YAML="${SCRIPT_DIR}/data/flinkdep-batch-cr.yaml"
 APPLICATION_IDENTIFIER="flinkdep/$CLUSTER_ID"
 TIMEOUT=300
-SLEEP_DURATION=30
 
 on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $CLUSTER_ID
 
@@ -41,13 +39,11 @@ retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
 wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
 
-# Wait for the job to reach the FINISHED state (first check).
+# Wait for the job to reach the FINISHED state.
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' FINISHED $TIMEOUT || exit 1
 
-echo "Job reached FINISHED state.  Sleeping for $SLEEP_DURATION seconds..."
-sleep "$SLEEP_DURATION"
-
-# Verify the job is *still* in the FINISHED state (second check).
+# Apply a no-op spec change; verify the job remains in the FINISHED state.
+kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"flinkConfiguration": {"kubernetes.operator.deployment.readiness.timeout": "6h" } } }'
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' FINISHED $TIMEOUT || exit 1
 
 # Verify the job status change to FINISHED shows up in the operator logs.
