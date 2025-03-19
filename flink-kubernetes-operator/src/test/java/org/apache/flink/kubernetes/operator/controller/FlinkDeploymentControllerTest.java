@@ -281,6 +281,14 @@ public class FlinkDeploymentControllerTest {
         // Validate status
         assertNotNull(appCluster.getStatus().getError());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+
         // next cycle should not create another event
         updateControl =
                 testController.reconcile(
@@ -365,6 +373,14 @@ public class FlinkDeploymentControllerTest {
                 org.apache.flink.api.common.JobStatus.RECONCILING,
                 appCluster.getStatus().getJobStatus().getState());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+
         // Validate status status
         assertNotNull(appCluster.getStatus().getError());
 
@@ -448,6 +464,15 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
                 "savepoint_1", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.FINISHED.name());
 
         // Resume from last savepoint
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
@@ -658,6 +683,9 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+
         // Check when the bad config is applied, observe() will change the cluster state correctly
         appCluster.getSpec().getJobManager().setReplicas(-1);
         // Next reconcile will set error msg and observe with previous validated config
@@ -672,6 +700,9 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+
         // Make sure we do validation before getting effective config in reconcile().
         appCluster.getSpec().getJobManager().setReplicas(1);
         appCluster.getSpec().getJob().setParallelism(0);
@@ -684,6 +715,10 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
     }
 
     @Test
@@ -698,6 +733,13 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+
         updateControl = testController.reconcile(appCluster, context);
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();
         assertFalse(updateControl.isUpdateStatus());
@@ -706,6 +748,13 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         // jobStatus has not been set at this time
         assertEquals(org.apache.flink.api.common.JobStatus.RECONCILING, jobStatus.getState());
+
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RECONCILING.name());
 
         // Switches operator mode to SESSION
         appCluster.getSpec().setJob(null);
@@ -728,6 +777,17 @@ public class FlinkDeploymentControllerTest {
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
         assertEquals(expectedJobStatus.getJobState(), jobStatus.getState());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(
+                        org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                        org.apache.flink.api.common.JobStatus.RUNNING.name());
     }
 
     @Test
@@ -742,12 +802,31 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(2)
+                .extracting("message")
+                .contains("JobManager deployment not found", "JobManager process is starting up");
+
         updateControl = testController.reconcile(appCluster, context);
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Validate status conditions
+        assertEquals("Pending", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(3)
+                .extracting("message")
+                .contains(
+                        "JobManager deployment not found",
+                        "JobManager process is starting up",
+                        "JobManager is running but not ready yet to receive REST API calls");
         // jobStatus has not been set at this time
         assertNull(jobStatus.getState());
 
@@ -765,6 +844,18 @@ public class FlinkDeploymentControllerTest {
                         .getError()
                         .contains("Cannot switch from session to job cluster"));
         assertNull(ReconciliationUtils.getDeployedSpec(appCluster).getJob());
+
+        // Validate status conditions
+        assertEquals("Running", appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(4)
+                .extracting("message")
+                .contains(
+                        "JobManager deployment not found",
+                        "JobManager process is starting up",
+                        "JobManager is running but not ready yet to receive REST API calls",
+                        "JobManager is running and ready to receive REST API call");
     }
 
     private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) throws Exception {
@@ -910,6 +1001,15 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Validate status conditions
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isNotNull();
+        assertThat(appCluster.getStatus().getConditions())
+                .extracting("message")
+                .contains(org.apache.flink.api.common.JobStatus.RUNNING.name());
     }
 
     @Test
@@ -1156,6 +1256,10 @@ public class FlinkDeploymentControllerTest {
         assertNull(appCluster.getStatus().getError());
         assertNull(reconciliationStatus.deserializeLastReconciledSpec());
         assertNull(reconciliationStatus.getLastStableSpec());
+
+        // Validate status conditions
+        assertNull(appCluster.getStatus().getPhase());
+        assertThat(appCluster.getStatus().getConditions()).isEmpty();
     }
 
     private void verifyReconcileNormalLifecycle(FlinkDeployment appCluster) throws Exception {

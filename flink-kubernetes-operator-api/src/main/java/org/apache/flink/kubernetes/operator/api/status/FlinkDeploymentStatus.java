@@ -82,8 +82,8 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                     updateCondition(
                             conditions,
                             ConditionUtils.runningFalse(
-                                    "JobManager deployment not found ",
-                                    "JobManager deployment not found "));
+                                    "JobManager deployment not found",
+                                    "JobManager deployment not found"));
                     break;
                 case DEPLOYING:
                     updateCondition(
