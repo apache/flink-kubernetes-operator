@@ -98,6 +98,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -302,6 +303,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(statefulUpgrade, context);
 
         assertEquals(0, flinkService.getRunningCount());
+
+        var spInfo = statefulUpgrade.getStatus().getJobStatus().getSavepointInfo();
+        assertEquals("savepoint_0", spInfo.getLastSavepoint().getLocation());
+        assertEquals(SnapshotTriggerType.UPGRADE, spInfo.getLastSavepoint().getTriggerType());
+        assertEquals(
+                spInfo.getLastSavepoint(),
+                new LinkedList<>(spInfo.getSavepointHistory()).getLast());
 
         reconciler.reconcile(statefulUpgrade, context);
 

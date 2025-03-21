@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
@@ -398,21 +399,35 @@ public abstract class AbstractJobReconciler<
      *
      * @param ctx context
      * @param savepointLocation location of savepoint taken
+     * @param cancelTs Timestamp when upgrade/cancel was triggered
      */
-    protected void setUpgradeSavepointPath(FlinkResourceContext<?> ctx, String savepointLocation) {
+    protected void setUpgradeSavepointPath(
+            FlinkResourceContext<?> ctx, String savepointLocation, Instant cancelTs) {
         var conf = ctx.getObserveConfig();
         var savepointFormatType =
-                ctx.getObserveConfig()
-                        .get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+                SavepointFormatType.valueOf(
+                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                .name());
 
         FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
                 conf,
                 ctx.getOperatorConfig(),
                 ctx.getKubernetesClient(),
                 ctx.getResource(),
-                SavepointFormatType.valueOf(savepointFormatType.name()),
+                savepointFormatType,
                 savepointLocation);
-        ctx.getResource().getStatus().getJobStatus().setUpgradeSavepointPath(savepointLocation);
+        var jobStatus = ctx.getResource().getStatus().getJobStatus();
+        jobStatus.setUpgradeSavepointPath(savepointLocation);
+
+        // Register created savepoint in the now deprecated savepoint info and history
+        var savepoint =
+                new Savepoint(
+                        cancelTs.toEpochMilli(),
+                        savepointLocation,
+                        SnapshotTriggerType.UPGRADE,
+                        savepointFormatType,
+                        null);
+        jobStatus.getSavepointInfo().updateLastSavepoint(savepoint);
     }
 
     /**
