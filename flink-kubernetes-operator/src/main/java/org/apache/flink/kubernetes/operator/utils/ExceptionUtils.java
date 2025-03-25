@@ -100,15 +100,15 @@ public class ExceptionUtils {
         var msg =
                 Optional.ofNullable(throwable.getMessage())
                         .orElse(throwable.getClass().getSimpleName());
-        level++;
-        if (level == EXCEPTION_LIMIT_FOR_EVENT_MESSAGE) {
+
+        if (level >= EXCEPTION_LIMIT_FOR_EVENT_MESSAGE) {
             return msg;
         }
 
         if (throwable.getCause() == null) {
             return msg;
         } else {
-            return msg + " -> " + getExceptionMessage(throwable.getCause(), level);
+            return msg + " -> " + getExceptionMessage(throwable.getCause(), level + 1);
         }
     }
 }
