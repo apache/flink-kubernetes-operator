@@ -27,13 +27,20 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.hooks.AbstractFlinkSessionJobContext;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookStatus;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookType;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHooksManager;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
@@ -48,11 +55,15 @@ public class SessionJobReconciler
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobReconciler.class);
 
+    private final FlinkResourceHooksManager flinkResourceHooksManager;
+
     public SessionJobReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
-            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler,
+            FlinkResourceHooksManager flinkResourceHooksManager) {
         super(eventRecorder, statusRecorder, autoscaler);
+        this.flinkResourceHooksManager = flinkResourceHooksManager;
     }
 
     @Override
@@ -60,6 +71,46 @@ public class SessionJobReconciler
         return sessionClusterReady(
                         ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class))
                 && super.readyToReconcile(ctx);
+    }
+
+    @Override
+    protected FlinkResourceHookStatus maybeExecuteFlinkResourceHooks(
+            FlinkResourceContext<FlinkSessionJob> ctx,
+            Configuration deployConfig,
+            Configuration lastDeployedConfig) {
+        return flinkResourceHooksManager.executeAllHooks(
+                FlinkResourceHookType.SESSION_JOB_PRE_SCALE_UP,
+                new AbstractFlinkSessionJobContext() {
+                    @Override
+                    public FlinkService getFlinkService() {
+                        return ctx.getFlinkService();
+                    }
+
+                    @Override
+                    public FlinkOperatorConfiguration getOperatorConfig() {
+                        return ctx.getOperatorConfig();
+                    }
+
+                    @Override
+                    public FlinkSessionJob getFlinkSessionJob() {
+                        return ctx.getResource();
+                    }
+
+                    @Override
+                    public Configuration getDeployConfig() {
+                        return new Configuration(deployConfig);
+                    }
+
+                    @Override
+                    public Configuration getCurrentDeployedConfig() {
+                        return lastDeployedConfig;
+                    }
+
+                    @Override
+                    public KubernetesClient getKubernetesClient() {
+                        return ctx.getKubernetesClient();
+                    }
+                });
     }
 
     @Override

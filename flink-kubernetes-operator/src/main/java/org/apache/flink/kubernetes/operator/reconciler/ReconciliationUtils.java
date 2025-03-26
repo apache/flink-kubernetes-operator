@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadata;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -39,6 +40,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -52,6 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
@@ -258,6 +261,16 @@ public class ReconciliationUtils {
             return updateControl;
         }
 
+        if (operatorConfiguration.isFlinkResourceHooksEnabled()) {
+            var reconcileInterval = maybeGetReconcileIntervalForHooks(current);
+            if (reconcileInterval.isPresent()) {
+                LOG.info(
+                        "Running flink resource hooks..., rescheduling after {}",
+                        reconcileInterval.get());
+                return updateControl.rescheduleAfter(reconcileInterval.get());
+            }
+        }
+
         if (upgradeStarted(
                         status.getReconciliationStatus(),
                         previous.getStatus().getReconciliationStatus())
@@ -277,6 +290,26 @@ public class ReconciliationUtils {
             return updateControl.rescheduleAfter(
                     operatorConfiguration.getReconcileInterval().toMillis());
         }
+    }
+
+    private static <
+                    SPEC extends AbstractFlinkSpec,
+                    STATUS extends CommonStatus<SPEC>,
+                    R extends CustomResource<SPEC, STATUS>>
+            Optional<Duration> maybeGetReconcileIntervalForHooks(R current) {
+        if (!(current instanceof FlinkSessionJob)) {
+            return Optional.empty();
+        }
+        var sessionJob = (FlinkSessionJob) current;
+        var reconciledSpecOpt =
+                Optional.of(sessionJob.getStatus())
+                        .map(CommonStatus::getReconciliationStatus)
+                        .map(ReconciliationStatus::deserializeLastReconciledSpec);
+        if (reconciledSpecOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        var reconciledSpec = reconciledSpecOpt.get();
+        return FlinkResourceHookUtils.getHooksReconciliationInterval(reconciledSpec);
     }
 
     public static Duration rescheduleAfter(

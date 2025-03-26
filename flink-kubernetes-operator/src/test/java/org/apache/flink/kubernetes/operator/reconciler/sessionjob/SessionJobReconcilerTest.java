@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
+import org.apache.flink.kubernetes.operator.TestFlinkResourceHooksManager;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -33,6 +34,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
@@ -49,6 +51,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -70,6 +73,8 @@ import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookUtils.FLINK_RESOURCES_HOOKS_ACTIVE_KEY;
+import static org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookUtils.FLINK_RESOURCES_HOOKS_RECONCILIATION_INTERVAL_KEY;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -83,6 +88,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class SessionJobReconcilerTest extends OperatorTestBase {
 
     @Getter private KubernetesClient kubernetesClient;
+    private TestFlinkResourceHooksManager hooksManager;
 
     private TestReconcilerAdapter<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus>
             reconciler;
@@ -92,11 +98,15 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         var configuration = new Configuration();
         configuration.set(OPERATOR_JOB_RESTART_FAILED, true);
         configManager = new FlinkConfigManager(configuration);
+        hooksManager = new TestFlinkResourceHooksManager(eventRecorder);
         reconciler =
                 new TestReconcilerAdapter<>(
                         this,
                         new SessionJobReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
+                                eventRecorder,
+                                statusRecorder,
+                                new NoopJobAutoscaler<>(),
+                                hooksManager));
     }
 
     @Test
@@ -830,5 +840,150 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob.getStatus().getReconciliationStatus().getState());
         // New jobID recorded despite failure
         Assertions.assertNotEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
+    }
+
+    @Test
+    public void testFlinkResourceHooksExecution() throws Exception {
+        enableResourceHooks();
+
+        // First, create a job for the first time
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(sessionJob, readyContext);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+
+        assertEquals(0, hooksManager.getExecutionCount());
+
+        assertEquals(
+                1,
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getParallelism());
+
+        // Update job spec to trigger a new reconciliation
+        sessionJob.getSpec().getJob().setParallelism(2);
+
+        // Test hooks returning PENDING status should block reconciliation
+        hooksManager.setHookStatus(
+                new FlinkResourceHookStatus(
+                        Duration.ofSeconds(30), FlinkResourceHookStatus.Status.PENDING));
+        reconciler.reconcile(sessionJob, readyContext);
+
+        // Verify job upgrade was not performed due to pending hook and that the job is still
+        // running
+        assertEquals(1, hooksManager.getExecutionCount());
+        assertEquals(1, flinkService.listJobs().size());
+        var reconciledConfig =
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getFlinkConfiguration();
+        assertEquals("true", reconciledConfig.get(FLINK_RESOURCES_HOOKS_ACTIVE_KEY));
+        assertEquals(
+                "PT30S", reconciledConfig.get(FLINK_RESOURCES_HOOKS_RECONCILIATION_INTERVAL_KEY));
+
+        // Test hooks returning COMPLETED status should allow reconciliation to proceed
+        hooksManager.setHookStatus(
+                new FlinkResourceHookStatus(null, FlinkResourceHookStatus.Status.COMPLETED));
+        // This should remove the hook state and cancel the job
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(2, hooksManager.getExecutionCount());
+        reconciledConfig =
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getFlinkConfiguration();
+        assertFalse(reconciledConfig.containsKey(FLINK_RESOURCES_HOOKS_ACTIVE_KEY));
+        assertFalse(
+                reconciledConfig.containsKey(FLINK_RESOURCES_HOOKS_RECONCILIATION_INTERVAL_KEY));
+        // Check that job was suspended as part of upgrade
+        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+        verifyJobState(sessionJob, JobState.SUSPENDED, "FINISHED");
+
+        flinkService.clear();
+
+        // This should deploy the new job
+        reconciler.reconcile(sessionJob, readyContext);
+
+        // Verify job upgrade was performed and that the job is still running
+        assertEquals(2, hooksManager.getExecutionCount());
+        assertEquals(1, flinkService.listJobs().size());
+
+        // Verify the parallelism was updated
+        assertEquals(
+                2,
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getParallelism());
+    }
+
+    @Test
+    public void testFlinkResourceHooksFailure() throws Exception {
+        enableResourceHooks();
+
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(sessionJob, readyContext);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        assertEquals(0, hooksManager.getExecutionCount());
+
+        // Update job spec to trigger a new reconciliation
+        sessionJob.getSpec().getJob().setParallelism(2);
+
+        // Set hooks to return FAILED status
+        hooksManager.setHookStatus(
+                new FlinkResourceHookStatus(null, FlinkResourceHookStatus.Status.FAILED));
+        reconciler.reconcile(sessionJob, readyContext);
+
+        // Verify reconciliation proceeds normally
+        assertEquals(1, hooksManager.getExecutionCount());
+        assertEquals(1, flinkService.listJobs().size());
+        assertTrue(
+                eventCollector.events.stream()
+                        .anyMatch(
+                                e ->
+                                        e.getType().equals("Warning")
+                                                && e.getReason()
+                                                        .contains("FlinkResourceHookFailed")));
+    }
+
+    @Test
+    public void testFlinkResourceHooksNotApplicable() throws Exception {
+        enableResourceHooks();
+
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(sessionJob, readyContext);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        assertEquals(0, hooksManager.getExecutionCount());
+
+        // Update job spec to trigger a new reconciliation
+        sessionJob.getSpec().getJob().setParallelism(2);
+
+        // Set hooks to return NOT_APPLICABLE status
+        hooksManager.setHookStatus(
+                new FlinkResourceHookStatus(null, FlinkResourceHookStatus.Status.NOT_APPLICABLE));
+        reconciler.reconcile(sessionJob, readyContext);
+
+        // Verify hooks were executed but reconciliation proceeded normally
+        assertEquals(1, hooksManager.getExecutionCount());
+        assertEquals(1, flinkService.listJobs().size());
+    }
+
+    private void enableResourceHooks() {
+        var conf = configManager.getDefaultConfig();
+        conf.set(KubernetesOperatorConfigOptions.FLINK_RESOURCE_HOOKS_ENABLED, true);
+        configManager.updateDefaultConfig(conf);
     }
 }

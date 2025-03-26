@@ -252,6 +252,9 @@ public class EventRecorder {
         ResourceQuotaReached,
         AutoscalerError,
         Scaling,
-        UnsupportedFlinkVersion
+        UnsupportedFlinkVersion,
+        FlinkResourceHookPending,
+        FlinkResourceHookFinished,
+        FlinkResourceHookFailed
     }
 }

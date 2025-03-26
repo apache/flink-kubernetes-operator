@@ -1,0 +1,45 @@
+name: "Publish Grepr Snapshot to Github Packages"
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'release-*'
+jobs:
+  publish-snapshot:
+    if: github.repository == 'grepr/flink-kubernetes-operator'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: main
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+      - name: Cache local Maven repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            snapshot-maven-
+      - name: Publish snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(git rev-parse --short HEAD)
+          mvn -B versions:set -DnewVersion=grepr-${VERSION} -DgenerateBackupPoms=false
+          
+          tmp_settings="tmp-settings.xml"
+          echo "<settings><servers><server>" > $tmp_settings
+          echo "<id>github</id><username>${GITHUB_ACTOR}</username>" >> $tmp_settings
+          echo "<password>${GITHUB_TOKEN}</password>" >> $tmp_settings
+          echo "</server></servers></settings>" >> $tmp_settings
+          
+          mvn -B --settings $tmp_settings clean deploy \
+          -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/grepr/flink-kubernetes-operator \
+          -Dgpg.skip -Drat.skip -DskipTests
+          
+          rm $tmp_settings

@@ -74,9 +74,9 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
     @Override
     public void deploySessionCluster(Configuration conf) throws Exception {
-        LOG.info("Deploying session cluster");
+        LOG.info("Deploying session cluster standalone");
         submitClusterInternal(removeOperatorConfigs(conf), Mode.SESSION);
-        LOG.info("Session cluster successfully deployed");
+        LOG.info("Session cluster successfully deployed standalone");
     }
 
     @Override

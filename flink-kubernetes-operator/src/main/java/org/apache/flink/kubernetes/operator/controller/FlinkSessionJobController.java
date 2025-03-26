@@ -87,7 +87,6 @@ public class FlinkSessionJobController
     @Override
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context josdkContext) {
-
         if (canaryResourceManager.handleCanaryResourceReconciliation(
                 flinkSessionJob, josdkContext.getClient())) {
             return UpdateControl.noUpdate();

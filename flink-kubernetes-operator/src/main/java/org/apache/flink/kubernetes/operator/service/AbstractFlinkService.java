@@ -56,6 +56,7 @@ import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
+import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -1004,6 +1005,20 @@ public abstract class AbstractFlinkService implements FlinkService {
             return responseBody.getMetrics().stream()
                     .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
                     .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
+        }
+    }
+
+    public MultipleJobsDetails getJobs(Configuration conf) {
+        try (var clusterClient = getClusterClient(conf)) {
+            return clusterClient
+                    .sendRequest(
+                            JobsOverviewHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance())
+                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.error("Failed to get jobs from Flink cluster", e);
+            throw new FlinkRuntimeException("Failed to get jobs from Flink cluster", e);
         }
     }
 

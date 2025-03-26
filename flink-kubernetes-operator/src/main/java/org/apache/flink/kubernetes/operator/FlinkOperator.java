@@ -34,6 +34,9 @@ import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.health.HealthProbe;
 import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHook;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookUtils;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHooksManager;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
@@ -81,6 +84,7 @@ public class FlinkOperator {
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
     private final OperatorHealthService operatorHealthService;
+    private final Collection<FlinkResourceHook> hooks;
 
     private final EventRecorder eventRecorder;
     private final Configuration baseConfig;
@@ -105,6 +109,7 @@ public class FlinkOperator {
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(baseConfig);
         FileSystem.initialize(baseConfig, pluginManager);
         this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
+        this.hooks = FlinkResourceHookUtils.discoverHooks(configManager);
     }
 
     @VisibleForTesting
@@ -193,7 +198,10 @@ public class FlinkOperator {
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var autoscaler = AutoscalerFactory.create(client, eventRecorder, null);
-        var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder, autoscaler);
+        var flinkResourceHooksManager = new FlinkResourceHooksManager(hooks, eventRecorder);
+        var reconciler =
+                new SessionJobReconciler(
+                        eventRecorder, statusRecorder, autoscaler, flinkResourceHooksManager);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);

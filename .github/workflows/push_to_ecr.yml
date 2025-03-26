@@ -1,9 +1,10 @@
 name: "Push Docker Image to Dev ECR"
 on:
   workflow_dispatch:
-  schedule:
-    # Runs at midnight UTC every day
-    - cron: '0 0 * * *'
+  push:
+    branches:
+      - main
+      - 'release-*'
 env:
   ROLE_ARN: arn:aws:iam::381491835868:role/grepr-flink-kubernetes-operator
   ROLE_SESSION_NAME: GitHub_to_AWS_via_FederatedOIDC
@@ -45,4 +46,4 @@ jobs:
 
       - name: Publish Docker image to ECR
         run: |
-          docker buildx build --tag ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0 --platform=linux/amd64,linux/arm64 --push --file Dockerfile . 
+          docker buildx build --tag ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0-grepr --platform=linux/amd64,linux/arm64 --push --file Dockerfile . 

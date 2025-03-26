@@ -621,4 +621,11 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofMinutes(-1))
                     .withDescription(
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> FLINK_RESOURCE_HOOKS_ENABLED =
+            operatorConfig("flink-resource.hooks.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Enables flink resource hooks.");
 }

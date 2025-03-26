@@ -74,6 +74,7 @@ public class FlinkOperatorConfiguration {
     String labelSelector;
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
+    boolean flinkResourceHooksEnabled;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -185,6 +186,9 @@ public class FlinkOperatorConfiguration {
         DeletionPropagation deletionPropagation =
                 operatorConfig.get(KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION);
 
+        boolean flinkResourceHooksEnabled =
+                operatorConfig.get(KubernetesOperatorConfigOptions.FLINK_RESOURCE_HOOKS_ENABLED);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -212,7 +216,8 @@ public class FlinkOperatorConfiguration {
                 exceptionLabelMapper,
                 labelSelector,
                 getLeaderElectionConfig(operatorConfig),
-                deletionPropagation);
+                deletionPropagation,
+                flinkResourceHooksEnabled);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {

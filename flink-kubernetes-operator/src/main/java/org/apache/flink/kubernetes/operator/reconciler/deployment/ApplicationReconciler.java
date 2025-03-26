@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.kubernetes.operator.hooks.FlinkResourceHookStatus;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -74,6 +75,14 @@ public class ApplicationReconciler
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
         super(eventRecorder, statusRecorder, autoscaler);
+    }
+
+    @Override
+    protected FlinkResourceHookStatus maybeExecuteFlinkResourceHooks(
+            FlinkResourceContext<FlinkDeployment> ctx,
+            Configuration deployConfig,
+            Configuration lastDeployedConfig) {
+        return FlinkResourceHookStatus.NOT_APPLICABLE;
     }
 
     @Override
