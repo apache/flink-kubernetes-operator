@@ -70,43 +70,45 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
         if (reconciliationStatus != null
                 && reconciliationStatus.deserializeLastReconciledSpec() != null
                 && reconciliationStatus.deserializeLastReconciledSpec().getJob() == null) {
+            // Populate conditions for SessionMode deployment
             switch (jobManagerDeploymentStatus) {
                 case READY:
                     updateCondition(
                             conditions,
                             ConditionUtils.runningTrue(
-                                    "JobManager is running and ready to receive REST API call",
-                                    "JobManager is running and ready to receive REST API call"));
+                                    JobManagerDeploymentStatus.READY.name(),
+                                    "JobManager is running and ready to receive REST API calls"));
                     break;
                 case MISSING:
                     updateCondition(
                             conditions,
                             ConditionUtils.runningFalse(
-                                    "JobManager deployment not found",
+                                    JobManagerDeploymentStatus.MISSING.name(),
                                     "JobManager deployment not found"));
                     break;
                 case DEPLOYING:
                     updateCondition(
                             conditions,
                             ConditionUtils.runningFalse(
-                                    "JobManager process is starting up",
+                                    JobManagerDeploymentStatus.DEPLOYING.name(),
                                     "JobManager process is starting up"));
                     break;
                 case DEPLOYED_NOT_READY:
                     updateCondition(
                             conditions,
                             ConditionUtils.runningFalse(
-                                    "JobManager is running but not ready yet to receive REST API calls",
+                                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY.name(),
                                     "JobManager is running but not ready yet to receive REST API calls"));
                     break;
                 case ERROR:
                     updateCondition(
                             conditions,
                             ConditionUtils.runningFalse(
-                                    "Deployment in terminal error, requires spec change for reconciliation to continue",
+                                    JobManagerDeploymentStatus.ERROR.name(),
                                     "JobManager deployment failed"));
             }
         } else if (getJobStatus() != null && getJobStatus().getState() != null) {
+            // Populate conditions for ApplicationMode deployment
             switch (getJobStatus().getState()) {
                 case RECONCILING:
                     updateCondition(
@@ -136,7 +138,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                             conditions,
                             ConditionUtils.runningFalse(
                                     JobStatus.RESTARTING.name(),
-                                    "The job is currently undergoing a restarting"));
+                                    "The job is currently restarting"));
                     break;
                 case FAILED:
                     updateCondition(
@@ -174,6 +176,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
         if (reconciliationStatus != null
                 && reconciliationStatus.deserializeLastReconciledSpec() != null
                 && reconciliationStatus.deserializeLastReconciledSpec().getJob() == null) {
+            // populate phase for SessionMode deployment
             switch (jobManagerDeploymentStatus) {
                 case READY:
                     phase = "Running";
@@ -185,6 +188,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                     break;
             }
         } else if (getJobStatus() != null && getJobStatus().getState() != null) {
+            // populate phase for ApplicationMode deployment
             switch (getJobStatus().getState()) {
                 case RECONCILING:
                     phase = "Pending";

@@ -23,16 +23,28 @@ import io.fabric8.kubernetes.api.model.ConditionBuilder;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-/**
- * Creates a condition object with the specified parameters.
- *
- * @return A condition object with the type, message, status, reason and timestamp.
- */
+/** Creates a condition object with the type, status, message and reason. */
 public class ConditionUtils {
+    /**
+     * Create a condition with type "Running", status "True", the given message and reason, and
+     * current timestamp.
+     *
+     * @param message Message for the condition.
+     * @param reason Reason for the condition.
+     * @return A condition object.
+     */
     public static Condition runningTrue(final String message, final String reason) {
         return crCondition("Running", "True", message, reason);
     }
 
+    /**
+     * Create a condition with type "Running", status "False", the given message and reason, and
+     * current timestamp.
+     *
+     * @param message Message for the condition.
+     * @param reason Reason for the condition.
+     * @return A condition object.
+     */
     public static Condition runningFalse(final String message, final String reason) {
         return crCondition("Running", "False", message, reason);
     }
