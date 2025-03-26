@@ -30,6 +30,12 @@ public class ExceptionUtils {
     /**
      * Based on the flink ExceptionUtils#findThrowableSerializedAware but fixes an infinite loop bug
      * resulting from SerializedThrowable deserialization errors.
+     *
+     * @param throwable the throwable to be processed
+     * @param searchType the type of the exception to search for
+     * @param classLoader the classloader to use for deserialization
+     * @param <T> the exception type
+     * @return the found exception, or empty if it is not found.
      */
     public static <T extends Throwable> Optional<T> findThrowableSerializedAware(
             Throwable throwable, Class<T> searchType, ClassLoader classLoader) {
@@ -65,8 +71,8 @@ public class ExceptionUtils {
      * exceptions in the hierarchy.
      *
      * @param throwable the throwable to be processed
-     * @return the exception message, which will have a format similar to "cause1 -> cause2 ->
-     *     cause3"
+     * @return the exception message, which will have a format similar to "cause1 &rarr; cause2
+     *     &rarr; cause3"
      */
     public static String getExceptionMessage(Throwable throwable) {
         return getExceptionMessage(throwable, 0);

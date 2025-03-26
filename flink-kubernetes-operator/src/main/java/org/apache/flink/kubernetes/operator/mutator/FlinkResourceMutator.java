@@ -31,6 +31,7 @@ public interface FlinkResourceMutator extends Plugin {
      * Mutate deployment and return the mutated Object.
      *
      * @param deployment A Flink application or session cluster deployment.
+     * @return the mutated Flink application or session cluster deployment.
      */
     FlinkDeployment mutateDeployment(FlinkDeployment deployment);
 
@@ -39,6 +40,7 @@ public interface FlinkResourceMutator extends Plugin {
      *
      * @param sessionJob the session job to be mutated.
      * @param session the target session cluster of the session job to be Mutated.
+     * @return the mutated session job.
      */
     FlinkSessionJob mutateSessionJob(FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
 
@@ -46,6 +48,7 @@ public interface FlinkResourceMutator extends Plugin {
      * Mutate snapshot and return the mutated Object.
      *
      * @param stateSnapshot the snapshot to be mutated.
+     * @return the mutated snapshot.
      */
     FlinkStateSnapshot mutateStateSnapshot(FlinkStateSnapshot stateSnapshot);
 }

@@ -954,7 +954,15 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    /** Wait until Deployment is removed, return remaining timeout. */
+    /**
+     * Wait until Deployment is removed, return remaining timeout.
+     *
+     * @param name name of the deployment
+     * @param deployment The deployment resource
+     * @param propagation DeletePropagation
+     * @param timeout Timeout to wait
+     * @return remaining timeout after deletion
+     */
     @VisibleForTesting
     protected Duration deleteDeploymentBlocking(
             String name,
