@@ -28,7 +28,7 @@ on:
       - release-*
   pull_request:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
