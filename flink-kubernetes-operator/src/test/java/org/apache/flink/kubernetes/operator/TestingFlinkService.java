@@ -130,6 +130,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean checkpointAvailable = true;
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
+    @Setter private Exception makeItFailWith;
     @Setter private boolean triggerSavepointFailure = false;
     @Setter private boolean disposeSavepointFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
@@ -212,6 +213,9 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -269,6 +273,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             Configuration conf,
             @Nullable String savepoint)
             throws Exception {
+
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
 
         if (deployFailure) {
             throw new Exception("Deployment failure");

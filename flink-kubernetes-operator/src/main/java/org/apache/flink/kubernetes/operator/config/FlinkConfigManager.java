@@ -238,6 +238,7 @@ public class FlinkConfigManager {
      *
      * @param baseConfMap The configuration map that should be searched for relevant Flink version
      *     prefixes.
+     * @param flinkVersion The FlinkVersion to be used
      * @return A list of relevant Flink version prefixes in order of ascending Flink version.
      */
     protected static List<String> getRelevantVersionPrefixes(
@@ -381,6 +382,7 @@ public class FlinkConfigManager {
      * Get configuration for interacting with session jobs. Similar to the observe configuration for
      * FlinkDeployments.
      *
+     * @param name The name of the job
      * @param deployment FlinkDeployment for the session cluster
      * @param sessionJobSpec Session job spec
      * @return Session job config
