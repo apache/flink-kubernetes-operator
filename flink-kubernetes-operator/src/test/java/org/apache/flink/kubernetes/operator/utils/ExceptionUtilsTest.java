@@ -47,7 +47,7 @@ public class ExceptionUtilsTest {
         var ex2 = new RuntimeException("Cause 2", new SerializedThrowable(ex3));
         var ex = new RuntimeException("Cause 1", ex2);
         assertThat(ExceptionUtils.getExceptionMessage(ex))
-                .isEqualTo("Cause 1 -> Cause 2 -> Cause 3 -> Cause 4");
+                .isEqualTo("Cause 1 -> Cause 2 -> Cause 3");
     }
 
     @Test

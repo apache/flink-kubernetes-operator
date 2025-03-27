@@ -29,10 +29,12 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -42,6 +44,7 @@ import java.util.ArrayList;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for the {@link JobStatusObserver}. */
 @EnableKubernetesMockClient(crud = true)
@@ -112,6 +115,36 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
+    }
+
+    @Test
+    void testFailed() throws Exception {
+        var observer = new JobStatusObserver<>(eventRecorder);
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Mark failed
+        flinkService.setJobFailedErr(
+                new Exception("job err", new SerializedThrowable(new Exception("root"))));
+        observer.observe(ctx);
+
+        // First event should be job error reported
+        var jobErrorEvent = flinkResourceEventCollector.events.poll();
+        assertEquals(EventRecorder.Reason.Error.name(), jobErrorEvent.getReason());
+        assertEquals("job err -> root", jobErrorEvent.getMessage());
+
+        // Make sure job status still reported
+        assertEquals(
+                EventRecorder.Reason.JobStatusChanged.name(),
+                flinkResourceEventCollector.events.poll().getReason());
+
+        observer.observe(ctx);
+        assertTrue(flinkResourceEventCollector.events.isEmpty());
     }
 
     private static Stream<Arguments> cancellingArgs() {

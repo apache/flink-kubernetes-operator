@@ -75,7 +75,7 @@ public class ExceptionUtils {
      *     &rarr; cause3"
      */
     public static String getExceptionMessage(Throwable throwable) {
-        return getExceptionMessage(throwable, 0);
+        return getExceptionMessage(throwable, 1);
     }
 
     /**

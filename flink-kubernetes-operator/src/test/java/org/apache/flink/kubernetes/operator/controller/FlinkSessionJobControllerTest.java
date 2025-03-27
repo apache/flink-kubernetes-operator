@@ -103,7 +103,7 @@ class FlinkSessionJobControllerTest {
 
         var event = testController.events().remove();
         Assertions.assertEquals(EventRecorder.Type.Warning.toString(), event.getType());
-        Assertions.assertEquals("SessionJobException", event.getReason());
+        Assertions.assertEquals("Error", event.getReason());
 
         testController.cleanup(sessionJob, context);
     }
@@ -635,7 +635,7 @@ class FlinkSessionJobControllerTest {
         var event = testController.events().remove();
         assertEquals("Submit", event.getReason());
         event = testController.events().remove();
-        assertEquals("SessionJobException", event.getReason());
+        assertEquals("Error", event.getReason());
         assertEquals(
                 "Deployment Failure -> IllegalStateException -> actual failure reason",
                 event.getMessage());

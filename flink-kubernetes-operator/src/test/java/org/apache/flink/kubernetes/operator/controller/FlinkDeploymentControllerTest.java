@@ -981,7 +981,7 @@ public class FlinkDeploymentControllerTest {
         var event = testController.flinkResourceEvents().remove();
         assertEquals("Submit", event.getReason());
         event = testController.flinkResourceEvents().remove();
-        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Error", event.getReason());
         assertEquals("Deployment failure", event.getMessage());
     }
 
@@ -1006,7 +1006,7 @@ public class FlinkDeploymentControllerTest {
         var event = testController.flinkResourceEvents().remove();
         assertEquals("Submit", event.getReason());
         event = testController.flinkResourceEvents().remove();
-        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Error", event.getReason());
         assertEquals(
                 "Deployment Failure -> IllegalStateException -> actual failure reason",
                 event.getMessage());
@@ -1112,7 +1112,7 @@ public class FlinkDeploymentControllerTest {
         var event = testController.flinkResourceEvents().remove();
         assertEquals("Submit", event.getReason());
         event = testController.flinkResourceEvents().remove();
-        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Error", event.getReason());
         assertEquals(
                 "Deployment Failure -> IllegalStateException -> actual failure reason",
                 event.getMessage());
