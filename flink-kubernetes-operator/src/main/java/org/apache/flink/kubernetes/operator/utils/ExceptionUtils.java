@@ -93,11 +93,12 @@ public class ExceptionUtils {
         }
 
         if (throwable instanceof SerializedThrowable) {
+            var serialized = ((SerializedThrowable) throwable);
             var deserialized =
-                    ((SerializedThrowable) throwable)
-                            .deserializeError(Thread.currentThread().getContextClassLoader());
+                    serialized.deserializeError(Thread.currentThread().getContextClassLoader());
             if (deserialized == throwable) {
-                return "Unknown Error (SerializedThrowable)";
+                var msg = serialized.getMessage();
+                return msg != null ? msg : serialized.getOriginalErrorClassName();
             } else {
                 return getExceptionMessage(deserialized, level);
             }

@@ -52,12 +52,25 @@ public class ExceptionUtilsTest {
 
     @Test
     void testSerializedThrowableError() {
-        var serializedException = new SerializedThrowable(new NonSerializableException());
-        assertThat(ExceptionUtils.getExceptionMessage(serializedException))
-                .isEqualTo("Unknown Error (SerializedThrowable)");
+        assertThat(
+                        ExceptionUtils.getExceptionMessage(
+                                new SerializedThrowable(new NonSerializableException("Message"))))
+                .isEqualTo(String.format("%s: Message", NonSerializableException.class.getName()));
+
+        assertThat(
+                        ExceptionUtils.getExceptionMessage(
+                                new SerializedThrowable(new NonSerializableException())))
+                .isEqualTo(NonSerializableException.class.getName());
     }
 
     private static class NonSerializableException extends Exception {
+
+        public NonSerializableException(String message) {
+            super(message);
+        }
+
+        public NonSerializableException() {}
+
         private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
             throw new IOException();
         }
