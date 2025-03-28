@@ -75,37 +75,37 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                 case READY:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningTrue(
-                                    JobManagerDeploymentStatus.READY.name(),
-                                    "JobManager is running and ready to receive REST API calls"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.SESSION_MODE_CONDITION.get(
+                                            JobManagerDeploymentStatus.READY.name())));
                     break;
                 case MISSING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobManagerDeploymentStatus.MISSING.name(),
-                                    "JobManager deployment not found"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.SESSION_MODE_CONDITION.get(
+                                            JobManagerDeploymentStatus.MISSING.name())));
                     break;
                 case DEPLOYING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobManagerDeploymentStatus.DEPLOYING.name(),
-                                    "JobManager process is starting up"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.SESSION_MODE_CONDITION.get(
+                                            JobManagerDeploymentStatus.DEPLOYING.name())));
                     break;
                 case DEPLOYED_NOT_READY:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY.name(),
-                                    "JobManager is running but not ready yet to receive REST API calls"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.SESSION_MODE_CONDITION.get(
+                                            JobManagerDeploymentStatus.DEPLOYED_NOT_READY.name())));
                     break;
                 case ERROR:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobManagerDeploymentStatus.ERROR.name(),
-                                    "JobManager deployment failed"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.SESSION_MODE_CONDITION.get(
+                                            JobManagerDeploymentStatus.ERROR.name())));
             }
         } else if (getJobStatus() != null && getJobStatus().getState() != null) {
             // Populate conditions for ApplicationMode deployment
@@ -113,59 +113,66 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                 case RECONCILING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.RECONCILING.name(), "Job is currently reconciling"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.RECONCILING.name())));
                     break;
                 case CREATED:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.CREATED.name(), "Job is created"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.CREATED.name())));
                     break;
                 case RUNNING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningTrue(JobStatus.RUNNING.name(), "Job is running"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.RUNNING.name())));
                     break;
                 case FAILING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.FAILING.name(), "Job has failed"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.FAILING.name())));
                     break;
                 case RESTARTING:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.RESTARTING.name(),
-                                    "The job is currently restarting"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.RESTARTING.name())));
                     break;
                 case FAILED:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.FAILED.name(),
-                                    "The job has failed with a non-recoverable task failure"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.FAILED.name())));
                     break;
                 case FINISHED:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.FINISHED.name(),
-                                    "Job's tasks have successfully finished"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.FINISHED.name())));
                     break;
 
                 case CANCELED:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.CANCELED.name(), "Job has been cancelled"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.CANCELED.name())));
                     break;
                 case SUSPENDED:
                     updateCondition(
                             conditions,
-                            ConditionUtils.runningFalse(
-                                    JobStatus.SUSPENDED.name(), "The job has been suspended"));
+                            ConditionUtils.crCondition(
+                                    ConditionUtils.APPLICATION_MODE_CONDITION.get(
+                                            JobStatus.SUSPENDED.name())));
                     break;
             }
         }
