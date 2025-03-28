@@ -189,9 +189,11 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                     phase = "Running";
                     break;
                 case MISSING:
-                case ERROR:
                 case DEPLOYING:
                     phase = "Pending";
+                    break;
+                case ERROR:
+                    phase = "Failed";
                     break;
             }
         } else if (getJobStatus() != null && getJobStatus().getState() != null) {
