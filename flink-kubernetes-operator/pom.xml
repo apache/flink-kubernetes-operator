@@ -185,6 +185,13 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kube-api-test-client-inject</artifactId>
+            <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>mockwebserver</artifactId>
             <version>${okhttp.version}</version>

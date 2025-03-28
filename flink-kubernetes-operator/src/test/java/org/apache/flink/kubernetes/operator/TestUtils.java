@@ -97,6 +97,24 @@ public class TestUtils extends BaseTestUtils {
     public static PodList createFailedPodList(String crashLoopMessage, String reason) {
         ContainerStatus cs =
                 new ContainerStatusBuilder()
+                        .withName("c1")
+                        .withNewState()
+                        .withNewWaiting()
+                        .withReason(reason)
+                        .withMessage(crashLoopMessage)
+                        .endWaiting()
+                        .endState()
+                        .build();
+
+        Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(new PodStatusBuilder().withContainerStatuses(cs).build());
+        return new PodListBuilder().withItems(pod).build();
+    }
+
+    public static PodList createFailedInitContainerPodList(String crashLoopMessage, String reason) {
+        ContainerStatus cs =
+                new ContainerStatusBuilder()
+                        .withName("c1")
                         .withNewState()
                         .withNewWaiting()
                         .withReason(reason)
@@ -108,7 +126,8 @@ public class TestUtils extends BaseTestUtils {
         Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
         pod.setStatus(
                 new PodStatusBuilder()
-                        .withContainerStatuses(Collections.singletonList(cs))
+                        .withContainerStatuses(new ContainerStatusBuilder().withReady().build())
+                        .withInitContainerStatuses(cs)
                         .build());
         return new PodListBuilder().withItems(pod).build();
     }
