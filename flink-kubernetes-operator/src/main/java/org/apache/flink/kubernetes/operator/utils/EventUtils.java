@@ -44,7 +44,6 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -240,7 +239,7 @@ public class EventUtils {
         return Optional.empty();
     }
 
-    public static List<Event> getPodEvents(KubernetesClient client, Pod pod) {
+    private static List<Event> getPodEvents(KubernetesClient client, Pod pod) {
         var ref = getObjectReference(pod);
 
         var eventList =
@@ -276,10 +275,10 @@ public class EventUtils {
      * Check that pod is stuck during volume mount stage and throw {@link DeploymentFailedException}
      * with the right reason message if that's the case.
      *
+     * @param client Kubernetes client
      * @param pod Pod to be checked
-     * @param podEventSupplier supplier for Pod event list. For easy testability
      */
-    public static void checkForVolumeMountErrors(Pod pod, Supplier<List<Event>> podEventSupplier) {
+    public static void checkForVolumeMountErrors(KubernetesClient client, Pod pod) {
         var conditions = pod.getStatus().getConditions();
         if (conditions == null) {
             return;
@@ -300,7 +299,7 @@ public class EventUtils {
         boolean notReady = checkStatusWasAlways(pod, conditionMap.get("Ready"), "False");
 
         if (notReady && failedInitialization) {
-            podEventSupplier.get().stream()
+            getPodEvents(client, pod).stream()
                     .filter(e -> e.getReason().equals("FailedMount"))
                     .findAny()
                     .ifPresent(

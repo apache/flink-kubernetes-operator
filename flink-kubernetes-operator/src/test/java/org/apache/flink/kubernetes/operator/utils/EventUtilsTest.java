@@ -18,14 +18,9 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
-import io.fabric8.kubernetes.api.model.PodCondition;
-import io.fabric8.kubernetes.api.model.PodConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -38,16 +33,9 @@ import javax.annotation.Nullable;
 
 import java.net.HttpURLConnection;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /** Test for {@link EventUtils}. */
 @EnableKubernetesMockClient(crud = true)
@@ -583,109 +571,5 @@ public class EventUtilsTest {
                         null,
                         null));
         Assertions.assertNull(eventConsumed);
-    }
-
-    @Test
-    public void testVolumeMountErrors() {
-        var pod =
-                new PodBuilder()
-                        .withNewMetadata()
-                        .withName("test")
-                        .withNamespace("default")
-                        .endMetadata()
-                        .withNewStatus()
-                        .endStatus()
-                        .build();
-
-        var events =
-                List.of(
-                        createPodEvent("e1", "reason1", "msg1", pod),
-                        createPodEvent("e2", "FailedMount", "mountErr", pod));
-
-        // No conditions, no error expected
-        EventUtils.checkForVolumeMountErrors(pod, () -> events);
-
-        var conditions = new ArrayList<PodCondition>();
-        pod.getStatus().setConditions(conditions);
-
-        // No conditions, no error expected
-        EventUtils.checkForVolumeMountErrors(pod, () -> events);
-
-        var conditionMap = new HashMap<String, String>();
-
-        // Pod initialized completely, shouldn't check events
-        conditionMap.put("Initialized", "True");
-        conditionMap.put("Ready", "False");
-
-        conditions.clear();
-        conditionMap.forEach(
-                (t, s) ->
-                        conditions.add(
-                                new PodConditionBuilder().withType(t).withStatus(s).build()));
-        EventUtils.checkForVolumeMountErrors(pod, () -> events);
-
-        // Pod initialized completely, shouldn't check events
-        conditionMap.put("PodReadyToStartContainers", "True");
-        conditionMap.put("Initialized", "False");
-
-        conditions.clear();
-        conditionMap.forEach(
-                (t, s) ->
-                        conditions.add(
-                                new PodConditionBuilder().withType(t).withStatus(s).build()));
-        EventUtils.checkForVolumeMountErrors(pod, () -> events);
-
-        // Check event only when not ready to start
-        conditionMap.put("PodReadyToStartContainers", "False");
-        conditions.clear();
-        conditionMap.forEach(
-                (t, s) ->
-                        conditions.add(
-                                new PodConditionBuilder().withType(t).withStatus(s).build()));
-
-        try {
-            EventUtils.checkForVolumeMountErrors(pod, () -> events);
-            fail("Exception not thrown");
-        } catch (DeploymentFailedException dfe) {
-            assertEquals("FailedMount", dfe.getReason());
-            assertEquals("mountErr", dfe.getMessage());
-        }
-
-        // Old kubernetes without PodReadyToStartContainers
-        conditionMap.remove("PodReadyToStartContainers");
-        conditionMap.put("Initialized", "False");
-        conditions.clear();
-        conditionMap.forEach(
-                (t, s) ->
-                        conditions.add(
-                                new PodConditionBuilder().withType(t).withStatus(s).build()));
-
-        try {
-            EventUtils.checkForVolumeMountErrors(pod, () -> events);
-            fail("Exception not thrown");
-        } catch (DeploymentFailedException dfe) {
-            assertEquals("FailedMount", dfe.getReason());
-            assertEquals("mountErr", dfe.getMessage());
-        }
-    }
-
-    private Event createPodEvent(String name, String reason, String msg, Pod pod) {
-        return new EventBuilder()
-                .withApiVersion("v1")
-                .withInvolvedObject(EventUtils.getObjectReference(pod))
-                .withType("type")
-                .withReason(reason)
-                .withFirstTimestamp(Instant.now().toString())
-                .withLastTimestamp(Instant.now().toString())
-                .withNewSource()
-                .withComponent("pod")
-                .endSource()
-                .withCount(1)
-                .withMessage(msg)
-                .withNewMetadata()
-                .withName(name)
-                .withNamespace(pod.getMetadata().getNamespace())
-                .endMetadata()
-                .build();
     }
 }

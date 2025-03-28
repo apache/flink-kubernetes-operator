@@ -183,8 +183,7 @@ public abstract class AbstractFlinkDeploymentObserver
                     .forEach(AbstractFlinkDeploymentObserver::checkContainerError);
 
             // No obvious errors were found, check for volume mount issues
-            EventUtils.checkForVolumeMountErrors(
-                    pod, () -> EventUtils.getPodEvents(ctx.getKubernetesClient(), pod));
+            EventUtils.checkForVolumeMountErrors(ctx.getKubernetesClient(), pod);
         }
     }
 
