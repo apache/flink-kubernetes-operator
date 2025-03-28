@@ -47,17 +47,30 @@ public class ExceptionUtilsTest {
         var ex2 = new RuntimeException("Cause 2", new SerializedThrowable(ex3));
         var ex = new RuntimeException("Cause 1", ex2);
         assertThat(ExceptionUtils.getExceptionMessage(ex))
-                .isEqualTo("Cause 1 -> Cause 2 -> Cause 3 -> Cause 4");
+                .isEqualTo("Cause 1 -> Cause 2 -> Cause 3");
     }
 
     @Test
     void testSerializedThrowableError() {
-        var serializedException = new SerializedThrowable(new NonSerializableException());
-        assertThat(ExceptionUtils.getExceptionMessage(serializedException))
-                .isEqualTo("Unknown Error (SerializedThrowable)");
+        assertThat(
+                        ExceptionUtils.getExceptionMessage(
+                                new SerializedThrowable(new NonSerializableException("Message"))))
+                .isEqualTo(String.format("%s: Message", NonSerializableException.class.getName()));
+
+        assertThat(
+                        ExceptionUtils.getExceptionMessage(
+                                new SerializedThrowable(new NonSerializableException())))
+                .isEqualTo(NonSerializableException.class.getName());
     }
 
     private static class NonSerializableException extends Exception {
+
+        public NonSerializableException(String message) {
+            super(message);
+        }
+
+        public NonSerializableException() {}
+
         private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
             throw new IOException();
         }

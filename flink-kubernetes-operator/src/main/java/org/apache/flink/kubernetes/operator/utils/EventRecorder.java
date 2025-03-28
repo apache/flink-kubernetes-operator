@@ -314,6 +314,7 @@ public class EventRecorder {
         Scaling,
         UnsupportedFlinkVersion,
         SnapshotError,
-        SnapshotAbandoned
+        SnapshotAbandoned,
+        Error
     }
 }
