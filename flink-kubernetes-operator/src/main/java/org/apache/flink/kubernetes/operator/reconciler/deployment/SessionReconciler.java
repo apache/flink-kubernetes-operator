@@ -74,7 +74,7 @@ public class SessionReconciler
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig, clock);
         statusRecorder.patchAndCacheStatus(deployment, ctx.getKubernetesClient());
 
-        deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false);
+        deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false, false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig, clock);
         return true;
     }
@@ -93,7 +93,8 @@ public class SessionReconciler
             FlinkDeploymentSpec spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            boolean retainJobGraph)
             throws Exception {
         var cr = ctx.getResource();
         setOwnerReference(cr, deployConfig);

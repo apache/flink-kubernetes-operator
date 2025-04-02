@@ -198,19 +198,17 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata, boolean retainJobGraph)
+            throws Exception {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
 
-        // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
-        // the newly changed job config (e.g. parallelism) could take effect
-        if (FlinkUtils.isKubernetesHAActivated(conf)) {
-            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
-        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
-            FlinkUtils.deleteJobGraphInZookeeperHA(conf);
+        if (!retainJobGraph) {
+            // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so
+            // that
+            // the newly changed job config (e.g. parallelism) could take effect
+            deleteJobGraph(conf);
         }
 
         if (requireHaMetadata) {
@@ -218,6 +216,16 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
 
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+    }
+
+    private void deleteJobGraph(Configuration conf) throws Exception {
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            FlinkUtils.deleteJobGraphInZookeeperHA(conf);
+        }
     }
 
     @Override

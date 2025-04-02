@@ -136,7 +136,8 @@ public class ApplicationReconciler
             FlinkDeploymentSpec spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            boolean retainJobGraph)
             throws Exception {
 
         var relatedResource = ctx.getResource();
@@ -180,7 +181,8 @@ public class ApplicationReconciler
                 EventRecorder.Component.JobManagerDeployment,
                 MSG_SUBMIT,
                 ctx.getKubernetesClient());
-        flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
+        flinkService.submitApplicationCluster(
+                spec.getJob(), deployConfig, requireHaMetadata, retainJobGraph);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 

@@ -103,7 +103,10 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .getState());
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
         flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+                deployment.getSpec().getJob(),
+                ctx.getDeployConfig(deployment.getSpec()),
+                false,
+                false);
         flinkService.cancelJob(JobID.fromHexString(jobStatus.getJobId()), false);
         observer.observe(ctx);
         assertEquals(
@@ -126,7 +129,10 @@ public class JobStatusObserverTest extends OperatorTestBase {
         jobStatus.setState(JobStatus.RUNNING);
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
         flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+                deployment.getSpec().getJob(),
+                ctx.getDeployConfig(deployment.getSpec()),
+                false,
+                false);
 
         // Mark failed
         flinkService.setJobFailedErr(

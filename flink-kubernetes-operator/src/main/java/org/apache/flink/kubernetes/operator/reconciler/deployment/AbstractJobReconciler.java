@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotTriggerTimestampStore;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -202,11 +203,36 @@ public abstract class AbstractJobReconciler<
                     currentDeploySpec,
                     deployConfig,
                     // We decide to enforce HA based on how job was previously suspended
-                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
+                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE,
+                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
+                            && wasUpgradeForScalingOnly(ctx));
 
             ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
         }
         return true;
+    }
+
+    /**
+     * Determines whether the last upgrade was performed for scaling.
+     *
+     * @param ctx Reconciliation context.
+     * @return {@code true} if the upgrade was for scaling, {@code false} otherwise.
+     */
+    protected boolean wasUpgradeForScalingOnly(FlinkResourceContext<CR> ctx) {
+        var resource = ctx.getResource();
+
+        STATUS status = resource.getStatus();
+        SPEC lastReconciledSpec = status.getReconciliationStatus().deserializeLastReconciledSpec();
+        SPEC lastStableSpec = status.getReconciliationStatus().deserializeLastStableSpec();
+        if (lastStableSpec == null) {
+            return false;
+        }
+        lastReconciledSpec.getJob().setState(lastStableSpec.getJob().getState());
+        var specDiff =
+                new ReflectiveDiffBuilder<>(
+                                ctx.getDeploymentMode(), lastReconciledSpec, lastStableSpec)
+                        .build();
+        return specDiff.getType() == DiffType.SCALE;
     }
 
     protected JobUpgrade getJobUpgrade(FlinkResourceContext<CR> ctx, Configuration deployConfig)
@@ -370,7 +396,8 @@ public abstract class AbstractJobReconciler<
             FlinkResourceContext<CR> ctx,
             SPEC spec,
             Configuration deployConfig,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            boolean retainJobGraph)
             throws Exception {
         Optional<String> savepointOpt = Optional.empty();
 
@@ -390,7 +417,7 @@ public abstract class AbstractJobReconciler<
             }
         }
 
-        deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
+        deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata, retainJobGraph);
     }
 
     /**
@@ -575,7 +602,7 @@ public abstract class AbstractJobReconciler<
                 && lastSavepointKnown) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
-        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
+        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata, false);
     }
 
     private void redeployWithSavepoint(
@@ -600,6 +627,7 @@ public abstract class AbstractJobReconciler<
                     currentDeploySpec,
                     ctx.getDeployConfig(currentDeploySpec),
                     savepointPath,
+                    false,
                     false);
         }
         ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
