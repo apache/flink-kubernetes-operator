@@ -17,11 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder;
+import io.fabric8.kubernetes.api.model.ObjectReference;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.slf4j.Logger;
@@ -32,10 +37,14 @@ import javax.annotation.Nullable;
 import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * The util to generate an event for the target resource. It is copied from
@@ -182,13 +191,7 @@ public class EventUtils {
             String eventName) {
         return new EventBuilder()
                 .withApiVersion("v1")
-                .withInvolvedObject(
-                        new ObjectReferenceBuilder()
-                                .withKind(target.getKind())
-                                .withUid(target.getMetadata().getUid())
-                                .withName(target.getMetadata().getName())
-                                .withNamespace(target.getMetadata().getNamespace())
-                                .build())
+                .withInvolvedObject(getObjectReference(target))
                 .withType(type.name())
                 .withReason(reason)
                 .withFirstTimestamp(Instant.now().toString())
@@ -234,5 +237,79 @@ public class EventUtils {
             }
         }
         return Optional.empty();
+    }
+
+    private static List<Event> getPodEvents(KubernetesClient client, Pod pod) {
+        var ref = getObjectReference(pod);
+
+        var eventList =
+                client.v1()
+                        .events()
+                        .inNamespace(pod.getMetadata().getNamespace())
+                        .withInvolvedObject(ref)
+                        .list();
+
+        if (eventList == null) {
+            return new ArrayList<>();
+        }
+
+        var items = eventList.getItems();
+        if (items == null) {
+            return new ArrayList<>();
+        }
+        return items;
+    }
+
+    @VisibleForTesting
+    protected static ObjectReference getObjectReference(HasMetadata resource) {
+        var ref = new ObjectReference();
+        ref.setApiVersion(resource.getApiVersion());
+        ref.setKind(resource.getKind());
+        ref.setName(resource.getMetadata().getName());
+        ref.setNamespace(resource.getMetadata().getNamespace());
+        ref.setUid(resource.getMetadata().getUid());
+        return ref;
+    }
+
+    /**
+     * Check that pod is stuck during volume mount stage and throw {@link DeploymentFailedException}
+     * with the right reason message if that's the case.
+     *
+     * @param client Kubernetes client
+     * @param pod Pod to be checked
+     */
+    public static void checkForVolumeMountErrors(KubernetesClient client, Pod pod) {
+        var conditions = pod.getStatus().getConditions();
+        if (conditions == null) {
+            return;
+        }
+        var conditionMap =
+                conditions.stream()
+                        .collect(Collectors.toMap(PodCondition::getType, Function.identity()));
+
+        // We use PodReadyToStartContainers if available otherwise use Initialized, but it's only
+        // there k8s 1.29+
+        boolean failedInitialization =
+                checkStatusWasAlways(
+                        pod,
+                        conditionMap.getOrDefault(
+                                "PodReadyToStartContainers", conditionMap.get("Initialized")),
+                        "False");
+
+        boolean notReady = checkStatusWasAlways(pod, conditionMap.get("Ready"), "False");
+
+        if (notReady && failedInitialization) {
+            getPodEvents(client, pod).stream()
+                    .filter(e -> e.getReason().equals("FailedMount"))
+                    .findAny()
+                    .ifPresent(
+                            e -> {
+                                throw new DeploymentFailedException(e.getMessage(), e.getReason());
+                            });
+        }
+    }
+
+    private static boolean checkStatusWasAlways(Pod pod, PodCondition condition, String status) {
+        return condition != null && condition.getStatus().equals(status);
     }
 }

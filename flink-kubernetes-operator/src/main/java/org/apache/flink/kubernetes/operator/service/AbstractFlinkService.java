@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -142,6 +143,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -546,7 +548,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         try {
             latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
         } catch (Exception e) {
-            if (e instanceof RestClientException
+            if (e instanceof ExecutionException
                     && e.getMessage() != null
                     && e.getMessage().contains("Checkpointing has not been enabled")) {
                 LOG.warn("Checkpointing not enabled for job {}", jobId, e);
@@ -953,7 +955,15 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    /** Wait until Deployment is removed, return remaining timeout. */
+    /**
+     * Wait until Deployment is removed, return remaining timeout.
+     *
+     * @param name name of the deployment
+     * @param deployment The deployment resource
+     * @param propagation DeletePropagation
+     * @param timeout Timeout to wait
+     * @return remaining timeout after deletion
+     */
     @VisibleForTesting
     protected Duration deleteDeploymentBlocking(
             String name,
@@ -975,7 +985,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         config.toMap()
                 .forEach(
                         (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
+                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                                 newConfig.setString(k, v);
                             }
                         });

@@ -52,6 +52,7 @@ import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -98,6 +99,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -129,6 +131,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean checkpointAvailable = true;
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
+    @Setter private Exception makeItFailWith;
     @Setter private boolean triggerSavepointFailure = false;
     @Setter private boolean disposeSavepointFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
@@ -139,6 +142,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
     private final Map<Long, String> checkpointStats = new HashMap<>();
     @Setter private boolean throwCheckpointingDisabledError = false;
+    @Setter private Throwable jobFailedErr;
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -211,6 +215,9 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -269,6 +276,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             @Nullable String savepoint)
             throws Exception {
 
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
+
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -292,7 +303,27 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }
+
+        if (jobFailedErr != null) {
+            return Optional.of(new JobStatusMessage(jobID, "n", JobStatus.FAILED, 0));
+        }
+
         return super.getJobStatus(conf, jobID);
+    }
+
+    @Override
+    public JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception {
+        if (jobFailedErr != null) {
+            return new JobResult.Builder()
+                    .jobId(jobID)
+                    .serializedThrowable(new SerializedThrowable(jobFailedErr))
+                    .netRuntime(1)
+                    .accumulatorResults(new HashMap<>())
+                    .applicationStatus(ApplicationStatus.FAILED)
+                    .build();
+        }
+
+        return super.requestJobResult(conf, jobID);
     }
 
     public List<Tuple3<String, JobStatusMessage, Configuration>> listJobs() {
@@ -598,8 +629,9 @@ public class TestingFlinkService extends AbstractFlinkService {
                     Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
             getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
         if (throwCheckpointingDisabledError) {
-            throw new RestClientException(
-                    "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST);
+            throw new ExecutionException(
+                    new RestClientException(
+                            "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST));
         }
 
         if (checkpointInfo != null) {

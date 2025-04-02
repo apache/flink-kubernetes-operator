@@ -98,6 +98,24 @@ public class TestUtils extends BaseTestUtils {
     public static PodList createFailedPodList(String crashLoopMessage, String reason) {
         ContainerStatus cs =
                 new ContainerStatusBuilder()
+                        .withName("c1")
+                        .withNewState()
+                        .withNewWaiting()
+                        .withReason(reason)
+                        .withMessage(crashLoopMessage)
+                        .endWaiting()
+                        .endState()
+                        .build();
+
+        Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(new PodStatusBuilder().withContainerStatuses(cs).build());
+        return new PodListBuilder().withItems(pod).build();
+    }
+
+    public static PodList createFailedInitContainerPodList(String crashLoopMessage, String reason) {
+        ContainerStatus cs =
+                new ContainerStatusBuilder()
+                        .withName("c1")
                         .withNewState()
                         .withNewWaiting()
                         .withReason(reason)
@@ -109,7 +127,8 @@ public class TestUtils extends BaseTestUtils {
         Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
         pod.setStatus(
                 new PodStatusBuilder()
-                        .withContainerStatuses(Collections.singletonList(cs))
+                        .withContainerStatuses(new ContainerStatusBuilder().withReady().build())
+                        .withInitContainerStatuses(cs)
                         .build());
         return new PodListBuilder().withItems(pod).build();
     }
@@ -118,7 +137,7 @@ public class TestUtils extends BaseTestUtils {
         String nowTs = Instant.now().toString();
         var status = new DeploymentStatus();
         status.setAvailableReplicas(ready ? 1 : 0);
-        status.setReplicas(1);
+        status.setReplicas(2);
         var availableCondition = new DeploymentCondition();
         availableCondition.setType("Available");
         availableCondition.setStatus(ready ? "True" : "False");
@@ -126,7 +145,7 @@ public class TestUtils extends BaseTestUtils {
         status.setConditions(List.of(availableCondition));
 
         DeploymentSpec spec = new DeploymentSpec();
-        spec.setReplicas(1);
+        spec.setReplicas(3);
 
         var meta = new ObjectMeta();
         meta.setCreationTimestamp(nowTs);

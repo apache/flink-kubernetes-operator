@@ -223,10 +223,12 @@ public class ApplicationReconciler
     @Override
     protected boolean cancelJob(FlinkResourceContext<FlinkDeployment> ctx, SuspendMode suspendMode)
             throws Exception {
+        var cancelTs = Instant.now();
         var result =
                 ctx.getFlinkService()
                         .cancelJob(ctx.getResource(), suspendMode, ctx.getObserveConfig());
-        result.getSavepointPath().ifPresent(location -> setUpgradeSavepointPath(ctx, location));
+        result.getSavepointPath()
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location, cancelTs));
         return result.isPending();
     }
 

@@ -122,10 +122,16 @@ public class EventRecorder {
     }
 
     /**
+     * @param resource The resource
+     * @param type The type
+     * @param reason the reason
+     * @param message the message
+     * @param component the component
+     * @param messageKey the message key
+     * @param client the client
      * @param interval Interval for dedupe. Null mean no dedupe.
-     * @return
      */
-    public boolean triggerEventWithInterval(
+    public void triggerEventWithInterval(
             AbstractFlinkResource<?, ?> resource,
             Type type,
             String reason,
@@ -134,7 +140,7 @@ public class EventRecorder {
             String messageKey,
             KubernetesClient client,
             @Nullable Duration interval) {
-        return EventUtils.createOrUpdateEventWithInterval(
+        EventUtils.createOrUpdateEventWithInterval(
                 client,
                 resource,
                 type,
@@ -166,12 +172,18 @@ public class EventRecorder {
     }
 
     /**
+     * @param resource The resource
+     * @param type The type
+     * @param reason the reason
+     * @param message the message
+     * @param component the component
+     * @param messageKey the message key
+     * @param client the client
      * @param interval Interval for dedupe. Null mean no dedupe.
      * @param dedupePredicate Predicate for dedupe algorithm..
      * @param labels Labels to store in meta data for dedupe. Do nothing if null.
-     * @return
      */
-    public boolean triggerEventWithLabels(
+    public void triggerEventWithLabels(
             AbstractFlinkResource<?, ?> resource,
             Type type,
             String reason,
@@ -182,7 +194,7 @@ public class EventRecorder {
             @Nullable Duration interval,
             @Nullable Predicate<Map<String, String>> dedupePredicate,
             @Nullable Map<String, String> labels) {
-        return EventUtils.createOrUpdateEventWithLabels(
+        EventUtils.createOrUpdateEventWithLabels(
                 client,
                 resource,
                 type,
@@ -302,6 +314,7 @@ public class EventRecorder {
         Scaling,
         UnsupportedFlinkVersion,
         SnapshotError,
-        SnapshotAbandoned
+        SnapshotAbandoned,
+        Error
     }
 }
