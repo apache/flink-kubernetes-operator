@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.utils;
 
+import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -24,15 +25,19 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Set;
+import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** AutoScaler utilities. */
 public class AutoScalerUtils {
@@ -93,5 +98,95 @@ public class AutoScalerUtils {
         }
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
         return anyAdded;
+    }
+
+    /**
+     * Computes the optimized linear scaling coefficient (α) by minimizing the weighted least
+     * squares error.
+     *
+     * <p>This method estimates the scaling coefficient in a linear scaling model by fitting
+     * observed processing rates and parallelism levels while applying weights to account for
+     * recency and significance.
+     *
+     * <p>The computed coefficient is clamped within the specified lower and upper bounds to ensure
+     * stability and prevent extreme scaling adjustments.
+     *
+     * @param parallelismLevels List of parallelism levels.
+     * @param processingRates List of observed processing rates.
+     * @param weights List of weights for each observation.
+     * @param baselineProcessingRate Baseline processing rate.
+     * @param upperBound Maximum allowable value for the scaling coefficient.
+     * @param lowerBound Minimum allowable value for the scaling coefficient.
+     * @return The optimized scaling coefficient (α), constrained within {@code [lowerBound,
+     *     upperBound]}.
+     */
+    public static double optimizeLinearScalingCoefficient(
+            List<Double> parallelismLevels,
+            List<Double> processingRates,
+            List<Double> weights,
+            double baselineProcessingRate,
+            double upperBound,
+            double lowerBound) {
+
+        double weightedSum = 0.0;
+        double weightedSquaredSum = 0.0;
+
+        for (int i = 0; i < parallelismLevels.size(); i++) {
+            double parallelism = parallelismLevels.get(i);
+            double processingRate = processingRates.get(i);
+            double weight = weights.get(i);
+
+            weightedSum += weight * parallelism * processingRate;
+            weightedSquaredSum += weight * parallelism * parallelism;
+        }
+
+        if (weightedSquaredSum == 0.0) {
+            return 1.0; // Fallback to linear scaling if denominator is zero
+        }
+
+        double alpha = weightedSum / (weightedSquaredSum * baselineProcessingRate);
+
+        return Math.max(lowerBound, Math.min(upperBound, alpha));
+    }
+
+    /**
+     * Computes the baseline processing rate from historical scaling data.
+     *
+     * <p>The baseline processing rate represents the **processing rate per unit of parallelism**.
+     * It is determined using the smallest observed parallelism in the history.
+     *
+     * @param history A {@code SortedMap} where keys are timestamps ({@code Instant}), and values
+     *     are {@code ScalingSummary} objects.
+     * @return The computed baseline processing rate (processing rate per unit of parallelism).
+     */
+    public static double computeBaselineProcessingRate(SortedMap<Instant, ScalingSummary> history) {
+        ScalingSummary latestSmallestParallelismSummary = null;
+
+        for (Map.Entry<Instant, ScalingSummary> entry :
+                ((NavigableMap<Instant, ScalingSummary>) history).descendingMap().entrySet()) {
+            ScalingSummary summary = entry.getValue();
+            double parallelism = summary.getCurrentParallelism();
+
+            if (parallelism == 1) {
+                return summary.getMetrics().get(TRUE_PROCESSING_RATE).getAverage();
+            }
+
+            if (latestSmallestParallelismSummary == null
+                    || parallelism < latestSmallestParallelismSummary.getCurrentParallelism()) {
+                latestSmallestParallelismSummary = entry.getValue();
+            }
+        }
+
+        if (latestSmallestParallelismSummary == null) {
+            return Double.NaN;
+        }
+
+        double parallelism = latestSmallestParallelismSummary.getCurrentParallelism();
+        double processingRate =
+                latestSmallestParallelismSummary
+                        .getMetrics()
+                        .get(TRUE_PROCESSING_RATE)
+                        .getAverage();
+        return processingRate / parallelism;
     }
 }
