@@ -987,10 +987,15 @@ public class AbstractFlinkServiceTest {
 
     @Test
     public void removeOperatorConfigTest() {
-        var key = "kubernetes.operator.meyKey";
-        var deployConfig = Configuration.fromMap(Map.of("kubernetes.operator.meyKey", "v"));
+        var opKey1 = "kubernetes.operator.meyKey";
+        var opKey2 = "job.autoscaler.";
+        var regularKey = "k";
+        var deployConfig =
+                Configuration.fromMap(Map.of(opKey1, "v", opKey2, "v", regularKey, "v1"));
         var newConf = AbstractFlinkService.removeOperatorConfigs(deployConfig);
-        assertFalse(newConf.containsKey(key));
+        assertFalse(newConf.containsKey(opKey1));
+        assertFalse(newConf.containsKey(opKey2));
+        assertTrue(newConf.containsKey(regularKey));
     }
 
     @Test

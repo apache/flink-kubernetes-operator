@@ -335,7 +335,8 @@ public class FlinkUtils {
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
-        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
+        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX)
+                || entry.getKey().startsWith("executionPlan-");
     }
 
     public static boolean isZookeeperHAActivated(Configuration configuration) {

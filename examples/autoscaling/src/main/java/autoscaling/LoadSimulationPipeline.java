@@ -18,12 +18,16 @@
 
 package autoscaling;
 
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
-import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.util.Collector;
 
 import org.slf4j.Logger;
@@ -60,6 +64,11 @@ public class LoadSimulationPipeline {
 
     private static final Logger LOG = LoggerFactory.getLogger(LoadSimulationPipeline.class);
 
+    // Number of impulses (records) emitted per sampling interval.
+    // This value determines how many records should be generated within each `samplingIntervalMs`
+    // period.
+    private static final int IMPULSES_PER_SAMPLING_INTERVAL = 10;
+
     public static void main(String[] args) throws Exception {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.disableOperatorChaining();
@@ -74,8 +83,39 @@ public class LoadSimulationPipeline {
         for (String branch : maxLoadPerTask.split("\n")) {
             String[] taskLoads = branch.split(";");
 
+            /*
+             * Creates an unbounded stream that continuously emits the constant value 42L.
+             * Flink's DataGeneratorSource with RateLimiterStrategy is used to control the emission rate.
+             *
+             * Emission Rate Logic:
+             * - The goal is to generate a fixed number of impulses per sampling interval.
+             * - `samplingIntervalMs` defines the duration of one sampling interval in milliseconds.
+             * - We define `IMPULSES_PER_SAMPLING_INTERVAL = 10`, meaning that for every sampling interval,
+             *   exactly 10 impulses should be generated.
+             *
+             * To calculate the total number of records emitted per second:
+             * 1. Determine how many sampling intervals fit within one second:
+             *      samplingIntervalsPerSecond = 1000 / samplingIntervalMs;
+             * 2. Multiply this by the number of impulses per interval to get the total rate:
+             *      impulsesPerSecond = IMPULSES_PER_SAMPLING_INTERVAL * samplingIntervalsPerSecond;
+             *
+             * Example:
+             * - If `samplingIntervalMs = 500 ms` and `IMPULSES_PER_SAMPLING_INTERVAL = 10`:
+             *      impulsesPerSecond = (1000 / 500) * 10 = 2 * 10 = 20 records per second.
+             */
             DataStream<Long> stream =
-                    env.addSource(new ImpulseSource(samplingIntervalMs)).name("ImpulseSource");
+                    env.fromSource(
+                            new DataGeneratorSource<>(
+                                    (GeneratorFunction<Long, Long>)
+                                            (index) -> 42L, // Emits constant value 42
+                                    Long.MAX_VALUE, // Unbounded stream
+                                    RateLimiterStrategy.perSecond(
+                                            (1000.0 / samplingIntervalMs)
+                                                    * IMPULSES_PER_SAMPLING_INTERVAL), // Controls
+                                    // rate
+                                    Types.LONG),
+                            WatermarkStrategy.noWatermarks(),
+                            "ImpulseSource");
 
             for (String load : taskLoads) {
                 double maxLoad = Double.parseDouble(load);
@@ -95,31 +135,6 @@ public class LoadSimulationPipeline {
                 "Load Simulation (repeats after "
                         + Duration.of(repeatsAfterMs, ChronoUnit.MILLIS)
                         + ")");
-    }
-
-    private static class ImpulseSource implements SourceFunction<Long> {
-        private final int maxSleepTimeMs;
-        volatile boolean canceled;
-
-        public ImpulseSource(int samplingInterval) {
-            this.maxSleepTimeMs = samplingInterval / 10;
-        }
-
-        @Override
-        public void run(SourceContext<Long> sourceContext) throws Exception {
-            while (!canceled) {
-                synchronized (sourceContext.getCheckpointLock()) {
-                    sourceContext.collect(42L);
-                }
-                // Provide an impulse to keep the load simulation active
-                Thread.sleep(maxSleepTimeMs);
-            }
-        }
-
-        @Override
-        public void cancel() {
-            canceled = true;
-        }
     }
 
     private static class LoadSimulationFn extends RichFlatMapFunction<Long, Long> {

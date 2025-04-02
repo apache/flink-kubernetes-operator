@@ -41,6 +41,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
@@ -100,10 +101,12 @@ public class SessionJobReconciler
     @Override
     protected boolean cancelJob(FlinkResourceContext<FlinkSessionJob> ctx, SuspendMode suspendMode)
             throws Exception {
+        var cancelTs = Instant.now();
         var result =
                 ctx.getFlinkService()
                         .cancelSessionJob(ctx.getResource(), suspendMode, ctx.getObserveConfig());
-        result.getSavepointPath().ifPresent(location -> setUpgradeSavepointPath(ctx, location));
+        result.getSavepointPath()
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location, cancelTs));
         return result.isPending();
     }
 

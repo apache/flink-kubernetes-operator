@@ -35,12 +35,12 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -58,7 +58,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -296,94 +295,6 @@ public class FlinkDeploymentControllerTest {
                                 configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
-    }
-
-    @ParameterizedTest()
-    @ValueSource(
-            strings = {
-                DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF,
-                DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF,
-                DeploymentFailedException.REASON_ERR_IMAGE_PULL
-            })
-    public void verifyInProgressDeploymentWithError(String reason) throws Exception {
-        String crashLoopMessage = "container fails";
-
-        var submittedEventValidatingResponseProvider =
-                new TestUtils.ValidatingResponseProvider<>(
-                        mockedEvent,
-                        r ->
-                                assertTrue(
-                                        r.getBody()
-                                                .readUtf8()
-                                                .contains(
-                                                        AbstractFlinkResourceReconciler
-                                                                .MSG_SUBMIT)));
-        mockServer
-                .expect()
-                .post()
-                .withPath("/api/v1/namespaces/flink-operator-test/events")
-                .andReply(submittedEventValidatingResponseProvider)
-                .once();
-
-        var validatingResponseProvider =
-                new TestUtils.ValidatingResponseProvider<>(
-                        mockedEvent,
-                        r -> {
-                            String recordedRequestBody = r.getBody().readUtf8();
-                            assertTrue(recordedRequestBody.contains(reason));
-                            assertTrue(recordedRequestBody.contains(crashLoopMessage));
-                        });
-        mockServer
-                .expect()
-                .post()
-                .withPath("/api/v1/namespaces/flink-operator-test/events")
-                .andReply(validatingResponseProvider)
-                .once();
-
-        flinkService.setPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
-
-        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
-        UpdateControl<FlinkDeployment> updateControl;
-
-        testController.reconcile(appCluster, context);
-        updateControl =
-                testController.reconcile(
-                        appCluster,
-                        TestUtils.createContextWithInProgressDeployment(kubernetesClient));
-        submittedEventValidatingResponseProvider.assertValidated();
-        assertFalse(updateControl.isUpdateStatus());
-        assertEquals(
-                Optional.of(
-                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
-                updateControl.getScheduleDelay());
-
-        assertEquals(
-                JobManagerDeploymentStatus.ERROR,
-                appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING,
-                appCluster.getStatus().getJobStatus().getState());
-
-        // Validate status status
-        assertNotNull(appCluster.getStatus().getError());
-
-        // next cycle should not create another event
-        updateControl =
-                testController.reconcile(
-                        appCluster,
-                        TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
-        assertEquals(
-                JobManagerDeploymentStatus.ERROR,
-                appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertFalse(updateControl.isUpdateStatus());
-        assertEquals(
-                ReconciliationUtils.rescheduleAfter(
-                                JobManagerDeploymentStatus.READY,
-                                appCluster,
-                                configManager.getOperatorConfiguration())
-                        .toMillis(),
-                updateControl.getScheduleDelay().get());
-        validatingResponseProvider.assertValidated();
     }
 
     @ParameterizedTest
@@ -914,9 +825,7 @@ public class FlinkDeploymentControllerTest {
     @Test
     public void testSuccessfulObservationShouldClearErrors() throws Exception {
         final String crashLoopMessage = "deploy errors";
-        flinkService.setPodList(
-                TestUtils.createFailedPodList(
-                        crashLoopMessage, DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
+        flinkService.setPodList(TestUtils.createFailedPodList(crashLoopMessage, "ErrImagePull"));
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
 
@@ -980,8 +889,35 @@ public class FlinkDeploymentControllerTest {
         var event = testController.flinkResourceEvents().remove();
         assertEquals("Submit", event.getReason());
         event = testController.flinkResourceEvents().remove();
-        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Error", event.getReason());
         assertEquals("Deployment failure", event.getMessage());
+    }
+
+    @Test
+    public void testEventOfNonDeploymentFailedChainedException() {
+        assertTrue(testController.flinkResourceEvents().isEmpty());
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+
+        flinkService.setMakeItFailWith(
+                new RuntimeException(
+                        "Deployment Failure",
+                        new IllegalStateException(
+                                null,
+                                new SerializedThrowable(new Exception("actual failure reason")))));
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.flinkResourceEvents().size());
+
+        var event = testController.flinkResourceEvents().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.flinkResourceEvents().remove();
+        assertEquals("Error", event.getReason());
+        assertEquals(
+                "Deployment Failure -> IllegalStateException -> actual failure reason",
+                event.getMessage());
     }
 
     @Test
@@ -1062,6 +998,32 @@ public class FlinkDeploymentControllerTest {
         flinkService.setDeployFailure(false);
         testController.reconcile(flinkDeployment, context);
         assertEquals("msp", flinkService.listJobs().get(0).f0);
+    }
+
+    @Test
+    public void testErrorOnReconcileWithChainedExceptions() throws Exception {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        flinkDeployment.getSpec().getJob().setInitialSavepointPath("msp");
+        flinkService.setMakeItFailWith(
+                new RuntimeException(
+                        "Deployment Failure",
+                        new IllegalStateException(
+                                null,
+                                new SerializedThrowable(new Exception("actual failure reason")))));
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.flinkResourceEvents().size());
+
+        var event = testController.flinkResourceEvents().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.flinkResourceEvents().remove();
+        assertEquals("Error", event.getReason());
+        assertEquals(
+                "Deployment Failure -> IllegalStateException -> actual failure reason",
+                event.getMessage());
     }
 
     @Test

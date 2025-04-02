@@ -134,6 +134,7 @@ public class SnapshotUtils {
      * @param resource The resource to be snapshotted.
      * @param conf The observe configuration of the resource.
      * @param snapshotType The type of the snapshot.
+     * @param lastTrigger the last time the snapshot was triggered.
      * @return An optional {@link SnapshotTriggerType}.
      */
     @VisibleForTesting

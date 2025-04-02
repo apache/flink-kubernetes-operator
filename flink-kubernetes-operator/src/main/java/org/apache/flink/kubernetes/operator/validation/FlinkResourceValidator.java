@@ -50,6 +50,7 @@ public interface FlinkResourceValidator extends Plugin {
      * Validate and return optional error.
      *
      * @param savepoint the savepoint to be validated.
+     * @param target the target resource of the savepoint to be validated.
      * @return Optional error string, should be present iff validation resulted in an error
      */
     Optional<String> validateStateSnapshot(

@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import org.slf4j.Logger;
@@ -182,7 +183,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 markSuspended(resource);
             }
 
-            setErrorIfPresent(ctx, clusterJobStatus);
+            recordJobErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Normal,
@@ -203,7 +204,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 });
     }
 
-    private void setErrorIfPresent(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+    private void recordJobErrorIfPresent(
+            FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
         if (clusterJobStatus.getJobState() == JobStatus.FAILED) {
             try {
                 var result =
@@ -215,10 +217,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                 t -> {
                                     updateFlinkResourceException(
                                             t, ctx.getResource(), ctx.getOperatorConfig());
-                                    LOG.error(
-                                            "Job {} failed with error: {}",
-                                            clusterJobStatus.getJobId(),
-                                            t.getFullStringifiedStackTrace());
+
+                                    eventRecorder.triggerEvent(
+                                            ctx.getResource(),
+                                            EventRecorder.Type.Warning,
+                                            EventRecorder.Reason.Error,
+                                            EventRecorder.Component.Job,
+                                            ExceptionUtils.getExceptionMessage(t),
+                                            ctx.getKubernetesClient());
                                 });
             } catch (Exception e) {
                 LOG.warn("Failed to request the job result", e);

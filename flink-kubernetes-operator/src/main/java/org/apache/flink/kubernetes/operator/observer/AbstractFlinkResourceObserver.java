@@ -107,6 +107,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
      * DEPLOYED state.
      *
      * @param ctx Context for resource.
+     * @return true if the resource was already upgraded, false otherwise.
      */
     protected abstract boolean checkIfAlreadyUpgraded(FlinkResourceContext<CR> ctx);
 }

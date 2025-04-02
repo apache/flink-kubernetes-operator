@@ -28,7 +28,7 @@ on:
       - release-*
   pull_request:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -161,6 +161,7 @@ jobs:
           - test_autoscaler.sh
           - test_flink_operator_ha.sh
           - test_snapshot.sh
+          - test_batch_job.sh
         exclude:
           - flink-version: v1_16
             test: test_autoscaler.sh
@@ -172,18 +173,24 @@ jobs:
             test: test_flink_operator_ha.sh
           - flink-version: v1_16
             test: test_snapshot.sh
+          - flink-version: v1_16
+            test: test_batch_job.sh
           - flink-version: v1_17
             test: test_dynamic_config.sh
           - flink-version: v1_17
             test: test_flink_operator_ha.sh
           - flink-version: v1_17
             test: test_snapshot.sh
+          - flink-version: v1_17
+            test: test_batch_job.sh
           - flink-version: v1_18
             test: test_dynamic_config.sh
           - flink-version: v1_18
             test: test_flink_operator_ha.sh
           - flink-version: v1_18
             test: test_snapshot.sh
+          - flink-version: v1_18
+            test: test_batch_job.sh
           - flink-version: v1_19
             test: test_snapshot.sh
     uses: ./.github/workflows/e2e.yaml
