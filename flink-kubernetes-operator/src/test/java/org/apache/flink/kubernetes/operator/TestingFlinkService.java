@@ -205,7 +205,8 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata, boolean retainJobGraph)
+            throws Exception {
 
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);

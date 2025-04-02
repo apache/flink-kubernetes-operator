@@ -70,7 +70,8 @@ public class SessionJobReconciler
             FlinkSessionJobSpec sessionJobSpec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            boolean retainJobGraph)
             throws Exception {
 
         eventRecorder.triggerEvent(

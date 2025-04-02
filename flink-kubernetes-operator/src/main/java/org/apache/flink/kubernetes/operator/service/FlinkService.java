@@ -51,7 +51,8 @@ public interface FlinkService {
 
     KubernetesClient getKubernetesClient();
 
-    void submitApplicationCluster(JobSpec jobSpec, Configuration conf, boolean requireHaMetadata)
+    void submitApplicationCluster(
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata, boolean retainJobGraph)
             throws Exception;
 
     boolean isHaMetadataAvailable(Configuration conf);

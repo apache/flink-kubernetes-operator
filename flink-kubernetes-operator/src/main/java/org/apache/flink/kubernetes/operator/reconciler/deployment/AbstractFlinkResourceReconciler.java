@@ -119,7 +119,7 @@ public abstract class AbstractFlinkResourceReconciler<
             updateStatusBeforeFirstDeployment(
                     cr, spec, deployConfig, status, ctx.getKubernetesClient());
 
-            deploy(ctx, spec, deployConfig, getInitialSnapshotPath(spec), false);
+            deploy(ctx, spec, deployConfig, getInitialSnapshotPath(spec), false, false);
 
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return;
@@ -304,6 +304,8 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param deployConfig Flink conf for the deployment.
      * @param savepoint Optional savepoint path for applications and session jobs.
      * @param requireHaMetadata Flag used by application deployments to validate HA metadata
+     * @param retainJobGraph Flag used by application deployments to decide if job graph should be
+     *     deleted while submitting application.
      * @throws Exception Error during deployment.
      */
     @VisibleForTesting
@@ -312,7 +314,8 @@ public abstract class AbstractFlinkResourceReconciler<
             SPEC spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            boolean retainJobGraph)
             throws Exception;
 
     /**

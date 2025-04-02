@@ -120,7 +120,7 @@ public class SecureFlinkServiceTest {
                         () -> {
                             final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
                             testService.submitApplicationCluster(
-                                    deployment.getSpec().getJob(), deployConfig, false);
+                                    deployment.getSpec().getJob(), deployConfig, false, false);
                         });
         assertInstanceOf(ClusterRetrieveException.class, thrown.getCause());
     }
@@ -248,7 +248,7 @@ public class SecureFlinkServiceTest {
         try {
             final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
             testService.submitApplicationCluster(
-                    deployment.getSpec().getJob(), deployConfig, false);
+                    deployment.getSpec().getJob(), deployConfig, false, false);
         } finally {
             TestUtils.setEnv(originalEnv);
         }
@@ -302,7 +302,11 @@ public class SecureFlinkServiceTest {
 
         @Override
         public void submitApplicationCluster(
-                JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+                JobSpec jobSpec,
+                Configuration conf,
+                boolean requireHaMetadata,
+                boolean retainJobGraph)
+                throws Exception {
             try {
                 getClusterClient(conf);
             } catch (ConfigurationException e) {
