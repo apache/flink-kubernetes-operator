@@ -302,7 +302,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         assertSpec(rs, minReconciliationTs);
 
-        // The first job should be running OK, the second should be left in its broken state
+        // The first job should be RUNNING, the second should be SUSPENDED
+        assertEquals(JobStatus.FAILING, rs.reconciledStatus.getJobStatus().getState());
         var flinkDeployments = getFlinkDeployments();
         assertEquals(2, flinkDeployments.size());
         assertEquals(
@@ -310,7 +311,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 flinkDeployments.get(0).getStatus().getReconciliationStatus().getState());
-        assertNull(flinkDeployments.get(1).getStatus().getJobStatus().getState());
+        assertEquals(
+                JobStatus.SUSPENDED,
+                flinkDeployments.get(1).getStatus().getJobStatus().getState());
         assertEquals(
                 ReconciliationState.UPGRADING,
                 flinkDeployments.get(1).getStatus().getReconciliationStatus().getState());

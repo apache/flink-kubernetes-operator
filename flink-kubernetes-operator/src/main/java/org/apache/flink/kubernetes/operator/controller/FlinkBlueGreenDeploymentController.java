@@ -65,7 +65,7 @@ import java.util.stream.Stream;
 @ControllerConfiguration
 public class FlinkBlueGreenDeploymentController
         implements Reconciler<FlinkBlueGreenDeployment>,
-                EventSourceInitializer<FlinkBlueGreenDeployment> {
+        EventSourceInitializer<FlinkBlueGreenDeployment> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
     private static final int DEFAULT_MAX_NUM_RETRIES = 5;
@@ -206,7 +206,13 @@ public class FlinkBlueGreenDeploymentController
 
             if (deploymentStatus.getNumRetries() >= maxNumRetries) {
                 // ABORT
-                return patchStatusUpdateControl(bgDeployment, deploymentStatus, null, null, false);
+                // Suspend the nextDeployment (FlinkDeployment)
+                nextDeployment.getStatus().getJobStatus().setState(JobStatus.SUSPENDED);
+                josdkContext.getClient().resource(nextDeployment).update();
+
+                // If the current running FlinkDeployment is not in RUNNING/STABLE,
+                // we flag this Blue/Green as FAILING
+                return patchStatusUpdateControl(bgDeployment, deploymentStatus, null, JobStatus.FAILING, false);
             } else {
                 // RETRY
                 deploymentStatus.setNumRetries(deploymentStatus.getNumRetries() + 1);
@@ -242,8 +248,6 @@ public class FlinkBlueGreenDeploymentController
             deploymentStatus.setLastReconciledSpec(
                     SpecUtils.serializeObject(bgDeployment.getSpec(), "spec"));
 
-            // TODO: set the last reconciled spec here
-
             return patchStatusUpdateControl(
                     bgDeployment, deploymentStatus, nextState, JobStatus.RUNNING, false);
         }
@@ -265,7 +269,6 @@ public class FlinkBlueGreenDeploymentController
                             ? deployments.getFlinkDeploymentBlue()
                             : deployments.getFlinkDeploymentGreen();
 
-            // TODO: if the current deployment is not STABLE/RUNNING we'll revert to the last stable
             // spec, report the error and abort
             if (isDeploymentReady(currentFlinkDeployment, josdkContext, deploymentStatus)) {
 
