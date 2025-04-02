@@ -764,7 +764,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        false);
 
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
@@ -773,7 +779,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        false);
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
@@ -1084,7 +1096,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        false);
 
         final List<Map<String, String>> expectedOwnerReferences =
                 List.of(TestUtils.generateTestOwnerReferenceMap(flinkApp));
@@ -1186,7 +1204,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         spec,
                         deployConfig,
                         Optional.empty(),
-                        requireMetadata);
+                        requireMetadata,
+                        false);
         assertEquals(deleted.get(), !requireMetadata);
         assertEquals(JobManagerDeploymentStatus.DEPLOYING, status.getJobManagerDeploymentStatus());
     }
@@ -1471,5 +1490,51 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     private void offsetReconcilerClock(FlinkDeployment dep, Duration offset) {
         testClock = Clock.offset(testClock, offset);
         appReconciler.setClock(testClock);
+    }
+
+    @Test
+    public void testJobGraphRetention() throws Exception {
+        var v1 = new JobVertexID();
+        var deleted = new AtomicBoolean(false);
+        var deployment = TestUtils.buildApplicationCluster();
+        flinkService =
+                new TestingFlinkService() {
+                    @Override
+                    public void submitApplicationCluster(
+                            JobSpec jobSpec,
+                            Configuration conf,
+                            boolean requireHaMetadata,
+                            boolean retainJobGraph)
+                            throws Exception {
+
+                        deleted.set(!retainJobGraph);
+
+                        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+                    }
+                };
+
+        getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        assertTrue(deleted.get());
+
+        FlinkDeployment scaleUpgrade = ReconciliationUtils.clone(deployment);
+        scaleUpgrade.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+        var config = scaleUpgrade.getSpec().getFlinkConfiguration();
+        config.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":2");
+        reconciler.reconcile(scaleUpgrade, context);
+        assertEquals(JobState.SUSPENDED, getReconciledJobState(scaleUpgrade));
+        deleted.set(true);
+        reconciler.reconcile(scaleUpgrade, context);
+        assertFalse(deleted.get());
+
+        FlinkDeployment nonScaleUpgrade = ReconciliationUtils.clone(deployment);
+        nonScaleUpgrade.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+        nonScaleUpgrade.getSpec().setRestartNonce(1234L);
+        reconciler.reconcile(nonScaleUpgrade, context);
+        assertEquals(JobState.SUSPENDED, getReconciledJobState(nonScaleUpgrade));
+        deleted.set(false);
+        reconciler.reconcile(nonScaleUpgrade, context);
+        assertTrue(deleted.get());
     }
 }

@@ -98,7 +98,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         // Validate port check logic
@@ -194,7 +194,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     public void testEventGeneratedWhenStatusChanged() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
 
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
@@ -225,7 +225,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     public void testErrorForwardToStatusWhenJobFailed() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
 
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
@@ -250,7 +250,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED.key(), "false");
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
@@ -539,7 +539,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setCheckpointTriggerNonce(timedOutNonce);
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
@@ -678,7 +678,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     public void testSavepointFormat() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
@@ -896,7 +896,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     public void jobStatusNotOverwrittenWhenTerminal() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
 
         deployment
@@ -918,7 +918,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
     public void getLastCheckpointShouldHandleCheckpointingNotEnabled() throws Exception {
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
 
         deployment
