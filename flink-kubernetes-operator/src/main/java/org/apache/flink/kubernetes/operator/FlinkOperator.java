@@ -269,6 +269,7 @@ public class FlinkOperator {
         registerDeploymentController();
         registerSessionJobController();
         registerSnapshotController();
+        registerBlueGreenController();
         operator.installShutdownHook(
                 baseConfig.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT));
         operator.start();
