@@ -235,8 +235,13 @@ spec:
           configMap:
             name: flink-operator-config
             items:
+            {{- if hasKey .Values.defaultConfiguration "flink-conf.yaml" }}
               - key: flink-conf.yaml
                 path: flink-conf.yaml
+            {{- else }}
+              - key: config.yaml
+                path: config.yaml
+            {{- end }}
               - key: log4j-operator.properties
                 path: log4j-operator.properties
               - key: log4j-console.properties
@@ -271,11 +276,25 @@ metadata:
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
+  config.yaml: |+
+{{- if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
+{{- end }}
+{{- if hasKey (.Values.defaultConfiguration) "config.yaml" }}
+  {{- index (.Values.defaultConfiguration) "config.yaml" | nindent 4 -}}
+{{- end }}
+{{- if .Values.watchNamespaces }}
+    kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
+{{- end }}
+{{- if index .Values "operatorHealth" }}
+    kubernetes.operator.health.probe.enabled: true
+    kubernetes.operator.health.probe.port: {{ .Values.operatorHealth.port }}
+{{- end }}
   flink-conf.yaml: |+
 {{- if .Values.defaultConfiguration.append }}
   {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
 {{- end }}
-{{- if index (.Values.defaultConfiguration) "flink-conf.yaml" }}
+{{- if hasKey (.Values.defaultConfiguration) "flink-conf.yaml" }}
   {{- index (.Values.defaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
 {{- end }}
 {{- if .Values.watchNamespaces }}

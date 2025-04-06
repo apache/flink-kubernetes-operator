@@ -75,6 +75,9 @@ jobs:
            sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
            sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
           fi
+          if [[ "${{ inputs.test }}" == "test_dynamic_config.sh" ]]; then          
+           sed -i "s/flink-conf.yaml: |+/config.yaml: |+/" helm/flink-kubernetes-operator/values.yaml
+          fi
           helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ steps.namespace-creator.outputs.EXTRA_HELM_INSTALL_ARGS }} 
           kubectl wait --for=condition=Available --timeout=120s -n ${{ inputs.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ inputs.namespace }}

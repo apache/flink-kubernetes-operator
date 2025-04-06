@@ -34,7 +34,7 @@ echo "Current operator pod is ${operator_pod}"
 create_namespace dynamic
 
 kubectl config set-context --current --namespace="${operator_namespace}"
-patch_flink_config '{"data": {"config.yaml": "kubernetes.operator.watched.namespaces: default,flink,dynamic"}}'
+patch_flink_config '{"data": {"flink-conf.yaml": "kubernetes.operator.watched.namespaces: default,flink,dynamic"}}'
 wait_for_operator_logs "${operator_pod}" "Setting default configuration to {kubernetes.operator.watched.namespaces=default,flink,dynamic}" ${TIMEOUT} || exit 1
 
 echo "Successfully run the dynamic property test"
