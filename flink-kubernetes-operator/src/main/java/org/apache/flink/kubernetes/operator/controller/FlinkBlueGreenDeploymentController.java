@@ -65,7 +65,7 @@ import java.util.stream.Stream;
 @ControllerConfiguration
 public class FlinkBlueGreenDeploymentController
         implements Reconciler<FlinkBlueGreenDeployment>,
-        EventSourceInitializer<FlinkBlueGreenDeployment> {
+                EventSourceInitializer<FlinkBlueGreenDeployment> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
     private static final int DEFAULT_MAX_NUM_RETRIES = 5;
@@ -196,8 +196,6 @@ public class FlinkBlueGreenDeploymentController
             // could get stuck
             //  (e.g. waiting for resources)
             // TODO: figure out the course of action for error/failure cases
-            // TODO: should we reschedule indefinitely? Should this case check the "should abort"
-            // condition?
 
             int maxNumRetries = bgDeployment.getSpec().getTemplate().getMaxNumRetries();
             if (maxNumRetries <= 0) {
@@ -210,27 +208,35 @@ public class FlinkBlueGreenDeploymentController
                 nextDeployment.getStatus().getJobStatus().setState(JobStatus.SUSPENDED);
                 josdkContext.getClient().resource(nextDeployment).update();
 
+                // We indicate this Blue/Green deployment is no longer Transitioning
+                //  and rollback the state value
+                deploymentStatus.setBlueGreenState(
+                        nextState == FlinkBlueGreenDeploymentState.ACTIVE_BLUE
+                                ? FlinkBlueGreenDeploymentState.ACTIVE_GREEN
+                                : FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
+
                 // If the current running FlinkDeployment is not in RUNNING/STABLE,
                 // we flag this Blue/Green as FAILING
-                return patchStatusUpdateControl(bgDeployment, deploymentStatus, null, JobStatus.FAILING, false);
+                return patchStatusUpdateControl(
+                        bgDeployment, deploymentStatus, null, JobStatus.FAILING, false);
             } else {
                 // RETRY
                 deploymentStatus.setNumRetries(deploymentStatus.getNumRetries() + 1);
 
                 LOG.info("Deployment " + nextDeployment.getMetadata().getName() + " not ready yet");
-                int reconciliationReschedInterval =
-                        bgDeployment
-                                .getSpec()
-                                .getTemplate()
-                                .getReconciliationReschedulingIntervalMs();
-                if (reconciliationReschedInterval <= 0) {
-                    reconciliationReschedInterval = DEFAULT_RECONCILIATION_RESCHEDULING_INTERVAL_MS;
-                }
-
                 return patchStatusUpdateControl(bgDeployment, deploymentStatus, null, null, false)
-                        .rescheduleAfter(reconciliationReschedInterval);
+                        .rescheduleAfter(getReconciliationReschedInterval(bgDeployment));
             }
         }
+    }
+
+    private static int getReconciliationReschedInterval(FlinkBlueGreenDeployment bgDeployment) {
+        int reconciliationReschedInterval =
+                bgDeployment.getSpec().getTemplate().getReconciliationReschedulingIntervalMs();
+        if (reconciliationReschedInterval <= 0) {
+            reconciliationReschedInterval = DEFAULT_RECONCILIATION_RESCHEDULING_INTERVAL_MS;
+        }
+        return reconciliationReschedInterval;
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> deleteAndFinalize(
@@ -247,6 +253,8 @@ public class FlinkBlueGreenDeploymentController
         } else {
             deploymentStatus.setLastReconciledSpec(
                     SpecUtils.serializeObject(bgDeployment.getSpec(), "spec"));
+
+            // TODO: Set the new child job STATUS to RUNNING too
 
             return patchStatusUpdateControl(
                     bgDeployment, deploymentStatus, nextState, JobStatus.RUNNING, false);
@@ -387,7 +395,7 @@ public class FlinkBlueGreenDeploymentController
 
         // TODO 1: check the last CP age with the logic from
         // AbstractJobReconciler.changeLastStateIfCheckpointTooOld
-        // TODO 2: if no checkpoint is available, take a savepoint
+        // TODO 2: if no checkpoint is available, take a savepoint? throw error?
         if (lastCheckpoint.isEmpty()) {
             throw new IllegalStateException(
                     "Last Checkpoint for Job "
@@ -406,14 +414,23 @@ public class FlinkBlueGreenDeploymentController
             Context<FlinkBlueGreenDeployment> josdkContext,
             boolean isFirstDeployment)
             throws JsonProcessingException {
+
         deploy(
                 flinkBlueGreenDeployment,
                 nextDeploymentType,
                 lastCheckpoint,
                 josdkContext,
                 isFirstDeployment);
+
+        // TODO: set child job status to JobStatus.INITIALIZING
+
         return patchStatusUpdateControl(
-                flinkBlueGreenDeployment, deploymentStatus, nextState, null, isFirstDeployment);
+                        flinkBlueGreenDeployment,
+                        deploymentStatus,
+                        nextState,
+                        null,
+                        isFirstDeployment)
+                .rescheduleAfter(getReconciliationReschedInterval(flinkBlueGreenDeployment));
     }
 
     private boolean isDeploymentReady(

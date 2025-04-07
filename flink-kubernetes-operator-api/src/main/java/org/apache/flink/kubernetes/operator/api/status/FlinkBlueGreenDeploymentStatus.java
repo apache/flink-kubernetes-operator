@@ -41,10 +41,10 @@ public class FlinkBlueGreenDeploymentStatus {
     /** The state of the blue/green transition. */
     private FlinkBlueGreenDeploymentState blueGreenState;
 
-    /** Last reconciled (serialized) deployment spec for A. */
+    /** Last reconciled (serialized) deployment spec. */
     private String lastReconciledSpec;
 
-    /** Timestamp of last reconciliation (either A or B). */
+    /** Timestamp of last reconciliation. */
     private Long lastReconciledTimestamp;
 
     /** Current number of retries. */
