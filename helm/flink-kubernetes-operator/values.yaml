@@ -23,7 +23,7 @@
 # watchNamespaces: ["flink"]
 
 image:
-  repository: flink-kubernetes-operator
+  repository: ghcr.io/apache/flink-kubernetes-operator
   pullPolicy: IfNotPresent
   tag: latest
   # If image digest is set then it takes precedence and the image tag will be ignored
