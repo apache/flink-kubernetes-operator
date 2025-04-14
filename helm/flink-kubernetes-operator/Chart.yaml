@@ -16,11 +16,18 @@
 # limitations under the License.
 ################################################################################
 
----
 apiVersion: v2
+
 name: flink-kubernetes-operator
+
 description: A Helm chart for the Apache Flink Kubernetes Operator
+
 type: application
+
 version: 1.12-SNAPSHOT
+
 appVersion: 1.12-SNAPSHOT
+
+home: https://github.com/apache/flink-kubernetes-operator
+
 icon: https://flink.apache.org/img/logo/png/50/color_50.png

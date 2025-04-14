@@ -1,0 +1,63 @@
+{{- /*
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+
+{{- if .Values.rbac.create }}
+{{- if .Values.rbac.jobRoleBinding.create }}
+{{- if .Values.watchNamespaces }}
+{{- range $namespace := .Values.watchNamespaces }}
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flink-operator.jobRoleBinding.name" $ }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "flink-operator.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ $role := include "flink-operator.jobRole.name" $ }}{{ include "flink-operator.roleScope" (dict "role" $role)}}
+  name: {{ include "flink-operator.jobRole.name" $ }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "flink-operator.jobServiceAccount.name" $ }}
+  namespace: {{ . }}
+{{- end }}
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flink-operator.jobRoleBinding.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flink-operator.jobRole.name" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "flink-operator.jobServiceAccount.name" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}
