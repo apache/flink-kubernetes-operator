@@ -1,0 +1,305 @@
+################################################################################
+#  Licensed to the Apache Software Foundation (ASF) under one
+#  or more contributor license agreements.  See the NOTICE file
+#  distributed with this work for additional information
+#  regarding copyright ownership.  The ASF licenses this file
+#  to you under the Apache License, Version 2.0 (the
+#  "License"); you may not use this file except in compliance
+#  with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+
+suite: Test Deployment
+
+templates:
+- controller/deployment.yaml
+
+release:
+  name: flink-operator
+  namespace: flink-operator
+
+tests:
+- it: Should create a deployment
+  asserts:
+  - containsDocument:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: flink-kubernetes-operator
+      namespace: flink-operator
+
+- it: Should use the specified image if `image.repository` and `image.tag` are set
+  set:
+    image: 
+      repository: test-repository/flink-kubernetes-operator
+      tag: test-tag
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[*].image
+      value: test-repository/flink-kubernetes-operator:test-tag
+
+- it: Should use the specified image pull policy if `image.pullPolicy` is set
+  set:
+    image:
+      pullPolicy: Always
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[*].imagePullPolicy
+      value: Always
+
+- it: Should use the specified image pull secrets if `imagePullsecrets` is set
+  set:
+    imagePullSecrets:
+    - name: test-secret1
+    - name: test-secret2
+  asserts:
+  - contains:
+      path: spec.template.spec.imagePullSecrets
+      content:
+        name: test-secret1
+  - contains:
+      path: spec.template.spec.imagePullSecrets
+      content:
+        name: test-secret2
+
+- it: Should use the specified replicas if `replicas` is set
+  set:
+    replicas: 0
+  asserts:
+  - equal:
+      path: spec.replicas
+      value: 0
+
+- it: Should use the specified strategy if `strategy` is set
+  set:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 1
+  asserts:
+  - equal:
+      path: spec.strategy
+      value:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 1
+
+- it: Should use the specified strategy if `strategy` is set
+  set:
+    strategy:
+      type: Recreate
+  asserts:
+  - equal:
+      path: spec.strategy
+      value:
+        type: Recreate
+
+- it: Should add deployment labels if `operatorPod.labels` is set
+  set:
+    operatorPod:
+      labels:
+        KEY1: VALUE1
+        KEY2: VALUE2
+  asserts:
+  - equal:
+      path: metadata.labels.KEY1
+      value: VALUE1
+  - equal:
+      path: metadata.labels.KEY2
+      value: VALUE2
+
+- it: Should add pod template labels if `operatorPod.labels` is set
+  set:
+    operatorPod:
+      labels:
+        KEY1: VALUE1
+        KEY2: VALUE2
+  asserts:
+  - equal:
+      path: spec.template.metadata.labels.KEY1
+      value: VALUE1
+  - equal:
+      path: spec.template.metadata.labels.KEY2
+      value: VALUE2
+
+- it: Should add pod template annotations if `operatorPod.annotations` is set
+  set:
+    operatorPod:
+      annotations:
+        KEY1: VALUE1
+        KEY2: VALUE2
+  asserts:
+  - equal:
+      path: spec.template.metadata.annotations.KEY1
+      value: VALUE1
+  - equal:
+      path: spec.template.metadata.annotations.KEY2
+      value: VALUE2
+
+- it: Should use the specified DNS policy if `operatorPod.dnsPolicy` is set
+  set:
+    operatorPod:
+      dnsPolicy: ClusterFirstWithHostNet
+  asserts:
+  - equal:
+      path: spec.template.spec.dnsPolicy
+      value: ClusterFirstWithHostNet
+
+- it: Should use the specified DNS config if `operatorPod.dnsConfig` is set
+  set:
+    operatorPod:
+      dnsConfig:
+        nameservers:
+        - 1.1.1.1
+        - 8.8.8.8
+        searches:
+        - ns1.svc.cluster-domain.example
+        - my.dns.search.suffix
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+  asserts:
+  - equal:
+      path: spec.template.spec.dnsConfig
+      value:
+        nameservers:
+        - 1.1.1.1
+        - 8.8.8.8
+        searches:
+        - ns1.svc.cluster-domain.example
+        - my.dns.search.suffix
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+
+- it: Should add nodeSelector if `operatorPod.nodeSelector` is set
+  set:
+    operatorPod:
+      nodeSelector:
+        key1: value1
+        key2: value2
+  asserts:
+  - equal:
+      path: spec.template.spec.nodeSelector.key1
+      value: value1
+  - equal:
+      path: spec.template.spec.nodeSelector.key2
+      value: value2
+
+- it: Should add affinity if `operatorPod.affinity` is set
+  set:
+    operatorPod:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - antarctica-east1
+                - antarctica-west1
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: another-node-label-key
+                operator: In
+                values:
+                - another-node-label-value
+  asserts:
+  - equal:
+      path: spec.template.spec.affinity
+      value:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - antarctica-east1
+                - antarctica-west1
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: another-node-label-key
+                operator: In
+                values:
+                - another-node-label-value
+
+- it: Should add tolerations if `operatorPod.tolerations` is set
+  set:
+    operatorPod:
+      tolerations:
+      - key: key1
+        operator: Equal
+        value: value1
+        effect: NoSchedule
+      - key: key2
+        operator: Exists
+        effect: NoSchedule
+  asserts:
+  - equal:
+      path: spec.template.spec.tolerations
+      value:
+      - key: key1
+        operator: Equal
+        value: value1
+        effect: NoSchedule
+      - key: key2
+        operator: Exists
+        effect: NoSchedule
+
+- it: Should use the specified priority class name if `operatorPod.priorityClassName` is set
+  set:
+    operatorPod:
+      priorityClassName: test-priority
+  asserts:
+  - equal:
+      path: spec.template.spec.priorityClassName
+      value: test-priority
+
+- it: Should use the specified topology spread constraints if `operatorPod.topologySpreadConstraints` is set
+  set:
+    operatorPod:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+  asserts:
+  - contains:
+      path: spec.template.spec.topologySpreadConstraints
+      content:
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+  - contains:
+      path: spec.template.spec.topologySpreadConstraints
+      content:
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+
+- it: Should use the specified service account name if `operatorServiceAccount.name` is set
+  set:
+    operatorServiceAccount:
+      name: test-service-account
+  asserts:
+  - equal:
+      path: spec.template.spec.serviceAccountName
+      value: test-service-account
