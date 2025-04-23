@@ -75,6 +75,10 @@ spec:
       {{- if .Values.operatorPod.topologySpreadConstraints }}
       topologySpreadConstraints: {{ toYaml .Values.operatorPod.topologySpreadConstraints | nindent 8 }}
       {{- end }}
+      {{- if .Values.operatorPod.initContainers }}
+      initContainers:
+      {{- toYaml .Values.operatorPod.initContainers | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "flink-operator.imagePath" . }}
@@ -115,7 +119,7 @@ spec:
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+              value: {{ .Values.jvmArgs.logConfig }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             {{- if .Values.tls.create }}
@@ -196,7 +200,7 @@ spec:
             - name: WEBHOOK_SERVER_PORT
               value: "9443"
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+              value: {{ .Values.jvmArgs.logConfig }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.webhook }}
             - name: FLINK_CONF_DIR
@@ -220,6 +224,9 @@ spec:
             readOnly: true
           - name: flink-operator-config-volume
             mountPath: /opt/flink/conf
+        {{- end }}
+        {{- if .Values.operatorPod.sidecarContainers }}
+        {{- toYaml .Values.operatorPod.sidecarContainers | nindent 8 }}
         {{- end }}
       {{- if index (.Values.operatorPod) "dnsPolicy" }}
       dnsPolicy: {{ .Values.operatorPod.dnsPolicy | quote }}
