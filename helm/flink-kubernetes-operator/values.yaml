@@ -102,6 +102,11 @@ operatorPod:
       env:
       # - name: ""
       #   value: ""
+  # optional init containers for operator pod
+  initContainers: []
+
+  # optional extra containers for operator pod
+  sidecarContainers: []
 
 operatorServiceAccount:
   create: true
@@ -190,6 +195,7 @@ fullnameOverride: ""
 jvmArgs:
   webhook: ""
   operator: ""
+  logConfig: "-Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties"
 
 # Configure health probes for the operator
 operatorHealth:
