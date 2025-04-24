@@ -76,7 +76,10 @@ public abstract class AbstractFlinkSessionJobContext
             @Override
             public void cancelJob(JobID jobId) {
                 try (var client = getFlinkService().getClusterClient(getDeployConfig())) {
-                    client.cancel(jobId);
+                    client.cancel(jobId)
+                            .get(
+                                    getOperatorConfig().getFlinkClientTimeout().toMillis(),
+                                    TimeUnit.MILLISECONDS);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
