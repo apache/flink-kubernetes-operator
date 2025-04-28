@@ -121,15 +121,24 @@ jobs:
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_dynamic_config.sh
+          - test_dynamic_flink_conf.sh
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
           - mode: standalone
             test: test_dynamic_config.sh
+          - mode: standalone
+            test: test_dynamic_flink_conf.sh
           - flink-version: v1_16
             test: test_autoscaler.sh
           - flink-version: v1_16
             test: test_dynamic_config.sh
+          - flink-version: v1_17
+            test: test_dynamic_config.sh
+          - flink-version: v1_18
+            test: test_dynamic_config.sh
+          - flink-version: v1_16
+            test: test_dynamic_flink_conf.sh
 
     uses: ./.github/workflows/e2e.yaml
     with:
@@ -156,6 +165,7 @@ jobs:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
           - test_dynamic_config.sh
+          - test_dynamic_flink_conf.sh
           - test_sessionjob_kubernetes_ha.sh
           - test_sessionjob_operations.sh
           - test_autoscaler.sh
@@ -170,6 +180,8 @@ jobs:
           - flink-version: v1_16
             test: test_dynamic_config.sh
           - flink-version: v1_16
+            test: test_dynamic_flink_conf.sh
+          - flink-version: v1_16
             test: test_flink_operator_ha.sh
           - flink-version: v1_16
             test: test_snapshot.sh
@@ -177,6 +189,8 @@ jobs:
             test: test_batch_job.sh
           - flink-version: v1_17
             test: test_dynamic_config.sh
+          - flink-version: v1_17
+            test: test_dynamic_flink_conf.sh
           - flink-version: v1_17
             test: test_flink_operator_ha.sh
           - flink-version: v1_17
@@ -185,6 +199,8 @@ jobs:
             test: test_batch_job.sh
           - flink-version: v1_18
             test: test_dynamic_config.sh
+          - flink-version: v1_18
+            test: test_dynamic_flink_conf.sh
           - flink-version: v1_18
             test: test_flink_operator_ha.sh
           - flink-version: v1_18
