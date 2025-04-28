@@ -994,10 +994,7 @@ public class ScalingMetricEvaluatorTest {
                         new CustomEvaluator.Context(
                                 new UnmodifiableConfiguration(conf),
                                 Collections.unmodifiableSortedMap(metricHistory),
-                                Collections.unmodifiableMap(
-                                        new HashMap<
-                                                JobVertexID,
-                                                Map<ScalingMetric, EvaluatedScalingMetric>>()),
+                                Collections.unmodifiableMap(new HashMap<>()),
                                 topology,
                                 false,
                                 Duration.ZERO,
@@ -1079,14 +1076,14 @@ public class ScalingMetricEvaluatorTest {
                 new EvaluatedScalingMetric(Double.NaN, 130.0);
         result = ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actual, incomingWithPartialNaN);
 
-        assertEquals(50.0, result.getCurrent(), "Current value should remain unchanged");
-        assertEquals(130.0, result.getAverage(), "Average value should be updated from incoming");
+        assertEquals(50.0, result.getCurrent());
+        assertEquals(130.0, result.getAverage());
 
         // Case 4
         EvaluatedScalingMetric actualWithNaN = new EvaluatedScalingMetric(Double.NaN, Double.NaN);
         result = ScalingMetricEvaluator.mergeEvaluatedScalingMetric(actualWithNaN, incoming);
 
-        assertEquals(60.0, result.getCurrent(), "Current value should be updated from incoming");
-        assertEquals(120.0, result.getAverage(), "Average value should be updated from incoming");
+        assertEquals(60.0, result.getCurrent());
+        assertEquals(120.0, result.getAverage());
     }
 }

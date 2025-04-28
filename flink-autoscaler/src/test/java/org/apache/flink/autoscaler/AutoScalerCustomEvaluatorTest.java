@@ -31,7 +31,6 @@ import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -69,8 +68,7 @@ public class AutoScalerCustomEvaluatorTest {
 
         ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor =
                 new ScalingExecutor<>(eventCollector, stateStore);
-        String testCustomEvaluatorName = "testEvaluator";
-        String testCustomEvaluatorClassName = TestCustomEvaluator.class.getName();
+        String testCustomEvaluatorName = "test-custom-evaluator";
 
         var customEvaluators = createTestCustomEvaluator();
 
@@ -103,16 +101,6 @@ public class AutoScalerCustomEvaluatorTest {
         defaultConf.set(AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD, Duration.ofSeconds(1));
 
         defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATOR_NAME, testCustomEvaluatorName);
-
-        defaultConf.set(
-                ConfigOptions.key(
-                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
-                                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
-                                        + testCustomEvaluatorName
-                                        + ".class")
-                        .stringType()
-                        .noDefaultValue(),
-                testCustomEvaluatorClassName);
 
         autoscaler =
                 new JobAutoScalerImpl<>(
@@ -180,6 +168,6 @@ public class AutoScalerCustomEvaluatorTest {
     private Map<String, CustomEvaluator> createTestCustomEvaluator() {
         var testCustomEvaluator = new TestCustomEvaluator();
         testCustomEvaluator.configure(new Configuration());
-        return Map.of(testCustomEvaluator.getClass().getName(), testCustomEvaluator);
+        return Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
     }
 }
