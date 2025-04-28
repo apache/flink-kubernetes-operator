@@ -1,0 +1,279 @@
+{{- /*
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flink-operator.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
+    {{- with .Values.operatorPod.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.replicas }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "flink-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "flink-operator.selectorLabels" . | nindent 8 }}
+        {{- with .Values.operatorPod.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
+        {{- with .Values.operatorPod.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ include "flink-operator.imagePath" . }}
+        {{- with .Values.image.pullPolicy }}
+        imagePullPolicy: {{ . }}
+        {{- end }}
+        command:
+        - /docker-entrypoint.sh 
+        - operator
+        ports:
+        {{- if .Values.metrics.port }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.operatorHealth }}
+        - containerPort: {{ .Values.operatorHealth.port }}
+          name: health-port
+          protocol: TCP
+        {{- end }}
+        env:
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: {{ include "flink-operator.name" . }}
+        - name: FLINK_CONF_DIR
+          value: /opt/flink/conf
+        - name: FLINK_PLUGINS_DIR
+          value: /opt/flink/plugins
+        - name: LOG_CONFIG
+          value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+        - name: JVM_ARGS
+          value: {{ .Values.jvmArgs.operator }}
+        {{- if .Values.tls.create }}
+        - name: OPERATOR_KEYSTORE_PATH
+          value: /opt/flink/tls-cert/keystore.jks
+        - name: OPERATOR_TRUSTSTORE_PATH
+          value: /opt/flink/tls-cert/truststore.jks
+        - name: OPERATOR_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- toYaml .Values.tls.secretKeyRef | nindent 14 }}
+              optional: true
+        {{- end }}
+        {{- with .Values.operatorPod.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.operatorPod.envFrom }}
+        envFrom:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.operatorPod.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.operatorSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: flink-operator-config-volume
+          mountPath: /opt/flink/conf
+        {{- if .Values.operatorVolumeMounts.create }}
+        {{- toYaml .Values.operatorVolumeMounts.data | nindent 8 }}
+        {{- else }}
+        - name: flink-artifacts-volume
+          mountPath: /opt/flink/artifacts
+        {{- end }}
+        {{- if .Values.tls.create }}
+        - name: flink-operator-cert-secret
+          mountPath: /opt/flink/tls-cert
+        {{- end }}
+        {{- with .Values.operatorHealth.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+          httpGet:
+            path: /
+            port: health-port
+        {{- end }}
+        {{- with .Values.operatorHealth.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+          httpGet:
+            path: /
+            port: health-port
+        {{- end }}
+        {{- with .Values.postStart }}
+        lifecycle:
+          postStart:
+            {{- toYaml . | nindent 14 }}
+        {{- end }}
+      {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
+      - name: flink-webhook
+        image: {{ include "flink-operator.imagePath" . }}
+        {{- with .Values.image.pullPolicy }}
+        imagePullPolicy: {{ . }}
+        {{- end }}
+        command:
+        - /docker-entrypoint.sh
+        - webhook
+        env:
+        - name: WEBHOOK_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+            {{- if .Values.webhook.keystore.useDefaultPassword }}
+              name: flink-operator-webhook-secret
+              key: password
+            {{- else }}
+              {{- with .Values.webhook.keystore.passwordSecretRef }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+            {{- end }}
+        - name: WEBHOOK_KEYSTORE_FILE
+          value: "/certs/keystore.p12"
+        - name: WEBHOOK_KEYSTORE_TYPE
+          value: "pkcs12"
+        - name: WEBHOOK_SERVER_PORT
+          value: "9443"
+        - name: LOG_CONFIG
+          value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+        - name: JVM_ARGS
+          value: {{ .Values.jvmArgs.webhook }}
+        - name: FLINK_CONF_DIR
+          value: /opt/flink/conf
+        - name: FLINK_PLUGINS_DIR
+          value: /opt/flink/plugins
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- with .Values.operatorPod.webhook.container.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.operatorPod.webhook.resources }}
+        resources:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.webhookSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        volumeMounts:
+        - name: keystore
+          mountPath: /certs
+          readOnly: true
+        - name: flink-operator-config-volume
+          mountPath: /opt/flink/conf
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: flink-operator-config-volume
+        configMap:
+          name: flink-operator-config
+          items:
+          - key: flink-conf.yaml
+            path: flink-conf.yaml
+          - key: log4j-operator.properties
+            path: log4j-operator.properties
+          - key: log4j-console.properties
+            path: log4j-console.properties
+      {{- if .Values.operatorVolumes.create }}
+      {{- toYaml .Values.operatorVolumes.data | nindent 6 }}
+      {{- else }}
+      - name: flink-artifacts-volume
+        emptyDir: {}
+      {{- end }}
+      {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
+      - name: keystore
+        secret:
+          secretName: webhook-server-cert
+          items:
+          - key: keystore.p12
+            path: keystore.p12
+      {{- end }}
+      {{- if .Values.tls.create }}
+      - name: flink-operator-cert-secret
+        secret:
+          secretName: {{ .Values.tls.secretName }}
+          optional: true
+      {{- end }}
+      {{- with .Values.operatorPod.dnsPolicy }}
+      dnsPolicy: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.operatorPod.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorPod.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorPod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorPod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorPod.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.operatorPod.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "flink-operator.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

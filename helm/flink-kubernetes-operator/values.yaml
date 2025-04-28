@@ -16,18 +16,20 @@
 # limitations under the License.
 ################################################################################
 
----
-
 # List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces.
 # When enabled RBAC is only created for said namespaces, otherwise it is done for the cluster scope.
-# watchNamespaces: ["flink"]
+watchNamespaces: 
+# - flink
 
 image:
   repository: flink-kubernetes-operator
-  pullPolicy: IfNotPresent
+
   tag: latest
+
+  pullPolicy: IfNotPresent
+
   # If image digest is set then it takes precedence and the image tag will be ignored
-  # digest: ""
+  digest: ""
 
 imagePullSecrets: []
 
@@ -47,21 +49,22 @@ rbac:
     create: false
   operatorRole:
     create: true
-    name: "flink-operator"
+    name: flink-operator
   operatorRoleBinding:
     create: true
-    name: "flink-operator-role-binding"
+    name: flink-operator-role-binding
   jobRole:
     create: true
-    name: "flink"
+    name: flink
   jobRoleBinding:
     create: true
-    name: "flink-role-binding"
+    name: flink-role-binding
 
 operatorPod:
-  priorityClassName: null
-  annotations: {}
   labels: {}
+
+  annotations: {}
+
   # The env variables only apply to the operator container in the operator pod
   # TODO: consider making this pod level env variables
   env:
@@ -72,32 +75,44 @@ operatorPod:
   #     configMapKeyRef:
   #       name: ""
   #       key: ""
-  # dnsPolicy: ""
-  # dnsConfig: {}
+
+
   # Node labels and affinity for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+
   envFrom:
   # - configMapRef:
   #     name: ""
+
+  resources:
+    # limits:
+    #   cpu: 250m
+    #   memory: 512Mi
+    # requests:
+    #   cpu: 250m
+    #   memory: 512Mi
+
+  dnsPolicy: ""
+
+  dnsConfig: {}
+
   nodeSelector: {}
 
   affinity: {}
+
   # Node tolerations for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
+
   # Topology spread constrains
   # https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
   topologySpreadConstraints: []
-  resources: {}
-  # resources:
-  #   limits:
-  #     cpu: "250m"
-  #     memory: "512Mi"
-  #   requests:
-  #     cpu: "250m"
-  #     memory: "512Mi"
+
+  priorityClassName: ""
+
   webhook:
     resources: {}
+
     container:
       env:
       # - name: ""
@@ -106,13 +121,13 @@ operatorPod:
 operatorServiceAccount:
   create: true
   annotations: {}
-  name: "flink-operator"
+  name: flink-operator
 
 jobServiceAccount:
   create: true
   annotations:
-    "helm.sh/resource-policy": keep
-  name: "flink"
+    helm.sh/resource-policy: keep
+  name: flink
 
 operatorVolumeMounts:
   create: false
@@ -148,9 +163,9 @@ webhook:
   #   create: true
   keystore:
     useDefaultPassword: true
-  # passwordSecretRef:
-  #   name: jks-password-secret
-  #   key: password-key
+    passwordSecretRef:
+      # name: jks-password-secret
+      # key: password-key
   serviceLabels: {}
 
 defaultConfiguration:

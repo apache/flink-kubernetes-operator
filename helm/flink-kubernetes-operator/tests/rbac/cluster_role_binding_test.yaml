@@ -16,18 +16,44 @@
 # limitations under the License.
 ################################################################################
 
-apiVersion: v2
+suite: Test Operator ClusterRoleBinding
 
-name: flink-kubernetes-operator
+templates:
+- rbac/cluster_role_binding.yaml
 
-description: A Helm chart for the Apache Flink Kubernetes Operator
+release:
+  name: flink-operator
+  namespace: flink-operator
 
-type: application
+tests:
+- it: Should not create ClusterRoleBinding if `rbac.operatorRoleBinding.create` is `false`
+  set:
+    rbac:
+      operatorRoleBinding:
+        create: false
+  asserts:
+  - hasDocuments:
+      count: 0
 
-version: 1.12-SNAPSHOT
-
-appVersion: 1.12-SNAPSHOT
-
-home: https://github.com/apache/flink-kubernetes-operator
-
-icon: https://flink.apache.org/img/logo/png/50/color_50.png
+- it: Should create ClusterRoleBinding if `rbac.operatorRoleBinding.create` is `true`
+  set:
+    rbac:
+      operatorRoleBinding:
+        create: true
+  asserts:
+  - containsDocument:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      name: flink-operator-role-binding
+  - equal:
+      path: roleRef
+      value:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: flink-operator
+  - contains:
+      path: subjects
+      content:
+        kind: ServiceAccount
+        name: flink-operator
+        namespace: flink-operator
