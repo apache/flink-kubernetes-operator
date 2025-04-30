@@ -187,7 +187,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         if (conf.get(OBSERVED_SCALABILITY_ENABLED)) {
 
             double scalingCoefficient =
-                    JobVertexScaler.calculateObservedScalingCoefficient(history, conf);
+                    JobVertexScaler.calculateObservedScalingCoefficient(
+                            history, conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS));
+
             scaleFactor = scaleFactor / scalingCoefficient;
         }
         double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
@@ -256,12 +258,14 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * 1.0} is returned, assuming linear scaling.
      *
      * @param history A {@code SortedMap} of {@code Instant} timestamps to {@code ScalingSummary}
-     * @param conf Deployment configuration.
+     * @param minObservations The minimum number of observations required to compute the scaling
+     *     coefficient. If the number of historical entries is less than this threshold, a default
+     *     coefficient of {@code 1.0} is returned.
      * @return The computed scaling coefficient.
      */
     @VisibleForTesting
     protected static double calculateObservedScalingCoefficient(
-            SortedMap<Instant, ScalingSummary> history, Configuration conf) {
+            SortedMap<Instant, ScalingSummary> history, int minObservations) {
         /*
          * The scaling coefficient is computed using the least squares approach
          * to fit a linear model:
@@ -283,10 +287,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
          *      α = ∑ (P_i * R_i) / (∑ (P_i^2) * β)
          *
          * We keep the system conservative for higher returns scenario by clamping computed α to an upper bound of 1.0.
-         * If the computed coefficient falls below threshold, the system falls back to assuming linear scaling (α = 1.0).
          */
-
-        var minObservations = conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS);
 
         // not enough data to compute scaling coefficient; we assume linear scaling.
         if (history.isEmpty() || history.size() < minObservations) {
@@ -319,17 +320,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         var coefficient =
                 AutoScalerUtils.optimizeLinearScalingCoefficient(
-                        parallelismList, processingRateList, baselineProcessingRate, 1, 0.01);
-
-        double threshold =
-                conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)
-                        ? conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD)
-                        : 0.5;
-
-        if (coefficient < threshold) {
-            LOG.warn("Scaling coefficient is below threshold. Falling back to linear scaling.");
-            return 1.0;
-        }
+                        parallelismList, processingRateList, baselineProcessingRate, 1, 0.5);
 
         return BigDecimal.valueOf(coefficient).setScale(2, RoundingMode.CEILING).doubleValue();
     }
