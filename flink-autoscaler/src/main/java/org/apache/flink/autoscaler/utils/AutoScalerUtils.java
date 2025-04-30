@@ -101,19 +101,16 @@ public class AutoScalerUtils {
     }
 
     /**
-     * Computes the optimized linear scaling coefficient (α) by minimizing the weighted least
-     * squares error.
+     * Computes the optimized linear scaling coefficient (α) by minimizing the least squares error.
      *
      * <p>This method estimates the scaling coefficient in a linear scaling model by fitting
-     * observed processing rates and parallelism levels while applying weights to account for
-     * recency and significance.
+     * observed processing rates and parallelism levels.
      *
      * <p>The computed coefficient is clamped within the specified lower and upper bounds to ensure
      * stability and prevent extreme scaling adjustments.
      *
      * @param parallelismLevels List of parallelism levels.
      * @param processingRates List of observed processing rates.
-     * @param weights List of weights for each observation.
      * @param baselineProcessingRate Baseline processing rate.
      * @param upperBound Maximum allowable value for the scaling coefficient.
      * @param lowerBound Minimum allowable value for the scaling coefficient.
@@ -123,28 +120,26 @@ public class AutoScalerUtils {
     public static double optimizeLinearScalingCoefficient(
             List<Double> parallelismLevels,
             List<Double> processingRates,
-            List<Double> weights,
             double baselineProcessingRate,
             double upperBound,
             double lowerBound) {
 
-        double weightedSum = 0.0;
-        double weightedSquaredSum = 0.0;
+        double sum = 0.0;
+        double squaredSum = 0.0;
 
         for (int i = 0; i < parallelismLevels.size(); i++) {
             double parallelism = parallelismLevels.get(i);
             double processingRate = processingRates.get(i);
-            double weight = weights.get(i);
 
-            weightedSum += weight * parallelism * processingRate;
-            weightedSquaredSum += weight * parallelism * parallelism;
+            sum += parallelism * processingRate;
+            squaredSum += parallelism * parallelism;
         }
 
-        if (weightedSquaredSum == 0.0) {
+        if (squaredSum == 0.0) {
             return 1.0; // Fallback to linear scaling if denominator is zero
         }
 
-        double alpha = weightedSum / (weightedSquaredSum * baselineProcessingRate);
+        double alpha = sum / (squaredSum * baselineProcessingRate);
 
         return Math.max(lowerBound, Math.min(upperBound, alpha));
     }

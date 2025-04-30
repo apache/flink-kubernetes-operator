@@ -394,8 +394,15 @@ public class AutoScalerOptions {
     public static final ConfigOption<Integer> OBSERVED_SCALABILITY_MIN_OBSERVATIONS =
             autoScalerConfig("observed-scalability.min-observations")
                     .intType()
-                    .defaultValue(5)
+                    .defaultValue(3)
                     .withFallbackKeys(oldOperatorConfigKey("observed-scalability.min-observations"))
                     .withDescription(
-                            "Defines the minimum number of historical scaling observations required to estimate the scalability coefficient. If the number of available observations is below this threshold, the system falls back to assuming linear scaling.");
+                            "Defines the minimum number of historical scaling observations required to estimate the scalability coefficient. "
+                                    + "If the number of available observations is below this threshold, the system falls back to assuming linear scaling. "
+                                    + "Note: To effectively use a higher minimum observation count, you need to increase "
+                                    + VERTEX_SCALING_HISTORY_COUNT.key()
+                                    + ". Avoid setting "
+                                    + VERTEX_SCALING_HISTORY_COUNT.key()
+                                    + " to a very high value, as the number of retained data points is limited by the size of the state store—"
+                                    + "particularly when using Kubernetes-based state store.");
 }

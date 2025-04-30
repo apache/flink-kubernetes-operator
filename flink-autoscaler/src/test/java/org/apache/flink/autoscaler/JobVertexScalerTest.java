@@ -50,7 +50,9 @@ import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
 import static org.apache.flink.autoscaler.JobVertexScaler.SCALE_LIMITED_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.SCALING_LIMITED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_MIN_OBSERVATIONS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1163,128 +1165,146 @@ public class JobVertexScalerTest {
         var currentTime = Instant.now();
 
         var linearScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var linearScalingEvaluatedData1 = evaluated(1, 100, 50);
-        var linearScalingEvaluatedData2 = evaluated(2, 200, 100);
-        var linearScalingEvaluatedData3 = evaluated(4, 100, 200);
-        var linearScalingEvaluatedData4 = evaluated(2, 400, 100);
-        var linearScalingEvaluatedData5 = evaluated(8, 800, 400);
+        var linearScalingEvaluatedData1 = evaluated(4, 100, 200);
+        var linearScalingEvaluatedData2 = evaluated(2, 400, 100);
+        var linearScalingEvaluatedData3 = evaluated(8, 800, 400);
 
-        linearScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, linearScalingEvaluatedData1));
-        linearScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, linearScalingEvaluatedData2));
         linearScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, linearScalingEvaluatedData3));
+                new ScalingSummary(4, 2, linearScalingEvaluatedData1));
         linearScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, linearScalingEvaluatedData4));
+                new ScalingSummary(2, 8, linearScalingEvaluatedData2));
         linearScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, linearScalingEvaluatedData5));
+                currentTime, new ScalingSummary(8, 16, linearScalingEvaluatedData3));
 
         double linearScalingScalingCoefficient =
-                JobVertexScaler.calculateObservedScalingCoefficient(linearScalingHistory, 5);
+                JobVertexScaler.calculateObservedScalingCoefficient(linearScalingHistory, conf);
 
         assertEquals(1.0, linearScalingScalingCoefficient);
 
         var slightDiminishingReturnsScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var slightDiminishingReturnsEvaluatedData1 = evaluated(1, 100, 50);
-        var slightDiminishingReturnsEvaluatedData2 = evaluated(2, 196, 98);
-        var slightDiminishingReturnsEvaluatedData3 = evaluated(4, 98, 196);
-        var slightDiminishingReturnsEvaluatedData4 = evaluated(2, 396, 99);
-        var slightDiminishingReturnsEvaluatedData5 = evaluated(8, 780, 390);
+        var slightDiminishingReturnsEvaluatedData1 = evaluated(4, 98, 196);
+        var slightDiminishingReturnsEvaluatedData2 = evaluated(2, 396, 99);
+        var slightDiminishingReturnsEvaluatedData3 = evaluated(8, 780, 390);
 
         slightDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, slightDiminishingReturnsEvaluatedData1));
-        slightDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, slightDiminishingReturnsEvaluatedData2));
-        slightDiminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, slightDiminishingReturnsEvaluatedData3));
+                new ScalingSummary(4, 2, slightDiminishingReturnsEvaluatedData1));
         slightDiminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, slightDiminishingReturnsEvaluatedData4));
+                new ScalingSummary(2, 8, slightDiminishingReturnsEvaluatedData2));
         slightDiminishingReturnsScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, slightDiminishingReturnsEvaluatedData5));
+                currentTime, new ScalingSummary(8, 16, slightDiminishingReturnsEvaluatedData3));
 
         double slightDiminishingReturnsScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        slightDiminishingReturnsScalingHistory, 5);
+                        slightDiminishingReturnsScalingHistory, conf);
 
         assertTrue(
                 slightDiminishingReturnsScalingCoefficient > 0.9
                         && slightDiminishingReturnsScalingCoefficient < 1);
 
         var sharpDiminishingReturnsScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var sharpDiminishingReturnsEvaluatedData1 = evaluated(1, 100, 50);
-        var sharpDiminishingReturnsEvaluatedData2 = evaluated(2, 192, 96);
-        var sharpDiminishingReturnsEvaluatedData3 = evaluated(4, 80, 160);
-        var sharpDiminishingReturnsEvaluatedData4 = evaluated(2, 384, 96);
-        var sharpDiminishingReturnsEvaluatedData5 = evaluated(8, 480, 240);
+        var sharpDiminishingReturnsEvaluatedData1 = evaluated(4, 80, 160);
+        var sharpDiminishingReturnsEvaluatedData2 = evaluated(2, 384, 96);
+        var sharpDiminishingReturnsEvaluatedData3 = evaluated(8, 480, 240);
 
         sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, sharpDiminishingReturnsEvaluatedData1));
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, sharpDiminishingReturnsEvaluatedData2));
-        sharpDiminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, sharpDiminishingReturnsEvaluatedData3));
+                new ScalingSummary(4, 2, sharpDiminishingReturnsEvaluatedData1));
         sharpDiminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, sharpDiminishingReturnsEvaluatedData4));
+                new ScalingSummary(2, 8, sharpDiminishingReturnsEvaluatedData2));
         sharpDiminishingReturnsScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, sharpDiminishingReturnsEvaluatedData5));
+                currentTime, new ScalingSummary(8, 16, sharpDiminishingReturnsEvaluatedData3));
 
         double sharpDiminishingReturnsScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        sharpDiminishingReturnsScalingHistory, 5);
+                        sharpDiminishingReturnsScalingHistory, conf);
 
         assertTrue(
                 sharpDiminishingReturnsScalingCoefficient < 0.9
                         && sharpDiminishingReturnsScalingCoefficient > 0.4);
 
-        var sharpDiminishingReturnsWithoutOneParallelismScalingHistory =
+        var sharpDiminishingReturnsWithOneParallelismScalingHistory =
                 new TreeMap<Instant, ScalingSummary>();
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData1 = evaluated(4, 80, 160);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData2 = evaluated(8, 480, 240);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData3 = evaluated(16, 140, 280);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData4 = evaluated(8, 480, 240);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData5 = evaluated(16, 560, 280);
+        var sharpDiminishingReturnsWithOneParallelismEvaluatedData1 = evaluated(1, 100, 50);
+        var sharpDiminishingReturnsWithOneParallelismEvaluatedData2 = evaluated(2, 160, 80);
+        var sharpDiminishingReturnsWithOneParallelismEvaluatedData3 = evaluated(4, 200, 100);
 
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(
-                        4, 8, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData1));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(
-                        8, 16, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData2));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
+        sharpDiminishingReturnsWithOneParallelismScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(
-                        16, 8, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData3));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
+                new ScalingSummary(1, 2, sharpDiminishingReturnsWithOneParallelismEvaluatedData1));
+        sharpDiminishingReturnsWithOneParallelismScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(
-                        8, 16, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData4));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
+                new ScalingSummary(2, 4, sharpDiminishingReturnsWithOneParallelismEvaluatedData2));
+        sharpDiminishingReturnsWithOneParallelismScalingHistory.put(
                 currentTime,
-                new ScalingSummary(
-                        16, 32, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData5));
+                new ScalingSummary(4, 8, sharpDiminishingReturnsWithOneParallelismEvaluatedData3));
 
-        double sharpDiminishingReturnsWithoutOneParallelismScalingCoefficient =
+        double sharpDiminishingReturnsWithOneParallelismScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        sharpDiminishingReturnsWithoutOneParallelismScalingHistory, 5);
+                        sharpDiminishingReturnsWithOneParallelismScalingHistory, conf);
 
         assertTrue(
-                sharpDiminishingReturnsWithoutOneParallelismScalingCoefficient < 0.9
-                        && sharpDiminishingReturnsWithoutOneParallelismScalingCoefficient > 0.4);
+                sharpDiminishingReturnsWithOneParallelismScalingCoefficient < 0.9
+                        && sharpDiminishingReturnsWithOneParallelismScalingCoefficient > 0.4);
+
+        conf.set(OBSERVED_SCALABILITY_MIN_OBSERVATIONS, 1);
+
+        var withOneScalingHistoryRecord = new TreeMap<Instant, ScalingSummary>();
+
+        var withOneScalingHistoryRecordEvaluatedData1 = evaluated(4, 200, 100);
+
+        withOneScalingHistoryRecord.put(
+                currentTime, new ScalingSummary(4, 8, withOneScalingHistoryRecordEvaluatedData1));
+
+        double withOneScalingHistoryRecordScalingCoefficient =
+                JobVertexScaler.calculateObservedScalingCoefficient(
+                        withOneScalingHistoryRecord, conf);
+
+        assertEquals(1, withOneScalingHistoryRecordScalingCoefficient);
+
+        var diminishingReturnWithTwoScalingHistoryRecord = new TreeMap<Instant, ScalingSummary>();
+
+        var diminishingReturnWithTwoScalingHistoryRecordEvaluatedData1 = evaluated(2, 160, 80);
+        var diminishingReturnWithTwoScalingHistoryRecordEvaluatedData2 = evaluated(4, 200, 100);
+
+        diminishingReturnWithTwoScalingHistoryRecord.put(
+                currentTime.minusSeconds(10),
+                new ScalingSummary(
+                        2, 4, diminishingReturnWithTwoScalingHistoryRecordEvaluatedData1));
+        diminishingReturnWithTwoScalingHistoryRecord.put(
+                currentTime,
+                new ScalingSummary(
+                        4, 8, diminishingReturnWithTwoScalingHistoryRecordEvaluatedData2));
+
+        double diminishingReturnWithTwoScalingHistoryRecordScalingCoefficient =
+                JobVertexScaler.calculateObservedScalingCoefficient(
+                        diminishingReturnWithTwoScalingHistoryRecord, conf);
+
+        assertTrue(
+                diminishingReturnWithTwoScalingHistoryRecordScalingCoefficient < 0.9
+                        && diminishingReturnWithTwoScalingHistoryRecordScalingCoefficient > 0.4);
+
+        var linearReturnWithTwoScalingHistoryRecord = new TreeMap<Instant, ScalingSummary>();
+
+        var linearReturnWithTwoScalingHistoryRecordEvaluatedData1 = evaluated(2, 160, 80);
+        var linearReturnWithTwoScalingHistoryRecordEvaluatedData2 = evaluated(4, 320, 160);
+
+        linearReturnWithTwoScalingHistoryRecord.put(
+                currentTime.minusSeconds(10),
+                new ScalingSummary(2, 4, linearReturnWithTwoScalingHistoryRecordEvaluatedData1));
+        linearReturnWithTwoScalingHistoryRecord.put(
+                currentTime,
+                new ScalingSummary(4, 8, linearReturnWithTwoScalingHistoryRecordEvaluatedData2));
+
+        double linearReturnWithTwoScalingHistoryRecordScalingCoefficient =
+                JobVertexScaler.calculateObservedScalingCoefficient(
+                        linearReturnWithTwoScalingHistoryRecord, conf);
+
+        assertEquals(1, linearReturnWithTwoScalingHistoryRecordScalingCoefficient);
     }
 
     @ParameterizedTest
@@ -1299,26 +1319,18 @@ public class JobVertexScalerTest {
         conf.set(OBSERVED_SCALABILITY_ENABLED, true);
 
         var linearScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var linearScalingEvaluatedData1 = evaluated(1, 100, 50);
-        var linearScalingEvaluatedData2 = evaluated(2, 200, 100);
-        var linearScalingEvaluatedData3 = evaluated(4, 100, 200);
-        var linearScalingEvaluatedData4 = evaluated(2, 400, 100);
-        var linearScalingEvaluatedData5 = evaluated(8, 800, 400);
+        var linearScalingEvaluatedData1 = evaluated(4, 100, 200);
+        var linearScalingEvaluatedData2 = evaluated(2, 400, 100);
+        var linearScalingEvaluatedData3 = evaluated(8, 800, 400);
 
         linearScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, linearScalingEvaluatedData1));
-        linearScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, linearScalingEvaluatedData2));
-        linearScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, linearScalingEvaluatedData3));
+                new ScalingSummary(4, 2, linearScalingEvaluatedData1));
         linearScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, linearScalingEvaluatedData4));
+                new ScalingSummary(2, 8, linearScalingEvaluatedData2));
         linearScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, linearScalingEvaluatedData5));
+                currentTime, new ScalingSummary(8, 16, linearScalingEvaluatedData3));
 
         assertEquals(
                 ParallelismChange.build(10, true),
@@ -1331,109 +1343,28 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        var slightDiminishingReturnsScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var slightDiminishingReturnsEvaluatedData1 = evaluated(1, 100, 50);
-        var slightDiminishingReturnsEvaluatedData2 = evaluated(2, 196, 98);
-        var slightDiminishingReturnsEvaluatedData3 = evaluated(4, 98, 196);
-        var slightDiminishingReturnsEvaluatedData4 = evaluated(2, 396, 99);
-        var slightDiminishingReturnsEvaluatedData5 = evaluated(8, 780, 390);
+        var diminishingReturnsScalingHistory = new TreeMap<Instant, ScalingSummary>();
+        var diminishingReturnsEvaluatedData1 = evaluated(4, 80, 160);
+        var diminishingReturnsEvaluatedData2 = evaluated(2, 384, 96);
+        var diminishingReturnsEvaluatedData3 = evaluated(8, 480, 240);
 
-        slightDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, slightDiminishingReturnsEvaluatedData1));
-        slightDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, slightDiminishingReturnsEvaluatedData2));
-        slightDiminishingReturnsScalingHistory.put(
+        diminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, slightDiminishingReturnsEvaluatedData3));
-        slightDiminishingReturnsScalingHistory.put(
+                new ScalingSummary(4, 2, diminishingReturnsEvaluatedData1));
+        diminishingReturnsScalingHistory.put(
                 currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, slightDiminishingReturnsEvaluatedData4));
-        slightDiminishingReturnsScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, slightDiminishingReturnsEvaluatedData5));
+                new ScalingSummary(2, 8, diminishingReturnsEvaluatedData2));
+        diminishingReturnsScalingHistory.put(
+                currentTime, new ScalingSummary(8, 16, diminishingReturnsEvaluatedData3));
 
         assertEquals(
-                ParallelismChange.build(12, true),
+                ParallelismChange.build(15, true),
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
                         inputShipStrategies,
                         evaluated(2, 100, 40),
-                        slightDiminishingReturnsScalingHistory,
-                        restartTime,
-                        delayedScaleDown));
-
-        var sharpDiminishingReturnsScalingHistory = new TreeMap<Instant, ScalingSummary>();
-        var sharpDiminishingReturnsEvaluatedData1 = evaluated(1, 100, 50);
-        var sharpDiminishingReturnsEvaluatedData2 = evaluated(2, 192, 96);
-        var sharpDiminishingReturnsEvaluatedData3 = evaluated(4, 80, 160);
-        var sharpDiminishingReturnsEvaluatedData4 = evaluated(2, 384, 96);
-        var sharpDiminishingReturnsEvaluatedData5 = evaluated(8, 480, 240);
-
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(1, 2, sharpDiminishingReturnsEvaluatedData1));
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(2, 4, sharpDiminishingReturnsEvaluatedData2));
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(20),
-                new ScalingSummary(4, 2, sharpDiminishingReturnsEvaluatedData3));
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime.minusSeconds(10),
-                new ScalingSummary(2, 8, sharpDiminishingReturnsEvaluatedData4));
-        sharpDiminishingReturnsScalingHistory.put(
-                currentTime, new ScalingSummary(8, 16, sharpDiminishingReturnsEvaluatedData5));
-
-        assertEquals(
-                ParallelismChange.build(18, true),
-                vertexScaler.computeScaleTargetParallelism(
-                        context,
-                        op,
-                        inputShipStrategies,
-                        evaluated(2, 100, 40),
-                        sharpDiminishingReturnsScalingHistory,
-                        restartTime,
-                        delayedScaleDown));
-
-        var sharpDiminishingReturnsWithoutOneParallelismScalingHistory =
-                new TreeMap<Instant, ScalingSummary>();
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData1 = evaluated(4, 80, 160);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData2 = evaluated(8, 480, 240);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData3 = evaluated(16, 140, 280);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData4 = evaluated(8, 480, 240);
-        var sharpDiminishingReturnsWithoutOneParallelismEvaluatedData5 = evaluated(16, 560, 280);
-
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(40),
-                new ScalingSummary(
-                        4, 8, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData1));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(30),
-                new ScalingSummary(
-                        8, 16, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData2));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(20),
-                new ScalingSummary(
-                        16, 8, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData3));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime.minusSeconds(10),
-                new ScalingSummary(
-                        8, 16, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData4));
-        sharpDiminishingReturnsWithoutOneParallelismScalingHistory.put(
-                currentTime,
-                new ScalingSummary(
-                        16, 32, sharpDiminishingReturnsWithoutOneParallelismEvaluatedData5));
-
-        assertEquals(
-                ParallelismChange.build(24, true),
-                vertexScaler.computeScaleTargetParallelism(
-                        context,
-                        op,
-                        inputShipStrategies,
-                        evaluated(2, 100, 40),
-                        sharpDiminishingReturnsWithoutOneParallelismScalingHistory,
+                        diminishingReturnsScalingHistory,
                         restartTime,
                         delayedScaleDown));
     }

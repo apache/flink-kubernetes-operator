@@ -185,9 +185,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
         double scaleFactor = targetCapacity / averageTrueProcessingRate;
         if (conf.get(OBSERVED_SCALABILITY_ENABLED)) {
+
             double scalingCoefficient =
-                    JobVertexScaler.calculateObservedScalingCoefficient(
-                            history, conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS));
+                    JobVertexScaler.calculateObservedScalingCoefficient(history, conf);
             scaleFactor = scaleFactor / scalingCoefficient;
         }
         double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
@@ -251,22 +251,19 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     /**
      * Calculates the scaling coefficient based on historical scaling data.
      *
-     * <p>The scaling coefficient is computed using a weighted least squares approach, where more
-     * recent data points and those with higher parallelism are given higher weights. If there are
-     * not enough observations, or if the computed coefficient is invalid, a default value of {@code
+     * <p>The scaling coefficient is computed using the least squares approach. If there are not
+     * enough observations, or if the computed coefficient is invalid, a default value of {@code
      * 1.0} is returned, assuming linear scaling.
      *
      * @param history A {@code SortedMap} of {@code Instant} timestamps to {@code ScalingSummary}
-     * @param minObservations The minimum number of observations required to compute the scaling
-     *     coefficient. If the number of historical entries is less than this threshold, a default
-     *     coefficient of {@code 1.0} is returned.
+     * @param conf Deployment configuration.
      * @return The computed scaling coefficient.
      */
     @VisibleForTesting
     protected static double calculateObservedScalingCoefficient(
-            SortedMap<Instant, ScalingSummary> history, int minObservations) {
+            SortedMap<Instant, ScalingSummary> history, Configuration conf) {
         /*
-         * The scaling coefficient is computed using a **weighted least squares** approach
+         * The scaling coefficient is computed using the least squares approach
          * to fit a linear model:
          *
          *      R_i = β * P_i * α
@@ -277,18 +274,21 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
          * - β   = baseline processing rate
          * - α   = scaling coefficient to optimize
          *
-         * The optimization minimizes the **weighted sum of squared errors**:
+         * The optimization minimizes the **sum of squared errors**:
          *
-         *      Loss = ∑ w_i * (R_i - β * α * P_i)^2
+         *      Loss = ∑ (R_i - β * α * P_i)^2
          *
          * Differentiating w.r.t. α and solving for α:
          *
-         *      α = ∑ (w_i * P_i * R_i) / (∑ (w_i * P_i^2) * β)
+         *      α = ∑ (P_i * R_i) / (∑ (P_i^2) * β)
          *
-         * We keep the system conservative for higher returns scenario by clamping computed α within 1.0.
+         * We keep the system conservative for higher returns scenario by clamping computed α to an upper bound of 1.0.
+         * If the computed coefficient falls below threshold, the system falls back to assuming linear scaling (α = 1.0).
          */
 
-        // not enough data to compute scaling coefficient. we assume linear scaling.
+        var minObservations = conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS);
+
+        // not enough data to compute scaling coefficient; we assume linear scaling.
         if (history.isEmpty() || history.size() < minObservations) {
             return 1.0;
         }
@@ -299,14 +299,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return 1.0;
         }
 
-        Instant latestTimestamp = history.lastKey();
-
         List<Double> parallelismList = new ArrayList<>();
         List<Double> processingRateList = new ArrayList<>();
-        List<Double> weightList = new ArrayList<>();
 
         for (Map.Entry<Instant, ScalingSummary> entry : history.entrySet()) {
-            Instant timestamp = entry.getKey();
             ScalingSummary summary = entry.getValue();
             double parallelism = summary.getCurrentParallelism();
             double processingRate = summary.getMetrics().get(TRUE_PROCESSING_RATE).getAverage();
@@ -317,25 +313,24 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 return 1.0;
             }
 
-            // Compute weight based on recency & parallelism
-            double timeDiff =
-                    Duration.between(timestamp, latestTimestamp).getSeconds()
-                            + 1; // Avoid division by zero
-            double weight = parallelism / timeDiff;
-
             parallelismList.add(parallelism);
             processingRateList.add(processingRate);
-            weightList.add(weight);
         }
 
         var coefficient =
                 AutoScalerUtils.optimizeLinearScalingCoefficient(
-                        parallelismList,
-                        processingRateList,
-                        weightList,
-                        baselineProcessingRate,
-                        1,
-                        0.01);
+                        parallelismList, processingRateList, baselineProcessingRate, 1, 0.01);
+
+        double threshold =
+                conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)
+                        ? conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD)
+                        : 0.5;
+
+        if (coefficient < threshold) {
+            LOG.warn("Scaling coefficient is below threshold. Falling back to linear scaling.");
+            return 1.0;
+        }
+
         return BigDecimal.valueOf(coefficient).setScale(2, RoundingMode.CEILING).doubleValue();
     }
 
