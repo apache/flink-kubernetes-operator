@@ -104,7 +104,8 @@ public class TestingFlinkDeploymentController
                                 flinkService.getKubernetesClient(),
                                 eventRecorder,
                                 new ClusterResourceManager(
-                                        Duration.ZERO, flinkService.getKubernetesClient())));
+                                        Duration.ZERO, flinkService.getKubernetesClient()),
+                                configManager));
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(
