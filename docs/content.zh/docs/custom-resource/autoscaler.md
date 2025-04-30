@@ -246,13 +246,13 @@ Flink cluster, includes:
 
 You can start a Flink Streaming job with the following ConfigOptions.
 
-```
-# Enable Adaptvie scheduler to play the in-place rescaling.
+```yaml
+# Enable Adaptive scheduler to play the in-place rescaling.
 jobmanager.scheduler : adaptive
 
 # Enable autoscale and scaling
-job.autoscaler.enabled : true
-job.autoscaler.scaling.enabled : true
+job.autoscaler.enabled : "true"
+job.autoscaler.scaling.enabled : "true"
 job.autoscaler.stabilization.interval : 1m
 job.autoscaler.metrics.window : 3m
 ```
