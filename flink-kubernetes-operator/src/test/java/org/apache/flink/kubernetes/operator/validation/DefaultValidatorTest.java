@@ -843,6 +843,21 @@ public class DefaultValidatorTest {
     }
 
     @Test
+    public void testAutoScalerDeploymentWithInvalidScalingCoefficientMin() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN
+                                                .key(),
+                                        "1.2"));
+        assertErrorContains(
+                result,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d));
+    }
+
+    @Test
     public void testNonEnabledAutoScalerDeploymentJob() {
         var result =
                 testAutoScalerConfiguration(

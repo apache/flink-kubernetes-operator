@@ -1178,7 +1178,7 @@ public class JobVertexScalerTest {
                 currentTime, new ScalingSummary(8, 16, linearScalingEvaluatedData3));
 
         double linearScalingScalingCoefficient =
-                JobVertexScaler.calculateObservedScalingCoefficient(linearScalingHistory, 3);
+                JobVertexScaler.calculateObservedScalingCoefficient(linearScalingHistory, conf);
 
         assertEquals(1.0, linearScalingScalingCoefficient);
 
@@ -1198,7 +1198,7 @@ public class JobVertexScalerTest {
 
         double slightDiminishingReturnsScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        slightDiminishingReturnsScalingHistory, 3);
+                        slightDiminishingReturnsScalingHistory, conf);
 
         assertTrue(
                 slightDiminishingReturnsScalingCoefficient > 0.9
@@ -1220,7 +1220,7 @@ public class JobVertexScalerTest {
 
         double sharpDiminishingReturnsScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        sharpDiminishingReturnsScalingHistory, 3);
+                        sharpDiminishingReturnsScalingHistory, conf);
 
         assertTrue(
                 sharpDiminishingReturnsScalingCoefficient < 0.9
@@ -1244,7 +1244,7 @@ public class JobVertexScalerTest {
 
         double sharpDiminishingReturnsWithOneParallelismScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        sharpDiminishingReturnsWithOneParallelismScalingHistory, 3);
+                        sharpDiminishingReturnsWithOneParallelismScalingHistory, conf);
 
         assertTrue(
                 sharpDiminishingReturnsWithOneParallelismScalingCoefficient < 0.9
@@ -1260,7 +1260,8 @@ public class JobVertexScalerTest {
                 currentTime, new ScalingSummary(4, 8, withOneScalingHistoryRecordEvaluatedData1));
 
         double withOneScalingHistoryRecordScalingCoefficient =
-                JobVertexScaler.calculateObservedScalingCoefficient(withOneScalingHistoryRecord, 1);
+                JobVertexScaler.calculateObservedScalingCoefficient(
+                        withOneScalingHistoryRecord, conf);
 
         assertEquals(1, withOneScalingHistoryRecordScalingCoefficient);
 
@@ -1280,7 +1281,7 @@ public class JobVertexScalerTest {
 
         double diminishingReturnWithTwoScalingHistoryRecordScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        diminishingReturnWithTwoScalingHistoryRecord, 1);
+                        diminishingReturnWithTwoScalingHistoryRecord, conf);
 
         assertTrue(
                 diminishingReturnWithTwoScalingHistoryRecordScalingCoefficient < 0.9
@@ -1300,7 +1301,7 @@ public class JobVertexScalerTest {
 
         double linearReturnWithTwoScalingHistoryRecordScalingCoefficient =
                 JobVertexScaler.calculateObservedScalingCoefficient(
-                        linearReturnWithTwoScalingHistoryRecord, 1);
+                        linearReturnWithTwoScalingHistoryRecord, conf);
 
         assertEquals(1, linearReturnWithTwoScalingHistoryRecordScalingCoefficient);
     }

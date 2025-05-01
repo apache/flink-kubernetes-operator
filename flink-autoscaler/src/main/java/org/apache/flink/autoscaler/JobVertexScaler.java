@@ -187,8 +187,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         if (conf.get(OBSERVED_SCALABILITY_ENABLED)) {
 
             double scalingCoefficient =
-                    JobVertexScaler.calculateObservedScalingCoefficient(
-                            history, conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS));
+                    JobVertexScaler.calculateObservedScalingCoefficient(history, conf);
 
             scaleFactor = scaleFactor / scalingCoefficient;
         }
@@ -258,14 +257,12 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * 1.0} is returned, assuming linear scaling.
      *
      * @param history A {@code SortedMap} of {@code Instant} timestamps to {@code ScalingSummary}
-     * @param minObservations The minimum number of observations required to compute the scaling
-     *     coefficient. If the number of historical entries is less than this threshold, a default
-     *     coefficient of {@code 1.0} is returned.
+     * @param conf Deployment configuration.
      * @return The computed scaling coefficient.
      */
     @VisibleForTesting
     protected static double calculateObservedScalingCoefficient(
-            SortedMap<Instant, ScalingSummary> history, int minObservations) {
+            SortedMap<Instant, ScalingSummary> history, Configuration conf) {
         /*
          * The scaling coefficient is computed using the least squares approach
          * to fit a linear model:
@@ -288,6 +285,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
          *
          * We keep the system conservative for higher returns scenario by clamping computed α to an upper bound of 1.0.
          */
+
+        var minObservations = conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS);
 
         // not enough data to compute scaling coefficient; we assume linear scaling.
         if (history.isEmpty() || history.size() < minObservations) {
@@ -318,9 +317,11 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             processingRateList.add(processingRate);
         }
 
+        double lowerBound = conf.get(AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN);
+
         var coefficient =
                 AutoScalerUtils.optimizeLinearScalingCoefficient(
-                        parallelismList, processingRateList, baselineProcessingRate, 1, 0.5);
+                        parallelismList, processingRateList, baselineProcessingRate, 1, lowerBound);
 
         return BigDecimal.valueOf(coefficient).setScale(2, RoundingMode.CEILING).doubleValue();
     }

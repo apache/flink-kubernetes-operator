@@ -389,7 +389,10 @@ public class AutoScalerOptions {
                     .defaultValue(false)
                     .withFallbackKeys(oldOperatorConfigKey("observed-scalability.enabled"))
                     .withDescription(
-                            "Enables the use of an observed scalability coefficient when computing target parallelism. If enabled, the system will estimate the scalability coefficient based on historical scaling data instead of assuming perfect linear scaling. This helps account for real-world inefficiencies such as network overhead and coordination costs.");
+                            "Enables the use of an observed scalability coefficient when computing target parallelism. "
+                                    + "If enabled, the system will estimate the scalability coefficient based on historical scaling data "
+                                    + "instead of assuming perfect linear scaling. "
+                                    + "This helps account for real-world inefficiencies such as network overhead and coordination costs.");
 
     public static final ConfigOption<Integer> OBSERVED_SCALABILITY_MIN_OBSERVATIONS =
             autoScalerConfig("observed-scalability.min-observations")
@@ -405,4 +408,14 @@ public class AutoScalerOptions {
                                     + VERTEX_SCALING_HISTORY_COUNT.key()
                                     + " to a very high value, as the number of retained data points is limited by the size of the state store—"
                                     + "particularly when using Kubernetes-based state store.");
+
+    public static final ConfigOption<Double> OBSERVED_SCALABILITY_COEFFICIENT_MIN =
+            autoScalerConfig("observed-scalability.coefficient-min")
+                    .doubleType()
+                    .defaultValue(0.5)
+                    .withFallbackKeys(oldOperatorConfigKey("observed-scalability.coefficient-min"))
+                    .withDescription(
+                            "Minimum allowed value for the observed scalability coefficient. "
+                                    + "Prevents aggressive scaling by clamping low coefficient estimates. "
+                                    + "If the estimated coefficient falls below this value, it is capped at the configured minimum.");
 }
