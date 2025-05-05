@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -211,6 +212,8 @@ public class OperatorJosdkMetrics implements Metrics {
             resourceClass = FlinkSessionJob.class;
         } else if (resourceGvk.getKind().equals(FlinkStateSnapshot.class.getSimpleName())) {
             resourceClass = FlinkStateSnapshot.class;
+        } else if (resourceGvk.getKind().equals(FlinkBlueGreenDeployment.class.getSimpleName())) {
+            resourceClass = FlinkBlueGreenDeployment.class;
         } else {
             return Optional.empty();
         }

@@ -407,6 +407,7 @@ under the License.
                         <!-- PyCharm -->
                         <exclude>**/.idea/**</exclude>
                         <!-- Generated CRD -->
+                        <exclude>helm/flink-kubernetes-operator/crds/flinkbluegreendeployments.flink.apache.org-v1.yml</exclude>
                         <exclude>helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml</exclude>
                         <exclude>helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml</exclude>
                         <exclude>helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml</exclude>
