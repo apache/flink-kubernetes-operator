@@ -280,7 +280,8 @@ public class EventRecorder {
     /** The type of the events. */
     public enum Type {
         Normal,
-        Warning
+        Warning,
+        Error
     }
 
     /** The component of events. */
@@ -315,6 +316,7 @@ public class EventRecorder {
         UnsupportedFlinkVersion,
         SnapshotError,
         SnapshotAbandoned,
+        JobManagerException,
         Error
     }
 }
