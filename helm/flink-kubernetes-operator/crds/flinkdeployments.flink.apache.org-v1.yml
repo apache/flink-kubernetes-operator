@@ -10376,6 +10376,8 @@ spec:
                   upgradeSavepointPath:
                     type: string
                 type: object
+              lastRecordedExceptionTimestamp:
+                type: string
               lifecycleState:
                 enum:
                 - CREATED

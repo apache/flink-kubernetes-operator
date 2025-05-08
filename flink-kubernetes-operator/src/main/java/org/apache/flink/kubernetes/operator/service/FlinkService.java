@@ -128,9 +128,8 @@ public interface FlinkService {
 
     RestClusterClient<String> getClusterClient(Configuration conf) throws Exception;
 
-    JobExceptionsInfoWithHistory getJobExceptions(FlinkDeployment deployment,
-                                                  JobID jobId,
-                                                  Configuration conf) throws Exception;
+    JobExceptionsInfoWithHistory getJobExceptions(
+            FlinkDeployment deployment, JobID jobId, Configuration deployConfig) throws Exception;
 
     /** Result of a cancel operation. */
     @AllArgsConstructor

@@ -171,6 +171,29 @@ public class EventRecorder {
                 messageKey);
     }
 
+    public boolean triggerEventOnceWithAnnotations(
+            long eventTimestampMillis,
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            Reason reason,
+            String message,
+            Component component,
+            String messageKey,
+            KubernetesClient client,
+            Map<String, String> annotations) {
+        return EventUtils.createWithAnnotationsIfNotExists(
+                client,
+                resource,
+                eventTimestampMillis,
+                type,
+                reason.toString(),
+                message,
+                component,
+                e -> eventListenerFlinkResource.accept(resource, e),
+                messageKey,
+                annotations);
+    }
+
     /**
      * @param resource The resource
      * @param type The type
@@ -280,8 +303,7 @@ public class EventRecorder {
     /** The type of the events. */
     public enum Type {
         Normal,
-        Warning,
-        Error
+        Warning
     }
 
     /** The component of events. */
@@ -316,7 +338,7 @@ public class EventRecorder {
         UnsupportedFlinkVersion,
         SnapshotError,
         SnapshotAbandoned,
-        JobManagerException,
+        JobException,
         Error
     }
 }

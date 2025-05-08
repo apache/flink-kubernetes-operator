@@ -74,6 +74,10 @@ public abstract class AbstractFlinkDeploymentObserver
             observeClusterInfo(ctx);
         }
 
+        if (!ReconciliationUtils.isJobInTerminalState(flinkDep.getStatus())) {
+            observeJobManagerExceptions(ctx);
+        }
+
         clearErrorsIfDeploymentIsHealthy(flinkDep);
     }
 
@@ -297,4 +301,11 @@ public abstract class AbstractFlinkDeploymentObserver
      * @param ctx the context with which the operation is executed
      */
     protected abstract void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx);
+
+    /**
+     * Observe the exceptions raised in the job manager and take appropriate action.
+     *
+     * @param ctx the context with which the operation is executed
+     */
+    protected abstract void observeJobManagerExceptions(FlinkResourceContext<FlinkDeployment> ctx);
 }

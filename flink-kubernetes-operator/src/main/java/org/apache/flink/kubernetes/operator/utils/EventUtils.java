@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.MicroTime;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectReference;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -37,6 +38,8 @@ import javax.annotation.Nullable;
 import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +105,33 @@ public class EventUtils {
                 .inNamespace(target.getMetadata().getNamespace())
                 .withName(eventName)
                 .get();
+    }
+
+    public static boolean createWithAnnotationsIfNotExists(
+            KubernetesClient client,
+            HasMetadata target,
+            long eventTime,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey,
+            @Nullable Map<String, String> annotations) {
+        String eventName =
+                generateEventName(
+                        target, type, reason, messageKey != null ? messageKey : message, component);
+        Event existing = findExistingEvent(client, target, eventName);
+
+        if (existing != null) {
+            return false;
+        } else {
+            Event event = buildEvent(target, type, reason, message, component, eventName);
+            setAnnotations(event, annotations);
+            setEventTime(event, Instant.ofEpochMilli(eventTime));
+            createOrReplaceEvent(client, event).ifPresent(eventListener);
+            return true;
+        }
     }
 
     public static boolean createIfNotExists(
@@ -180,6 +210,22 @@ public class EventUtils {
             existing.setMetadata(new ObjectMeta());
         }
         existing.getMetadata().setLabels(labels);
+    }
+
+    private static void setAnnotations(Event existing, @Nullable Map<String, String> annotations) {
+        if (annotations == null) {
+            return;
+        }
+        if (existing.getMetadata() == null) {
+            existing.setMetadata(new ObjectMeta());
+        }
+        existing.getMetadata().setAnnotations(annotations);
+    }
+
+    private static void setEventTime(Event existing, Instant eventTime) {
+        ZonedDateTime zonedDateTime = ZonedDateTime.ofInstant(eventTime, ZoneId.of("UTC"));
+        MicroTime microTime = new MicroTime(zonedDateTime.toString());
+        existing.setEventTime(microTime);
     }
 
     private static Event buildEvent(

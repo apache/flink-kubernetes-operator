@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScaler;
-import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
@@ -46,7 +45,6 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
-import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -57,8 +55,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -303,90 +299,7 @@ public class ApplicationReconciler
             return true;
         }
 
-        // check for JobManager exceptions if the REST API server is still up.
-        if (!ReconciliationUtils.isJobInTerminalState(deployment.getStatus())) {
-            observeJobManagerExceptions(ctx, deployment, observeConfig);
-        }
-
         return cleanupTerminalJmAfterTtl(ctx.getFlinkService(), deployment, observeConfig);
-    }
-
-    private void observeJobManagerExceptions(
-            FlinkResourceContext<FlinkDeployment> ctx,
-            FlinkDeployment deployment,
-            Configuration observeConfig) {
-        try {
-            var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
-            var history = ctx.getFlinkService().getJobExceptions(deployment, jobId, observeConfig);
-            if (history == null || history.getExceptionHistory() == null) {
-                return;
-            }
-            var exceptionHistory = history.getExceptionHistory();
-            var exceptions = exceptionHistory.getEntries();
-            if (exceptions.isEmpty()) {
-                LOG.info(String.format("No exceptions found in job exception history for jobId '%s'.", jobId));
-                return;
-            }
-            if (exceptionHistory.isTruncated()) {
-                LOG.warn(String.format("Job exception history is truncated for jobId '%s'. "
-                        + "Some exceptions are not shown.", jobId));
-            }
-            for (var exception : exceptions) {
-                emitJobManagerExceptionEvent(ctx, deployment, exception);
-            }
-        } catch (Exception e) {
-            LOG.warn("Could not fetch JobManager exception info.", e);
-        }
-    }
-
-    private void emitJobManagerExceptionEvent(
-            FlinkResourceContext<FlinkDeployment> ctx,
-            FlinkDeployment deployment,
-            JobExceptionsInfoWithHistory.RootExceptionInfo exception) {
-
-        String message = exception.getExceptionName();
-        if (message == null || message.isBlank()) {
-            return;
-        }
-
-        String stacktrace = exception.getStacktrace();
-        String taskName = exception.getTaskName();
-        String endpoint = exception.getEndpoint();
-        String tmId = exception.getTaskManagerId();
-        Map<String, String> labels = exception.getFailureLabels();
-        String time = DateTimeUtils.readable(Instant.ofEpochMilli(exception.getTimestamp()), ZoneId.systemDefault());
-
-        StringBuilder combined = new StringBuilder();
-        combined.append("JobManager Exception at ").append(time).append(":\n");
-        combined.append(message).append("\n\n");
-
-        if (taskName != null) {
-            combined.append("Task: ").append(taskName).append("\n");
-        }
-        if (endpoint != null) {
-            combined.append("Endpoint: ").append(endpoint).append("\n");
-        }
-        if (tmId != null) {
-            combined.append("TaskManager ID: ").append(tmId).append("\n");
-        }
-
-        if (labels != null && !labels.isEmpty()) {
-            combined.append("Failure Labels:\n");
-            labels.forEach((k, v) -> combined.append("- ").append(k).append(": ").append(v).append("\n"));
-        }
-
-        if (stacktrace != null && !stacktrace.isBlank()) {
-            combined.append("\nStacktrace:\n").append(stacktrace);
-        }
-
-        eventRecorder.triggerEventOnce(
-                deployment,
-                EventRecorder.Type.Warning,
-                EventRecorder.Reason.JobManagerException,
-                combined.toString(),
-                EventRecorder.Component.JobManagerDeployment,
-                "jobmanager-exception-" + message.hashCode(),
-                ctx.getKubernetesClient());
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 
@@ -35,5 +36,9 @@ public class TestObserverAdapter<CR extends AbstractFlinkResource<?, ?>> {
 
     public void observe(CR cr, Context<?> context) {
         observer.observe(operatorTestBase.getResourceContext(cr, context));
+    }
+
+    public void observe(CR cr, Context<?> context, Configuration configuration) {
+        observer.observe(operatorTestBase.getResourceContext(cr, context, configuration));
     }
 }

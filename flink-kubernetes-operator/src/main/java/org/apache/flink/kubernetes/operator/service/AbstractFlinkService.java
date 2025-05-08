@@ -849,19 +849,19 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public JobExceptionsInfoWithHistory getJobExceptions(FlinkDeployment deployment,
-                                                                   JobID jobId,
-                                                                   Configuration conf) {
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            FlinkDeployment deployment, JobID jobId, Configuration deployConfig) {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
-        int port = conf.getInteger(RestOptions.PORT);
+        int port = deployConfig.getInteger(RestOptions.PORT);
         String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
-                                deployment.getMetadata().getName(), deployment.getMetadata().getNamespace()));
+                                deployment.getMetadata().getName(),
+                                deployment.getMetadata().getNamespace()));
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
-        try (var restClient = getRestClient(conf)) {
+        try (var restClient = getRestClient(deployConfig)) {
             return restClient
                     .sendRequest(
                             host,
@@ -871,7 +871,10 @@ public abstract class AbstractFlinkService implements FlinkService {
                             EmptyRequestBody.getInstance())
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
-            LOG.warn(String.format("Failed to fetch job exceptions from REST API for jobId %s", jobId), e);
+            LOG.warn(
+                    String.format(
+                            "Failed to fetch job exceptions from REST API for jobId %s", jobId),
+                    e);
             return null;
         }
     }

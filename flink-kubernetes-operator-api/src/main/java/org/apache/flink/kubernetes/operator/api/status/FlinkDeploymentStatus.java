@@ -55,4 +55,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Information about the TaskManagers for the scale subresource. */
     private TaskManagerInfo taskManager;
+
+    /** Information about when the last exception was recorded for this deployment. */
+    private String lastRecordedExceptionTimestamp;
 }

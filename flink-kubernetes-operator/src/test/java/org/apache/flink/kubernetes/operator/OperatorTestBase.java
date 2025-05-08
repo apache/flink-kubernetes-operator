@@ -76,4 +76,13 @@ public abstract class OperatorTestBase {
                         configManager, operatorMetricGroup, flinkService, eventRecorder);
         return ctxFactory.getResourceContext(cr, josdkContext);
     }
+
+    public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
+            CR cr, Context josdkContext, Configuration configuration) {
+        configManager.updateDefaultConfig(configuration);
+        var ctxFactory =
+                new TestingFlinkResourceContextFactory(
+                        configManager, operatorMetricGroup, flinkService, eventRecorder);
+        return ctxFactory.getResourceContext(cr, josdkContext);
+    }
 }
