@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -35,11 +36,26 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
+
+    /** The cache entry for the last recorded exception timestamp. */
+    public static final class ExceptionCacheEntry {
+        final String jobId;
+        final long lastTimestamp;
+
+        ExceptionCacheEntry(String jobId, long lastTimestamp) {
+            this.jobId = jobId;
+            this.lastTimestamp = lastTimestamp;
+        }
+    }
+
+    @VisibleForTesting
+    final Map<String, ExceptionCacheEntry> lastRecordedExceptionCache = new ConcurrentHashMap<>();
 
     private static final Logger LOG = LoggerFactory.getLogger(ApplicationObserver.class);
 
@@ -108,22 +124,19 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
                         jobId);
             }
 
+            String resourceKey =
+                    deployment.getMetadata().getNamespace()
+                            + "/"
+                            + deployment.getMetadata().getName();
+            String currentJobId = jobStatus.getJobId();
             Instant lastRecorded = null; // first reconciliation
-            if (deployment.getStatus().getLastRecordedExceptionTimestamp() != null) {
-                try {
-                    lastRecorded =
-                            Instant.parse(
-                                    deployment.getStatus().getLastRecordedExceptionTimestamp());
-                } catch (Exception e) {
-                    LOG.warn(
-                            "Failed to parse last recorded exception timestamp for deployment '{}'.",
-                            deployment.getMetadata().getName(),
-                            e);
-                    return;
-                }
-            }
-            Instant now = Instant.now();
 
+            ExceptionCacheEntry cacheEntry = lastRecordedExceptionCache.get(resourceKey);
+            if (cacheEntry != null && cacheEntry.jobId.equals(currentJobId)) {
+                lastRecorded = Instant.ofEpochMilli(cacheEntry.lastTimestamp);
+            }
+
+            Instant now = Instant.now();
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
             int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
 
@@ -139,8 +152,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
                     break;
                 }
             }
-            // only update the last recorded exception timestamp if we emitted an event
-            deployment.getStatus().setLastRecordedExceptionTimestamp(now.toString());
+            lastRecordedExceptionCache.put(
+                    resourceKey, new ExceptionCacheEntry(currentJobId, now.toEpochMilli()));
 
         } catch (Exception e) {
             LOG.warn(

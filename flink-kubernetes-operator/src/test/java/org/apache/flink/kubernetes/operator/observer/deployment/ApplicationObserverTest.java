@@ -1024,10 +1024,17 @@ public class ApplicationObserverTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var jobId = new JobID();
         deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
-        deployment
-                .getStatus()
-                .setLastRecordedExceptionTimestamp(
-                        java.time.Instant.ofEpochMilli(2500L).toString());
+
+        ApplicationObserver observer = new ApplicationObserver(eventRecorder);
+        String name = deployment.getMetadata().getName();
+        String namespace = deployment.getMetadata().getNamespace();
+        String resourceKey = namespace + "/" + name;
+        observer.lastRecordedExceptionCache.put(
+                resourceKey,
+                new ApplicationObserver.ExceptionCacheEntry(jobId.toHexString(), 2500L));
+
+        TestObserverAdapter<FlinkDeployment> observerAdapter =
+                new TestObserverAdapter<>(this, observer);
 
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
@@ -1036,7 +1043,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         flinkService.addExceptionHistory(jobId, "MidException", "mid", 2000L);
         flinkService.addExceptionHistory(jobId, "NewException", "new", 3000L);
 
-        observer.observe(deployment, readyContext);
+        observerAdapter.observe(deployment, readyContext);
 
         var events =
                 kubernetesClient
@@ -1047,29 +1054,5 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         .getItems();
         assertEquals(1, events.size());
         assertTrue(events.get(0).getMessage().contains("NewException"));
-    }
-
-    @Test
-    public void testInvalidTimestampIsIgnored() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        var jobId = new JobID();
-        deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
-        deployment.getStatus().setLastRecordedExceptionTimestamp("invalid-timestamp");
-
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-
-        flinkService.addExceptionHistory(jobId, "BadTimestampException", "trace", 5000L);
-
-        observer.observe(deployment, readyContext);
-
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertEquals(0, events.size());
     }
 }
