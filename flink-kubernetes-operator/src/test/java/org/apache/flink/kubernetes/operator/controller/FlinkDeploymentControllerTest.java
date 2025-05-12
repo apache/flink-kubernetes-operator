@@ -1223,7 +1223,10 @@ public class FlinkDeploymentControllerTest {
         assertNull(reconciliationStatus.getLastStableSpec());
 
         // Validate status conditions
-        assertThat(appCluster.getStatus().getConditions()).isEmpty();
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains("JobManager deployment not found");
     }
 
     private void verifyReconcileNormalLifecycle(FlinkDeployment appCluster) throws Exception {

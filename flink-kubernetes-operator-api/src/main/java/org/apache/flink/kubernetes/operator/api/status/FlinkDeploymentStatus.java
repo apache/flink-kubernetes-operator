@@ -68,9 +68,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     private List<Condition> conditions = new ArrayList<>();
 
     public List<Condition> getConditions() {
-        if (reconciliationStatus != null
-                && reconciliationStatus.deserializeLastReconciledSpec() != null
-                && reconciliationStatus.deserializeLastReconciledSpec().getJob() == null) {
+        if (getJobStatus() != null && getJobStatus().getState() == null) {
             // Populate conditions for SessionMode deployment
             switch (jobManagerDeploymentStatus) {
                 case READY:
@@ -192,11 +190,13 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
                                                     && c.getMessage()
                                                             .equals(newCondition.getMessage()))
                             .findFirst();
-            // Until there is a condition change which reflects the latest state, no need to add condition to list.
+            // Until there is a condition change which reflects the latest state, no need to add
+            // condition to list.
             if (existingCondition.isPresent()) {
                 return;
             }
-            // Remove existing Condition with type running and then add a new condition that reflects the current state.
+            // Remove existing Condition with type running and then add a new condition that
+            // reflects the current state.
             conditions.removeIf(
                     c ->
                             c.getType().equals(CONDITION_TYPE_RUNNING)
