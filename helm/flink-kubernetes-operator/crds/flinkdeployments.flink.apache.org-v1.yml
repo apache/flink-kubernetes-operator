@@ -10408,8 +10408,6 @@ spec:
                 type: string
               observedGeneration:
                 type: integer
-              phase:
-                type: string
               reconciliationStatus:
                 properties:
                   lastReconciledSpec:

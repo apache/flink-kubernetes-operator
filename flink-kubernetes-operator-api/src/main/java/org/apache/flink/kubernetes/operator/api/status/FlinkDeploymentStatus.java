@@ -35,6 +35,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
+import static org.apache.flink.kubernetes.operator.api.utils.ConditionUtils.CONDITION_TYPE_RUNNING;
 
 /** Last observed status of the Flink deployment. */
 @Experimental
@@ -63,8 +66,6 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Condition of the CR . */
     private List<Condition> conditions = new ArrayList<>();
-
-    private String phase;
 
     public List<Condition> getConditions() {
         if (reconciliationStatus != null
@@ -179,69 +180,29 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
         return conditions;
     }
 
-    public String getPhase() {
-        if (reconciliationStatus != null
-                && reconciliationStatus.deserializeLastReconciledSpec() != null
-                && reconciliationStatus.deserializeLastReconciledSpec().getJob() == null) {
-            // populate phase for SessionMode deployment
-            switch (jobManagerDeploymentStatus) {
-                case READY:
-                    phase = "Running";
-                    break;
-                case MISSING:
-                case DEPLOYING:
-                    phase = "Pending";
-                    break;
-                case ERROR:
-                    phase = "Failed";
-                    break;
+    private static void updateCondition(List<Condition> conditions, Condition newCondition) {
+        if (newCondition.getType().equals(CONDITION_TYPE_RUNNING)) {
+            Optional<Condition> existingCondition =
+                    conditions.stream()
+                            .filter(
+                                    c ->
+                                            c.getType().equals(CONDITION_TYPE_RUNNING)
+                                                    && c.getReason()
+                                                            .equals(newCondition.getReason())
+                                                    && c.getMessage()
+                                                            .equals(newCondition.getMessage()))
+                            .findFirst();
+            // Until there is a condition change which reflects the latest state, no need to add condition to list.
+            if (existingCondition.isPresent()) {
+                return;
             }
-        } else if (getJobStatus() != null && getJobStatus().getState() != null) {
-            // populate phase for ApplicationMode deployment
-            switch (getJobStatus().getState()) {
-                case RECONCILING:
-                    phase = "Pending";
-                    break;
-                case CREATED:
-                    phase = JobStatus.CREATED.name();
-                    break;
-                case RUNNING:
-                    phase = JobStatus.RUNNING.name();
-                    break;
-                case FAILING:
-                    phase = JobStatus.FAILING.name();
-                    break;
-                case RESTARTING:
-                    phase = JobStatus.RESTARTING.name();
-                    break;
-                case FAILED:
-                    phase = JobStatus.FAILED.name();
-                    break;
-                case FINISHED:
-                    phase = JobStatus.FINISHED.name();
-                    break;
-                case CANCELED:
-                    phase = JobStatus.CANCELED.name();
-                    break;
-                case SUSPENDED:
-                    phase = JobStatus.SUSPENDED.name();
-                    break;
-            }
+            // Remove existing Condition with type running and then add a new condition that reflects the current state.
+            conditions.removeIf(
+                    c ->
+                            c.getType().equals(CONDITION_TYPE_RUNNING)
+                                    && !c.getMessage().equals(newCondition.getMessage())
+                                    && !c.getReason().equals(newCondition.getReason()));
         }
-        return phase;
-    }
-
-    private static void updateCondition(List<Condition> conditions, Condition condition) {
-        if (conditions.isEmpty()) {
-            conditions.add(condition);
-            return;
-        }
-        // If new condition is same as last condition, ignore
-        Condition existingCondition = conditions.get(conditions.size() - 1);
-        if (existingCondition.getType().equals(condition.getType())
-                && existingCondition.getMessage().equals(condition.getMessage())) {
-            return;
-        }
-        conditions.add(condition);
+        conditions.add(newCondition);
     }
 }

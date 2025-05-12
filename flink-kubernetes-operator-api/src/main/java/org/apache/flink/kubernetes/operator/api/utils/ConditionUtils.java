@@ -29,6 +29,8 @@ import java.util.Map;
 
 /** Creates a condition object with the type, status, message and reason. */
 public class ConditionUtils {
+    public static final String CONDITION_TYPE_RUNNING = "Running";
+
     public static Condition crCondition(Condition condition) {
         return new ConditionBuilder(condition)
                 .withLastTransitionTime(
@@ -40,104 +42,105 @@ public class ConditionUtils {
             Map.of(
                     JobManagerDeploymentStatus.READY.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("True")
-                            .withMessage("Ready")
-                            .withReason("JobManager is running and ready to receive REST API calls")
+                            .withReason("Ready")
+                            .withMessage(
+                                    "JobManager is running and ready to receive REST API calls")
                             .build(),
                     JobManagerDeploymentStatus.MISSING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("Missing")
-                            .withReason("JobManager deployment not found")
+                            .withReason("Missing")
+                            .withMessage("JobManager deployment not found")
                             .build(),
                     JobManagerDeploymentStatus.DEPLOYING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("Deploying")
-                            .withReason("JobManager process is starting up")
+                            .withReason("Deploying")
+                            .withMessage("JobManager process is starting up")
                             .build(),
                     JobManagerDeploymentStatus.DEPLOYED_NOT_READY.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("DeployedNotReady")
-                            .withReason(
+                            .withReason("DeployedNotReady")
+                            .withMessage(
                                     "JobManager is running but not ready yet to receive REST API calls")
                             .build(),
                     JobManagerDeploymentStatus.ERROR.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("Error")
-                            .withReason("JobManager deployment failed")
+                            .withReason("Error")
+                            .withMessage("JobManager deployment failed")
                             .build());
 
     public static final Map<String, Condition> APPLICATION_MODE_CONDITION =
             Map.of(
                     JobStatus.RECONCILING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("Reconciling")
-                            .withReason("Job is currently reconciling")
+                            .withReason("Reconciling")
+                            .withMessage("Job is currently reconciling")
                             .build(),
                     JobStatus.CREATED.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobCreated")
-                            .withReason("Job is created")
+                            .withReason("JobCreated")
+                            .withMessage("Job is created")
                             .build(),
                     JobStatus.RUNNING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("True")
-                            .withMessage("JobRunning")
-                            .withReason("Job is running")
+                            .withReason("JobRunning")
+                            .withMessage("Job is running")
                             .build(),
                     JobStatus.FAILING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobFailing")
-                            .withReason("Job has failed")
+                            .withReason("JobFailing")
+                            .withMessage("Job has failed")
                             .build(),
                     JobStatus.RESTARTING.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobRestarting")
-                            .withReason("The job is currently restarting")
+                            .withReason("JobRestarting")
+                            .withMessage("The job is currently restarting")
                             .build(),
                     JobStatus.FAILED.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobFailed")
-                            .withReason("The job has failed with a non-recoverable task failure")
+                            .withReason("JobFailed")
+                            .withMessage("The job has failed with a non-recoverable task failure")
                             .build(),
                     JobStatus.FINISHED.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobFinished")
-                            .withReason("Job's tasks have successfully finished")
+                            .withReason("JobFinished")
+                            .withMessage("Job's tasks have successfully finished")
                             .build(),
                     JobStatus.CANCELED.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobCancelled")
-                            .withReason("Job has been cancelled")
+                            .withReason("JobCancelled")
+                            .withMessage("Job has been cancelled")
                             .build(),
                     JobStatus.SUSPENDED.name(),
                     new ConditionBuilder()
-                            .withType("Running")
+                            .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("False")
-                            .withMessage("JobSuspended")
-                            .withReason("The job has been suspended")
+                            .withReason("JobSuspended")
+                            .withMessage("The job has been suspended")
                             .build());
 }
