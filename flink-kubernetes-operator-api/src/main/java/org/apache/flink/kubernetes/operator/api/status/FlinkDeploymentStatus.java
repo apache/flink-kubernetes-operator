@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.utils.ConditionUtils;
 
@@ -67,20 +68,22 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     private List<Condition> conditions = new ArrayList<>();
 
     public List<Condition> getConditions() {
-        if (getJobStatus() != null && getJobStatus().getState() == null) {
-            // Populate conditions for SessionMode deployment
-            updateCondition(
-                    conditions,
-                    ConditionUtils.crCondition(
-                            ConditionUtils.SESSION_MODE_CONDITION.get(
-                                    jobManagerDeploymentStatus.name())));
-        } else if (getJobStatus() != null && getJobStatus().getState() != null) {
-            // Populate conditions for ApplicationMode deployment
-            updateCondition(
-                    conditions,
-                    ConditionUtils.crCondition(
-                            ConditionUtils.APPLICATION_MODE_CONDITION.get(
-                                    getJobStatus().getState().name())));
+        if (getJobStatus() != null) {
+            JobStatus jobStatus = getJobStatus().getState();
+            if (jobStatus == null) {
+                // Populate conditions for SessionMode deployment
+                updateCondition(
+                        conditions,
+                        ConditionUtils.crCondition(
+                                ConditionUtils.SESSION_MODE_CONDITION.get(
+                                        jobManagerDeploymentStatus.name())));
+            } else if (jobStatus != null) {
+                // Populate conditions for ApplicationMode deployment
+                updateCondition(
+                        conditions,
+                        ConditionUtils.crCondition(
+                                ConditionUtils.APPLICATION_MODE_CONDITION.get(jobStatus.name())));
+            }
         }
         return conditions;
     }
