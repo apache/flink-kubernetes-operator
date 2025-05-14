@@ -823,7 +823,7 @@ public class FlinkDeploymentControllerTest {
         assertThat(appCluster.getStatus().getConditions())
                 .hasSize(1)
                 .extracting("reason")
-                .contains("Ready");
+                .contains("JobManagerReady");
     }
 
     private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) throws Exception {

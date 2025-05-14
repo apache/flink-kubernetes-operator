@@ -44,7 +44,7 @@ public class ConditionUtils {
                     new ConditionBuilder()
                             .withType(CONDITION_TYPE_RUNNING)
                             .withStatus("True")
-                            .withReason("Ready")
+                            .withReason("JobManagerReady")
                             .withMessage(
                                     "JobManager is running and ready to receive REST API calls")
                             .build(),
