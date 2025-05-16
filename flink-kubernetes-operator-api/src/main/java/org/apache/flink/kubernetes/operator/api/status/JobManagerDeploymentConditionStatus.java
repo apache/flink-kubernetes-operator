@@ -8,7 +8,7 @@ public enum JobManagerDeploymentConditionStatus {
     DEPLOYED_NOT_READY(
             "False",
             "DeployedNotReady",
-            "JobManager is running but not ready yet to receive REST API calls"),
+            "JobManager is running but not yet ready to receive REST API calls"),
     ERROR("False", "Error", "JobManager deployment failed");
 
     private String status;

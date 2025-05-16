@@ -113,12 +113,12 @@ public class ConditionUtils {
         return new ConditionBuilder()
                 .withType(CONDITION_TYPE_RUNNING)
                 .withStatus(jobStatus == RUNNING ? "True" : "False")
-                .withReason(toCameCase(jobStatus.name()))
+                .withReason(toCamelCase(jobStatus.name()))
                 .withMessage("Job state " + jobStatus.name())
                 .build();
     }
 
-    private static String toCameCase(String reason) {
+    private static String toCamelCase(String reason) {
         reason = reason.toLowerCase();
         return reason.substring(0, 1).toUpperCase() + reason.substring(1);
     }
