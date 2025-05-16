@@ -32,6 +32,7 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
     private final SnapshotObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
     private final JobStatusObserver<FlinkDeployment> jobStatusObserver;
+
     private final ClusterHealthObserver clusterHealthObserver;
 
     public ApplicationObserver(EventRecorder eventRecorder) {
