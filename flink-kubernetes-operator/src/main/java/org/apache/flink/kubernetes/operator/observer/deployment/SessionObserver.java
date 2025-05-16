@@ -49,10 +49,4 @@ public class SessionObserver extends AbstractFlinkDeploymentObserver {
             }
         }
     }
-
-    @Override
-    protected void observeJobManagerExceptions(FlinkResourceContext<FlinkDeployment> ctx) {
-        logger.error("Observing job manager exceptions not supported for session cluster");
-        return;
-    }
 }

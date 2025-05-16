@@ -42,7 +42,6 @@ import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.Event;
-import io.fabric8.kubernetes.api.model.MicroTime;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -55,8 +54,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -946,113 +943,5 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         EventRecorder.Reason.CheckpointError.name(),
                         deployment.getMetadata().getNamespace(),
                         "Checkpointing has not been enabled"));
-    }
-
-    @Test
-    public void testExceptionLimitConfig() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        var jobId = new JobID();
-        deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
-
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-
-        flinkService.addExceptionHistory(jobId, "ExceptionOne", "trace1", 1000L);
-        flinkService.addExceptionHistory(jobId, "ExceptionTwo", "trace2", 2000L);
-        flinkService.addExceptionHistory(jobId, "ExceptionThree", "trace3", 3000L);
-
-        Map<String, String> configuration = new HashMap<>();
-        configuration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT.key(), "2");
-        Configuration operatorConfig = Configuration.fromMap(configuration);
-
-        observer.observe(deployment, readyContext, operatorConfig);
-
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertEquals(2, events.size());
-    }
-
-    @Test
-    public void testStackTraceTruncationConfig() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        var jobId = new JobID();
-        deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
-
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-
-        long exceptionTime = 4000L;
-        String longTrace = "line1\nline2\nline3\nline4";
-        flinkService.addExceptionHistory(jobId, "StackTraceCheck", longTrace, exceptionTime);
-
-        Map<String, String> configuration = new HashMap<>();
-        configuration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES.key(),
-                "2");
-        Configuration operatorConfig = Configuration.fromMap(configuration);
-
-        observer.observe(deployment, readyContext, operatorConfig);
-
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertEquals(1, events.size());
-        String msg = events.get(0).getMessage();
-        assertTrue(msg.contains("line1"));
-        assertTrue(msg.contains("line2"));
-        assertFalse(msg.contains("line3"));
-        assertTrue(msg.contains("... (2 more lines)"));
-        // check that exception time becomes the event time
-        ZonedDateTime zonedDateTime =
-                ZonedDateTime.ofInstant(Instant.ofEpochMilli(exceptionTime), ZoneId.of("UTC"));
-        MicroTime expectedEventTime = new MicroTime(zonedDateTime.toString());
-        assertEquals(expectedEventTime, events.get(0).getEventTime());
-    }
-
-    @Test
-    public void testIgnoreOldExceptions() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        var jobId = new JobID();
-        deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
-
-        ApplicationObserver observer = new ApplicationObserver(eventRecorder);
-        String name = deployment.getMetadata().getName();
-        String namespace = deployment.getMetadata().getNamespace();
-        String resourceKey = namespace + "/" + name;
-        observer.lastRecordedExceptionCache.put(
-                resourceKey,
-                new ApplicationObserver.ExceptionCacheEntry(jobId.toHexString(), 2500L));
-
-        TestObserverAdapter<FlinkDeployment> observerAdapter =
-                new TestObserverAdapter<>(this, observer);
-
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-
-        flinkService.addExceptionHistory(jobId, "OldException", "old", 1000L);
-        flinkService.addExceptionHistory(jobId, "MidException", "mid", 2000L);
-        flinkService.addExceptionHistory(jobId, "NewException", "new", 3000L);
-
-        observerAdapter.observe(deployment, readyContext);
-
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertEquals(1, events.size());
-        assertTrue(events.get(0).getMessage().contains("NewException"));
     }
 }

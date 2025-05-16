@@ -657,7 +657,7 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
-            operatorConfig("event.exception.stacktrace.lines")
+            operatorConfig("events.exceptions.stacktrace-lines")
                     .intType()
                     .defaultValue(5)
                     .withDescription(
@@ -665,7 +665,7 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
-            operatorConfig("event.exception.limit.per.reconciliation")
+            operatorConfig("events.exceptions.limit-per-reconciliation")
                     .intType()
                     .defaultValue(10)
                     .withDescription(

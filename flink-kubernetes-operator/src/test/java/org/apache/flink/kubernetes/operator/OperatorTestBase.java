@@ -31,7 +31,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 
 /**
- * @link JobStatusObserver unit tests
+ * @link Base class for unit tests
  */
 public abstract class OperatorTestBase {
 
@@ -67,6 +67,11 @@ public abstract class OperatorTestBase {
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
             CR cr) {
         return getResourceContext(cr, context);
+    }
+
+    public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
+            CR cr, Configuration configuration) {
+        return getResourceContext(cr, context, configuration);
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(

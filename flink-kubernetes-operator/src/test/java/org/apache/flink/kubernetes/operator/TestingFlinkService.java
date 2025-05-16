@@ -314,6 +314,12 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration deployConfig) {
+        return jobExceptionsMap.getOrDefault(jobId, null);
+    }
+
+    @Override
     public JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception {
         if (jobFailedErr != null) {
             return new JobResult.Builder()
@@ -496,11 +502,13 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     private MultipleJobsDetails getMultipleJobsDetails() {
-        return new MultipleJobsDetails(
-                jobs.stream()
-                        .map(tuple -> tuple.f1)
-                        .map(TestingFlinkService::toJobDetails)
-                        .collect(Collectors.toList()));
+        MultipleJobsDetails multipleJobsDetails =
+                new MultipleJobsDetails(
+                        jobs.stream()
+                                .map(tuple -> tuple.f1)
+                                .map(TestingFlinkService::toJobDetails)
+                                .collect(Collectors.toList()));
+        return multipleJobsDetails;
     }
 
     private AggregatedMetricsResponseBody getSubtaskMetrics() {
@@ -725,12 +733,6 @@ public class TestingFlinkService extends AbstractFlinkService {
         return metricsValues;
     }
 
-    @Override
-    public JobExceptionsInfoWithHistory getJobExceptions(
-            FlinkDeployment deployment, JobID jobId, Configuration conf) {
-        return jobExceptionsMap.get(jobId);
-    }
-
     /**
      * Utilities to add exception history for testing.
      *
@@ -767,9 +769,5 @@ public class TestingFlinkService extends AbstractFlinkService {
         JobExceptionsInfoWithHistory newExceptionHistory =
                 new JobExceptionsInfoWithHistory(exceptionHistory);
         jobExceptionsMap.put(jobId, newExceptionHistory);
-    }
-
-    public void clearExceptionHistories() {
-        jobExceptionsMap.clear();
     }
 }

@@ -31,6 +31,7 @@ import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -850,15 +851,15 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public JobExceptionsInfoWithHistory getJobExceptions(
-            FlinkDeployment deployment, JobID jobId, Configuration deployConfig) {
+            AbstractFlinkResource resource, JobID jobId, Configuration deployConfig) {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
         int port = deployConfig.getInteger(RestOptions.PORT);
         String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
-                                deployment.getMetadata().getName(),
-                                deployment.getMetadata().getNamespace()));
+                                resource.getMetadata().getName(),
+                                resource.getMetadata().getNamespace()));
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
         try (var restClient = getRestClient(deployConfig)) {

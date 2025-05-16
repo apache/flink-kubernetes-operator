@@ -25,10 +25,13 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
+import java.util.Map;
 import java.util.function.Function;
 
 /** Context for reconciling a Flink resource. */
@@ -39,8 +42,16 @@ public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment
             Context<?> josdkContext,
             KubernetesResourceMetricGroup resourceMetricGroup,
             FlinkConfigManager configManager,
-            Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory) {
-        super(resource, josdkContext, resourceMetricGroup, configManager, flinkServiceFactory);
+            Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory,
+            Map<ResourceID, FlinkResourceContextFactory.ExceptionCacheEntry>
+                    lastRecordedExceptionCache) {
+        super(
+                resource,
+                josdkContext,
+                resourceMetricGroup,
+                configManager,
+                flinkServiceFactory,
+                lastRecordedExceptionCache);
     }
 
     @Override
