@@ -97,25 +97,28 @@ public class ClusterHealthEvaluator {
                 LOG.debug("Last valid health info: {}", lastValidClusterHealthInfo);
                 LOG.debug("Observed health info: {}", observedClusterHealthInfo);
 
-                boolean isHealthy =
+                var jobHealthResult =
                         evaluateRestarts(
-                                        configuration,
-                                        clusterInfo,
-                                        lastValidClusterHealthInfo,
-                                        observedClusterHealthInfo)
-                                && evaluateCheckpoints(
-                                        configuration,
-                                        lastValidClusterHealthInfo,
-                                        observedClusterHealthInfo);
+                                configuration,
+                                clusterInfo,
+                                lastValidClusterHealthInfo,
+                                observedClusterHealthInfo);
+
+                var checkpointHealthResult =
+                        evaluateCheckpoints(
+                                configuration,
+                                lastValidClusterHealthInfo,
+                                observedClusterHealthInfo);
 
                 lastValidClusterHealthInfo.setTimeStamp(observedClusterHealthInfo.getTimeStamp());
-                lastValidClusterHealthInfo.setHealthy(isHealthy);
+                lastValidClusterHealthInfo.setHealthResult(
+                        jobHealthResult.join(checkpointHealthResult));
                 setLastValidClusterHealthInfo(clusterInfo, lastValidClusterHealthInfo);
             }
         }
     }
 
-    private boolean evaluateRestarts(
+    private ClusterHealthResult evaluateRestarts(
             Configuration configuration,
             Map<String, String> clusterInfo,
             ClusterHealthInfo lastValidClusterHealthInfo,
@@ -128,7 +131,7 @@ public class ClusterHealthEvaluator {
             lastValidClusterHealthInfo.setNumRestarts(observedClusterHealthInfo.getNumRestarts());
             lastValidClusterHealthInfo.setNumRestartsEvaluationTimeStamp(
                     observedClusterHealthInfo.getTimeStamp());
-            return true;
+            return ClusterHealthResult.healthy();
         }
 
         var timestampDiffMs =
@@ -153,9 +156,15 @@ public class ClusterHealthEvaluator {
         LOG.debug("Calculated restart count for {} window: {}", restartCheckWindow, numRestarts);
 
         var restartThreshold = configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD);
+
+        var healthResult = ClusterHealthResult.healthy();
+
         boolean isHealthy = numRestarts <= restartThreshold;
         if (!isHealthy) {
             LOG.info("Restart count hit threshold: {}", restartThreshold);
+            healthResult =
+                    ClusterHealthResult.error(
+                            String.format("Restart count hit threshold: %s", restartThreshold));
         }
 
         if (lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp()
@@ -167,15 +176,15 @@ public class ClusterHealthEvaluator {
                     observedClusterHealthInfo.getTimeStamp());
         }
 
-        return isHealthy;
+        return healthResult;
     }
 
-    private boolean evaluateCheckpoints(
+    private ClusterHealthResult evaluateCheckpoints(
             Configuration configuration,
             ClusterHealthInfo lastValidClusterHealthInfo,
             ClusterHealthInfo observedClusterHealthInfo) {
         if (!configuration.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED)) {
-            return true;
+            return ClusterHealthResult.healthy();
         }
 
         var windowOpt =
@@ -195,7 +204,7 @@ public class ClusterHealthEvaluator {
         if (windowOpt.isEmpty() && !checkpointConfig.isCheckpointingEnabled()) {
             // If no explicit checkpoint check window is specified and checkpointing is disabled
             // based on the config, we don't do anything
-            return true;
+            return ClusterHealthResult.healthy();
         }
 
         var completedCheckpointsCheckWindow =
@@ -226,7 +235,7 @@ public class ClusterHealthEvaluator {
                     observedClusterHealthInfo.getNumCompletedCheckpoints());
             lastValidClusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
                     observedClusterHealthInfo.getTimeStamp());
-            return true;
+            return ClusterHealthResult.healthy();
         }
 
         var timestampDiffMs =
@@ -234,7 +243,6 @@ public class ClusterHealthEvaluator {
                         - lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp();
         LOG.debug("Time difference between health infos: {}", Duration.ofMillis(timestampDiffMs));
 
-        boolean isHealthy = true;
         var completedCheckpointsCheckWindowMs = completedCheckpointsCheckWindow.toMillis();
 
         if (observedClusterHealthInfo.getNumCompletedCheckpoints()
@@ -248,9 +256,9 @@ public class ClusterHealthEvaluator {
                         + completedCheckpointsCheckWindowMs
                 < clock.millis()) {
             LOG.info("Cluster is not able to complete checkpoints");
-            isHealthy = false;
+            return ClusterHealthResult.error("Cluster is not able to complete checkpoints");
         }
 
-        return isHealthy;
+        return ClusterHealthResult.healthy();
     }
 }

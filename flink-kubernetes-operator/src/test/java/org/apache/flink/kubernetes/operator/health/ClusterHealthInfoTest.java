@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
+
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -43,11 +45,13 @@ class ClusterHealthInfoTest {
 
     @Test
     public void deserializeWithOldVersionShouldDeserializeCorrectly() {
-        var clusterHealthInfoJson = "{\"timeStamp\":1,\"numRestarts\":2,\"healthy\":true}";
+        var clusterHealthInfoJson =
+                "{\"timeStamp\":1,\"numRestarts\":2,\"healthResult\": {\"healthy\":false, \"error\":\"test-error\"}}}}";
         var clusterHealthInfoFromJson = ClusterHealthInfo.deserialize(clusterHealthInfoJson);
         assertEquals(1, clusterHealthInfoFromJson.getTimeStamp());
         assertEquals(2, clusterHealthInfoFromJson.getNumRestarts());
-        assertTrue(clusterHealthInfoFromJson.isHealthy());
+        assertFalse(clusterHealthInfoFromJson.getHealthResult().isHealthy());
+        assertEquals("test-error", clusterHealthInfoFromJson.getHealthResult().getError());
     }
 
     @Test
@@ -58,7 +62,7 @@ class ClusterHealthInfoTest {
         clusterHealthInfo.setNumRestartsEvaluationTimeStamp(3);
         clusterHealthInfo.setNumCompletedCheckpoints(4);
         clusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(5);
-        clusterHealthInfo.setHealthy(false);
+        clusterHealthInfo.setHealthResult(ClusterHealthResult.error("error"));
         var clusterHealthInfoJson = ClusterHealthInfo.serialize(clusterHealthInfo);
 
         var clusterHealthInfoFromJson = ClusterHealthInfo.deserialize(clusterHealthInfoJson);

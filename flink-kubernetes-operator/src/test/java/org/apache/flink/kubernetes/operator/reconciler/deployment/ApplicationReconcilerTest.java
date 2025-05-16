@@ -65,6 +65,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
@@ -128,7 +129,6 @@ import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECK
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
-import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RESTART_UNHEALTHY;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.getLastSnapshotStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1223,12 +1223,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         var clusterHealthInfo = new ClusterHealthInfo();
         clusterHealthInfo.setTimeStamp(System.currentTimeMillis());
         clusterHealthInfo.setNumRestarts(2);
-        clusterHealthInfo.setHealthy(false);
+        clusterHealthInfo.setHealthResult(ClusterHealthResult.error("error"));
         ClusterHealthEvaluator.setLastValidClusterHealthInfo(
                 deployment.getStatus().getClusterInfo(), clusterHealthInfo);
         reconciler.reconcile(deployment, context);
-        Assertions.assertEquals(
-                MSG_RESTART_UNHEALTHY, flinkResourceEventCollector.events.remove().getMessage());
+        Assertions.assertEquals("error", flinkResourceEventCollector.events.remove().getMessage());
     }
 
     @Test
