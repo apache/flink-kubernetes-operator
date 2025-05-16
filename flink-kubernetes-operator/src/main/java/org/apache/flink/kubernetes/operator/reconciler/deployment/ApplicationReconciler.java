@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
@@ -268,6 +269,9 @@ public class ApplicationReconciler
 
         var deployment = ctx.getResource();
         var observeConfig = ctx.getObserveConfig();
+        var clusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(
+                        deployment.getStatus().getClusterInfo());
         boolean shouldRestartJobBecauseUnhealthy =
                 shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
@@ -288,7 +292,10 @@ public class ApplicationReconciler
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RestartUnhealthyJob,
                         EventRecorder.Component.Job,
-                        MSG_RESTART_UNHEALTHY,
+                        Optional.ofNullable(clusterHealthInfo)
+                                .map(ClusterHealthInfo::getHealthResult)
+                                .map(ClusterHealthResult::getError)
+                                .orElse(MSG_RESTART_UNHEALTHY),
                         ctx.getKubernetesClient());
                 cleanupAfterFailedJob(ctx);
             }
@@ -312,7 +319,7 @@ public class ApplicationReconciler
                     ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
             if (clusterHealthInfo != null) {
                 LOG.debug("Cluster info contains job health info");
-                if (!clusterHealthInfo.isHealthy()) {
+                if (!clusterHealthInfo.getHealthResult().isHealthy()) {
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
                         LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
