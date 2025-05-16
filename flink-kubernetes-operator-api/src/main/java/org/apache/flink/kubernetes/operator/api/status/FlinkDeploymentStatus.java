@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.utils.ConditionUtils;
 
@@ -35,9 +34,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-
-import static org.apache.flink.kubernetes.operator.api.utils.ConditionUtils.CONDITION_TYPE_RUNNING;
 
 /** Last observed status of the Flink deployment. */
 @Experimental
@@ -68,51 +64,8 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     private List<Condition> conditions = new ArrayList<>();
 
     public List<Condition> getConditions() {
-        if (getJobStatus() != null) {
-            JobStatus jobStatus = getJobStatus().getState();
-            if (jobStatus == null) {
-                // Populate conditions for SessionMode deployment
-                updateCondition(
-                        conditions,
-                        ConditionUtils.crCondition(
-                                ConditionUtils.SESSION_MODE_CONDITION.get(
-                                        jobManagerDeploymentStatus.name())));
-            } else if (jobStatus != null) {
-                // Populate conditions for ApplicationMode deployment
-                updateCondition(
-                        conditions,
-                        ConditionUtils.crCondition(
-                                ConditionUtils.APPLICATION_MODE_CONDITION.get(jobStatus.name())));
-            }
-        }
-        return conditions;
-    }
-
-    private static void updateCondition(List<Condition> conditions, Condition newCondition) {
-        if (newCondition.getType().equals(CONDITION_TYPE_RUNNING)) {
-            Optional<Condition> existingCondition =
-                    conditions.stream()
-                            .filter(
-                                    c ->
-                                            c.getType().equals(CONDITION_TYPE_RUNNING)
-                                                    && c.getReason()
-                                                            .equals(newCondition.getReason())
-                                                    && c.getMessage()
-                                                            .equals(newCondition.getMessage()))
-                            .findFirst();
-            // Until there is a condition change which reflects the latest state, no need to add
-            // condition to list.
-            if (existingCondition.isPresent()) {
-                return;
-            }
-            // Remove existing Condition with type running and then add a new condition that
-            // reflects the current state.
-            conditions.removeIf(
-                    c ->
-                            c.getType().equals(CONDITION_TYPE_RUNNING)
-                                    && !c.getMessage().equals(newCondition.getMessage())
-                                    && !c.getReason().equals(newCondition.getReason()));
-        }
-        conditions.add(newCondition);
+        Condition condition = ConditionUtils.getCondition(this);
+        ConditionUtils.updateLastTransitionTime(conditions, condition);
+        return condition == null ? List.of() : List.of(condition);
     }
 }
