@@ -30,15 +30,18 @@ import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerCo
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import javax.annotation.Nullable;
 
+import java.util.Map;
 import java.util.function.Function;
 
 /** Context for reconciling a Flink resource. */
@@ -50,6 +53,10 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     @Getter private final KubernetesResourceMetricGroup resourceMetricGroup;
     protected final FlinkConfigManager configManager;
     private final Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory;
+
+    @Getter
+    private final Map<ResourceID, FlinkResourceContextFactory.ExceptionCacheEntry>
+            lastRecordedExceptionCache;
 
     private FlinkOperatorConfiguration operatorConfig;
     private Configuration observeConfig;

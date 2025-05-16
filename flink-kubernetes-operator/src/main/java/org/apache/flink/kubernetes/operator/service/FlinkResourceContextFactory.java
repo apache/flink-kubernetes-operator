@@ -39,6 +39,7 @@ import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +52,22 @@ import java.util.concurrent.Executors;
 public class FlinkResourceContextFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceContextFactory.class);
+
+    /** The cache entry for the last recorded exception timestamp for a JobID. */
+    @Getter
+    public static final class ExceptionCacheEntry {
+        final String jobId;
+        final long lastTimestamp;
+
+        public ExceptionCacheEntry(String jobId, long lastTimestamp) {
+            this.jobId = jobId;
+            this.lastTimestamp = lastTimestamp;
+        }
+    }
+
+    @VisibleForTesting
+    final Map<ResourceID, ExceptionCacheEntry> lastRecordedExceptionCache =
+            new ConcurrentHashMap<>();
 
     private final FlinkConfigManager configManager;
     private final ArtifactManager artifactManager;
@@ -98,7 +115,12 @@ public class FlinkResourceContextFactory {
             var flinkDep = (FlinkDeployment) resource;
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
-                            flinkDep, josdkContext, resMg, configManager, this::getFlinkService);
+                            flinkDep,
+                            josdkContext,
+                            resMg,
+                            configManager,
+                            this::getFlinkService,
+                            lastRecordedExceptionCache);
         } else if (resource instanceof FlinkSessionJob) {
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
@@ -106,7 +128,8 @@ public class FlinkResourceContextFactory {
                             josdkContext,
                             resMg,
                             configManager,
-                            this::getFlinkService);
+                            this::getFlinkService,
+                            lastRecordedExceptionCache);
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());
@@ -137,13 +160,16 @@ public class FlinkResourceContextFactory {
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
+        ResourceID resourceId = ResourceID.fromResource(flinkApp);
         var resourceMetricGroup =
-                resourceMetricGroups.remove(
-                        Tuple2.of(flinkApp.getClass(), ResourceID.fromResource(flinkApp)));
+                resourceMetricGroups.remove(Tuple2.of(flinkApp.getClass(), resourceId));
         if (resourceMetricGroup != null) {
             resourceMetricGroup.close();
         } else {
             LOG.warn("Unknown resource metric group for {}", flinkApp);
         }
+        // remove the resource from the cache
+        lastRecordedExceptionCache.remove(resourceId);
+        LOG.debug("Removed resource {} from last recorded exception cache", resourceId);
     }
 }

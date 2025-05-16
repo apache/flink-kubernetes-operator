@@ -54,6 +54,7 @@ public class TestingKubernetesAutoscalerUtils {
                         },
                         null,
                         new FlinkConfigManager(new Configuration()),
+                        null,
                         null));
     }
 }
