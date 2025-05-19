@@ -1,4 +1,4 @@
-name: "Push Docker Image to Dev ECR"
+name: "Push Docker Image to ECR"
 on:
   workflow_dispatch:
   push:
@@ -7,10 +7,8 @@ on:
       - 'release-*'
 env:
   ROLE_ARN: arn:aws:iam::381491835868:role/grepr-flink-kubernetes-operator
-  ROLE_SESSION_NAME: GitHub_to_AWS_via_FederatedOIDC
-  AWS_REGION: us-east-1
-  IMAGE_NAME: flink-k8s-operator
-  ECR_URL: 381491835868.dkr.ecr.us-east-1.amazonaws.com
+  DEV_ECR: 381491835868.dkr.ecr.us-east-1.amazonaws.com/flink-k8s-operator
+  PRD_ECR: 992382778380.dkr.ecr.us-east-1.amazonaws.com/flink-k8s-operator
 jobs:
   build_image:
     runs-on: ubuntu-latest
@@ -21,8 +19,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: release-1.9
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -31,19 +27,21 @@ jobs:
           platforms: all
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1.7.0
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.ROLE_ARN }}
-          role-session-name: ${{ env.ROLE_SESSION_NAME }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: "381491835868,992382778380"
 
       - name: Publish Docker image to ECR
         run: |
-          docker buildx build --tag ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0-grepr --platform=linux/amd64,linux/arm64 --push --file Dockerfile . 
+          TAG="1.9.0-${GITHUB_SHA::7}"
+          docker buildx build --tag ${{ env.DEV_ECR }}:$TAG --tag ${{ env.PRD_ECR }}:$TAG \
+            --platform=linux/amd64,linux/arm64 --push --file Dockerfile .
