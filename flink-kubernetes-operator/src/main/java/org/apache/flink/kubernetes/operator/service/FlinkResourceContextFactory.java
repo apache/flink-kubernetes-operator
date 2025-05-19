@@ -40,6 +40,7 @@ import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,9 +56,10 @@ public class FlinkResourceContextFactory {
 
     /** The cache entry for the last recorded exception timestamp for a JobID. */
     @Getter
+    @Setter
     public static final class ExceptionCacheEntry {
-        final String jobId;
-        final long lastTimestamp;
+        private String jobId;
+        private long lastTimestamp;
 
         public ExceptionCacheEntry(String jobId, long lastTimestamp) {
             this.jobId = jobId;
@@ -110,9 +112,16 @@ public class FlinkResourceContextFactory {
                         r ->
                                 OperatorMetricUtils.createResourceMetricGroup(
                                         operatorMetricGroup, configManager, resource));
-
+        String jobId = null;
+        if (resource.getStatus() != null) {
+            if (resource.getStatus().getJobStatus() != null) {
+                jobId = resource.getStatus().getJobStatus().getJobId();
+            }
+        }
         if (resource instanceof FlinkDeployment) {
             var flinkDep = (FlinkDeployment) resource;
+            var resourceId = ResourceID.fromResource(flinkDep);
+            var flinkDepJobId = jobId;
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
                             flinkDep,
@@ -120,8 +129,14 @@ public class FlinkResourceContextFactory {
                             resMg,
                             configManager,
                             this::getFlinkService,
-                            lastRecordedExceptionCache);
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceId,
+                                    id ->
+                                            new ExceptionCacheEntry(
+                                                    flinkDepJobId, System.currentTimeMillis())));
         } else if (resource instanceof FlinkSessionJob) {
+            var resourceId = ResourceID.fromResource(resource);
+            var flinkSessionJobId = jobId;
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
                             (FlinkSessionJob) resource,
@@ -129,7 +144,12 @@ public class FlinkResourceContextFactory {
                             resMg,
                             configManager,
                             this::getFlinkService,
-                            lastRecordedExceptionCache);
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceId,
+                                    id ->
+                                            new ExceptionCacheEntry(
+                                                    flinkSessionJobId,
+                                                    System.currentTimeMillis())));
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());

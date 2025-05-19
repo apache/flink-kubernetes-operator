@@ -31,14 +31,12 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.MicroTime;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -174,6 +172,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 getResourceContext(deployment, operatorConfig); // set a non-terminal state
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
+        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
 
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
@@ -214,6 +214,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
+        ctx.getExceptionCacheEntry().setLastTimestamp(3000L);
 
         long exceptionTime = 4000L;
         String longTrace = "line1\nline2\nline3\nline4";
@@ -251,11 +253,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
         jobStatus.setState(JobStatus.RUNNING); // set a non-terminal state
 
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
-        ctx.getLastRecordedExceptionCache()
-                .put(
-                        ResourceID.fromResource(deployment),
-                        new FlinkResourceContextFactory.ExceptionCacheEntry(
-                                deployment.getStatus().getJobStatus().getJobId(), 2500L));
+        ctx.getExceptionCacheEntry().setJobId(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setLastTimestamp(2500L);
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
         flinkService.submitApplicationCluster(

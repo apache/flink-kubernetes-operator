@@ -35,13 +35,11 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import javax.annotation.Nullable;
 
-import java.util.Map;
 import java.util.function.Function;
 
 /** Context for reconciling a Flink resource. */
@@ -54,9 +52,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     protected final FlinkConfigManager configManager;
     private final Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory;
 
-    @Getter
-    private final Map<ResourceID, FlinkResourceContextFactory.ExceptionCacheEntry>
-            lastRecordedExceptionCache;
+    @Getter private final FlinkResourceContextFactory.ExceptionCacheEntry exceptionCacheEntry;
 
     private FlinkOperatorConfiguration operatorConfig;
     private Configuration observeConfig;

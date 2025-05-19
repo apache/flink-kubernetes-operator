@@ -27,13 +27,11 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -118,16 +116,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         var resource = ctx.getResource();
         var operatorConfig = ctx.getOperatorConfig();
         var jobStatus = resource.getStatus().getJobStatus();
-        // Ideally should not happen
-        if (jobStatus == null || jobStatus.getJobId() == null) {
-            LOG.warn(
-                    "No jobId found for deployment '{}', skipping exception observation.",
-                    resource.getMetadata().getName());
-            return;
-        }
 
         try {
-            JobID jobId = JobID.fromHexString(jobStatus.getJobId());
+            var jobId = JobID.fromHexString(jobStatus.getJobId());
             // TODO: Ideally the best way to restrict the number of events is to use the query param
             // `maxExceptions`
             //  but the JobExceptionsMessageParameters does not expose the parameters and nor does
@@ -153,13 +144,16 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                         jobId);
             }
 
-            ResourceID resourceID = ResourceID.fromResource(resource);
             String currentJobId = jobStatus.getJobId();
             Instant lastRecorded = null; // first reconciliation
 
-            FlinkResourceContextFactory.ExceptionCacheEntry cacheEntry =
-                    ctx.getLastRecordedExceptionCache().get(resourceID);
-            if (cacheEntry != null && cacheEntry.getJobId().equals(currentJobId)) {
+            var cacheEntry = ctx.getExceptionCacheEntry();
+            // a cache entry is created should always be present. The timestamp for the first
+            // reconciliation would be
+            // when the job was created. This check is still necessary because even though there
+            // might be an entry,
+            // the jobId could have changed since the job was first created.
+            if (cacheEntry.getJobId().equals(currentJobId)) {
                 lastRecorded = Instant.ofEpochMilli(cacheEntry.getLastTimestamp());
             }
 
@@ -179,16 +173,10 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     break;
                 }
             }
-            ctx.getLastRecordedExceptionCache()
-                    .put(
-                            resourceID,
-                            new FlinkResourceContextFactory.ExceptionCacheEntry(
-                                    currentJobId, now.toEpochMilli()));
+            ctx.getExceptionCacheEntry().setJobId(currentJobId);
+            ctx.getExceptionCacheEntry().setLastTimestamp(now.toEpochMilli());
         } catch (Exception e) {
-            LOG.warn(
-                    "Failed to fetch JobManager exception info for deployment '{}'.",
-                    resource.getMetadata().getName(),
-                    e);
+            LOG.warn("Failed to fetch JobManager exception info.", e);
         }
     }
 

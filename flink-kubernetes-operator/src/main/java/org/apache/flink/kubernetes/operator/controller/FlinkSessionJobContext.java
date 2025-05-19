@@ -30,9 +30,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
-import java.util.Map;
 import java.util.function.Function;
 
 import static org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler.sessionClusterReady;
@@ -48,15 +46,14 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
             KubernetesResourceMetricGroup resourceMetricGroup,
             FlinkConfigManager configManager,
             Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory,
-            Map<ResourceID, FlinkResourceContextFactory.ExceptionCacheEntry>
-                    lastRecordedExceptionCache) {
+            FlinkResourceContextFactory.ExceptionCacheEntry exceptionCacheEntry) {
         super(
                 resource,
                 josdkContext,
                 resourceMetricGroup,
                 configManager,
                 flinkServiceFactory,
-                lastRecordedExceptionCache);
+                exceptionCacheEntry);
     }
 
     @Override
