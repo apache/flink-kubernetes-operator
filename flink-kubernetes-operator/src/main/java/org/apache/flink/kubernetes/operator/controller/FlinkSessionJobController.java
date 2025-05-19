@@ -40,10 +40,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
@@ -52,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -59,8 +58,6 @@ import java.util.Set;
 @ControllerConfiguration()
 public class FlinkSessionJobController
         implements io.javaoperatorsdk.operator.api.reconciler.Reconciler<FlinkSessionJob>,
-                ErrorStatusHandler<FlinkSessionJob>,
-                EventSourceInitializer<FlinkSessionJob>,
                 Cleaner<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobController.class);
@@ -179,7 +176,7 @@ public class FlinkSessionJobController
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(
+    public List<EventSource<?, FlinkSessionJob>> prepareEventSources(
             EventSourceContext<FlinkSessionJob> context) {
         List<EventSource> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getFlinkDeploymentInformerEventSource(context));

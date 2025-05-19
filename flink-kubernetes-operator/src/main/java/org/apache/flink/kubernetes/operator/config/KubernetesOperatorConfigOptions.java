@@ -496,13 +496,13 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.");
 
+    public static final int DEFAULT_TERMINATION_TIMEOUT_SECONDS = 10;
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_TERMINATION_TIMEOUT =
             operatorConfig("termination.timeout")
                     .durationType()
-                    .defaultValue(
-                            Duration.ofSeconds(
-                                    ConfigurationService.DEFAULT_TERMINATION_TIMEOUT_SECONDS))
+                    .defaultValue(Duration.ofSeconds(DEFAULT_TERMINATION_TIMEOUT_SECONDS))
                     .withDescription(
                             "Operator shutdown timeout before reconciliation threads are killed.");
 

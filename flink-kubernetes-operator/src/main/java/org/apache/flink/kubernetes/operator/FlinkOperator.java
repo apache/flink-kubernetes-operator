@@ -66,6 +66,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -150,10 +151,10 @@ public class FlinkOperator {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
 
-        overrider.withTerminationTimeoutSeconds(
-                (int)
+        overrider.withReconciliationTerminationTimeout(
+                Duration.ofSeconds(
                         conf.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT)
-                                .toSeconds());
+                                .toSeconds()));
 
         overrider.withStopOnInformerErrorDuringStartup(
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR));

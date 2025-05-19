@@ -75,7 +75,7 @@ under the License.
         <maven-javadoc-plugin.version>3.3.2</maven-javadoc-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>4.9.4</operator.sdk.version>
+        <operator.sdk.version>5.1.0-SNAPSHOT</operator.sdk.version>
         <operator.sdk.webhook-framework.version>1.1.1</operator.sdk.webhook-framework.version>
 
         <fabric8.version>6.13.2</fabric8.version>
@@ -162,6 +162,15 @@ under the License.
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <repositories>
+        <repository>
+            <id>snapshots-repo</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <releases><enabled>false</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+    </repositories>
 
     <profiles>
         <!--
