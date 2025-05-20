@@ -158,6 +158,85 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
+    public void testExceptionObservedEvenWhenNewStateIsTerminal() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+        Map<String, String> configuration = new HashMap<>();
+        configuration.put(
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT.key(), "2");
+        Configuration operatorConfig = Configuration.fromMap(configuration);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(deployment, operatorConfig);
+
+        var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
+        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
+        flinkService.addExceptionHistory(jobId, "ExceptionOne", "trace1", 1000L);
+
+        // Ensure jobFailedErr is null before the observe call
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.cancelJob(JobID.fromHexString(jobStatus.getJobId()), false);
+        flinkService.setJobFailedErr(null);
+
+        observer.observe(ctx);
+
+        var events =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems();
+        assertEquals(2, events.size()); // one will be for job status changed
+        // assert that none of the events contain JOB_NOT_FOUND_ERR
+        assertFalse(
+                events.stream()
+                        .anyMatch(
+                                event ->
+                                        event.getMessage()
+                                                .contains(JobStatusObserver.JOB_NOT_FOUND_ERR)));
+    }
+
+    @Test
+    public void testExceptionNotObservedWhenOldStateIsTerminal() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.CANCELED);
+        Map<String, String> configuration = new HashMap<>();
+        configuration.put(
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT.key(), "2");
+        Configuration operatorConfig = Configuration.fromMap(configuration);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(deployment, operatorConfig);
+
+        var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
+        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
+        flinkService.addExceptionHistory(jobId, "ExceptionOne", "trace1", 1000L);
+
+        // Ensure jobFailedErr is null before the observe call
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.setJobFailedErr(null);
+
+        observer.observe(ctx);
+
+        var events =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems();
+        assertEquals(1, events.size()); // only one event for job status changed
+        assertEquals(EventRecorder.Reason.JobStatusChanged.name(), events.get(0).getReason());
+    }
+
+    @Test
     public void testExceptionLimitConfig() throws Exception {
         var observer = new JobStatusObserver<>(eventRecorder);
         var deployment = initDeployment();

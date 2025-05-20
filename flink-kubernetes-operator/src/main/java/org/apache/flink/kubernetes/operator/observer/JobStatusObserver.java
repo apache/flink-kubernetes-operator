@@ -41,7 +41,6 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Pattern;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
@@ -51,8 +50,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
     public static final String JOB_NOT_FOUND_ERR = "Job Not Found";
-    private static final Pattern VALID_K8S_ANNOTATION_KEY_PATTERN =
-            Pattern.compile("^[a-zA-Z0-9./-]{1,63}$");
 
     protected final EventRecorder eventRecorder;
 
@@ -90,7 +87,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 updateJobStatus(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
                 // see if the JM server is up, try to get the exceptions
-                // in case the new
                 if (!previousJobStatus.isGloballyTerminalState()) {
                     observeJobManagerExceptions(ctx);
                 }
