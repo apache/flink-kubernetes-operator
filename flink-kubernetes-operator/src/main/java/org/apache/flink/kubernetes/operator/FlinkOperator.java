@@ -159,6 +159,7 @@ public class FlinkOperator {
         overrider.withStopOnInformerErrorDuringStartup(
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR));
 
+        overrider.withUseSSAToPatchPrimaryResource(false);
         var leaderElectionConf = operatorConf.getLeaderElectionConfiguration();
         if (leaderElectionConf != null) {
             overrider.withLeaderElectionConfiguration(leaderElectionConf);

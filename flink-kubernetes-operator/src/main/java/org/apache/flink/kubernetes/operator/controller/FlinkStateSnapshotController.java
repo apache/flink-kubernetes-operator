@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -171,9 +170,9 @@ public class FlinkStateSnapshotController
         var statusChanged = resourceStatusChanged(ctx);
 
         if (labelsChanged && statusChanged) {
-            updateControl = UpdateControl.updateResourceAndPatchStatus(resource);
+            updateControl = UpdateControl.patchResourceAndStatus(resource);
         } else if (labelsChanged) {
-            updateControl = UpdateControl.updateResource(resource);
+            updateControl = UpdateControl.patchResource(resource);
         } else if (statusChanged) {
             updateControl = UpdateControl.patchStatus(resource);
         }

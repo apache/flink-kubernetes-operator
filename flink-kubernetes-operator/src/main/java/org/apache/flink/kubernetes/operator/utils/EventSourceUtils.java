@@ -63,7 +63,8 @@ public class EventSourceUtils {
         var labelSelector =
                 String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TRIGGER_TYPE, labelFilters);
         var configuration =
-                InformerConfiguration.from(FlinkStateSnapshot.class, context)
+                InformerEventSourceConfiguration.from(
+                                FlinkStateSnapshot.class, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withSecondaryToPrimaryMapper(
                                 snapshot -> {
@@ -76,8 +77,8 @@ public class EventSourceUtils {
                                                     snapshot.getSpec().getJobReference().getName(),
                                                     snapshot.getMetadata().getNamespace()));
                                 })
-                        .withNamespacesInheritedFromController(context)
-                        .followNamespaceChanges(true)
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
                         .build();
         return new InformerEventSource<>(configuration, context);
     }

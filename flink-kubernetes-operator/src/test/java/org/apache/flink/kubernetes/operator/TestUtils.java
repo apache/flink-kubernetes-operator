@@ -51,9 +51,8 @@ import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
 import okhttp3.Headers;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -506,18 +505,13 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
-        public <R> Optional<R> getSecondaryResource(
-                Class<R> aClass, ResourceDiscriminator<R, T> resourceDiscriminator) {
-            return Optional.empty();
-        }
-
-        @Override
         public ControllerConfiguration<T> getControllerConfiguration() {
             return null;
         }
 
         @Override
-        public ManagedDependentResourceContext managedDependentResourceContext() {
+        public ManagedWorkflowAndDependentResourceContext
+                managedWorkflowAndDependentResourceContext() {
             return null;
         }
 
@@ -537,8 +531,18 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
+        public T getPrimaryResource() {
+            return null;
+        }
+
+        @Override
         public IndexedResourceCache<T> getPrimaryCache() {
             return null;
+        }
+
+        @Override
+        public boolean isNextReconciliationImminent() {
+            return false;
         }
     }
 }

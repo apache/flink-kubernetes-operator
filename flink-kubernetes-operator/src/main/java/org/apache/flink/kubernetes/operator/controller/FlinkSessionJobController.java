@@ -49,8 +49,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -178,7 +176,7 @@ public class FlinkSessionJobController
     @Override
     public List<EventSource<?, FlinkSessionJob>> prepareEventSources(
             EventSourceContext<FlinkSessionJob> context) {
-        List<EventSource> eventSources = new ArrayList<>();
+        List<EventSource<?, FlinkSessionJob>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
 
         if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
@@ -189,7 +187,7 @@ public class FlinkSessionJobController
                     "Could not initialize informer for snapshots as the CRD has not been installed!");
         }
 
-        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
+        return eventSources;
     }
 
     private boolean validateSessionJob(FlinkResourceContext<FlinkSessionJob> ctx) {
