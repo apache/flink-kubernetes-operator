@@ -39,8 +39,7 @@ import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,8 +54,7 @@ public class FlinkResourceContextFactory {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceContextFactory.class);
 
     /** The cache entry for the last recorded exception timestamp for a JobID. */
-    @Getter
-    @Setter
+    @Data
     public static final class ExceptionCacheEntry {
         private String jobId;
         private long lastTimestamp;

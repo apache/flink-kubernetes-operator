@@ -851,9 +851,9 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public JobExceptionsInfoWithHistory getJobExceptions(
-            AbstractFlinkResource resource, JobID jobId, Configuration deployConfig) {
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
-        int port = deployConfig.getInteger(RestOptions.PORT);
+        int port = observeConfig.getInteger(RestOptions.PORT);
         String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
@@ -862,7 +862,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 resource.getMetadata().getNamespace()));
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
-        try (var restClient = getRestClient(deployConfig)) {
+        try (var restClient = getRestClient(observeConfig)) {
             return restClient
                     .sendRequest(
                             host,

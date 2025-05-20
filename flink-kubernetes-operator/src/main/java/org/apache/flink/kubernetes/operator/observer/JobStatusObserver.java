@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
+import org.apache.flink.kubernetes.operator.utils.K8sAnnotationsSanitizer;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 
@@ -40,6 +41,7 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
@@ -49,6 +51,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
     public static final String JOB_NOT_FOUND_ERR = "Job Not Found";
+    private static final Pattern VALID_K8S_ANNOTATION_KEY_PATTERN =
+            Pattern.compile("^[a-zA-Z0-9./-]{1,63}$");
 
     protected final EventRecorder eventRecorder;
 
@@ -85,11 +89,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 var newJobStatus = newJobStatusOpt.get();
                 updateJobStatus(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
-                // now check if the job is in a terminal state. This might not be need as we have
-                // already
-                // verified that the REST API server is available
-                // now check if the job is NOT in a terminal state
-                if (!newJobStatus.getJobState().isGloballyTerminalState()) {
+                // see if the JM server is up, try to get the exceptions
+                // in case the new
+                if (!previousJobStatus.isGloballyTerminalState()) {
                     observeJobManagerExceptions(ctx);
                 }
                 return true;
@@ -124,9 +126,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             //  but the JobExceptionsMessageParameters does not expose the parameters and nor does
             // it have setters.
             var history =
-                    ctx.getFlinkService()
-                            .getJobExceptions(
-                                    resource, jobId, ctx.getDeployConfig(resource.getSpec()));
+                    ctx.getFlinkService().getJobExceptions(resource, jobId, ctx.getObserveConfig());
 
             if (history == null || history.getExceptionHistory() == null) {
                 return;
@@ -241,7 +241,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 EventRecorder.Component.JobManagerDeployment,
                 "jobmanager-exception-" + keyMessage.hashCode(),
                 ctx.getKubernetesClient(),
-                annotations);
+                K8sAnnotationsSanitizer.sanitizeAnnotations(annotations));
     }
 
     /**

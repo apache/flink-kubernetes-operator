@@ -315,7 +315,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public JobExceptionsInfoWithHistory getJobExceptions(
-            AbstractFlinkResource resource, JobID jobId, Configuration deployConfig) {
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
         return jobExceptionsMap.getOrDefault(jobId, null);
     }
 
