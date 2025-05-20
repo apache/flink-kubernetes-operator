@@ -47,6 +47,8 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.mockwebserver.http.Headers;
+import io.fabric8.mockwebserver.http.RecordedRequest;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -54,8 +56,6 @@ import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
-import okhttp3.Headers;
-import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.provider.Arguments;
 

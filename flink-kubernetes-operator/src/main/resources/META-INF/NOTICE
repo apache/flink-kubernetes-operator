@@ -72,6 +72,8 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.xerial.snappy:snappy-java:jar:1.1.10.4
 - org.yaml:snakeyaml:jar:2.0
 - tools.profiler:async-profiler:jar:2.9
+- io.github.java-diff-utils:java-diff-utils:4.15
+- io.fabric8:kubernetes-httpclient-jdk:7.3.0
 
 This project bundles the following dependencies under the BSD License.
 See bundled license files for details.
