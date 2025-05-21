@@ -139,6 +139,10 @@ under the License.
                 <version>${fabric8.version}</version>
                 <exclusions>
                     <exclusion>
+                        <groupId>io.fabric8</groupId>
+                        <artifactId>kubernetes-httpclient-vertx</artifactId>
+                    </exclusion>
+                    <exclusion>
                         <groupId>com.squareup.okhttp3</groupId>
                         <artifactId>*</artifactId>
                     </exclusion>
