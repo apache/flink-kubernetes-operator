@@ -251,7 +251,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.JobException,
                 eventMessage.toString().trim(),
-                EventRecorder.Component.JobManagerDeployment,
+                EventRecorder.Component.Job,
                 identityKey,
                 ctx.getKubernetesClient(),
                 K8sAnnotationsSanitizer.sanitizeAnnotations(annotations));
