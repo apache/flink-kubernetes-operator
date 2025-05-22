@@ -574,7 +574,7 @@ public class EventUtilsTest {
     }
 
     @Test
-    public void testCreateWithAnnotationsIfNotExists() {
+    public void testCreateWithAnnotations() {
         var consumer =
                 new Consumer<Event>() {
                     @Override
@@ -597,7 +597,7 @@ public class EventUtilsTest {
 
         // First call should create the event
         boolean created =
-                EventUtils.createWithAnnotationsIfNotExists(
+                EventUtils.createWithAnnotations(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Normal,
@@ -627,7 +627,7 @@ public class EventUtilsTest {
         // Second call with same key should not create new event
         eventConsumed = null;
         boolean createdAgain =
-                EventUtils.createWithAnnotationsIfNotExists(
+                EventUtils.createWithAnnotations(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Normal,

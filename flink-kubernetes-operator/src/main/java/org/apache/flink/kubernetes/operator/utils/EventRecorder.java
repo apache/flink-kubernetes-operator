@@ -171,7 +171,7 @@ public class EventRecorder {
                 messageKey);
     }
 
-    public boolean triggerEventOnceWithAnnotations(
+    public boolean triggerEventWithAnnotations(
             AbstractFlinkResource<?, ?> resource,
             Type type,
             Reason reason,
@@ -180,7 +180,7 @@ public class EventRecorder {
             String messageKey,
             KubernetesClient client,
             Map<String, String> annotations) {
-        return EventUtils.createWithAnnotationsIfNotExists(
+        return EventUtils.createWithAnnotations(
                 client,
                 resource,
                 type,

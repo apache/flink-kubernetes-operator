@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -43,6 +42,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
@@ -153,11 +153,10 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // when the job was created. This check is still necessary because even though there
             // might be an entry,
             // the jobId could have changed since the job was first created.
-            if (cacheEntry.getJobId().equals(currentJobId)) {
+            if (cacheEntry.getJobId() != null && cacheEntry.getJobId().equals(currentJobId)) {
                 lastRecorded = Instant.ofEpochMilli(cacheEntry.getLastTimestamp());
             }
 
-            Instant now = Instant.now();
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
             int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
 
@@ -167,21 +166,31 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     Comparator.comparingLong(
                                     JobExceptionsInfoWithHistory.RootExceptionInfo::getTimestamp)
                             .reversed());
-
             int count = 0;
+            Instant latestSeen = null;
+
             for (var exception : sortedExceptions) {
                 Instant exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
                 // Skip already recorded exceptions
-                if (lastRecorded != null && exceptionTime.isBefore(lastRecorded)) {
-                    continue;
+                if (lastRecorded != null && !exceptionTime.isAfter(lastRecorded)) {
+                    break;
                 }
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
+                if (latestSeen == null || exceptionTime.isAfter(latestSeen)) {
+                    latestSeen = exceptionTime;
+                }
                 if (++count >= maxEvents) {
                     break;
                 }
             }
+
             ctx.getExceptionCacheEntry().setJobId(currentJobId);
-            ctx.getExceptionCacheEntry().setLastTimestamp(now.toEpochMilli());
+            // Set to the timestamp of the latest emitted exception, if any were emitted
+            // the other option is that if no exceptions were emitted, we set this to now.
+            if (latestSeen != null) {
+                ctx.getExceptionCacheEntry().setLastTimestamp(latestSeen.toEpochMilli());
+            }
+
         } catch (Exception e) {
             LOG.warn("Failed to fetch JobManager exception info.", e);
         }
@@ -197,13 +206,12 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         if (exceptionName == null || exceptionName.isBlank()) {
             return;
         }
-
         Map<String, String> annotations = new HashMap<>();
-        annotations.put(
-                "event-time-readable",
-                DateTimeUtils.readable(exceptionTime, ZoneId.systemDefault()));
-        annotations.put("event-timestamp-millis", String.valueOf(exceptionTime.toEpochMilli()));
-
+        if (exceptionTime != null) {
+            annotations.put(
+                    "exception-timestamp",
+                    exceptionTime.atZone(ZoneId.systemDefault()).toOffsetDateTime().toString());
+        }
         if (exception.getTaskName() != null) {
             annotations.put("task-name", exception.getTaskName());
         }
@@ -213,7 +221,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         if (exception.getTaskManagerId() != null) {
             annotations.put("tm-id", exception.getTaskManagerId());
         }
-
         if (exception.getFailureLabels() != null) {
             exception
                     .getFailureLabels()
@@ -236,16 +243,16 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
         }
 
-        String keyMessage =
-                exceptionName.length() > 128 ? exceptionName.substring(0, 128) : exceptionName;
-
-        eventRecorder.triggerEventOnceWithAnnotations(
+        String identityKey =
+                "jobmanager-exception-"
+                        + Integer.toHexString(Objects.hash(eventMessage.toString()));
+        eventRecorder.triggerEventWithAnnotations(
                 ctx.getResource(),
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.JobException,
                 eventMessage.toString().trim(),
                 EventRecorder.Component.JobManagerDeployment,
-                "jobmanager-exception-" + keyMessage.hashCode(),
+                identityKey,
                 ctx.getKubernetesClient(),
                 K8sAnnotationsSanitizer.sanitizeAnnotations(annotations));
     }

@@ -104,7 +104,11 @@ public class EventUtils {
                 .get();
     }
 
-    public static boolean createWithAnnotationsIfNotExists(
+    /**
+     * Create or update an event for the target resource. If the event already exists, it will be
+     * updated with the new annotations, message and the count will be increased.
+     */
+    public static boolean createWithAnnotations(
             KubernetesClient client,
             HasMetadata target,
             EventRecorder.Type type,
@@ -120,6 +124,11 @@ public class EventUtils {
         Event existing = findExistingEvent(client, target, eventName);
 
         if (existing != null) {
+            existing.setLastTimestamp(Instant.now().toString());
+            existing.setCount(existing.getCount() + 1);
+            existing.setMessage(message);
+            setAnnotations(existing, annotations);
+            createOrReplaceEvent(client, existing).ifPresent(eventListener);
             return false;
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
