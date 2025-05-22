@@ -37,7 +37,7 @@ jobs:
     name: maven build
     strategy:
       matrix:
-        java-version: [ 11, 17, 21 ]
+        java-version: [ 17, 21 ]
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -76,7 +76,7 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp", "jdk", "jetty", "vertx" ]
-        java-version: [ "11", "17", "21" ]
+        java-version: [ "17", "21" ]
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: ${{ matrix.java-version }}
@@ -89,7 +89,7 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp" ]
-        java-version: [ "11", "17"]
+        java-version: [ "17"]
         flink-version:
           - "v2_0"
           - "v1_20"
@@ -142,7 +142,7 @@ jobs:
 
     uses: ./.github/workflows/e2e.yaml
     with:
-      java-version: 11
+      java-version: 17
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       namespace: "flink"
@@ -211,7 +211,7 @@ jobs:
             test: test_snapshot.sh
     uses: ./.github/workflows/e2e.yaml
     with:
-      java-version: 11
+      java-version: 17
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       mode: ${{ matrix.mode }}
