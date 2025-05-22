@@ -38,7 +38,10 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
@@ -129,8 +132,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
 
             var exceptionHistory = history.getExceptionHistory();
-            var exceptions = exceptionHistory.getEntries();
-            if (exceptions.isEmpty()) {
+            List<JobExceptionsInfoWithHistory.RootExceptionInfo> exceptions =
+                    exceptionHistory.getEntries();
+            if (exceptions == null || exceptions.isEmpty()) {
                 return;
             }
 
@@ -157,13 +161,20 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
             int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
 
+            // Sort and reverse to prioritize the newest exceptions
+            var sortedExceptions = new ArrayList<>(exceptions);
+            sortedExceptions.sort(
+                    Comparator.comparingLong(
+                                    JobExceptionsInfoWithHistory.RootExceptionInfo::getTimestamp)
+                            .reversed());
+
             int count = 0;
-            for (var exception : exceptions) {
+            for (var exception : sortedExceptions) {
                 Instant exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
+                // Skip already recorded exceptions
                 if (lastRecorded != null && exceptionTime.isBefore(lastRecorded)) {
                     continue;
                 }
-
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
                 if (++count >= maxEvents) {
                     break;
@@ -229,7 +240,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 exceptionName.length() > 128 ? exceptionName.substring(0, 128) : exceptionName;
 
         eventRecorder.triggerEventOnceWithAnnotations(
-                exceptionTime.toEpochMilli(),
                 ctx.getResource(),
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.JobException,

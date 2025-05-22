@@ -172,7 +172,6 @@ public class EventRecorder {
     }
 
     public boolean triggerEventOnceWithAnnotations(
-            long eventTimestampMillis,
             AbstractFlinkResource<?, ?> resource,
             Type type,
             Reason reason,
@@ -184,7 +183,6 @@ public class EventRecorder {
         return EventUtils.createWithAnnotationsIfNotExists(
                 client,
                 resource,
-                eventTimestampMillis,
                 type,
                 reason.toString(),
                 message,

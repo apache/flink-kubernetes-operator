@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.fabric8.kubernetes.api.model.MicroTime;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectReference;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -38,8 +37,6 @@ import javax.annotation.Nullable;
 import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,7 +107,6 @@ public class EventUtils {
     public static boolean createWithAnnotationsIfNotExists(
             KubernetesClient client,
             HasMetadata target,
-            long eventTime,
             EventRecorder.Type type,
             String reason,
             String message,
@@ -128,7 +124,6 @@ public class EventUtils {
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
             setAnnotations(event, annotations);
-            setEventTime(event, Instant.ofEpochMilli(eventTime));
             createOrReplaceEvent(client, event).ifPresent(eventListener);
             return true;
         }
@@ -220,12 +215,6 @@ public class EventUtils {
             existing.setMetadata(new ObjectMeta());
         }
         existing.getMetadata().setAnnotations(annotations);
-    }
-
-    private static void setEventTime(Event existing, Instant eventTime) {
-        ZonedDateTime zonedDateTime = ZonedDateTime.ofInstant(eventTime, ZoneId.of("UTC"));
-        MicroTime microTime = new MicroTime(zonedDateTime.toString());
-        existing.setEventTime(microTime);
     }
 
     private static Event buildEvent(

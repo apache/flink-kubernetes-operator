@@ -600,7 +600,6 @@ public class EventUtilsTest {
                 EventUtils.createWithAnnotationsIfNotExists(
                         kubernetesClient,
                         flinkApp,
-                        System.currentTimeMillis(),
                         EventRecorder.Type.Normal,
                         reason,
                         message,
@@ -631,7 +630,6 @@ public class EventUtilsTest {
                 EventUtils.createWithAnnotationsIfNotExists(
                         kubernetesClient,
                         flinkApp,
-                        System.currentTimeMillis(),
                         EventRecorder.Type.Normal,
                         reason,
                         message,
