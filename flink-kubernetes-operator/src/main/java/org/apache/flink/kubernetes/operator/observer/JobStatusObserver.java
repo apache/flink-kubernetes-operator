@@ -176,7 +176,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     break;
                 }
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
-                if (latestSeen == null || exceptionTime.isAfter(latestSeen)) {
+                if (latestSeen == null) {
                     latestSeen = exceptionTime;
                 }
                 if (++count >= maxEvents) {
@@ -201,11 +201,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             JobExceptionsInfoWithHistory.RootExceptionInfo exception,
             Instant exceptionTime,
             int maxStackTraceLines) {
-
-        String exceptionName = exception.getExceptionName();
-        if (exceptionName == null || exceptionName.isBlank()) {
-            return;
-        }
         Map<String, String> annotations = new HashMap<>();
         if (exceptionTime != null) {
             annotations.put(
@@ -227,11 +222,10 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     .forEach((k, v) -> annotations.put("failure-label-" + k, v));
         }
 
-        StringBuilder eventMessage = new StringBuilder(exceptionName);
+        StringBuilder eventMessage = new StringBuilder();
         String stacktrace = exception.getStacktrace();
         if (stacktrace != null && !stacktrace.isBlank()) {
             String[] lines = stacktrace.split("\n");
-            eventMessage.append("\n\nStacktrace (truncated):\n");
             for (int i = 0; i < Math.min(maxStackTraceLines, lines.length); i++) {
                 eventMessage.append(lines[i]).append("\n");
             }
