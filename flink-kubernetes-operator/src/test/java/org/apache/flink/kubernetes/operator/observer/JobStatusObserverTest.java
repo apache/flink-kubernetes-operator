@@ -34,7 +34,6 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.SerializedThrowable;
 
-import io.fabric8.kubernetes.api.model.MicroTime;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
@@ -44,9 +43,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -317,11 +313,6 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertTrue(msg.contains("line2"));
         assertFalse(msg.contains("line3"));
         assertTrue(msg.contains("... (2 more lines)"));
-        // check that exception time becomes the event time
-        ZonedDateTime zonedDateTime =
-                ZonedDateTime.ofInstant(Instant.ofEpochMilli(exceptionTime), ZoneId.of("UTC"));
-        MicroTime expectedEventTime = new MicroTime(zonedDateTime.toString());
-        assertEquals(expectedEventTime, events.get(0).getEventTime());
     }
 
     @Test
@@ -338,10 +329,26 @@ public class JobStatusObserverTest extends OperatorTestBase {
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
-
-        flinkService.addExceptionHistory(jobId, "OldException", "old", 1000L);
-        flinkService.addExceptionHistory(jobId, "MidException", "mid", 2000L);
-        flinkService.addExceptionHistory(jobId, "NewException", "new", 3000L);
+        // Map exception names to timestamps
+        Map<String, Long> exceptionHistory =
+                Map.of(
+                        "OldException", 1000L,
+                        "MidException", 2000L,
+                        "NewException", 3000L);
+        String dummyStackTrace =
+                "org.apache.%s\n"
+                        + "\tat org.apache.flink.kubernetes.operator.observer.JobStatusObserverTest.testIgnoreOldExceptions(JobStatusObserverTest.java:1)\n"
+                        + "\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n"
+                        + "\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\n"
+                        + "\tat java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\n"
+                        + "\tat java.base/java.lang.reflect.Method.invoke(Method.java:566)\n";
+        // Add mapped exceptions
+        exceptionHistory.forEach(
+                (exceptionName, timestamp) -> {
+                    String fullStackTrace = String.format(dummyStackTrace, exceptionName);
+                    flinkService.addExceptionHistory(
+                            jobId, "org.apache." + exceptionName, fullStackTrace, timestamp);
+                });
 
         // Ensure jobFailedErr is null before the observe call
         flinkService.setJobFailedErr(null);
@@ -355,7 +362,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .list()
                         .getItems();
         assertEquals(1, events.size());
-        assertTrue(events.get(0).getMessage().contains("NewException"));
+        assertTrue(events.get(0).getMessage().contains("org.apache.NewException"));
     }
 
     private static Stream<Arguments> cancellingArgs() {

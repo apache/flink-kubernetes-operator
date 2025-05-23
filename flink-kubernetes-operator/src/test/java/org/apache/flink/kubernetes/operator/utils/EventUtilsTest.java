@@ -646,8 +646,8 @@ public class EventUtilsTest {
                         .inNamespace(flinkApp.getMetadata().getNamespace())
                         .withName(eventName)
                         .get();
-
-        Assertions.assertEquals(1, eventUnchanged.getCount());
-        Assertions.assertNull(eventConsumed);
+        // but it should increase the count
+        Assertions.assertEquals(2, eventUnchanged.getCount());
+        Assertions.assertNotNull(eventConsumed);
     }
 }
