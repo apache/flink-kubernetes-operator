@@ -306,7 +306,8 @@ public class NativeFlinkServiceTest {
                                 TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
-                                ctx -> service),
+                                ctx -> service,
+                                null),
                         configManager.getDeployConfig(flinkDep.getMetadata(), flinkDep.getSpec())));
         assertEquals(
                 Map.of(
@@ -494,7 +495,8 @@ public class NativeFlinkServiceTest {
                                 TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
-                                c -> service),
+                                c -> service,
+                                null),
                         configManager.getDeployConfig(depCopy.getMetadata(), depCopy.getSpec())));
     }
 

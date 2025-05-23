@@ -104,6 +104,40 @@ public class EventUtils {
                 .get();
     }
 
+    /**
+     * Create or update an event for the target resource. If the event already exists, it will be
+     * updated with the new annotations, message and the count will be increased.
+     */
+    public static boolean createWithAnnotations(
+            KubernetesClient client,
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey,
+            @Nullable Map<String, String> annotations) {
+        String eventName =
+                generateEventName(
+                        target, type, reason, messageKey != null ? messageKey : message, component);
+        Event existing = findExistingEvent(client, target, eventName);
+
+        if (existing != null) {
+            existing.setLastTimestamp(Instant.now().toString());
+            existing.setCount(existing.getCount() + 1);
+            existing.setMessage(message);
+            setAnnotations(existing, annotations);
+            createOrReplaceEvent(client, existing).ifPresent(eventListener);
+            return false;
+        } else {
+            Event event = buildEvent(target, type, reason, message, component, eventName);
+            setAnnotations(event, annotations);
+            createOrReplaceEvent(client, event).ifPresent(eventListener);
+            return true;
+        }
+    }
+
     public static boolean createIfNotExists(
             KubernetesClient client,
             HasMetadata target,
@@ -180,6 +214,16 @@ public class EventUtils {
             existing.setMetadata(new ObjectMeta());
         }
         existing.getMetadata().setLabels(labels);
+    }
+
+    private static void setAnnotations(Event existing, @Nullable Map<String, String> annotations) {
+        if (annotations == null) {
+            return;
+        }
+        if (existing.getMetadata() == null) {
+            existing.setMetadata(new ObjectMeta());
+        }
+        existing.getMetadata().setAnnotations(annotations);
     }
 
     private static Event buildEvent(

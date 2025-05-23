@@ -77,6 +77,8 @@ public class FlinkOperatorConfiguration {
     DeletionPropagation deletionPropagation;
     boolean snapshotResourcesEnabled;
     Duration slowRequestThreshold;
+    int reportedExceptionEventsMaxCount;
+    int reportedExceptionEventsMaxStackTraceLength;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -195,6 +197,12 @@ public class FlinkOperatorConfiguration {
         Duration slowRequestThreshold =
                 operatorConfig.get(OPERATOR_KUBERNETES_SLOW_REQUEST_THRESHOLD);
 
+        int reportedExceptionEventsMaxCount =
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT);
+        int reportedExceptionEventsMaxStackTraceLength =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -224,7 +232,9 @@ public class FlinkOperatorConfiguration {
                 getLeaderElectionConfig(operatorConfig),
                 deletionPropagation,
                 snapshotResourcesEnabled,
-                slowRequestThreshold);
+                slowRequestThreshold,
+                reportedExceptionEventsMaxCount,
+                reportedExceptionEventsMaxStackTraceLength);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {

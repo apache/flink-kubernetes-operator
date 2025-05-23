@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerCo
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -50,6 +51,8 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     @Getter private final KubernetesResourceMetricGroup resourceMetricGroup;
     protected final FlinkConfigManager configManager;
     private final Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory;
+
+    @Getter private final FlinkResourceContextFactory.ExceptionCacheEntry exceptionCacheEntry;
 
     private FlinkOperatorConfiguration operatorConfig;
     private Configuration observeConfig;

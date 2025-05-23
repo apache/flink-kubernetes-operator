@@ -39,6 +39,18 @@
             <td>Whether to enable on-the-fly config changes through the operator configmap.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.events.exceptions.limit-per-reconciliation</h5></td>
+            <td style="word-wrap: break-word;">10</td>
+            <td>Integer</td>
+            <td>Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.events.exceptions.stacktrace-lines</h5></td>
+            <td style="word-wrap: break-word;">5</td>
+            <td>Integer</td>
+            <td>Maximum number of stack trace lines to include in exception-related Kubernetes event messages.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.health.canary.resource.timeout</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>

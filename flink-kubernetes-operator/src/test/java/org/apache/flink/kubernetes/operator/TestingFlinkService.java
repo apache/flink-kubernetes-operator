@@ -64,6 +64,7 @@ import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
@@ -113,6 +114,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                     "15.0.0",
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     "1234567 @ 1970-01-01T00:00:00+00:00");
+    private final Map<JobID, JobExceptionsInfoWithHistory> jobExceptionsMap = new HashMap<>();
     public static final String SNAPSHOT_ERROR_MESSAGE = "Failed";
 
     private int savepointCounter = 0;
@@ -312,6 +314,12 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
+        return jobExceptionsMap.getOrDefault(jobId, null);
+    }
+
+    @Override
     public JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception {
         if (jobFailedErr != null) {
             return new JobResult.Builder()
@@ -494,11 +502,13 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     private MultipleJobsDetails getMultipleJobsDetails() {
-        return new MultipleJobsDetails(
-                jobs.stream()
-                        .map(tuple -> tuple.f1)
-                        .map(TestingFlinkService::toJobDetails)
-                        .collect(Collectors.toList()));
+        MultipleJobsDetails multipleJobsDetails =
+                new MultipleJobsDetails(
+                        jobs.stream()
+                                .map(tuple -> tuple.f1)
+                                .map(TestingFlinkService::toJobDetails)
+                                .collect(Collectors.toList()));
+        return multipleJobsDetails;
     }
 
     private AggregatedMetricsResponseBody getSubtaskMetrics() {
@@ -721,5 +731,43 @@ public class TestingFlinkService extends AbstractFlinkService {
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) {
         return metricsValues;
+    }
+
+    /**
+     * Utilities to add exception history for testing.
+     *
+     * @param jobId of Job for which exception history is mocked
+     * @param exceptionName dummy exception name
+     * @param stackTrace dummy stack trace
+     * @param timestamp dummy timestamp
+     */
+    public void addExceptionHistory(
+            JobID jobId, String exceptionName, String stackTrace, long timestamp) {
+        JobExceptionsInfoWithHistory.RootExceptionInfo exception =
+                new JobExceptionsInfoWithHistory.RootExceptionInfo(
+                        exceptionName,
+                        stackTrace,
+                        timestamp,
+                        Map.of("label-key", "label-value"),
+                        "task-name-1",
+                        "location-1",
+                        "endpoint-1",
+                        "tm-id-1",
+                        List.of() // concurrentExceptions
+                        );
+
+        JobExceptionsInfoWithHistory existing = jobExceptionsMap.get(jobId);
+        List<JobExceptionsInfoWithHistory.RootExceptionInfo> entries =
+                existing != null && existing.getExceptionHistory() != null
+                        ? new ArrayList<>(existing.getExceptionHistory().getEntries())
+                        : new ArrayList<>();
+        entries.add(exception);
+
+        JobExceptionsInfoWithHistory.JobExceptionHistory exceptionHistory =
+                new JobExceptionsInfoWithHistory.JobExceptionHistory(entries, false);
+
+        JobExceptionsInfoWithHistory newExceptionHistory =
+                new JobExceptionsInfoWithHistory(exceptionHistory);
+        jobExceptionsMap.put(jobId, newExceptionHistory);
     }
 }

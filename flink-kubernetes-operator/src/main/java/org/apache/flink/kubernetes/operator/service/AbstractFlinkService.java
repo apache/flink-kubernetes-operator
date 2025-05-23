@@ -31,6 +31,7 @@ import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -65,6 +66,8 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
@@ -77,6 +80,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeade
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -843,6 +847,37 @@ public abstract class AbstractFlinkService implements FlinkService {
                 operatorRestConf,
                 clusterId,
                 (c, e) -> new StandaloneClientHAServices(restServerAddress));
+    }
+
+    @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
+        JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
+        int port = observeConfig.getInteger(RestOptions.PORT);
+        String host =
+                ObjectUtils.firstNonNull(
+                        operatorConfig.getFlinkServiceHostOverride(),
+                        ExternalServiceDecorator.getNamespacedExternalServiceName(
+                                resource.getMetadata().getName(),
+                                resource.getMetadata().getNamespace()));
+        JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
+        params.jobPathParameter.resolve(jobId);
+        try (var restClient = getRestClient(observeConfig)) {
+            return restClient
+                    .sendRequest(
+                            host,
+                            port,
+                            jobExceptionsHeaders,
+                            params,
+                            EmptyRequestBody.getInstance())
+                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.warn(
+                    String.format(
+                            "Failed to fetch job exceptions from REST API for jobId %s", jobId),
+                    e);
+            return null;
+        }
     }
 
     @VisibleForTesting
