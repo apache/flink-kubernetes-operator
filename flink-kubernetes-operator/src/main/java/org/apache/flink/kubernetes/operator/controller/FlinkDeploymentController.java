@@ -43,10 +43,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
@@ -55,17 +53,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
 @ControllerConfiguration
 public class FlinkDeploymentController
-        implements Reconciler<FlinkDeployment>,
-                ErrorStatusHandler<FlinkDeployment>,
-                EventSourceInitializer<FlinkDeployment>,
-                Cleaner<FlinkDeployment> {
+        implements Reconciler<FlinkDeployment>, Cleaner<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
     private final Set<FlinkResourceValidator> validators;
@@ -185,9 +179,9 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(
+    public List<EventSource<?, FlinkDeployment>> prepareEventSources(
             EventSourceContext<FlinkDeployment> context) {
-        List<EventSource> eventSources = new ArrayList<>();
+        List<EventSource<?, FlinkDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
         eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
 
@@ -199,7 +193,7 @@ public class FlinkDeploymentController
                     "Could not initialize informer for snapshots as the CRD has not been installed!");
         }
 
-        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
+        return eventSources;
     }
 
     @Override

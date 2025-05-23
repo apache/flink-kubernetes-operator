@@ -31,7 +31,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RuntimeInfo;
-import io.javaoperatorsdk.operator.api.config.ResourceConfiguration;
 import io.javaoperatorsdk.operator.health.InformerHealthIndicator;
 import io.javaoperatorsdk.operator.health.InformerWrappingEventSourceHealthIndicator;
 import io.javaoperatorsdk.operator.health.Status;
@@ -258,16 +257,6 @@ public class HealthProbeTest {
                                     }
                                 }));
 
-        return new InformerWrappingEventSourceHealthIndicator() {
-            @Override
-            public Map<String, InformerHealthIndicator> informerHealthIndicators() {
-                return informers;
-            }
-
-            @Override
-            public ResourceConfiguration getInformerConfiguration() {
-                return null;
-            }
-        };
+        return () -> informers;
     }
 }

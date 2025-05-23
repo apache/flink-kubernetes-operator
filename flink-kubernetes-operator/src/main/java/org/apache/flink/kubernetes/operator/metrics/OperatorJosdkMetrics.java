@@ -28,6 +28,7 @@ import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.util.clock.Clock;
 import org.apache.flink.util.clock.SystemClock;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
@@ -108,7 +109,8 @@ public class OperatorJosdkMetrics implements Metrics {
 
     @Override
     public void reconcileCustomResource(
-            ResourceID resourceID, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
+            HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
+        var resourceID = ResourceID.fromResource(resource);
         counter(getResourceMg(resourceID, metadata), RECONCILIATION).inc();
 
         if (retryInfoNullable != null) {
@@ -117,14 +119,22 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void finishedReconciliation(ResourceID resourceID, Map<String, Object> metadata) {
-        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "finished").inc();
+    public void finishedReconciliation(HasMetadata resource, Map<String, Object> metadata) {
+        counter(
+                        getResourceMg(ResourceID.fromResource(resource), metadata),
+                        RECONCILIATION,
+                        "finished")
+                .inc();
     }
 
     @Override
     public void failedReconciliation(
-            ResourceID resourceID, Exception exception, Map<String, Object> metadata) {
-        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "failed").inc();
+            HasMetadata resource, Exception exception, Map<String, Object> metadata) {
+        counter(
+                        getResourceMg(ResourceID.fromResource(resource), metadata),
+                        RECONCILIATION,
+                        "failed")
+                .inc();
     }
 
     @Override

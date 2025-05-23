@@ -233,7 +233,7 @@ public class FlinkStateSnapshotControllerTest {
 
     private void assertUpdateControl(
             UpdateControl<FlinkStateSnapshot> actual, boolean updateResource, boolean patchStatus) {
-        assertThat(actual.isUpdateResource()).isEqualTo(updateResource);
+        assertThat(actual.isPatchResource()).isEqualTo(updateResource);
         assertThat(actual.isPatchStatus()).isEqualTo(patchStatus);
     }
 
