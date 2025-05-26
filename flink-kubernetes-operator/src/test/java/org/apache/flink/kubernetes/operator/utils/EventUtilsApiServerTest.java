@@ -18,9 +18,11 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 
 import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
 import io.fabric8.kubernetes.api.model.EventBuilder;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodCondition;
@@ -28,16 +30,18 @@ import io.fabric8.kubernetes.api.model.PodConditionBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /** Test for {@link EventUtils}. */
 @EnableKubeAPIServer
-public class PodErrorTest {
+public class EventUtilsApiServerTest {
 
     static KubernetesClient client;
 
@@ -141,6 +145,56 @@ public class PodErrorTest {
                         .withNewMetadata()
                         .withName(name)
                         .withNamespace(pod.getMetadata().getNamespace())
+                        .endMetadata()
+                        .build();
+        client.resource(event).create();
+    }
+
+    @Test
+    public void testFindingLatestJobExceptionTs() throws Exception {
+        // Testing with pods instead of FlinkDeployments due to the local Kube server limitations
+        var pod =
+                new PodBuilder()
+                        .withNewMetadata()
+                        .withName("test2")
+                        .withNamespace("default")
+                        .endMetadata()
+                        .withNewStatus()
+                        .endStatus()
+                        .build();
+
+        assertEquals(Optional.empty(), EventUtils.findLastJobExceptionTsFromK8s(client, pod));
+
+        var now = Instant.now();
+        createExceptionEvent(pod, "ex1", now);
+        assertEquals(Optional.of(now), EventUtils.findLastJobExceptionTsFromK8s(client, pod));
+
+        createExceptionEvent(pod, "ex2", now.plus(Duration.ofSeconds(1)));
+        createExceptionEvent(pod, "ex3", now.minus(Duration.ofSeconds(1)));
+
+        assertEquals(
+                Optional.of(now.plus(Duration.ofSeconds(1))),
+                EventUtils.findLastJobExceptionTsFromK8s(client, pod));
+    }
+
+    private static void createExceptionEvent(HasMetadata resource, String name, Instant now) {
+        var event =
+                new EventBuilder()
+                        .withApiVersion("v1")
+                        .withInvolvedObject(EventUtils.getObjectReference(resource))
+                        .withType("type")
+                        .withReason(EventRecorder.Reason.JobException.name())
+                        .withFirstTimestamp(Instant.now().toString())
+                        .withLastTimestamp(Instant.now().toString())
+                        .withNewSource()
+                        .withComponent(EventRecorder.Component.Job.name())
+                        .endSource()
+                        .withCount(1)
+                        .withMessage("m")
+                        .withNewMetadata()
+                        .withName(name)
+                        .withNamespace(resource.getMetadata().getNamespace())
+                        .addToAnnotations(JobStatusObserver.EXCEPTION_TIMESTAMP, now.toString())
                         .endMetadata()
                         .build();
         client.resource(event).create();

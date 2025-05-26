@@ -749,10 +749,6 @@ public class TestingFlinkService extends AbstractFlinkService {
                         stackTrace,
                         timestamp,
                         Map.of("label-key", "label-value"),
-                        "task-name-1",
-                        "location-1",
-                        "endpoint-1",
-                        "tm-id-1",
                         List.of() // concurrentExceptions
                         );
 

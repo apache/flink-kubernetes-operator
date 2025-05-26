@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.K8sAnnotationsSanitizer;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -35,12 +36,11 @@ import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
@@ -53,6 +53,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
     public static final String JOB_NOT_FOUND_ERR = "Job Not Found";
+    public static final String EXCEPTION_TIMESTAMP = "exception-timestamp";
+    public static final Duration MAX_K8S_EVENT_AGE = Duration.ofMinutes(30);
 
     protected final EventRecorder eventRecorder;
 
@@ -132,8 +134,50 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
 
             var exceptionHistory = history.getExceptionHistory();
-            List<JobExceptionsInfoWithHistory.RootExceptionInfo> exceptions =
-                    exceptionHistory.getEntries();
+            var exceptions = exceptionHistory.getEntries();
+
+            String currentJobId = jobStatus.getJobId();
+            var cacheEntry = ctx.getExceptionCacheEntry();
+
+            if (!cacheEntry.isInitialized()) {
+
+                Instant lastExceptionTs;
+                if (exceptions == null || exceptions.isEmpty()) {
+                    // If the job doesn't have any exceptions set to MIN as we always have to record
+                    // the next
+                    lastExceptionTs = Instant.MIN;
+                } else {
+                    var k8sExpirationTs = Instant.now().minus(MAX_K8S_EVENT_AGE);
+                    var maxJobExceptionTs =
+                            exceptions.stream()
+                                    .map(e -> Instant.ofEpochMilli(e.getTimestamp()))
+                                    .max(Comparator.naturalOrder())
+                                    .orElseThrow();
+
+                    if (maxJobExceptionTs.isBefore(k8sExpirationTs)) {
+                        // If the last job exception was a long time ago, then there is no point in
+                        // checking in k8s.
+                        lastExceptionTs = maxJobExceptionTs;
+                    } else {
+                        // If there were recent exceptions, we check the triggered events from kube
+                        // to make sure we don't double trigger
+                        lastExceptionTs =
+                                EventUtils.findLastJobExceptionTsFromK8s(
+                                                ctx.getKubernetesClient(), resource)
+                                        .orElse(Instant.now().minus(MAX_K8S_EVENT_AGE));
+                    }
+                }
+
+                cacheEntry.setLastTimestamp(lastExceptionTs);
+                cacheEntry.setInitialized(true);
+                cacheEntry.setJobId(currentJobId);
+            }
+
+            var lastRecorded =
+                    currentJobId.equals(cacheEntry.getJobId())
+                            ? cacheEntry.getLastTimestamp()
+                            : Instant.MIN;
+
             if (exceptions == null || exceptions.isEmpty()) {
                 return;
             }
@@ -142,19 +186,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 LOG.warn(
                         "Job exception history is truncated for jobId '{}'. Some exceptions may be missing.",
                         jobId);
-            }
-
-            String currentJobId = jobStatus.getJobId();
-            Instant lastRecorded = null; // first reconciliation
-
-            var cacheEntry = ctx.getExceptionCacheEntry();
-            // a cache entry is created should always be present. The timestamp for the first
-            // reconciliation would be
-            // when the job was created. This check is still necessary because even though there
-            // might be an entry,
-            // the jobId could have changed since the job was first created.
-            if (cacheEntry.getJobId() != null && cacheEntry.getJobId().equals(currentJobId)) {
-                lastRecorded = Instant.ofEpochMilli(cacheEntry.getLastTimestamp());
             }
 
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
@@ -172,7 +203,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             for (var exception : sortedExceptions) {
                 Instant exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
                 // Skip already recorded exceptions
-                if (lastRecorded != null && !exceptionTime.isAfter(lastRecorded)) {
+                if (!exceptionTime.isAfter(lastRecorded)) {
                     break;
                 }
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
@@ -188,7 +219,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // Set to the timestamp of the latest emitted exception, if any were emitted
             // the other option is that if no exceptions were emitted, we set this to now.
             if (latestSeen != null) {
-                ctx.getExceptionCacheEntry().setLastTimestamp(latestSeen.toEpochMilli());
+                ctx.getExceptionCacheEntry().setLastTimestamp(latestSeen);
             }
 
         } catch (Exception e) {
@@ -203,9 +234,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             int maxStackTraceLines) {
         Map<String, String> annotations = new HashMap<>();
         if (exceptionTime != null) {
-            annotations.put(
-                    "exception-timestamp",
-                    exceptionTime.atZone(ZoneId.systemDefault()).toOffsetDateTime().toString());
+            annotations.put(EXCEPTION_TIMESTAMP, exceptionTime.toString());
         }
         if (exception.getTaskName() != null) {
             annotations.put("task-name", exception.getTaskName());
