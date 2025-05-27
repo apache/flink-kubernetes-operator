@@ -43,6 +43,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -167,8 +170,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 getResourceContext(deployment, operatorConfig);
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
-        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(500L));
         flinkService.addExceptionHistory(jobId, "ExceptionOne", "trace1", 1000L);
 
         // Ensure jobFailedErr is null before the observe call
@@ -210,8 +214,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 getResourceContext(deployment, operatorConfig);
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
-        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(500L));
         flinkService.addExceptionHistory(jobId, "ExceptionOne", "trace1", 1000L);
 
         // Ensure jobFailedErr is null before the observe call
@@ -247,8 +252,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 getResourceContext(deployment, operatorConfig); // set a non-terminal state
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
-        ctx.getExceptionCacheEntry().setLastTimestamp(500L);
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(500L));
 
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
@@ -289,8 +295,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
-        ctx.getExceptionCacheEntry().setLastTimestamp(3000L);
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
 
         long exceptionTime = 4000L;
         String longTrace = "line1\nline2\nline3\nline4";
@@ -323,8 +330,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
         jobStatus.setState(JobStatus.RUNNING); // set a non-terminal state
 
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+        ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(deployment.getStatus().getJobStatus().getJobId());
-        ctx.getExceptionCacheEntry().setLastTimestamp(2500L);
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(2500L));
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
         flinkService.submitApplicationCluster(
@@ -363,6 +371,51 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .getItems();
         assertEquals(1, events.size());
         assertTrue(events.get(0).getMessage().contains("org.apache.NewException"));
+    }
+
+    @Test
+    public void testExceptionEventTriggerInitialization() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING); // set a non-terminal state
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var now = Instant.now();
+        var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Old exception that happened outside of kubernetes event retention should be ignored
+        flinkService.addExceptionHistory(
+                jobId,
+                "OldException",
+                "OldException",
+                now.minus(Duration.ofHours(1)).toEpochMilli());
+        flinkService.addExceptionHistory(
+                jobId,
+                "NewException",
+                "NewException",
+                now.minus(Duration.ofMinutes(1)).toEpochMilli());
+
+        // Ensure jobFailedErr is null before the observe call
+        flinkService.setJobFailedErr(null);
+        observer.observe(ctx);
+
+        var events =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems();
+        assertEquals(1, events.size());
+        assertTrue(events.get(0).getMessage().contains("NewException"));
+        assertTrue(ctx.getExceptionCacheEntry().isInitialized());
+        assertEquals(
+                now.minus(Duration.ofMinutes(1)).truncatedTo(ChronoUnit.MILLIS),
+                ctx.getExceptionCacheEntry().getLastTimestamp());
     }
 
     private static Stream<Arguments> cancellingArgs() {

@@ -43,6 +43,7 @@ import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -57,12 +58,8 @@ public class FlinkResourceContextFactory {
     @Data
     public static final class ExceptionCacheEntry {
         private String jobId;
-        private long lastTimestamp;
-
-        public ExceptionCacheEntry(String jobId, long lastTimestamp) {
-            this.jobId = jobId;
-            this.lastTimestamp = lastTimestamp;
-        }
+        private Instant lastTimestamp;
+        private boolean initialized;
     }
 
     @VisibleForTesting
@@ -128,10 +125,7 @@ public class FlinkResourceContextFactory {
                             configManager,
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
-                                    resourceId,
-                                    id ->
-                                            new ExceptionCacheEntry(
-                                                    flinkDepJobId, System.currentTimeMillis())));
+                                    resourceId, id -> new ExceptionCacheEntry()));
         } else if (resource instanceof FlinkSessionJob) {
             var resourceId = ResourceID.fromResource(resource);
             var flinkSessionJobId = jobId;
@@ -143,11 +137,7 @@ public class FlinkResourceContextFactory {
                             configManager,
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
-                                    resourceId,
-                                    id ->
-                                            new ExceptionCacheEntry(
-                                                    flinkSessionJobId,
-                                                    System.currentTimeMillis())));
+                                    resourceId, id -> new ExceptionCacheEntry()));
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());

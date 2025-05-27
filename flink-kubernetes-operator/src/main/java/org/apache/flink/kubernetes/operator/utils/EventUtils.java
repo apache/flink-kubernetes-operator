@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -38,6 +39,7 @@ import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -283,13 +285,13 @@ public class EventUtils {
         return Optional.empty();
     }
 
-    private static List<Event> getPodEvents(KubernetesClient client, Pod pod) {
-        var ref = getObjectReference(pod);
+    private static List<Event> getResourceEvents(KubernetesClient client, HasMetadata cr) {
+        var ref = getObjectReference(cr);
 
         var eventList =
                 client.v1()
                         .events()
-                        .inNamespace(pod.getMetadata().getNamespace())
+                        .inNamespace(cr.getMetadata().getNamespace())
                         .withInvolvedObject(ref)
                         .list();
 
@@ -343,7 +345,7 @@ public class EventUtils {
         boolean notReady = checkStatusWasAlways(pod, conditionMap.get("Ready"), "False");
 
         if (notReady && failedInitialization) {
-            getPodEvents(client, pod).stream()
+            getResourceEvents(client, pod).stream()
                     .filter(e -> e.getReason().equals("FailedMount"))
                     .findAny()
                     .ifPresent(
@@ -355,5 +357,21 @@ public class EventUtils {
 
     private static boolean checkStatusWasAlways(Pod pod, PodCondition condition, String status) {
         return condition != null && condition.getStatus().equals(status);
+    }
+
+    public static Optional<Instant> findLastJobExceptionTsFromK8s(
+            KubernetesClient client, HasMetadata cr) {
+        var events = getResourceEvents(client, cr);
+        return events.stream()
+                .filter(e -> EventRecorder.Reason.JobException.name().equals(e.getReason()))
+                .map(
+                        e ->
+                                Instant.parse(
+                                        e.getMetadata()
+                                                .getAnnotations()
+                                                .getOrDefault(
+                                                        JobStatusObserver.EXCEPTION_TIMESTAMP,
+                                                        e.getMetadata().getCreationTimestamp())))
+                .max(Comparator.naturalOrder());
     }
 }
