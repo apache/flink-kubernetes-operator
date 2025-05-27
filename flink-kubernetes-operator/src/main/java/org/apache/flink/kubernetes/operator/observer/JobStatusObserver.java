@@ -200,10 +200,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
             }
 
-            if (count < maxEvents && exceptionHistory.isTruncated()) {
-                LOG.warn(
-                        "Job exception history is truncated for jobId '{}'. Some exceptions may be missing.",
-                        jobId);
+            if (count > maxEvents) {
+                LOG.warn("Job exception history is truncated. Some exceptions may be missing.");
             }
 
             cacheEntry.setJobId(currentJobId);
