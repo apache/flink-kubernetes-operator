@@ -63,8 +63,8 @@ pygmentsUseClasses = true
   ]
 
   PreviousDocs = [
+    ["1.12", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.12"],
     ["1.11", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.11"],
-    ["1.10", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.10"],
   ]
 
 [markup]
