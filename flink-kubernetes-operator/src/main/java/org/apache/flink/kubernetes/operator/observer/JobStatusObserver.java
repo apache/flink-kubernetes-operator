@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
@@ -135,28 +136,32 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
             var exceptionHistory = history.getExceptionHistory();
             var exceptions = exceptionHistory.getEntries();
+            if (exceptions != null) {
+                exceptions = new ArrayList<>(exceptions);
+                exceptions.sort(
+                        Comparator.comparingLong(
+                                        JobExceptionsInfoWithHistory.RootExceptionInfo
+                                                ::getTimestamp)
+                                .reversed());
+            } else {
+                exceptions = Collections.emptyList();
+            }
 
             String currentJobId = jobStatus.getJobId();
             var cacheEntry = ctx.getExceptionCacheEntry();
 
             if (!cacheEntry.isInitialized()) {
-
                 Instant lastExceptionTs;
-                if (exceptions == null || exceptions.isEmpty()) {
+                if (exceptions.isEmpty()) {
                     // If the job doesn't have any exceptions set to MIN as we always have to record
                     // the next
                     lastExceptionTs = Instant.MIN;
                 } else {
                     var k8sExpirationTs = Instant.now().minus(MAX_K8S_EVENT_AGE);
-                    var maxJobExceptionTs =
-                            exceptions.stream()
-                                    .map(e -> Instant.ofEpochMilli(e.getTimestamp()))
-                                    .max(Comparator.naturalOrder())
-                                    .orElseThrow();
-
+                    var maxJobExceptionTs = Instant.ofEpochMilli(exceptions.get(0).getTimestamp());
                     if (maxJobExceptionTs.isBefore(k8sExpirationTs)) {
                         // If the last job exception was a long time ago, then there is no point in
-                        // checking in k8s.
+                        // checking in k8s. We won't report this as exception
                         lastExceptionTs = maxJobExceptionTs;
                     } else {
                         // If there were recent exceptions, we check the triggered events from kube
@@ -164,7 +169,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                         lastExceptionTs =
                                 EventUtils.findLastJobExceptionTsFromK8s(
                                                 ctx.getKubernetesClient(), resource)
-                                        .orElse(Instant.now().minus(MAX_K8S_EVENT_AGE));
+                                        .orElse(k8sExpirationTs);
                     }
                 }
 
@@ -178,50 +183,31 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                             ? cacheEntry.getLastTimestamp()
                             : Instant.MIN;
 
-            if (exceptions == null || exceptions.isEmpty()) {
+            if (exceptions.isEmpty()) {
                 return;
-            }
-
-            if (exceptionHistory.isTruncated()) {
-                LOG.warn(
-                        "Job exception history is truncated for jobId '{}'. Some exceptions may be missing.",
-                        jobId);
             }
 
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
             int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
 
-            // Sort and reverse to prioritize the newest exceptions
-            var sortedExceptions = new ArrayList<>(exceptions);
-            sortedExceptions.sort(
-                    Comparator.comparingLong(
-                                    JobExceptionsInfoWithHistory.RootExceptionInfo::getTimestamp)
-                            .reversed());
             int count = 0;
-            Instant latestSeen = null;
-
-            for (var exception : sortedExceptions) {
-                Instant exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
-                // Skip already recorded exceptions
-                if (!exceptionTime.isAfter(lastRecorded)) {
+            for (var exception : exceptions) {
+                var exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
+                // Skip already recorded exceptions and after max count
+                if (!exceptionTime.isAfter(lastRecorded) || count++ >= maxEvents) {
                     break;
                 }
                 emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
-                if (latestSeen == null) {
-                    latestSeen = exceptionTime;
-                }
-                if (++count >= maxEvents) {
-                    break;
-                }
             }
 
-            ctx.getExceptionCacheEntry().setJobId(currentJobId);
-            // Set to the timestamp of the latest emitted exception, if any were emitted
-            // the other option is that if no exceptions were emitted, we set this to now.
-            if (latestSeen != null) {
-                ctx.getExceptionCacheEntry().setLastTimestamp(latestSeen);
+            if (count < maxEvents && exceptionHistory.isTruncated()) {
+                LOG.warn(
+                        "Job exception history is truncated for jobId '{}'. Some exceptions may be missing.",
+                        jobId);
             }
 
+            cacheEntry.setJobId(currentJobId);
+            cacheEntry.setLastTimestamp(Instant.ofEpochMilli(exceptions.get(0).getTimestamp()));
         } catch (Exception e) {
             LOG.warn("Failed to fetch JobManager exception info.", e);
         }
