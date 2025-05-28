@@ -188,3 +188,5 @@ The following steps demonstrate how to develop and use a custom mutator.
     ```text
     2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
     ```
+
+## Flink Autoscaler Custom Evaluator

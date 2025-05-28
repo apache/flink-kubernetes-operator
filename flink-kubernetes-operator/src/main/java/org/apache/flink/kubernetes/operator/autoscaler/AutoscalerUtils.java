@@ -18,7 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -38,14 +38,15 @@ public class AutoscalerUtils {
      *
      * @param configManager Flink Config manager
      * @return A map of discovered custom evaluators, where the key is the evaluator name provided
-     *     by {@link CustomEvaluator#getName()}) and the value is the corresponding instance.
+     *     by {@link FlinkAutoscalerEvaluator#getName()}) and the value is the corresponding
+     *     instance.
      */
-    public static Map<String, CustomEvaluator> discoverCustomEvaluators(
+    public static Map<String, FlinkAutoscalerEvaluator> discoverCustomEvaluators(
             FlinkConfigManager configManager) {
         var conf = configManager.getDefaultConfig();
-        Map<String, CustomEvaluator> customEvaluators = new HashMap<>();
+        Map<String, FlinkAutoscalerEvaluator> customEvaluators = new HashMap<>();
         PluginUtils.createPluginManagerFromRootFolder(conf)
-                .load(CustomEvaluator.class)
+                .load(FlinkAutoscalerEvaluator.class)
                 .forEachRemaining(
                         customEvaluator -> {
                             String customEvaluatorName = customEvaluator.getName();

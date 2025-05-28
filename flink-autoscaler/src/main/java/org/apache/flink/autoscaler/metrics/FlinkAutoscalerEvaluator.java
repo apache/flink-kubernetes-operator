@@ -31,11 +31,11 @@ import java.util.Map;
 import java.util.SortedMap;
 
 /**
- * Interface for custom evaluators that allow custom scaling metric evaluations. Implementations of
+ * Interface for custom evaluators that allow tailored scaling metric evaluations. Implementations of
  * this interface can provide custom logic to evaluate vertex metrics and merge them with internally
  * evaluated metrics.
  */
-public interface CustomEvaluator extends Plugin {
+public interface FlinkAutoscalerEvaluator extends Plugin {
 
     /**
      * Returns the name of the custom evaluator.

@@ -23,7 +23,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
@@ -466,7 +466,7 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testGetCustomEvaluatorIfRequired() {
-        CustomEvaluator testCustomEvaluator = new TestCustomEvaluator();
+        FlinkAutoscalerEvaluator testCustomEvaluator = new TestCustomEvaluator();
         testCustomEvaluator.configure(new Configuration());
         var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
 
@@ -491,7 +491,7 @@ public class JobAutoScalerImplTest {
                 autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
                         context.getConfiguration());
         assertNotNull(customEvaluatorWithConfig);
-        assertInstanceOf(CustomEvaluator.class, customEvaluatorWithConfig.f0);
+        assertInstanceOf(FlinkAutoscalerEvaluator.class, customEvaluatorWithConfig.f0);
         var customEvaluatorConfig = customEvaluatorWithConfig.f1;
         assertNotNull(customEvaluatorConfig);
         assertEquals(0, customEvaluatorConfig.keySet().size());
@@ -525,7 +525,8 @@ public class JobAutoScalerImplTest {
                         context.getConfiguration());
         assertNotNull(customEvaluatorWithConfigContainingAdditionalKeys);
         assertInstanceOf(
-                CustomEvaluator.class, customEvaluatorWithConfigContainingAdditionalKeys.f0);
+                FlinkAutoscalerEvaluator.class,
+                customEvaluatorWithConfigContainingAdditionalKeys.f0);
         var customEvaluatorConfigContainingAdditionalKeys =
                 customEvaluatorWithConfigContainingAdditionalKeys.f1;
         assertNotNull(customEvaluatorConfigContainingAdditionalKeys);

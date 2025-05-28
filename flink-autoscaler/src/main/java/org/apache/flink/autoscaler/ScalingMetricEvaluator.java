@@ -22,9 +22,9 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
@@ -79,7 +79,9 @@ public class ScalingMetricEvaluator {
             Configuration conf,
             CollectedMetricHistory collectedMetrics,
             Duration restartTime,
-            @Nullable Tuple2<CustomEvaluator, Configuration> customEvaluatorWithConfig) {
+            @Nullable
+                    Tuple2<FlinkAutoscalerEvaluator, Configuration>
+                            customEvaluatorWithConfig) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -93,7 +95,7 @@ public class ScalingMetricEvaluator {
                                 info ->
                                         Tuple2.of(
                                                 info.f0,
-                                                new CustomEvaluator.Context(
+                                                new FlinkAutoscalerEvaluator.Context(
                                                         new UnmodifiableConfiguration(conf),
                                                         Collections.unmodifiableSortedMap(
                                                                 metricsHistory),
@@ -158,7 +160,9 @@ public class ScalingMetricEvaluator {
             JobVertexID vertex,
             boolean processingBacklog,
             Duration restartTime,
-            @Nullable Tuple2<CustomEvaluator, CustomEvaluator.Context> customEvaluationSession) {
+            @Nullable
+                    Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+                            customEvaluationSession) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -633,7 +637,7 @@ public class ScalingMetricEvaluator {
 
     /**
      * Executes the provided custom evaluator for the given job vertex. Calls {@link
-     * CustomEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
+     * FlinkAutoscalerEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
      *
      * @param vertex The job vertex being evaluated.
      * @param evaluatedMetrics Current evaluated metrics.
@@ -645,7 +649,8 @@ public class ScalingMetricEvaluator {
     protected static Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Tuple2<CustomEvaluator, CustomEvaluator.Context> customEvaluationSession) {
+            Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+                    customEvaluationSession) {
         try {
             return customEvaluationSession.f0.evaluateVertexMetrics(
                     vertex, evaluatedMetrics, customEvaluationSession.f1);

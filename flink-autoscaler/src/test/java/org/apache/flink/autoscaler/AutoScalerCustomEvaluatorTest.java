@@ -22,7 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
@@ -165,7 +165,7 @@ public class AutoScalerCustomEvaluatorTest {
         assertEquals(balancedCount, autoscalerFlinkMetrics.getNumBalancedCount());
     }
 
-    private Map<String, CustomEvaluator> createTestCustomEvaluator() {
+    private Map<String, FlinkAutoscalerEvaluator> createTestCustomEvaluator() {
         var testCustomEvaluator = new TestCustomEvaluator();
         testCustomEvaluator.configure(new Configuration());
         return Map.of(testCustomEvaluator.getName(), testCustomEvaluator);

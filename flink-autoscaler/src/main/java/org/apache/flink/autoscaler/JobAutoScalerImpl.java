@@ -24,8 +24,8 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
@@ -63,7 +63,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final ScalingRealizer<KEY, Context> scalingRealizer;
     private final AutoScalerStateStore<KEY, Context> stateStore;
-    private final Map<String, CustomEvaluator> customEvaluators;
+    private final Map<String, FlinkAutoscalerEvaluator> customEvaluators;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -80,7 +80,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             AutoScalerEventHandler<KEY, Context> eventHandler,
             ScalingRealizer<KEY, Context> scalingRealizer,
             AutoScalerStateStore<KEY, Context> stateStore,
-            Map<String, CustomEvaluator> customEvaluators) {
+            Map<String, FlinkAutoscalerEvaluator> customEvaluators) {
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
@@ -276,12 +276,12 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     }
 
     @VisibleForTesting
-    protected Tuple2<CustomEvaluator, Configuration> getCustomEvaluatorIfRequired(
+    protected Tuple2<FlinkAutoscalerEvaluator, Configuration> getCustomEvaluatorIfRequired(
             Configuration conf) {
         return Optional.ofNullable(conf.get(CUSTOM_EVALUATOR_NAME))
                 .map(
                         name -> {
-                            CustomEvaluator evaluator = customEvaluators.get(name);
+                            FlinkAutoscalerEvaluator evaluator = customEvaluators.get(name);
                             return evaluator != null
                                     ? new Tuple2<>(
                                             evaluator,

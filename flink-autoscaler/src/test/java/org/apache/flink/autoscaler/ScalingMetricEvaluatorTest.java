@@ -21,8 +21,8 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.CustomEvaluator;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
@@ -319,7 +319,7 @@ public class ScalingMetricEvaluatorTest {
         var conf = new Configuration();
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
-        CustomEvaluator customEvaluator = new TestCustomEvaluator();
+        FlinkAutoscalerEvaluator customEvaluator = new TestCustomEvaluator();
         var customEvaluatorWithConfig = new Tuple2<>(customEvaluator, new Configuration());
 
         var evaluatedMetrics =
@@ -985,13 +985,13 @@ public class ScalingMetricEvaluatorTest {
                         Map.of()));
 
         var conf = new Configuration();
-        CustomEvaluator customEvaluator = new TestCustomEvaluator();
+        FlinkAutoscalerEvaluator customEvaluator = new TestCustomEvaluator();
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
 
         var testCustomEvaluationSession =
                 Tuple2.of(
                         customEvaluator,
-                        new CustomEvaluator.Context(
+                        new FlinkAutoscalerEvaluator.Context(
                                 new UnmodifiableConfiguration(conf),
                                 Collections.unmodifiableSortedMap(metricHistory),
                                 Collections.unmodifiableMap(new HashMap<>()),
