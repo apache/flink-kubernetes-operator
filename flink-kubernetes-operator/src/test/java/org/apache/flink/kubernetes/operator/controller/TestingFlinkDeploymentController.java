@@ -43,10 +43,8 @@ import io.fabric8.kubernetes.api.model.Event;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -56,16 +54,14 @@ import org.junit.jupiter.api.Assertions;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.function.BiConsumer;
 
 /** A wrapper around {@link FlinkDeploymentController} used by unit tests. */
 public class TestingFlinkDeploymentController
-        implements Reconciler<FlinkDeployment>,
-                ErrorStatusHandler<FlinkDeployment>,
-                EventSourceInitializer<FlinkDeployment>,
-                Cleaner<FlinkDeployment> {
+        implements Reconciler<FlinkDeployment>, Cleaner<FlinkDeployment> {
 
     @Getter private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
@@ -165,7 +161,7 @@ public class TestingFlinkDeploymentController
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(
+    public List<EventSource<?, FlinkDeployment>> prepareEventSources(
             EventSourceContext<FlinkDeployment> eventSourceContext) {
         throw new UnsupportedOperationException();
     }

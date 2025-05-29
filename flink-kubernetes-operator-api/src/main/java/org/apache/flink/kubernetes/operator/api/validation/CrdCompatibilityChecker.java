@@ -97,7 +97,13 @@ public class CrdCompatibilityChecker {
                             // This claims field was removed in Kubernetes 1.28 as it was mistakenly
                             // added in the first place. For more context please refer to
                             // https://github.com/kubernetes/api/commit/8b14183
-                            && !fieldPath.contains(".volumeClaimTemplate.spec.resources.claims")) {
+                            && !fieldPath.contains(".volumeClaimTemplate.spec.resources.claims")
+                            && !fieldPath.contains(
+                                    ".spec.taskManager.podTemplate.spec.resourceClaims.items.source")
+                            && !fieldPath.contains(
+                                    ".spec.jobManager.podTemplate.spec.resourceClaims.items.source")
+                            && !fieldPath.contains(
+                                    ".spec.podTemplate.spec.resourceClaims.items.source")) {
                         err(fieldPath + " has been removed");
                     }
                 } else {

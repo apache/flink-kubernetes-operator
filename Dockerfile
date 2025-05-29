@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 # Build
-ARG JAVA_VERSION=11
+ARG JAVA_VERSION=17
 FROM maven:3.8.8-eclipse-temurin-${JAVA_VERSION} AS build
 ARG SKIP_TESTS=true
 ARG HTTP_CLIENT=okhttp

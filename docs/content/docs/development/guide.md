@@ -36,7 +36,7 @@ In order to build the operator you need to [clone the git repository]({{< github
 git clone {{< github_repo >}}
 ```
 
-To build from the command line, it is necessary to have **Maven 3** and a **Java Development Kit** (JDK) installed. Please note that Flink Kubernetes Operator requires **Java 11**.
+To build from the command line, it is necessary to have **Maven 3** and a **Java Development Kit** (JDK) installed. Please note that Flink Kubernetes Operator requires **Java 17**.
 
 To build the project, you can use the following command:
 

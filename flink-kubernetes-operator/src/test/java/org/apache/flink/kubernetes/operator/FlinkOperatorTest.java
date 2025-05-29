@@ -81,7 +81,7 @@ public class FlinkOperatorTest {
         var labelSelectors =
                 testOperator.registeredControllers.stream()
                         .map(RegisteredController::getConfiguration)
-                        .map(ControllerConfiguration::getLabelSelector);
+                        .map(c -> c.getInformerConfig().getLabelSelector());
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
         Assertions.assertFalse(configService.stopOnInformerErrorDuringStartup());
