@@ -654,4 +654,20 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofMinutes(-1))
                     .withDescription(
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
+            operatorConfig("events.exceptions.stacktrace-lines")
+                    .intType()
+                    .defaultValue(5)
+                    .withDescription(
+                            "Maximum number of stack trace lines to include in exception-related Kubernetes event messages.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
+            operatorConfig("events.exceptions.limit-per-reconciliation")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
 }

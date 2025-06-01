@@ -48,12 +48,16 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
@@ -753,8 +757,9 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }
 
-    @Test
-    public void observeListJobsError() {
+    @ParameterizedTest
+    @MethodSource("containerFailureReasons")
+    public void observeListJobsError(String reason, boolean initError) {
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -762,9 +767,12 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 deployment.getStatus().getJobManagerDeploymentStatus());
         // simulate deployment failure
         String podFailedMessage = "list jobs error";
-        flinkService.setPodList(
-                TestUtils.createFailedPodList(
-                        podFailedMessage, DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
+        if (initError) {
+            flinkService.setPodList(
+                    TestUtils.createFailedInitContainerPodList(podFailedMessage, reason));
+        } else {
+            flinkService.setPodList(TestUtils.createFailedPodList(podFailedMessage, reason));
+        }
         flinkService.setPortReady(false);
         Exception exception =
                 assertThrows(
@@ -774,7 +782,14 @@ public class ApplicationObserverTest extends OperatorTestBase {
                                         deployment,
                                         TestUtils.createContextWithInProgressDeployment(
                                                 kubernetesClient)));
-        assertEquals(podFailedMessage, exception.getMessage());
+        assertEquals("[c1] " + podFailedMessage, exception.getMessage());
+    }
+
+    private static Stream<Arguments> containerFailureReasons() {
+        return DeploymentFailedException.CONTAINER_ERROR_REASONS.stream()
+                .flatMap(
+                        reason ->
+                                Stream.of(Arguments.of(reason, true), Arguments.of(reason, false)));
     }
 
     @Test

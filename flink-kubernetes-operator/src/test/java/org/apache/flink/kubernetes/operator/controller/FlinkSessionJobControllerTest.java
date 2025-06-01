@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -102,7 +103,7 @@ class FlinkSessionJobControllerTest {
 
         var event = testController.events().remove();
         Assertions.assertEquals(EventRecorder.Type.Warning.toString(), event.getType());
-        Assertions.assertEquals("SessionJobException", event.getReason());
+        Assertions.assertEquals("Error", event.getReason());
 
         testController.cleanup(sessionJob, context);
     }
@@ -613,6 +614,31 @@ class FlinkSessionJobControllerTest {
         flinkService.setDeployFailure(false);
         testController.reconcile(sessionJob, context);
         assertEquals("msp", flinkService.listJobs().get(0).f0);
+    }
+
+    @Test
+    public void testErrorOnReconcileWithChainedExceptions() throws Exception {
+        sessionJob.getSpec().getJob().setInitialSavepointPath("msp");
+        flinkService.setMakeItFailWith(
+                new RuntimeException(
+                        "Deployment Failure",
+                        new IllegalStateException(
+                                null,
+                                new SerializedThrowable(new Exception("actual failure reason")))));
+        try {
+            testController.reconcile(sessionJob, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.events().size());
+
+        var event = testController.events().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.events().remove();
+        assertEquals("Error", event.getReason());
+        assertEquals(
+                "Deployment Failure -> IllegalStateException -> actual failure reason",
+                event.getMessage());
     }
 
     @Test

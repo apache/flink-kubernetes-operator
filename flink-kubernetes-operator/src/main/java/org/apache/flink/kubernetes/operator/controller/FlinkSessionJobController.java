@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -120,13 +121,7 @@ public class FlinkSessionJobController
             statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
             reconciler.reconcile(ctx);
         } catch (Exception e) {
-            eventRecorder.triggerEvent(
-                    flinkSessionJob,
-                    EventRecorder.Type.Warning,
-                    "SessionJobException",
-                    e.getMessage(),
-                    EventRecorder.Component.Job,
-                    josdkContext.getClient());
+            triggerErrorEvent(ctx, e);
             throw new ReconciliationException(e);
         }
         statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
@@ -164,6 +159,16 @@ public class FlinkSessionJobController
             statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
         }
         return deleteControl;
+    }
+
+    private void triggerErrorEvent(FlinkResourceContext<?> ctx, Exception e) {
+        eventRecorder.triggerEvent(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Error.name(),
+                ExceptionUtils.getExceptionMessage(e),
+                EventRecorder.Component.Job,
+                ctx.getKubernetesClient());
     }
 
     @Override

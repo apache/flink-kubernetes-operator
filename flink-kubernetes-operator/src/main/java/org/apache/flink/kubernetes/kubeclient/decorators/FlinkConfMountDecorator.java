@@ -22,6 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -166,7 +167,30 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
         clusterSideConfig.removeConfig(TaskManagerOptions.BIND_HOST);
         clusterSideConfig.removeConfig(TaskManagerOptions.HOST);
 
+        validateConfigKeysForV2(clusterSideConfig);
+
         return ConfigurationUtils.convertConfigToWritableLines(clusterSideConfig, false);
+    }
+
+    private void validateConfigKeysForV2(Configuration clusterSideConfig) {
+
+        // Only validate Flink 2.0 yaml configs
+        if (!useStandardYamlConfig()) {
+            return;
+        }
+
+        var keys = clusterSideConfig.keySet();
+
+        for (var key1 : keys) {
+            for (var key2 : keys) {
+                if (key2.startsWith(key1 + ".")) {
+                    throw new IllegalConfigurationException(
+                            String.format(
+                                    "Overlapping key prefixes detected (%s -> %s), please replace with Flink v2 compatible, non-deprecated keys.",
+                                    key1, key2));
+                }
+            }
+        }
     }
 
     @VisibleForTesting

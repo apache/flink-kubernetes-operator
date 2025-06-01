@@ -34,11 +34,11 @@ pygmentsUseClasses = true
   # we change the version for the complete docs when forking of a release branch
   # etc.
   # The full version string as referenced in Maven (e.g. 1.2.1)
-  Version = "1.12-SNAPSHOT"
+  Version = "1.13-SNAPSHOT"
 
   # For stable releases, leave the bugfix version out (e.g. 1.2). For snapshot
   # release this should be the same as the regular version
-  VersionTitle = "1.12-SNAPSHOT"
+  VersionTitle = "1.13-SNAPSHOT"
 
   # The branch for this version of the Apache Flink Kubernetes Operator
   Branch = "main"
@@ -63,8 +63,8 @@ pygmentsUseClasses = true
   ]
 
   PreviousDocs = [
+    ["1.12", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.12"],
     ["1.11", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.11"],
-    ["1.10", "https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-1.10"],
   ]
 
 [markup]

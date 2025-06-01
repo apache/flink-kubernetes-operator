@@ -17,15 +17,25 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
-import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableSet;
+
+import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+
+import java.util.Optional;
+import java.util.Set;
 
 /** Exception to signal terminal deployment failure. */
 public class DeploymentFailedException extends RuntimeException {
 
-    public static final String REASON_CRASH_LOOP_BACKOFF = "CrashLoopBackOff";
-    public static final String REASON_IMAGE_PULL_BACKOFF = "ImagePullBackOff";
-    public static final String REASON_ERR_IMAGE_PULL = "ErrImagePull";
+    public static final Set<String> CONTAINER_ERROR_REASONS =
+            ImmutableSet.of(
+                    "CrashLoopBackOff",
+                    "ImagePullBackOff",
+                    "ErrImagePull",
+                    "RunContainerError",
+                    "CreateContainerConfigError",
+                    "OOMKilled");
 
     private static final long serialVersionUID = -1070179896083579221L;
 
@@ -36,11 +46,6 @@ public class DeploymentFailedException extends RuntimeException {
         this.reason = deployCondition.getReason();
     }
 
-    public DeploymentFailedException(ContainerStateWaiting stateWaiting) {
-        super(stateWaiting.getMessage());
-        this.reason = stateWaiting.getReason();
-    }
-
     public DeploymentFailedException(String message, String reason) {
         super(message);
         this.reason = reason;
@@ -48,5 +53,25 @@ public class DeploymentFailedException extends RuntimeException {
 
     public String getReason() {
         return reason;
+    }
+
+    public static DeploymentFailedException forContainerStatus(ContainerStatus status) {
+        var waiting = status.getState().getWaiting();
+        var lastState = status.getLastState();
+        String message = null;
+        if ("CrashLoopBackOff".equals(waiting.getReason())
+                && lastState != null
+                && lastState.getTerminated() != null) {
+            message =
+                    Optional.ofNullable(lastState.getTerminated().getMessage())
+                            .map(err -> "CrashLoop - " + err)
+                            .orElse(null);
+        }
+
+        if (message == null) {
+            message = waiting.getMessage();
+        }
+        return new DeploymentFailedException(
+                String.format("[%s] %s", status.getName(), message), waiting.getReason());
     }
 }

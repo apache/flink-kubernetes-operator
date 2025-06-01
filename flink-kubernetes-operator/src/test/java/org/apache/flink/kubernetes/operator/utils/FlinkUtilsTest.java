@@ -18,7 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -51,6 +50,8 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.HttpURLConnection;
 import java.util.Collections;
@@ -125,12 +126,13 @@ public class FlinkUtilsTest {
         assertEquals(expectedProbe, pod.getSpec().getContainers().get(1).getStartupProbe());
     }
 
-    @Test
-    public void testDeleteJobGraphInKubernetesHA() {
+    @ParameterizedTest
+    @ValueSource(strings = {"jobGraph-jobId", "executionPlan-jobId"})
+    public void testDeleteJobGraphInKubernetesHA(String key) {
         final String name = "ha-configmap";
         final String clusterId = "cluster-id";
         final Map<String, String> data = new HashMap<>();
-        data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
+        data.put(key, "job-graph-data");
         data.put("leader", "localhost");
         createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, data);
         assertNotNull(kubernetesClient.configMaps().withName(name).get());

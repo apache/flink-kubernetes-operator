@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -30,6 +31,7 @@ import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -64,6 +66,8 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
@@ -76,6 +80,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeade
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -142,6 +147,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -546,7 +552,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         try {
             latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
         } catch (Exception e) {
-            if (e instanceof RestClientException
+            if (e instanceof ExecutionException
                     && e.getMessage() != null
                     && e.getMessage().contains("Checkpointing has not been enabled")) {
                 LOG.warn("Checkpointing not enabled for job {}", jobId, e);
@@ -843,6 +849,37 @@ public abstract class AbstractFlinkService implements FlinkService {
                 (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
+    @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
+        JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
+        int port = observeConfig.getInteger(RestOptions.PORT);
+        String host =
+                ObjectUtils.firstNonNull(
+                        operatorConfig.getFlinkServiceHostOverride(),
+                        ExternalServiceDecorator.getNamespacedExternalServiceName(
+                                resource.getMetadata().getName(),
+                                resource.getMetadata().getNamespace()));
+        JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
+        params.jobPathParameter.resolve(jobId);
+        try (var restClient = getRestClient(observeConfig)) {
+            return restClient
+                    .sendRequest(
+                            host,
+                            port,
+                            jobExceptionsHeaders,
+                            params,
+                            EmptyRequestBody.getInstance())
+                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.warn(
+                    String.format(
+                            "Failed to fetch job exceptions from REST API for jobId %s", jobId),
+                    e);
+            return null;
+        }
+    }
+
     @VisibleForTesting
     protected void runJar(
             JobSpec job,
@@ -953,7 +990,15 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    /** Wait until Deployment is removed, return remaining timeout. */
+    /**
+     * Wait until Deployment is removed, return remaining timeout.
+     *
+     * @param name name of the deployment
+     * @param deployment The deployment resource
+     * @param propagation DeletePropagation
+     * @param timeout Timeout to wait
+     * @return remaining timeout after deletion
+     */
     @VisibleForTesting
     protected Duration deleteDeploymentBlocking(
             String name,
@@ -975,7 +1020,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         config.toMap()
                 .forEach(
                         (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
+                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                                 newConfig.setString(k, v);
                             }
                         });

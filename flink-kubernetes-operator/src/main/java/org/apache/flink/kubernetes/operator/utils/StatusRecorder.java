@@ -85,6 +85,7 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
      * operator behavior.
      *
      * @param resource Resource for which status update should be performed
+     * @param client Kubernetes client to use for the update
      */
     @SneakyThrows
     public void patchAndCacheStatus(CR resource, KubernetesClient client) {

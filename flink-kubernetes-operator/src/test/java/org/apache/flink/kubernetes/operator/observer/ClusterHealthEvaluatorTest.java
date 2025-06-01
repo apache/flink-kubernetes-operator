@@ -358,6 +358,6 @@ class ClusterHealthEvaluatorTest {
         var lastValidClusterHealthInfo =
                 ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
         assertNotNull(lastValidClusterHealthInfo);
-        assertEquals(healthy, lastValidClusterHealthInfo.isHealthy());
+        assertEquals(healthy, lastValidClusterHealthInfo.getHealthResult().isHealthy());
     }
 }
