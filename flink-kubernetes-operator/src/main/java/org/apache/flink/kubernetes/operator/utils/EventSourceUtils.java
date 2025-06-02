@@ -116,7 +116,7 @@ public class EventSourceUtils {
                                                 flinkDeployment.getMetadata().getNamespace())));
 
         var configuration =
-                InformerEventSourceConfiguration.from(FlinkSessionJob.class, FlinkSessionJob.class)
+                InformerEventSourceConfiguration.from(FlinkSessionJob.class, FlinkDeployment.class)
                         .withSecondaryToPrimaryMapper(
                                 sessionJob ->
                                         context
