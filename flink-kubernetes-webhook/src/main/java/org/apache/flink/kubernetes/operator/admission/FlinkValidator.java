@@ -55,7 +55,8 @@ public class FlinkValidator implements Validator<HasMetadata> {
     }
 
     @Override
-    public void validate(HasMetadata resource, Operation operation) throws NotAllowedException {
+    public void validate(HasMetadata resource, HasMetadata oldResource, Operation operation)
+            throws NotAllowedException {
         LOG.debug("Validating resource {}", resource);
 
         if (CanaryResourceManager.isCanaryResource(resource)) {
