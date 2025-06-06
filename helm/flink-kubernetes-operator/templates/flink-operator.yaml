@@ -57,6 +57,7 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      hostNetwork: {{ .Values.operatorPod.hostNetwork }}
       {{- if .Values.operatorPod.nodeSelector }}
       nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
       {{- end }}
