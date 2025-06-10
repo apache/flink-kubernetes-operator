@@ -119,7 +119,7 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Integer> OPERATOR_FLINK_CLIENT_IO_THREADS =
             operatorConfig("flink.client.io.threads")
                     .intType()
-                    .defaultValue(60)
+                    .defaultValue(10)
                     .withDescription(
                             "The maximum number of io threads used by the flink rest client.");
 
