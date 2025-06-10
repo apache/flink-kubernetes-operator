@@ -51,6 +51,8 @@ import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobResourcesRequirementsUpdateHeaders;
 
+import org.apache.flink.shaded.netty4.io.netty.channel.EventLoopGroup;
+
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -89,7 +91,28 @@ public class NativeFlinkService extends AbstractFlinkService {
             ExecutorService executorService,
             FlinkOperatorConfiguration operatorConfig,
             EventRecorder eventRecorder) {
-        super(kubernetesClient, artifactManager, executorService, operatorConfig);
+        this(
+                kubernetesClient,
+                artifactManager,
+                executorService,
+                operatorConfig,
+                eventRecorder,
+                null);
+    }
+
+    public NativeFlinkService(
+            KubernetesClient kubernetesClient,
+            ArtifactManager artifactManager,
+            ExecutorService executorService,
+            FlinkOperatorConfiguration operatorConfig,
+            EventRecorder eventRecorder,
+            EventLoopGroup flinkClientEventLoopGroup) {
+        super(
+                kubernetesClient,
+                artifactManager,
+                executorService,
+                operatorConfig,
+                flinkClientEventLoopGroup);
         this.eventRecorder = eventRecorder;
     }
 
