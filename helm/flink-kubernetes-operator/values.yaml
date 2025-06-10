@@ -20,14 +20,15 @@
 
 # List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces.
 # When enabled RBAC is only created for said namespaces, otherwise it is done for the cluster scope.
-# watchNamespaces: ["flink"]
+watchNamespaces: []
+# - flink
 
 image:
   repository: ghcr.io/apache/flink-kubernetes-operator
   pullPolicy: IfNotPresent
   tag: latest
   # If image digest is set then it takes precedence and the image tag will be ignored
-  # digest: ""
+  digest: ""
 
 imagePullSecrets: []
 
@@ -72,8 +73,8 @@ operatorPod:
   #     configMapKeyRef:
   #       name: ""
   #       key: ""
-  # dnsPolicy: ""
-  # dnsConfig: {}
+  dnsPolicy: ""
+  dnsConfig: {}
   # Node labels and affinity for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
   envFrom:
@@ -153,9 +154,9 @@ webhook:
   #   create: true
   keystore:
     useDefaultPassword: true
-  # passwordSecretRef:
-  #   name: jks-password-secret
-  #   key: password-key
+    passwordSecretRef:
+    # name: jks-password-secret
+    # key: password-key
   serviceLabels: {}
 
 defaultConfiguration:
