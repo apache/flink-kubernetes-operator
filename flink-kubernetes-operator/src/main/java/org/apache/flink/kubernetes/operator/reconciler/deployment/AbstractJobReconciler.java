@@ -409,25 +409,30 @@ public abstract class AbstractJobReconciler<
                         conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE)
                                 .name());
 
-        FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
-                conf,
-                ctx.getOperatorConfig(),
-                ctx.getKubernetesClient(),
-                ctx.getResource(),
-                savepointFormatType,
-                savepointLocation);
+        var snapshotCrOpt =
+                FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
+                        conf,
+                        ctx.getOperatorConfig(),
+                        ctx.getKubernetesClient(),
+                        ctx.getResource(),
+                        savepointFormatType,
+                        savepointLocation);
         var jobStatus = ctx.getResource().getStatus().getJobStatus();
         jobStatus.setUpgradeSavepointPath(savepointLocation);
 
-        // Register created savepoint in the now deprecated savepoint info and history
-        var savepoint =
-                new Savepoint(
-                        cancelTs.toEpochMilli(),
-                        savepointLocation,
-                        SnapshotTriggerType.UPGRADE,
-                        savepointFormatType,
-                        null);
-        jobStatus.getSavepointInfo().updateLastSavepoint(savepoint);
+        if (snapshotCrOpt.isEmpty()) {
+            // Register created savepoint in the now deprecated savepoint info and history
+            // only if snapshot CR was not created, otherwise it would be double recorded
+            // and disposed immediately
+            var savepoint =
+                    new Savepoint(
+                            cancelTs.toEpochMilli(),
+                            savepointLocation,
+                            SnapshotTriggerType.UPGRADE,
+                            savepointFormatType,
+                            null);
+            jobStatus.getSavepointInfo().updateLastSavepoint(savepoint);
+        }
     }
 
     /**
