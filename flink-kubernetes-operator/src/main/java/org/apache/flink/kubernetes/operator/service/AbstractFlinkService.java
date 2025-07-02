@@ -854,71 +854,19 @@ public abstract class AbstractFlinkService implements FlinkService {
             AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
             throws IOException {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
-        // port is specified at the same place for both session and application jobs
-        int port = observeConfig.getInteger(RestOptions.PORT);
-        String host;
-        // In case of session job, there is a single rest service for all the jobs, while in the
-        // application mode,
-        // the rest service is per job.
-
-        Configuration operatorRestConf = observeConfig;
-        if (SecurityOptions.isRestSSLEnabled(observeConfig)) {
-            operatorRestConf = getOperatorRestConfig(observeConfig);
-        }
-
-        if (resource instanceof FlinkSessionJob) {
-            // For session jobs, we need to use the deployment name from the spec
-            FlinkSessionJob sessionJob = (FlinkSessionJob) resource;
-            final String clusterId = observeConfig.get(KubernetesConfigOptions.CLUSTER_ID);
-            final String namespace = observeConfig.get(KubernetesConfigOptions.NAMESPACE);
-            host =
-                    ObjectUtils.firstNonNull(
-                            operatorConfig.getFlinkServiceHostOverride(),
-                            ExternalServiceDecorator.getNamespacedExternalServiceName(
-                                    clusterId, namespace));
-        } else {
-            // For application jobs (FlinkDeployment), use the resource name directly
-            FlinkDeployment deployment = (FlinkDeployment) resource;
-            host =
-                    ObjectUtils.firstNonNull(
-                            operatorConfig.getFlinkServiceHostOverride(),
-                            ExternalServiceDecorator.getNamespacedExternalServiceName(
-                                    deployment.getMetadata().getName(),
-                                    resource.getMetadata().getNamespace()));
-        }
-
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
 
-        if (resource instanceof FlinkSessionJob) {
-            try (var clusterClient = getClusterClient(observeConfig)) {
-                return clusterClient
-                        .sendRequest(jobExceptionsHeaders, params, EmptyRequestBody.getInstance())
-                        .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
-            } catch (Exception e) {
-                LOG.warn(
-                        String.format(
-                                "Failed to fetch job exceptions from REST API for jobId %s", jobId),
-                        e);
-                return null;
-            }
-        } else {
-            try (var restClient = getRestClient(observeConfig)) {
-                return restClient
-                        .sendRequest(
-                                host,
-                                port,
-                                jobExceptionsHeaders,
-                                params,
-                                EmptyRequestBody.getInstance())
-                        .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
-            } catch (Exception e) {
-                LOG.warn(
-                        String.format(
-                                "Failed to fetch job exceptions from REST API for jobId %s", jobId),
-                        e);
-                return null;
-            }
+        try (var clusterClient = getClusterClient(observeConfig)) {
+            return clusterClient
+                    .sendRequest(jobExceptionsHeaders, params, EmptyRequestBody.getInstance())
+                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.warn(
+                    String.format(
+                            "Failed to fetch job exceptions from REST API for jobId %s", jobId),
+                    e);
+            return null;
         }
     }
 
