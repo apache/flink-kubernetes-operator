@@ -68,7 +68,7 @@ We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is opt
 
 Install the certificate manager on your Kubernetes cluster to enable adding the webhook component (only needed once per Kubernetes cluster):
 ```bash
-kubectl create -f https://github.com/jetstack/cert-manager/releases/download/v1.18.2/cert-manager.yaml
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 ```
 
 {{< hint info >}}
