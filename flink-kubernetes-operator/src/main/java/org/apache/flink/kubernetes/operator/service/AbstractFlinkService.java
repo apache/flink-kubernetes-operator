@@ -336,7 +336,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     savepointPath = savepointJobOrError(clusterClient, status, conf);
                     break;
                 case STATELESS:
-                    if (ReconciliationUtils.isJobCancellable(status)) {
+                    if (status.isJobCancellable()) {
                         try {
                             cancelJobOrError(clusterClient, status, true);
                         } catch (Exception ex) {

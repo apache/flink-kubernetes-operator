@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -55,4 +56,10 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Information about the TaskManagers for the scale subresource. */
     private TaskManagerInfo taskManager;
+
+    @JsonIgnore
+    @Override
+    public boolean isJobCancellable() {
+        return super.isJobCancellable() && jobManagerDeploymentStatus.isRestApiAvailable();
+    }
 }
