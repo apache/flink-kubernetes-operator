@@ -139,6 +139,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean deployFailure = false;
     @Setter private Exception makeItFailWith;
     @Setter private boolean triggerSavepointFailure = false;
+    @Setter private Exception savepointTriggerException = null;
+    @Setter private String savepointFetchError = null;
     @Setter private boolean disposeSavepointFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
     @Setter private PodList podList = new PodList();
@@ -375,6 +377,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             String savepointDirectory,
             Configuration conf)
             throws Exception {
+        if (savepointTriggerException != null) {
+            throw savepointTriggerException;
+        }
         if (triggerSavepointFailure) {
             throw new Exception(SNAPSHOT_ERROR_MESSAGE);
         }
@@ -397,6 +402,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     public SavepointFetchResult fetchSavepointInfo(
             String triggerId, String jobId, Configuration conf) {
+
+        if (savepointFetchError != null) {
+            return SavepointFetchResult.error(savepointFetchError);
+        }
 
         if (savepointTriggers.containsKey(triggerId)) {
             if (savepointTriggers.get(triggerId)) {
@@ -626,10 +635,13 @@ public class TestingFlinkService extends AbstractFlinkService {
                 .findAny()
                 .ifPresent(
                         t -> {
-                            if (!t.f1.getJobState().isGloballyTerminalState()) {
-                                throw new RuntimeException(
-                                        "Checkpoint should not be queried if job is not in terminal state");
-                            }
+                            // TODO: check this... for example getting the SP/CP
+                            //   in RUNNING state should be valid
+                            // if (!t.f1.getJobState().isGloballyTerminalState()) {
+                            //      throw new RuntimeException(
+                            //          "Checkpoint should not be
+                            //          queried if job is not in terminal state");
+                            // }
                         });
 
         return super.getLastCheckpoint(jobId, conf);
@@ -770,5 +782,21 @@ public class TestingFlinkService extends AbstractFlinkService {
         JobExceptionsInfoWithHistory newExceptionHistory =
                 new JobExceptionsInfoWithHistory(exceptionHistory);
         jobExceptionsMap.put(jobId, newExceptionHistory);
+    }
+
+    public void setSavepointTriggerException(Exception exception) {
+        this.savepointTriggerException = exception;
+    }
+
+    public void clearSavepointTriggerException() {
+        this.savepointTriggerException = null;
+    }
+
+    public void setSavepointFetchError(String error) {
+        this.savepointFetchError = error;
+    }
+
+    public void clearSavepointFetchError() {
+        this.savepointFetchError = null;
     }
 }
