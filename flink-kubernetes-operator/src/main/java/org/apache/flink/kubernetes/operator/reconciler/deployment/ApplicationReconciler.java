@@ -88,12 +88,13 @@ public class ApplicationReconciler
         var status = deployment.getStatus();
         var availableUpgradeMode = super.getJobUpgrade(ctx, deployConfig);
 
-        if (availableUpgradeMode.isAvailable() || !availableUpgradeMode.isAllowFallback()) {
+        if (availableUpgradeMode.isAvailable()) {
             return availableUpgradeMode;
         }
         var flinkService = ctx.getFlinkService();
 
-        if (HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+        if (availableUpgradeMode.isAllowFallback()
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
                 && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
                 && flinkService.isHaMetadataAvailable(deployConfig)) {
             LOG.info(
@@ -125,7 +126,7 @@ public class ApplicationReconciler
                     "UpgradeFailed");
         }
 
-        return JobUpgrade.unavailable();
+        return availableUpgradeMode;
     }
 
     private void deleteJmThatNeverStarted(

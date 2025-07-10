@@ -35,4 +35,8 @@ public enum JobManagerDeploymentStatus {
 
     /** Deployment in terminal error, requires spec change for reconciliation to continue. */
     ERROR;
+
+    public boolean isRestApiAvailable() {
+        return this == READY;
+    }
 }
