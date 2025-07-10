@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -25,11 +26,16 @@ import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.runtime.messages.webmonitor.JobDetails;
+import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
+import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
@@ -120,6 +126,61 @@ public class SessionReconciler
                 .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
+    /**
+     * Detects unmanaged jobs running in the session cluster. Unmanaged jobs are jobs that exist in
+     * the Flink cluster but are not managed by FlinkSessionJob resources.
+     */
+    private Set<JobID> getUnmanagedJobs(
+            FlinkResourceContext<FlinkDeployment> ctx, Set<FlinkSessionJob> sessionJobs) {
+        LOG.info(
+                "Starting unmanaged job detection for session cluster: {}",
+                ctx.getResource().getMetadata().getName());
+        try {
+            // Get all jobs running in the Flink cluster
+            var flinkService = ctx.getFlinkService();
+            var clusterClient = flinkService.getClusterClient(ctx.getObserveConfig());
+            var allJobs =
+                    clusterClient
+                            .sendRequest(
+                                    JobsOverviewHeaders.getInstance(),
+                                    EmptyMessageParameters.getInstance(),
+                                    EmptyRequestBody.getInstance())
+                            .get()
+                            .getJobs();
+
+            // Get job IDs managed by FlinkSessionJob resources
+            Set<JobID> managedJobIds =
+                    sessionJobs.stream()
+                            .map(job -> job.getStatus().getJobStatus().getJobId())
+                            .filter(jobId -> jobId != null)
+                            .map(JobID::fromHexString)
+                            .collect(Collectors.toSet());
+
+            // Get job IDs that are not managed by FlinkSessionJob resources and are currently
+            // running
+            //    FAILED(TerminalState.GLOBALLY)
+            //    CANCELED(TerminalState.GLOBALLY)
+            //    FINISHED(TerminalState.GLOBALLY)
+            // Above terminal states are ignored
+            Set<JobID> unmanagedJobIds =
+                    allJobs.stream()
+                            .filter(
+                                    job ->
+                                            !job.getStatus()
+                                                    .isGloballyTerminalState()) // Only consider
+                            // running jobs
+                            .map(JobDetails::getJobId)
+                            .filter(jobId -> !managedJobIds.contains(jobId))
+                            .collect(Collectors.toSet());
+
+            LOG.info("Detected {} unmanaged job IDs: {}", unmanagedJobIds.size(), unmanagedJobIds);
+            return unmanagedJobIds;
+        } catch (Exception e) {
+            LOG.warn("Failed to detect unmanaged jobs in session cluster", e);
+            return Set.of();
+        }
+    }
+
     @Override
     public DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
         Set<FlinkSessionJob> sessionJobs =
@@ -143,13 +204,41 @@ public class SessionReconciler
             }
             return DeleteControl.noFinalizerRemoval()
                     .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
-        } else {
-            LOG.info("Stopping session cluster");
-            var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
-            ctx.getFlinkService()
-                    .deleteClusterDeployment(
-                            deployment.getMetadata(), deployment.getStatus(), conf, true);
-            return DeleteControl.defaultDelete();
         }
+
+        // Check for unmanaged jobs if the option is enabled (Enabled by default)
+        boolean blockOnUnmanagedJobs =
+                ctx.getObserveConfig()
+                        .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
+        if (blockOnUnmanagedJobs) {
+            Set<JobID> unmanagedJobs = getUnmanagedJobs(ctx, sessionJobs);
+            if (!unmanagedJobs.isEmpty()) {
+                var error =
+                        String.format(
+                                "The session cluster has unmanaged jobs %s that should be cancelled first",
+                                unmanagedJobs.stream()
+                                        .map(JobID::toHexString)
+                                        .collect(Collectors.toList()));
+                LOG.warn(error);
+                if (eventRecorder.triggerEvent(
+                        deployment,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.CleanupFailed,
+                        EventRecorder.Component.Operator,
+                        error,
+                        ctx.getKubernetesClient())) {
+                    LOG.warn(error);
+                }
+                return DeleteControl.noFinalizerRemoval()
+                        .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
+            }
+        }
+
+        LOG.info("Stopping session cluster");
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        ctx.getFlinkService()
+                .deleteClusterDeployment(
+                        deployment.getMetadata(), deployment.getStatus(), conf, true);
+        return DeleteControl.defaultDelete();
     }
 }
