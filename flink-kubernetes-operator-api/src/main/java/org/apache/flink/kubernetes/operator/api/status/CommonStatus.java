@@ -90,6 +90,30 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             return ResourceLifecycleState.FAILED;
         }
 
+        // Check for unrecoverable deployments that should be marked as FAILED
+        if (this instanceof FlinkDeploymentStatus) {
+            FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
+            var jmStatus = deploymentStatus.getJobManagerDeploymentStatus();
+
+            // ERROR deployments are in terminal error state and should always be FAILED
+            if (jmStatus == JobManagerDeploymentStatus.ERROR) {
+                return ResourceLifecycleState.FAILED;
+            }
+
+            // MISSING deployments should be FAILED if they're clearly unrecoverable
+            if (jmStatus == JobManagerDeploymentStatus.MISSING) {
+                // Mark as FAILED if error message clearly indicates deployment failure (any time)
+                if (StringUtils.isNotEmpty(error)) {
+                    return ResourceLifecycleState.FAILED;
+                }
+                // Also mark as FAILED if stable deployment is missing without any error
+                // (indicating it was deleted externally)
+                else if (reconciliationStatus.isLastReconciledSpecStable()) {
+                    return ResourceLifecycleState.FAILED;
+                }
+            }
+        }
+
         if (reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK) {
             return ResourceLifecycleState.ROLLED_BACK;
         } else if (reconciliationStatus.isLastReconciledSpecStable()) {
