@@ -647,6 +647,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Indicate whether the job should be drained when stopping with savepoint.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> BLOCK_ON_UNMANAGED_JOBS =
+            operatorConfig("session.block-on-unmanaged-jobs")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
             operatorConfig("cluster.resource-view.refresh-interval")
