@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
@@ -71,8 +72,28 @@ public class ResourceLifecycleMetricsTest {
         ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
         assertEquals(DEPLOYED, application.getStatus().getLifecycleState());
 
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(STABLE, application.getStatus().getLifecycleState());
+        assertEquals(
+                STABLE,
+                application.getStatus().getLifecycleState(),
+                "JobManager Deployment is in DEPLOYING state, hence application is STABLE");
+
+        application
+                .getStatus()
+                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
+        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+        assertEquals(
+                STABLE,
+                application.getStatus().getLifecycleState(),
+                "JobManager Deployment is in DEPLOYED_NOT_READY state, hence application is STABLE");
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+        assertEquals(
+                STABLE,
+                application.getStatus().getLifecycleState(),
+                "JobManager Deployment is in READY state, hence application is STABLE");
 
         application.getStatus().setError("errr");
         assertEquals(STABLE, application.getStatus().getLifecycleState());
@@ -336,5 +357,58 @@ public class ResourceLifecycleMetricsTest {
                                             new Configuration()))));
         }
         return histos;
+    }
+
+    @Test
+    public void testUnrecoverableDeploymentLifecycleState() {
+        var application = TestUtils.buildApplicationCluster();
+
+        // Setup the deployment to simulate it has been deployed (so isBeforeFirstDeployment =
+        // false)
+        ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
+        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        application.getStatus().setError(null);
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "ERROR deployment should always be FAILED (terminal error state)");
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        application.getStatus().setError("JobManager deployment failed to start");
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "ERROR deployment with error message should also be FAILED");
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        application
+                .getStatus()
+                .setError("JobManager deployment was deleted and cannot be recovered");
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "MISSING deployment with error should be FAILED");
+
+        application.getStatus().setError(null);
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "MISSING deployment with stable reconciliation should be FAILED");
+
+        application.getStatus().setError(null);
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        // Reset to DEPLOYED state (not stable yet) to simulate ongoing deployment
+        application.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        application
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastStableSpec(null); // Mark as not stable
+        assertEquals(
+                DEPLOYED,
+                application.getStatus().getLifecycleState(),
+                "MISSING deployment before stability should not be FAILED yet (still deploying)");
     }
 }
