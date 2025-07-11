@@ -161,7 +161,7 @@ public class SessionReconciler
             //    FAILED(TerminalState.GLOBALLY)
             //    CANCELED(TerminalState.GLOBALLY)
             //    FINISHED(TerminalState.GLOBALLY)
-            // Above terminal states are ignored
+            // Above terminal states are not considered since they are no longer active jobs
             Set<JobID> unmanagedJobIds =
                     allJobs.stream()
                             .filter(
