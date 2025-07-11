@@ -151,7 +151,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testUnmanagedJobsIdentification() throws Exception {
+    public void testGetUnmanagedJobs() throws Exception {
         // Create a session cluster deployment with blocking enabled
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment
