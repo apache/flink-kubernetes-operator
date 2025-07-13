@@ -100,7 +100,14 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
                             || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
                     && StringUtils.isNotEmpty(error)
-                    && error.contains("configmaps have been deleted")) {
+                    && (error.toLowerCase()
+                                    .contains(
+                                            "it is possible that the job has finished or terminally failed, or the configmaps have been deleted")
+                            || error.toLowerCase().contains("manual restore required")
+                            || error.toLowerCase().contains("ha metadata not available")
+                            || error.toLowerCase()
+                                    .contains(
+                                            "ha data is not available to make stateful upgrades"))) {
                 return ResourceLifecycleState.FAILED;
             }
         }
