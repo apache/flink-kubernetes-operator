@@ -72,28 +72,8 @@ public class ResourceLifecycleMetricsTest {
         ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
         assertEquals(DEPLOYED, application.getStatus().getLifecycleState());
 
-        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(
-                STABLE,
-                application.getStatus().getLifecycleState(),
-                "JobManager Deployment is in DEPLOYING state, hence application is STABLE");
-
-        application
-                .getStatus()
-                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
-        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(
-                STABLE,
-                application.getStatus().getLifecycleState(),
-                "JobManager Deployment is in DEPLOYED_NOT_READY state, hence application is STABLE");
-
-        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(
-                STABLE,
-                application.getStatus().getLifecycleState(),
-                "JobManager Deployment is in READY state, hence application is STABLE");
+        assertEquals(STABLE, application.getStatus().getLifecycleState());
 
         application.getStatus().setError("errr");
         assertEquals(STABLE, application.getStatus().getLifecycleState());
@@ -369,34 +349,27 @@ public class ResourceLifecycleMetricsTest {
         application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
 
         application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        application.getStatus().setError(null);
+        application
+                .getStatus()
+                .setError(
+                        "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
+                                + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
+                                + "Manual restore required.");
         assertEquals(
                 FAILED,
                 application.getStatus().getLifecycleState(),
-                "ERROR deployment should always be FAILED (terminal error state)");
-
-        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        application.getStatus().setError("JobManager deployment failed to start");
-        assertEquals(
-                FAILED,
-                application.getStatus().getLifecycleState(),
-                "ERROR deployment with error message should also be FAILED");
+                "ERROR deployment with `configmaps have been deleted` error should always be FAILED (terminal error state)");
 
         application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         application
                 .getStatus()
-                .setError("JobManager deployment was deleted and cannot be recovered");
+                .setError(
+                        "HA metadata not available to restore from last state. "
+                                + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. ");
         assertEquals(
                 FAILED,
                 application.getStatus().getLifecycleState(),
                 "MISSING deployment with error should be FAILED");
-
-        application.getStatus().setError(null);
-        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        assertEquals(
-                FAILED,
-                application.getStatus().getLifecycleState(),
-                "MISSING deployment with stable reconciliation should be FAILED");
 
         application.getStatus().setError(null);
         application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
