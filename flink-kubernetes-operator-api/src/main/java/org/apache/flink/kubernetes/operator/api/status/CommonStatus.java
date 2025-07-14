@@ -37,6 +37,13 @@ import org.apache.commons.lang3.StringUtils;
 @SuperBuilder
 public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
+    // Error message constants for deployment failure classification
+    // Full error message constants for deployment failure reporting
+    public static final String MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED =
+            "It is possible that the job has finished or terminally failed, or the configmaps have been deleted.";
+    public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
+    public static final String MSG_MANUAL_RESTORE_REQUIRED = "Manual restore required.";
+
     /** Last observed status of the Flink job on Application/Session cluster. */
     private JobStatus jobStatus = new JobStatus();
 
@@ -95,19 +102,13 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
             var jmDeployStatus = deploymentStatus.getJobManagerDeploymentStatus();
 
-            // ERROR/MISSING deployments are in terminal error state
-            // [Configmaps deleted -> require manual restore]  and should always be FAILED
+            // ERROR/MISSING deployments are in terminal error state and should always be FAILED
             if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
                             || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
-                    && StringUtils.isNotEmpty(error)
-                    && (error.toLowerCase()
-                                    .contains(
-                                            "it is possible that the job has finished or terminally failed, or the configmaps have been deleted")
-                            || error.toLowerCase().contains("manual restore required")
-                            || error.toLowerCase().contains("ha metadata not available")
-                            || error.toLowerCase()
-                                    .contains(
-                                            "ha data is not available to make stateful upgrades"))) {
+                    && error != null
+                    && (error.contains(MSG_MANUAL_RESTORE_REQUIRED)
+                            || error.contains(MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED)
+                            || error.contains(MSG_HA_METADATA_NOT_AVAILABLE))) {
                 return ResourceLifecycleState.FAILED;
             }
         }

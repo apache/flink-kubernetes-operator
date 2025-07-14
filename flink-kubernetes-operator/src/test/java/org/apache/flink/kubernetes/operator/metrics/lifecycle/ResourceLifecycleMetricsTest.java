@@ -53,6 +53,9 @@ import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecyc
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.STABLE;
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.SUSPENDED;
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.UPGRADING;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -352,9 +355,11 @@ public class ResourceLifecycleMetricsTest {
         application
                 .getStatus()
                 .setError(
-                        "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
-                                + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                                + "Manual restore required.");
+                        "\"JobManager deployment is missing and  "
+                                + MSG_HA_METADATA_NOT_AVAILABLE
+                                + " to make stateful upgrades. "
+                                + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                                + MSG_MANUAL_RESTORE_REQUIRED);
         assertEquals(
                 FAILED,
                 application.getStatus().getLifecycleState(),
@@ -364,8 +369,9 @@ public class ResourceLifecycleMetricsTest {
         application
                 .getStatus()
                 .setError(
-                        "HA metadata not available to restore from last state. "
-                                + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. ");
+                        MSG_HA_METADATA_NOT_AVAILABLE
+                                + " to restore from last state. "
+                                + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED);
         assertEquals(
                 FAILED,
                 application.getStatus().getLifecycleState(),

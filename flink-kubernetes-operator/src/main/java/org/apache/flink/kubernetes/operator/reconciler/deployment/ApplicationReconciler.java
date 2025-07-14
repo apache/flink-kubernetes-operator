@@ -59,6 +59,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
 /** Reconciler Flink Application deployments. */
@@ -114,9 +117,11 @@ public class ApplicationReconciler
                         || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
                 && !flinkService.isHaMetadataAvailable(deployConfig)) {
             throw new UpgradeFailureException(
-                    "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
+                    "JobManager deployment is missing and "
+                            + MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to make stateful upgrades. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
                     "UpgradeFailed");
         }
 
