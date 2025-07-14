@@ -127,10 +127,7 @@ public class SessionReconciler
                 .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
-    /**
-     * Detects unmanaged jobs running in the session cluster. Unmanaged jobs are jobs that exist in
-     * the Flink cluster but are not managed by FlinkSessionJob resources.
-     */
+    // Detects jobs which are not in globally terminated states
     @VisibleForTesting
     Set<JobID> getNonTerminalJobs(FlinkResourceContext<FlinkDeployment> ctx) {
         LOG.debug("Starting nonTerminal jobs detection for session cluster");
@@ -186,7 +183,8 @@ public class SessionReconciler
                     .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
         }
 
-        // Check for unmanaged non-terminated jobs if the option is enabled (Enabled by default)
+        // Check for non-terminated jobs if the option is enabled (Enabled by default) , after
+        // sessionJobs are deleted
         boolean blockOnUnmanagedJobs =
                 ctx.getObserveConfig()
                         .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
