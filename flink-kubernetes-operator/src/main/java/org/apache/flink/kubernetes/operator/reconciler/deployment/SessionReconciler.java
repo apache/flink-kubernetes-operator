@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
@@ -130,11 +131,9 @@ public class SessionReconciler
      * Detects unmanaged jobs running in the session cluster. Unmanaged jobs are jobs that exist in
      * the Flink cluster but are not managed by FlinkSessionJob resources.
      */
-    private Set<JobID> getUnmanagedJobs(
-            FlinkResourceContext<FlinkDeployment> ctx, Set<FlinkSessionJob> sessionJobs) {
-        LOG.info(
-                "Starting unmanaged job detection for session cluster: {}",
-                ctx.getResource().getMetadata().getName());
+    @VisibleForTesting
+    Set<JobID> getNonTerminalJobs(FlinkResourceContext<FlinkDeployment> ctx) {
+        LOG.debug("Starting nonTerminal jobs detection for session cluster");
         try {
             // Get all jobs running in the Flink cluster
             var flinkService = ctx.getFlinkService();
@@ -148,35 +147,17 @@ public class SessionReconciler
                             .get()
                             .getJobs();
 
-            // Get job IDs managed by FlinkSessionJob resources
-            Set<JobID> managedJobIds =
-                    sessionJobs.stream()
-                            .map(job -> job.getStatus().getJobStatus().getJobId())
-                            .filter(jobId -> jobId != null)
-                            .map(JobID::fromHexString)
-                            .collect(Collectors.toSet());
-
-            // Get job IDs that are not managed by FlinkSessionJob resources and are currently
             // running
-            //    FAILED(TerminalState.GLOBALLY)
-            //    CANCELED(TerminalState.GLOBALLY)
-            //    FINISHED(TerminalState.GLOBALLY)
             // Above terminal states are not considered since they are no longer active jobs
-            Set<JobID> unmanagedJobIds =
+            Set<JobID> nonTerminalJobIds =
                     allJobs.stream()
-                            .filter(
-                                    job ->
-                                            !job.getStatus()
-                                                    .isGloballyTerminalState()) // Only consider
-                            // running jobs
+                            .filter(job -> !job.getStatus().isGloballyTerminalState())
                             .map(JobDetails::getJobId)
-                            .filter(jobId -> !managedJobIds.contains(jobId))
                             .collect(Collectors.toSet());
 
-            LOG.info("Detected {} unmanaged job IDs: {}", unmanagedJobIds.size(), unmanagedJobIds);
-            return unmanagedJobIds;
+            return nonTerminalJobIds;
         } catch (Exception e) {
-            LOG.warn("Failed to detect unmanaged jobs in session cluster", e);
+            LOG.warn("Failed to detect nonTerminal jobs in session cluster", e);
             return Set.of();
         }
     }
@@ -206,20 +187,19 @@ public class SessionReconciler
                     .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
         }
 
-        // Check for unmanaged jobs if the option is enabled (Enabled by default)
+        // Check for unmanaged non-terminated jobs if the option is enabled (Enabled by default)
         boolean blockOnUnmanagedJobs =
                 ctx.getObserveConfig()
                         .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
         if (blockOnUnmanagedJobs) {
-            Set<JobID> unmanagedJobs = getUnmanagedJobs(ctx, sessionJobs);
-            if (!unmanagedJobs.isEmpty()) {
+            Set<JobID> nonTerminalJobs = getNonTerminalJobs(ctx);
+            if (!nonTerminalJobs.isEmpty()) {
                 var error =
                         String.format(
-                                "The session cluster has unmanaged jobs %s that should be cancelled first",
-                                unmanagedJobs.stream()
+                                "The session cluster has non terminated jobs %s that should be cancelled first",
+                                nonTerminalJobs.stream()
                                         .map(JobID::toHexString)
                                         .collect(Collectors.toList()));
-                LOG.warn(error);
                 if (eventRecorder.triggerEvent(
                         deployment,
                         EventRecorder.Type.Warning,

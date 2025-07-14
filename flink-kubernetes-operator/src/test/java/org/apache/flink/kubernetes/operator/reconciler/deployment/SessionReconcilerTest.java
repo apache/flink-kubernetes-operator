@@ -32,7 +32,6 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -49,7 +48,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -151,8 +149,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testGetUnmanagedJobs() throws Exception {
-        // Create a session cluster deployment with blocking enabled
+    public void testGetNonTerminalJobs() throws Exception {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment
                 .getSpec()
@@ -166,7 +163,6 @@ public class SessionReconcilerTest extends OperatorTestBase {
                         .getFlinkConfiguration()
                         .get(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key()));
 
-        // First, deploy the session cluster to set up proper state
         reconciler.reconcile(deployment, flinkService.getContext());
 
         // Verify deployment is in DEPLOYED state
@@ -181,7 +177,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
         JobID unmanagedTerminatedJobId = new JobID();
         JobID unmanagedRunningJobId2 = new JobID();
 
-        // Add a mix of managed and unmanaged jobs to the testing service
+        // Add jobs to the testing service
         flinkService
                 .listJobs()
                 .add(
@@ -253,44 +249,46 @@ public class SessionReconcilerTest extends OperatorTestBase {
         sessionJobs.add(managedSessionJob1);
         sessionJobs.add(managedSessionJob2);
 
-        // Test with blocking enabled - should identify running unmanaged jobs correctly
+        // Test with blocking enabled - should identify all non-terminal jobs
         var context = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         var resourceContext = getResourceContext(deployment, context);
 
-        // Use reflection to access the private getUnmanagedJobs method
-        var sessionReconciler = reconciler.getReconciler();
-        var getUnmanagedJobsMethod =
-                sessionReconciler
-                        .getClass()
-                        .getDeclaredMethod(
-                                "getUnmanagedJobs", FlinkResourceContext.class, Set.class);
-        getUnmanagedJobsMethod.setAccessible(true);
+        var sessionReconciler = (SessionReconciler) reconciler.getReconciler();
+        Set<JobID> nonTerminalJobs = sessionReconciler.getNonTerminalJobs(resourceContext);
 
-        @SuppressWarnings("unchecked")
-        var unmanagedJobs =
-                (java.util.Set<String>)
-                        getUnmanagedJobsMethod.invoke(
-                                sessionReconciler, resourceContext, sessionJobs);
+        // Verify all non-terminal jobs are identified - should be 4 (2 managed + 2 unmanaged
+        // running)
+        assertEquals(4, nonTerminalJobs.size(), "Should identify exactly 4 non-terminal jobs");
 
-        // Verify only RUNNING unmanaged jobs are identified - should be 2
-        assertEquals(2, unmanagedJobs.size(), "Should identify exactly 2 running unmanaged jobs");
+        assertTrue(
+                nonTerminalJobs.contains(unmanagedRunningJobId1),
+                "Should contain unmanagedRunningJobId1");
+        assertTrue(
+                nonTerminalJobs.contains(unmanagedRunningJobId2),
+                "Should contain unmanagedRunningJobId2");
 
-        // Verify that none of the managed job IDs are in the unmanaged list
-        Set<String> managedJobIds =
-                sessionJobs.stream()
-                        .map(job -> job.getStatus().getJobStatus().getJobId())
-                        .collect(Collectors.toSet());
+        // Verify terminated job is not included
+        assertFalse(
+                nonTerminalJobs.contains(unmanagedTerminatedJobId),
+                "Should not contain terminated job");
 
-        for (String managedJobId : managedJobIds) {
-            assertFalse(
-                    unmanagedJobs.contains(managedJobId),
-                    "Managed job " + managedJobId + " should NOT be in unmanaged jobs");
-        }
+        // Test scenario with only unmanaged jobs
+        flinkService
+                .listJobs()
+                .removeIf(
+                        job ->
+                                job.f1.getJobId().equals(managedJobId1)
+                                        || job.f1.getJobId().equals(managedJobId2));
 
-        // Verify managed jobs are properly set up (we should have 2 managed jobs)
-        assertEquals(2, managedJobIds.size(), "Should have 2 managed jobs configured");
+        Set<JobID> nonTerminalJobsAfterSessionJobsRemoval =
+                sessionReconciler.getNonTerminalJobs(resourceContext);
 
-        // Test scenario with no running unmanaged jobs
+        assertEquals(
+                2,
+                nonTerminalJobsAfterSessionJobsRemoval.size(),
+                "Should have 2 non-terminal jobs when sessionjobs are deleted");
+
+        // Test scenario with no running jobs
         flinkService
                 .listJobs()
                 .removeIf(
@@ -298,15 +296,12 @@ public class SessionReconcilerTest extends OperatorTestBase {
                                 job.f1.getJobId().equals(unmanagedRunningJobId1)
                                         || job.f1.getJobId().equals(unmanagedRunningJobId2));
 
-        @SuppressWarnings("unchecked")
-        var unmanagedJobsAfterRemoval =
-                (java.util.Set<String>)
-                        getUnmanagedJobsMethod.invoke(
-                                sessionReconciler, resourceContext, sessionJobs);
+        Set<JobID> nonTerminalJobsAfterRemoval =
+                sessionReconciler.getNonTerminalJobs(resourceContext);
 
         assertEquals(
                 0,
-                unmanagedJobsAfterRemoval.size(),
-                "Should have no unmanaged jobs when only managed and terminated jobs exist");
+                nonTerminalJobsAfterRemoval.size(),
+                "Should have no non-terminal jobs when only terminated jobs exist");
     }
 }
