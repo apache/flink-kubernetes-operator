@@ -147,8 +147,7 @@ public class SessionReconciler
                             .get()
                             .getJobs();
 
-            // running
-            // Above terminal states are not considered since they are no longer active jobs
+            // running job Ids
             Set<JobID> nonTerminalJobIds =
                     allJobs.stream()
                             .filter(job -> !job.getStatus().isGloballyTerminalState())
