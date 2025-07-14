@@ -570,8 +570,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
             throw new UpgradeFailureException(
-                    "Latest checkpoint not externally addressable, "
-                            + MSG_MANUAL_RESTORE_REQUIRED,
+                    "Latest checkpoint not externally addressable, " + MSG_MANUAL_RESTORE_REQUIRED,
                     "CheckpointNotFound");
         }
         return latestCheckpointOpt.map(

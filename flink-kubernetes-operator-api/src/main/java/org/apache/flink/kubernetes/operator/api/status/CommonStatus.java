@@ -37,8 +37,7 @@ import org.apache.commons.lang3.StringUtils;
 @SuperBuilder
 public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
-    // Error message constants for deployment failure classification
-    // Full error message constants for deployment failure reporting
+    // Frequent error message constants for deployment failure reporting
     public static final String MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED =
             "It is possible that the job has finished or terminally failed, or the configmaps have been deleted.";
     public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
