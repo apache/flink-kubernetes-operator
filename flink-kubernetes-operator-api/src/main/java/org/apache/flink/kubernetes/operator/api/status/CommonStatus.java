@@ -37,7 +37,7 @@ import org.apache.commons.lang3.StringUtils;
 @SuperBuilder
 public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
-    // Frequent error message constants for deployment failure reporting
+    // Frequent error message constants for resource failure reporting
     public static final String MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED =
             "It is possible that the job has finished or terminally failed, or the configmaps have been deleted.";
     public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
@@ -96,7 +96,8 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             return ResourceLifecycleState.FAILED;
         }
 
-        // Check for unrecoverable deployments that should be marked as FAILED
+        // Check for unrecoverable deployments that should be marked as FAILED if the error contains
+        // the following substrings
         if (this instanceof FlinkDeploymentStatus) {
             FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
             var jmDeployStatus = deploymentStatus.getJobManagerDeploymentStatus();
