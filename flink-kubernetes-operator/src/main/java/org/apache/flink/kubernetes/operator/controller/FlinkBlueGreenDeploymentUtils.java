@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.api.model.OwnerReference;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /** Utility methods for the FlinkBlueGreenDeploymentController. */
 public class FlinkBlueGreenDeploymentUtils {
@@ -71,7 +72,12 @@ public class FlinkBlueGreenDeploymentUtils {
 
     public static <T> T getConfigOption(
             FlinkBlueGreenDeployment bgDeployment, ConfigOption<T> option) {
-        return Configuration.fromMap(bgDeployment.getSpec().getTemplate().getConfiguration())
-                .get(option);
+        Map<String, String> configuration = bgDeployment.getSpec().getTemplate().getConfiguration();
+
+        if (configuration == null) {
+            return option.defaultValue();
+        }
+
+        return Configuration.fromMap(configuration).get(option);
     }
 }

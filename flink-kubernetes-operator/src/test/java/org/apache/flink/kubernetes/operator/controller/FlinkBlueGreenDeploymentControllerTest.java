@@ -59,9 +59,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD_MS;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY_MS;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.RECONCILIATION_RESCHEDULING_INTERVAL_MS;
+import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
+import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
@@ -183,9 +183,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var reconciliationReschedulingIntervalMs = 5000;
         Map<String, String> configuration =
                 blueGreenDeployment.getSpec().getTemplate().getConfiguration();
-        configuration.put(ABORT_GRACE_PERIOD_MS.key(), String.valueOf(abortGracePeriodMs));
+        configuration.put(ABORT_GRACE_PERIOD.key(), String.valueOf(abortGracePeriodMs));
         configuration.put(
-                RECONCILIATION_RESCHEDULING_INTERVAL_MS.key(),
+                RECONCILIATION_RESCHEDULING_INTERVAL.key(),
                 String.valueOf(reconciliationReschedulingIntervalMs));
 
         var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
@@ -526,7 +526,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         if (customDeletionDelayMs > 0) {
             template.getConfiguration()
-                    .put(DEPLOYMENT_DELETION_DELAY_MS.key(), String.valueOf(customDeletionDelayMs));
+                    .put(DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(customDeletionDelayMs));
         }
 
         FlinkDeploymentSpec spec = template.getSpec();
@@ -648,10 +648,10 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         .build();
 
         Map<String, String> configuration = new HashMap<>();
-        configuration.put(ABORT_GRACE_PERIOD_MS.key(), "1");
-        configuration.put(RECONCILIATION_RESCHEDULING_INTERVAL_MS.key(), "500");
+        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
+        configuration.put(RECONCILIATION_RESCHEDULING_INTERVAL.key(), "500");
         configuration.put(
-                DEPLOYMENT_DELETION_DELAY_MS.key(), String.valueOf(DEFAULT_DELETION_DELAY_VALUE));
+                DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(DEFAULT_DELETION_DELAY_VALUE));
 
         var flinkDeploymentTemplateSpec =
                 FlinkDeploymentTemplateSpec.builder()

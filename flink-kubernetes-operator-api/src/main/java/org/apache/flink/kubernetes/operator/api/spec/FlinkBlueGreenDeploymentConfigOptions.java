@@ -20,10 +20,14 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
+import java.time.Duration;
+
 /** Configuration options to be used by the Flink Blue/Green Deployments. */
 public class FlinkBlueGreenDeploymentConfigOptions {
 
-    public static final String BLUE_GREEN_CONF_PREFIX = "bluegreen.";
+    public static final String K8S_OP_CONF_PREFIX = "kubernetes.operator.";
+
+    public static final String BLUE_GREEN_CONF_PREFIX = K8S_OP_CONF_PREFIX + "bluegreen.";
 
     public static final int MIN_ABORT_GRACE_PERIOD_MS = 120000; // 2 mins
 
@@ -31,24 +35,24 @@ public class FlinkBlueGreenDeploymentConfigOptions {
         return ConfigOptions.key(BLUE_GREEN_CONF_PREFIX + key);
     }
 
-    public static final ConfigOption<Integer> ABORT_GRACE_PERIOD_MS =
-            operatorConfig("abortGracePeriodMs")
-                    .intType()
-                    .defaultValue(0)
+    public static final ConfigOption<Duration> ABORT_GRACE_PERIOD =
+            operatorConfig("abort.grace-period")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(MIN_ABORT_GRACE_PERIOD_MS))
                     .withDescription(
-                            "The max time to wait for a deployment to become ready before aborting it, in milliseconds. Cannot be smaller than 2 minutes.");
+                            "The max time to wait in milliseconds for a deployment to become ready before aborting it. Cannot be smaller than 2 minutes.");
 
-    public static final ConfigOption<Integer> RECONCILIATION_RESCHEDULING_INTERVAL_MS =
-            operatorConfig("reconciliationReschedulingIntervalMs")
-                    .intType()
-                    .defaultValue(15000) // 15 seconds
+    public static final ConfigOption<Duration> RECONCILIATION_RESCHEDULING_INTERVAL =
+            operatorConfig("reconciliation.reschedule-interval")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(15000)) // 15 seconds
                     .withDescription(
                             "Configurable delay in milliseconds to use when the operator reschedules a reconciliation.");
 
-    public static final ConfigOption<Integer> DEPLOYMENT_DELETION_DELAY_MS =
-            operatorConfig("deploymentDeletionDelayMs")
-                    .intType()
-                    .defaultValue(0)
+    public static final ConfigOption<Duration> DEPLOYMENT_DELETION_DELAY =
+            operatorConfig("deployment-deletion.delay")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(0))
                     .withDescription(
-                            "Configurable delay before deleting a deployment after being marked done.");
+                            "Configurable delay in milliseconds before deleting a deployment after being marked done.");
 }
