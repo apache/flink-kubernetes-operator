@@ -354,13 +354,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         simulateSubmitAndSuccessfulJobStart(deploymentA);
 
-        // 2. Mark the Blue deployment ready
-        rs = reconcile(rs.deployment);
-
-        // 3. Logic for the deployment to get deleted
-        assertDeploymentDeleted(rs, DEFAULT_DELETION_DELAY_VALUE, bgSpecBefore);
-
-        // 4. Finalize the Blue deployment
+        // 2. Mark the Blue deployment ready and finalize it
         var minReconciliationTs = System.currentTimeMillis() - 1;
         rs = reconcile(rs.deployment);
 
@@ -374,7 +368,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                     FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
                     rs.reconciledStatus.getBlueGreenState());
 
-            // 5. Subsequent reconciliation calls = NO-OP
+            // 3. Subsequent reconciliation calls = NO-OP
             var rs2 = reconcile(rs.deployment);
             assertTrue(rs2.updateControl.isNoUpdate());
         }
