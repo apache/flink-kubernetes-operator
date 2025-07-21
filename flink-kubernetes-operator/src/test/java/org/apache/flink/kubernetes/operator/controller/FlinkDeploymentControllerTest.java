@@ -1054,7 +1054,7 @@ public class FlinkDeploymentControllerTest {
                         .flinkResourceEvents()
                         .poll()
                         .getMessage()
-                        .contains("HA metadata not available to restore from last state."));
+                        .contains("HA metadata is not available to restore from last state."));
 
         testController.flinkResourceEvents().clear();
         testController.reconcile(appCluster, context);
@@ -1068,7 +1068,7 @@ public class FlinkDeploymentControllerTest {
                         .flinkResourceEvents()
                         .poll()
                         .getMessage()
-                        .contains("HA metadata not available to restore from last state."));
+                        .contains("HA metadata is not available to restore from last state."));
 
         flinkService.setHaDataAvailable(true);
         testController.flinkResourceEvents().clear();
