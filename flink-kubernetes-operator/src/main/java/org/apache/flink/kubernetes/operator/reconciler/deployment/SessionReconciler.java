@@ -197,22 +197,20 @@ public class SessionReconciler
                                 nonTerminalJobs.stream()
                                         .map(JobID::toHexString)
                                         .collect(Collectors.toList()));
-                if (eventRecorder.triggerEvent(
+                eventRecorder.triggerEvent(
                         deployment,
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.CleanupFailed,
                         EventRecorder.Component.Operator,
                         error,
-                        ctx.getKubernetesClient())) {
-                    LOG.warn(error);
-                }
+                        ctx.getKubernetesClient());
                 return DeleteControl.noFinalizerRemoval()
                         .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
             }
         }
 
         LOG.info("Stopping session cluster");
-        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        var conf = ctx.getObserveConfig();
         ctx.getFlinkService()
                 .deleteClusterDeployment(
                         deployment.getMetadata(), deployment.getStatus(), conf, true);
