@@ -66,10 +66,14 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobConfigHeaders;
+import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
+import org.apache.flink.runtime.rest.messages.JobMessageParameters;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatisticDetailsHeaders;
@@ -170,6 +174,14 @@ public abstract class AbstractFlinkService implements FlinkService {
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
     public static final String FIELD_NAME_STATE_SIZE = "state-size";
+    private static final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    static {
+        objectMapper.setVisibility(
+                com.fasterxml.jackson.annotation.PropertyAccessor.FIELD,
+                com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.ANY);
+    }
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -567,7 +579,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
             throw new UpgradeFailureException(
-                    "Latest checkpoint not externally addressable, manual recovery required.",
+                    "Latest checkpoint not externally addressable, Manual restore required.",
                     "CheckpointNotFound");
         }
         return latestCheckpointOpt.map(
@@ -868,6 +880,303 @@ public abstract class AbstractFlinkService implements FlinkService {
                     e);
             return null;
         }
+    }
+
+    @Override
+    public Map<String, String> getJobConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching job configuration for job {}", jobId);
+        try (var clusterClient = getClusterClient(conf)) {
+            Map<String, String> jobConfig = new HashMap<>();
+
+            // Use JobConfigHeaders to get job configuration directly
+            var jobConfigHeaders = JobConfigHeaders.getInstance();
+            var parameters = new JobMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            try {
+                JobConfigInfo configurationInfo =
+                        clusterClient
+                                .sendRequest(
+                                        jobConfigHeaders,
+                                        parameters,
+                                        EmptyRequestBody.getInstance())
+                                .get(
+                                        operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                        TimeUnit.SECONDS);
+                LOG.debug("Job Config Info: {}", configurationInfo);
+
+                // Extract configuration from the response
+                if (configurationInfo != null) {
+                    LOG.debug("Job Configuration Info: {}", configurationInfo);
+                    if (configurationInfo.getExecutionConfigInfo() != null) {
+                        jobConfig.put(
+                                "parallelism.default",
+                                String.valueOf(
+                                        configurationInfo
+                                                .getExecutionConfigInfo()
+                                                .getParallelism()));
+                        // Correct this as restart-strategy is incorect
+                        //                        if (!Objects.equals(
+                        //
+                        // configurationInfo.getExecutionConfigInfo().getRestartStrategy(),
+                        //                                "Cluster level default restart strategy"))
+                        // {
+                        //                            jobConfig.put(
+                        //                                    "restart-strategy",
+                        //                                    configurationInfo
+                        //                                            .getExecutionConfigInfo()
+                        //                                            .getRestartStrategy());
+                        //                        }
+                        jobConfig.put(
+                                "pipeline.object-reuse",
+                                String.valueOf(
+                                        configurationInfo
+                                                .getExecutionConfigInfo()
+                                                .isObjectReuse()));
+                        jobConfig.putAll(
+                                configurationInfo
+                                        .getExecutionConfigInfo()
+                                        .getGlobalJobParameters());
+                    }
+
+                    LOG.debug("Fetched {} job configuration entries", jobConfig.size());
+                } else {
+                    LOG.warn("Job configuration is null for job {}", jobId);
+                }
+
+            } catch (Exception e) {
+                LOG.warn(
+                        "Failed to fetch job configuration for job {} via REST API: {}",
+                        jobId,
+                        e.getMessage());
+                LOG.debug("Job configuration fetch exception details", e);
+            }
+
+            LOG.debug(
+                    "Fetched {} configuration entries for job {}: {}",
+                    jobConfig.size(),
+                    jobId,
+                    jobConfig);
+            return jobConfig;
+        }
+    }
+
+    @Override
+    public Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching checkpoint configuration for job {}", jobId);
+        try (var clusterClient = getClusterClient(conf)) {
+            var checkpointConfigHeaders = CheckpointConfigHeaders.getInstance();
+            var parameters = new JobMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            try {
+                var checkpointConfigInfo =
+                        clusterClient
+                                .sendRequest(
+                                        checkpointConfigHeaders,
+                                        parameters,
+                                        EmptyRequestBody.getInstance())
+                                .get(
+                                        operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                        TimeUnit.SECONDS);
+
+                // Convert the REST API response to a Map<String, Object> to handle nested objects
+                Map<String, Object> rawResponse =
+                        objectMapper.convertValue(
+                                checkpointConfigInfo,
+                                new com.fasterxml.jackson.core.type.TypeReference<
+                                        Map<String, Object>>() {});
+
+                LOG.debug(
+                        "Raw checkpoint configuration response for job {}: {}", jobId, rawResponse);
+
+                // Map the JSON response fields to correct Flink configuration keys
+                Map<String, String> mappedConfig = new HashMap<>();
+
+                // Map checkpoint mode
+                if (rawResponse.containsKey("processingMode")) {
+                    String mode = String.valueOf(rawResponse.get("processingMode"));
+                    if ("exactly_once".equals(mode)) {
+                        mappedConfig.put("execution.checkpointing.mode", "EXACTLY_ONCE");
+                    } else if ("at_least_once".equals(mode)) {
+                        mappedConfig.put("execution.checkpointing.mode", "AT_LEAST_ONCE");
+                    }
+                }
+
+                // Map checkpoint interval (from milliseconds to duration string)
+                if (rawResponse.containsKey("checkpointInterval")) {
+                    String intervalMs = String.valueOf(rawResponse.get("checkpointInterval"));
+                    mappedConfig.put("execution.checkpointing.interval", intervalMs + "ms");
+                }
+
+                // Map checkpoint timeout (from milliseconds to duration string)
+                if (rawResponse.containsKey("checkpointTimeout")) {
+                    String timeoutMs = String.valueOf(rawResponse.get("checkpointTimeout"));
+                    mappedConfig.put("execution.checkpointing.timeout", timeoutMs + "ms");
+                }
+
+                // Map min pause between checkpoints (from milliseconds to duration string)
+                if (rawResponse.containsKey("minPauseBetweenCheckpoints")) {
+                    String minPauseMs =
+                            String.valueOf(rawResponse.get("minPauseBetweenCheckpoints"));
+                    mappedConfig.put("execution.checkpointing.min-pause", minPauseMs + "ms");
+                }
+
+                // Map max concurrent checkpoints
+                if (rawResponse.containsKey("maxConcurrentCheckpoints")) {
+                    mappedConfig.put(
+                            "execution.checkpointing.max-concurrent-checkpoints",
+                            String.valueOf(rawResponse.get("maxConcurrentCheckpoints")));
+                }
+
+                // Map tolerable failed checkpoints
+                if (rawResponse.containsKey("tolerableFailedCheckpoints")) {
+                    mappedConfig.put(
+                            "execution.checkpointing.tolerable-failed-checkpoints",
+                            String.valueOf(rawResponse.get("tolerableFailedCheckpoints")));
+                }
+
+                // Map externalized checkpoint retention
+                if (rawResponse.containsKey("externalizedCheckpointInfo")) {
+                    Object externalizationObj = rawResponse.get("externalizedCheckpointInfo");
+                    if (externalizationObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> externalization =
+                                (Map<String, Object>) externalizationObj;
+                        Boolean enabled = (Boolean) externalization.get("enabled");
+                        Boolean deleteOnCancellation =
+                                (Boolean) externalization.get("deleteOnCancellation");
+
+                        if (Boolean.TRUE.equals(enabled)) {
+                            if (Boolean.TRUE.equals(deleteOnCancellation)) {
+                                mappedConfig.put(
+                                        "execution.checkpointing.externalized-checkpoint-retention",
+                                        "DELETE_ON_CANCELLATION");
+                            } else {
+                                mappedConfig.put(
+                                        "execution.checkpointing.externalized-checkpoint-retention",
+                                        "RETAIN_ON_CANCELLATION");
+                            }
+                        } else {
+                            mappedConfig.put(
+                                    "execution.checkpointing.externalized-checkpoint-retention",
+                                    "NO_EXTERNALIZED_CHECKPOINTS");
+                        }
+                    }
+                }
+
+                // Map state backend
+                if (rawResponse.containsKey("stateBackend")) {
+                    String stateBackend = String.valueOf(rawResponse.get("stateBackend"));
+                    if ("EmbeddedRocksDBStateBackend".equals(stateBackend)) {
+                        mappedConfig.put("state.backend.type", "rocksdb");
+                    } else if ("HashMapStateBackend".equals(stateBackend)) {
+                        mappedConfig.put("state.backend.type", "hashmap");
+                    } else {
+                        mappedConfig.put("state.backend.type", stateBackend.toLowerCase());
+                    }
+                }
+
+                // Map checkpoint storage
+                if (rawResponse.containsKey("checkpointStorage")) {
+                    String checkpointStorage = String.valueOf(rawResponse.get("checkpointStorage"));
+                    if ("FileSystemCheckpointStorage".equals(checkpointStorage)) {
+                        mappedConfig.put("execution.checkpointing.storage", "filesystem");
+                    } else if ("JobManagerCheckpointStorage".equals(checkpointStorage)) {
+                        mappedConfig.put("execution.checkpointing.storage", "jobmanager");
+                    } else {
+                        mappedConfig.put(
+                                "execution.checkpointing.storage", checkpointStorage.toLowerCase());
+                    }
+                }
+
+                // Map unaligned checkpoints
+                if (rawResponse.containsKey("unalignedCheckpoints")) {
+                    mappedConfig.put(
+                            "execution.checkpointing.unaligned.enabled",
+                            String.valueOf(rawResponse.get("unalignedCheckpoints")));
+                }
+
+                // Map aligned checkpoint timeout (from milliseconds to duration string)
+                if (rawResponse.containsKey("alignedCheckpointTimeout")) {
+                    String alignedTimeoutMs =
+                            String.valueOf(rawResponse.get("alignedCheckpointTimeout"));
+                    mappedConfig.put(
+                            "execution.checkpointing.aligned-checkpoint-timeout",
+                            alignedTimeoutMs + "ms");
+                }
+
+                // Map checkpoints after tasks finish
+                if (rawResponse.containsKey("checkpointsWithFinishedTasks")) {
+                    mappedConfig.put(
+                            "execution.checkpointing.checkpoints-after-tasks-finish",
+                            String.valueOf(rawResponse.get("checkpointsWithFinishedTasks")));
+                }
+
+                // Map state changelog settings
+                if (rawResponse.containsKey("stateChangelog")) {
+                    mappedConfig.put(
+                            "state.changelog.enabled",
+                            String.valueOf(rawResponse.get("stateChangelog")));
+                }
+
+                if (rawResponse.containsKey("periodicMaterializationInterval")) {
+                    String intervalMs =
+                            String.valueOf(rawResponse.get("periodicMaterializationInterval"));
+                    mappedConfig.put(
+                            "state.changelog.periodic-materialize.interval", intervalMs + "ms");
+                }
+
+                if (rawResponse.containsKey("changelogStorage")) {
+                    mappedConfig.put(
+                            "state.changelog.storage",
+                            String.valueOf(rawResponse.get("changelogStorage")));
+                }
+
+                LOG.debug(
+                        "Mapped {} checkpoint configuration entries for job {}: {}",
+                        mappedConfig.size(),
+                        jobId,
+                        mappedConfig);
+
+                return mappedConfig;
+
+            } catch (Exception e) {
+                LOG.warn(
+                        "Failed to fetch checkpoint configuration for job {} via REST API, falling back to job config logic.",
+                        jobId,
+                        e);
+
+                if (e.getMessage() != null && e.getMessage().contains("404")) {
+                    throw new RuntimeException(e);
+                }
+                // We fallback to this logic, because the checkpoint config query is not available
+                // int pre Flink 1.15
+                return getJobConfigFromRest(clusterClient, jobId).entrySet().stream()
+                        .filter(
+                                entry ->
+                                        entry.getKey().startsWith("execution.checkpointing.")
+                                                || entry.getKey()
+                                                        .startsWith("state.backend.changelog"))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            }
+        }
+    }
+
+    private Map<String, String> getJobConfigFromRest(
+            RestClusterClient<String> clusterClient, JobID jobId) throws Exception {
+        var jobConfigHeaders = JobConfigHeaders.getInstance();
+        var parameters = new JobMessageParameters();
+        parameters.jobPathParameter.resolve(jobId);
+        var jobConfigInfo =
+                clusterClient
+                        .sendRequest(jobConfigHeaders, parameters, EmptyRequestBody.getInstance())
+                        .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        return objectMapper.convertValue(
+                jobConfigInfo,
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
     }
 
     @VisibleForTesting

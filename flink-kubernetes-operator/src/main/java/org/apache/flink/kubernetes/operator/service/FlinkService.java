@@ -133,6 +133,28 @@ public interface FlinkService {
             AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
             throws Exception;
 
+    /**
+     * Fetches the actual runtime configuration of a job from Flink REST API. This is used to get
+     * the real configuration after programmatic overrides.
+     *
+     * @param conf Configuration for REST client
+     * @param jobId Job ID to fetch configuration for
+     * @return Map of configuration key-value pairs
+     * @throws Exception if REST call fails
+     */
+    Map<String, String> getJobConfiguration(Configuration conf, JobID jobId) throws Exception;
+
+    /**
+     * Fetches the checkpoint configuration of a job from Flink REST API.
+     *
+     * @param conf Configuration for REST client
+     * @param jobId Job ID to fetch checkpoint configuration for
+     * @return CheckpointConfigInfo containing checkpoint configuration
+     * @throws Exception if REST call fails
+     */
+    Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
+            throws Exception;
+
     /** Result of a cancel operation. */
     @AllArgsConstructor
     class CancelResult {
