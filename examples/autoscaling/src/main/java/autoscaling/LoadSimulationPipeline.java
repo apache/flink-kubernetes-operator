@@ -55,7 +55,7 @@ import java.time.temporal.ChronoUnit;
  *
  *                    A concrete example: "1;2;4\n4;2;1"
  *                      Two branches are created with three tasks each. On the first branch, the tasks have
- *                      a load of 1, 2, and 3 respectively. On the second branch, the tasks have the load reversed.
+ *                      a load of 1, 2, and 4 respectively. On the second branch, the tasks have the load reversed.
  *                      This means, that at peak Flink Autoscaling at target utilization of 0.5, the parallelisms of
  *                      the tasks will be 2, 4, 8 for branch one and vise-versa for branch two.
  * </pre>
