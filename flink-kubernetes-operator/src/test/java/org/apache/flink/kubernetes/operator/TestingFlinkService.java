@@ -105,6 +105,10 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
+
 /** Flink service mock for tests. */
 public class TestingFlinkService extends AbstractFlinkService {
 
@@ -244,9 +248,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     protected void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
             throw new UpgradeFailureException(
-                    "HA metadata not available to restore from last state. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
+                    MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to restore from last state. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
                     "RestoreFailed");
         }
     }
