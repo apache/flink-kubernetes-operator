@@ -149,6 +149,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -962,6 +963,32 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    // Constants for checkpoint configuration field mappings
+    private static final Map<String, String> CHECKPOINT_FIELD_MAPPINGS =
+            Map.of(
+                    "processingMode", "execution.checkpointing.mode",
+                    "checkpointInterval", "execution.checkpointing.interval",
+                    "checkpointTimeout", "execution.checkpointing.timeout",
+                    "minPauseBetweenCheckpoints", "execution.checkpointing.min-pause",
+                    "maxConcurrentCheckpoints",
+                            "execution.checkpointing.max-concurrent-checkpoints",
+                    "tolerableFailedCheckpoints",
+                            "execution.checkpointing.tolerable-failed-checkpoints",
+                    "unalignedCheckpoints", "execution.checkpointing.unaligned.enabled",
+                    "alignedCheckpointTimeout",
+                            "execution.checkpointing.aligned-checkpoint-timeout",
+                    "checkpointsWithFinishedTasks",
+                            "execution.checkpointing.checkpoints-after-tasks-finish",
+                    "stateChangelog", "state.changelog.enabled");
+
+    private static final Set<String> DURATION_FIELDS =
+            Set.of(
+                    "checkpointInterval",
+                    "checkpointTimeout",
+                    "minPauseBetweenCheckpoints",
+                    "alignedCheckpointTimeout",
+                    "periodicMaterializationInterval");
+
     @Override
     public Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
             throws Exception {
@@ -982,7 +1009,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         operatorConfig.getFlinkClientTimeout().toSeconds(),
                                         TimeUnit.SECONDS);
 
-                // Convert the REST API response to a Map<String, Object> to handle nested objects
+                // Convert response to handle nested objects
                 Map<String, Object> rawResponse =
                         objectMapper.convertValue(
                                 checkpointConfigInfo,
@@ -992,156 +1019,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 LOG.debug(
                         "Raw checkpoint configuration response for job {}: {}", jobId, rawResponse);
 
-                // Map the JSON response fields to correct Flink configuration keys
-                Map<String, String> mappedConfig = new HashMap<>();
-
-                // Map checkpoint mode
-                if (rawResponse.containsKey("processingMode")) {
-                    String mode = String.valueOf(rawResponse.get("processingMode"));
-                    if ("exactly_once".equals(mode)) {
-                        mappedConfig.put("execution.checkpointing.mode", "EXACTLY_ONCE");
-                    } else if ("at_least_once".equals(mode)) {
-                        mappedConfig.put("execution.checkpointing.mode", "AT_LEAST_ONCE");
-                    }
-                }
-
-                // Map checkpoint interval (from milliseconds to duration string)
-                if (rawResponse.containsKey("checkpointInterval")) {
-                    String intervalMs = String.valueOf(rawResponse.get("checkpointInterval"));
-                    mappedConfig.put("execution.checkpointing.interval", intervalMs + "ms");
-                }
-
-                // Map checkpoint timeout (from milliseconds to duration string)
-                if (rawResponse.containsKey("checkpointTimeout")) {
-                    String timeoutMs = String.valueOf(rawResponse.get("checkpointTimeout"));
-                    mappedConfig.put("execution.checkpointing.timeout", timeoutMs + "ms");
-                }
-
-                // Map min pause between checkpoints (from milliseconds to duration string)
-                if (rawResponse.containsKey("minPauseBetweenCheckpoints")) {
-                    String minPauseMs =
-                            String.valueOf(rawResponse.get("minPauseBetweenCheckpoints"));
-                    mappedConfig.put("execution.checkpointing.min-pause", minPauseMs + "ms");
-                }
-
-                // Map max concurrent checkpoints
-                if (rawResponse.containsKey("maxConcurrentCheckpoints")) {
-                    mappedConfig.put(
-                            "execution.checkpointing.max-concurrent-checkpoints",
-                            String.valueOf(rawResponse.get("maxConcurrentCheckpoints")));
-                }
-
-                // Map tolerable failed checkpoints
-                if (rawResponse.containsKey("tolerableFailedCheckpoints")) {
-                    mappedConfig.put(
-                            "execution.checkpointing.tolerable-failed-checkpoints",
-                            String.valueOf(rawResponse.get("tolerableFailedCheckpoints")));
-                }
-
-                // Map externalized checkpoint retention
-                if (rawResponse.containsKey("externalizedCheckpointInfo")) {
-                    Object externalizationObj = rawResponse.get("externalizedCheckpointInfo");
-                    if (externalizationObj instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> externalization =
-                                (Map<String, Object>) externalizationObj;
-                        Boolean enabled = (Boolean) externalization.get("enabled");
-                        Boolean deleteOnCancellation =
-                                (Boolean) externalization.get("deleteOnCancellation");
-
-                        if (Boolean.TRUE.equals(enabled)) {
-                            if (Boolean.TRUE.equals(deleteOnCancellation)) {
-                                mappedConfig.put(
-                                        "execution.checkpointing.externalized-checkpoint-retention",
-                                        "DELETE_ON_CANCELLATION");
-                            } else {
-                                mappedConfig.put(
-                                        "execution.checkpointing.externalized-checkpoint-retention",
-                                        "RETAIN_ON_CANCELLATION");
-                            }
-                        } else {
-                            mappedConfig.put(
-                                    "execution.checkpointing.externalized-checkpoint-retention",
-                                    "NO_EXTERNALIZED_CHECKPOINTS");
-                        }
-                    }
-                }
-
-                // Map state backend
-                if (rawResponse.containsKey("stateBackend")) {
-                    String stateBackend = String.valueOf(rawResponse.get("stateBackend"));
-                    if ("EmbeddedRocksDBStateBackend".equals(stateBackend)) {
-                        mappedConfig.put("state.backend.type", "rocksdb");
-                    } else if ("HashMapStateBackend".equals(stateBackend)) {
-                        mappedConfig.put("state.backend.type", "hashmap");
-                    } else {
-                        mappedConfig.put("state.backend.type", stateBackend.toLowerCase());
-                    }
-                }
-
-                // Map checkpoint storage
-                if (rawResponse.containsKey("checkpointStorage")) {
-                    String checkpointStorage = String.valueOf(rawResponse.get("checkpointStorage"));
-                    if ("FileSystemCheckpointStorage".equals(checkpointStorage)) {
-                        mappedConfig.put("execution.checkpointing.storage", "filesystem");
-                    } else if ("JobManagerCheckpointStorage".equals(checkpointStorage)) {
-                        mappedConfig.put("execution.checkpointing.storage", "jobmanager");
-                    } else {
-                        mappedConfig.put(
-                                "execution.checkpointing.storage", checkpointStorage.toLowerCase());
-                    }
-                }
-
-                // Map unaligned checkpoints
-                if (rawResponse.containsKey("unalignedCheckpoints")) {
-                    mappedConfig.put(
-                            "execution.checkpointing.unaligned.enabled",
-                            String.valueOf(rawResponse.get("unalignedCheckpoints")));
-                }
-
-                // Map aligned checkpoint timeout (from milliseconds to duration string)
-                if (rawResponse.containsKey("alignedCheckpointTimeout")) {
-                    String alignedTimeoutMs =
-                            String.valueOf(rawResponse.get("alignedCheckpointTimeout"));
-                    mappedConfig.put(
-                            "execution.checkpointing.aligned-checkpoint-timeout",
-                            alignedTimeoutMs + "ms");
-                }
-
-                // Map checkpoints after tasks finish
-                if (rawResponse.containsKey("checkpointsWithFinishedTasks")) {
-                    mappedConfig.put(
-                            "execution.checkpointing.checkpoints-after-tasks-finish",
-                            String.valueOf(rawResponse.get("checkpointsWithFinishedTasks")));
-                }
-
-                // Map state changelog settings
-                if (rawResponse.containsKey("stateChangelog")) {
-                    mappedConfig.put(
-                            "state.changelog.enabled",
-                            String.valueOf(rawResponse.get("stateChangelog")));
-                }
-
-                if (rawResponse.containsKey("periodicMaterializationInterval")) {
-                    String intervalMs =
-                            String.valueOf(rawResponse.get("periodicMaterializationInterval"));
-                    mappedConfig.put(
-                            "state.changelog.periodic-materialize.interval", intervalMs + "ms");
-                }
-
-                if (rawResponse.containsKey("changelogStorage")) {
-                    mappedConfig.put(
-                            "state.changelog.storage",
-                            String.valueOf(rawResponse.get("changelogStorage")));
-                }
-
-                LOG.debug(
-                        "Mapped {} checkpoint configuration entries for job {}: {}",
-                        mappedConfig.size(),
-                        jobId,
-                        mappedConfig);
-
-                return mappedConfig;
+                return mapCheckpointConfiguration(rawResponse, jobId);
 
             } catch (Exception e) {
                 LOG.warn(
@@ -1149,11 +1027,14 @@ public abstract class AbstractFlinkService implements FlinkService {
                         jobId,
                         e);
 
-                if (e.getMessage() != null && e.getMessage().contains("404")) {
-                    throw new RuntimeException(e);
+                if (e.getCause() instanceof RestClientException) {
+                    RestClientException restException = (RestClientException) e.getCause();
+                    if (restException.getHttpResponseStatus() == HttpResponseStatus.NOT_FOUND) {
+                        throw new RuntimeException("Job not found: " + jobId, e);
+                    }
                 }
-                // We fallback to this logic, because the checkpoint config query is not available
-                // int pre Flink 1.15
+
+                // Fallback for pre-Flink 1.15 versions
                 return getJobConfigFromRest(clusterClient, jobId).entrySet().stream()
                         .filter(
                                 entry ->
@@ -1162,6 +1043,120 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                         .startsWith("state.backend.changelog"))
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             }
+        }
+    }
+
+    private Map<String, String> mapCheckpointConfiguration(
+            Map<String, Object> rawResponse, JobID jobId) {
+        Map<String, String> mappedConfig = new HashMap<>();
+
+        // Handle simple field mappings
+        CHECKPOINT_FIELD_MAPPINGS.forEach(
+                (jsonField, configKey) -> {
+                    if (rawResponse.containsKey(jsonField)) {
+                        String value = String.valueOf(rawResponse.get(jsonField));
+
+                        // Special handling for processing mode
+                        if ("processingMode".equals(jsonField)) {
+                            value = mapProcessingMode(value);
+                        }
+
+                        // Add duration suffix for time-based fields
+                        if (DURATION_FIELDS.contains(jsonField)) {
+                            value += "ms";
+                        }
+
+                        mappedConfig.put(configKey, value);
+                    }
+                });
+
+        // Handle complex nested mappings
+        mapExternalizedCheckpointInfo(rawResponse, mappedConfig);
+        mapStateBackend(rawResponse, mappedConfig);
+        mapCheckpointStorage(rawResponse, mappedConfig);
+        mapStateChangelog(rawResponse, mappedConfig);
+
+        LOG.debug(
+                "Mapped {} checkpoint configuration entries for job {}: {}",
+                mappedConfig.size(),
+                jobId,
+                mappedConfig);
+        return mappedConfig;
+    }
+
+    private String mapProcessingMode(String mode) {
+        if ("exactly_once".equals(mode)) {
+            return "EXACTLY_ONCE";
+        } else if ("at_least_once".equals(mode)) {
+            return "AT_LEAST_ONCE";
+        } else {
+            return mode.toUpperCase();
+        }
+    }
+
+    private void mapExternalizedCheckpointInfo(
+            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
+        Object externalizationObj = rawResponse.get("externalizedCheckpointInfo");
+        if (externalizationObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> externalization = (Map<String, Object>) externalizationObj;
+            Boolean enabled = (Boolean) externalization.get("enabled");
+            Boolean deleteOnCancellation = (Boolean) externalization.get("deleteOnCancellation");
+
+            String retention = "NO_EXTERNALIZED_CHECKPOINTS";
+            if (Boolean.TRUE.equals(enabled)) {
+                retention =
+                        Boolean.TRUE.equals(deleteOnCancellation)
+                                ? "DELETE_ON_CANCELLATION"
+                                : "RETAIN_ON_CANCELLATION";
+            }
+            mappedConfig.put(
+                    "execution.checkpointing.externalized-checkpoint-retention", retention);
+        }
+    }
+
+    private void mapStateBackend(
+            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
+        if (rawResponse.containsKey("stateBackend")) {
+            String stateBackend = String.valueOf(rawResponse.get("stateBackend"));
+            String backendType;
+            if ("EmbeddedRocksDBStateBackend".equals(stateBackend)) {
+                backendType = "rocksdb";
+            } else if ("HashMapStateBackend".equals(stateBackend)) {
+                backendType = "hashmap";
+            } else {
+                backendType = stateBackend.toLowerCase();
+            }
+            mappedConfig.put("state.backend.type", backendType);
+        }
+    }
+
+    private void mapCheckpointStorage(
+            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
+        if (rawResponse.containsKey("checkpointStorage")) {
+            String checkpointStorage = String.valueOf(rawResponse.get("checkpointStorage"));
+            String storageType;
+            if ("FileSystemCheckpointStorage".equals(checkpointStorage)) {
+                storageType = "filesystem";
+            } else if ("JobManagerCheckpointStorage".equals(checkpointStorage)) {
+                storageType = "jobmanager";
+            } else {
+                storageType = checkpointStorage.toLowerCase();
+            }
+            mappedConfig.put("execution.checkpointing.storage", storageType);
+        }
+    }
+
+    private void mapStateChangelog(
+            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
+        if (rawResponse.containsKey("periodicMaterializationInterval")) {
+            String intervalMs = String.valueOf(rawResponse.get("periodicMaterializationInterval"));
+            mappedConfig.put("state.changelog.periodic-materialize.interval", intervalMs + "ms");
+        }
+
+        if (rawResponse.containsKey("changelogStorage")) {
+            mappedConfig.put(
+                    "state.changelog.storage", String.valueOf(rawResponse.get("changelogStorage")));
         }
     }
 
