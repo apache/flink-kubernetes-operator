@@ -59,7 +59,9 @@ public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment
 
     @Override
     protected Configuration createObserveConfig() {
-        return configManager.getObserveConfig(getResource());
+        // Use enhanced observe config that fetches runtime configuration from the job
+        // and overrides deployment spec configuration with actual runtime values
+        return configManager.getObserveConfigWithRuntimeOverrides(getResource(), getFlinkService());
     }
 
     @Override
