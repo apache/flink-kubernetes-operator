@@ -163,9 +163,7 @@ public class FlinkConfigManager {
                         .maximumSize(
                                 defaultConfig.get(
                                         KubernetesOperatorConfigOptions
-                                                .OPERATOR_CONFIG_CACHE_SIZE)) // Reasonable limit
-                        // for runtime config
-                        // cache
+                                                .OPERATOR_CONFIG_CACHE_SIZE))
                         .expireAfterAccess(cacheTimeout)
                         .build();
 
