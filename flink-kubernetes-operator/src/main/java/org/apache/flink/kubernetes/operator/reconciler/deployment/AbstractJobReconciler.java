@@ -59,6 +59,8 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Predicate;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
@@ -227,7 +229,8 @@ public abstract class AbstractJobReconciler<
 
             if (!SnapshotUtils.lastSavepointKnown(status)) {
                 throw new UpgradeFailureException(
-                        "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. Manual restore required.",
+                        "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. "
+                                + MSG_MANUAL_RESTORE_REQUIRED,
                         "UpgradeFailed");
             }
             LOG.info("Job is in terminal state, ready for upgrade from observed latest state");
@@ -360,7 +363,8 @@ public abstract class AbstractJobReconciler<
 
         var conf = ctx.getObserveConfig();
         if (!ctx.getFlinkService().isHaMetadataAvailable(conf)) {
-            LOG.info("HA metadata not available, cancel will be used instead of last-state");
+            LOG.info(
+                    "{}, cancel will be used instead of last-state", MSG_HA_METADATA_NOT_AVAILABLE);
             return true;
         }
         return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB);
