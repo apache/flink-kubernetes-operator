@@ -148,6 +148,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
     private final Map<Long, String> checkpointStats = new HashMap<>();
     @Setter private boolean throwCheckpointingDisabledError = false;
+    @Setter private boolean throwJobNotFoundError = false;
     @Setter private Throwable jobFailedErr;
 
     @Getter private int desiredReplicas = 0;
@@ -644,6 +645,13 @@ public class TestingFlinkService extends AbstractFlinkService {
             throw new ExecutionException(
                     new RestClientException(
                             "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST));
+        }
+
+        if (throwJobNotFoundError) {
+            throw new ExecutionException(
+                    new RestClientException(
+                            String.format("Job %s not found", jobId.toString()),
+                            HttpResponseStatus.NOT_FOUND));
         }
 
         if (checkpointInfo != null) {
