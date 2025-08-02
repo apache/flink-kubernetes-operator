@@ -560,6 +560,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                     && e.getMessage().contains("Checkpointing has not been enabled")) {
                 LOG.warn("Checkpointing not enabled for job {}", jobId, e);
                 return Optional.empty();
+            } else if (e instanceof ExecutionException
+                    && e.getMessage() != null
+                    && e.getMessage()
+                            .contains(String.format("Job %s not found", jobId.toString()))) {
+                LOG.warn("Job {} not found", jobId, e);
+                return Optional.empty();
             }
             throw new ReconciliationException("Could not observe latest savepoint information", e);
         }
