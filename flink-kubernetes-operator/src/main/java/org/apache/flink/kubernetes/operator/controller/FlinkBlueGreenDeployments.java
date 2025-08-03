@@ -30,7 +30,7 @@ import java.util.Set;
 /** Utility to handle A/B deployments. */
 @Data
 @NoArgsConstructor
-class FlinkBlueGreenDeployments {
+public class FlinkBlueGreenDeployments {
     private FlinkDeployment flinkDeploymentBlue;
     private FlinkDeployment flinkDeploymentGreen;
 

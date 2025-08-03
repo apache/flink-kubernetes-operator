@@ -53,9 +53,9 @@ public class FlinkBlueGreenDeploymentConfigOptions {
     public static final ConfigOption<Duration> ABORT_GRACE_PERIOD =
             operatorConfig("abort.grace-period")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(2))
+                    .defaultValue(Duration.ofMinutes(10))
                     .withDescription(
-                            "The max time to wait in milliseconds for a deployment to become ready before aborting it. Cannot be smaller than 2 minutes.");
+                            "The max time to wait in milliseconds for a deployment to become ready before aborting it. Cannot be smaller than 10 minutes.");
 
     public static final ConfigOption<Duration> RECONCILIATION_RESCHEDULING_INTERVAL =
             operatorConfig("reconciliation.reschedule-interval")
