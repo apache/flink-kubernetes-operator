@@ -30,12 +30,12 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
+import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.diff.FlinkBlueGreenDeploymentSpecDiff;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,13 +75,12 @@ public class BlueGreenSpecUtils {
     /**
      * Checks if the Blue/Green deployment spec has changed compared to the last reconciled spec.
      *
-     * @param newSpec the new spec to compare
-     * @param deploymentStatus the deployment status containing the last reconciled spec
+     * @param context the Blue/Green transition context
      * @return true if the spec has changed, false otherwise
      */
-    public static boolean hasSpecChanged(
-            FlinkBlueGreenDeploymentSpec newSpec, FlinkBlueGreenDeploymentStatus deploymentStatus) {
+    public static boolean hasSpecChanged(BlueGreenTransitionContext context) {
 
+        FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
         String lastReconciledSpec = deploymentStatus.getLastReconciledSpec();
         FlinkBlueGreenDeploymentSpec lastSpec =
                 SpecUtils.readSpecFromJSON(
@@ -89,7 +88,9 @@ public class BlueGreenSpecUtils {
 
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(
-                        KubernetesDeploymentMode.NATIVE, lastSpec, newSpec);
+                        KubernetesDeploymentMode.NATIVE,
+                        lastSpec,
+                        context.getBgDeployment().getSpec());
 
         BlueGreenDiffType diffType = diff.compare();
 
@@ -181,11 +182,10 @@ public class BlueGreenSpecUtils {
         return previousState;
     }
 
-    public static void setLastReconciledSpec(
-            FlinkBlueGreenDeployment bgDeployment,
-            FlinkBlueGreenDeploymentStatus deploymentStatus) {
+    public static void setLastReconciledSpec(BlueGreenTransitionContext context) {
+        FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
         deploymentStatus.setLastReconciledSpec(
-                SpecUtils.writeSpecAsJSON(bgDeployment.getSpec(), "spec"));
+                SpecUtils.writeSpecAsJSON(context.getBgDeployment().getSpec(), "spec"));
         deploymentStatus.setLastReconciledTimestamp(Instant.now().toString());
     }
 
@@ -215,15 +215,13 @@ public class BlueGreenSpecUtils {
         return lastCheckpoint.get();
     }
 
-    public static void revertToLastSpec(
-            FlinkBlueGreenDeployment bgDeployment,
-            FlinkBlueGreenDeploymentStatus deploymentStatus,
-            Context<FlinkBlueGreenDeployment> josdkContext) {
-        bgDeployment.setSpec(
-                SpecUtils.readSpecFromJSON(
-                        deploymentStatus.getLastReconciledSpec(),
-                        "spec",
-                        FlinkBlueGreenDeploymentSpec.class));
-        replaceFlinkBlueGreenDeployment(bgDeployment, josdkContext);
+    public static void revertToLastSpec(BlueGreenTransitionContext context) {
+        context.getBgDeployment()
+                .setSpec(
+                        SpecUtils.readSpecFromJSON(
+                                context.getDeploymentStatus().getLastReconciledSpec(),
+                                "spec",
+                                FlinkBlueGreenDeploymentSpec.class));
+        replaceFlinkBlueGreenDeployment(context);
     }
 }

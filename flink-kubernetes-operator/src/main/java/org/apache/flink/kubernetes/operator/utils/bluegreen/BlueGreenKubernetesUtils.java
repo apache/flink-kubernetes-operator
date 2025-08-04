@@ -24,11 +24,11 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.StatusDetails;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.List;
 
@@ -63,14 +63,14 @@ public class BlueGreenKubernetesUtils {
      * Deletes a Kubernetes FlinkDeployment resource.
      *
      * @param currentDeployment the FlinkDeployment to delete
-     * @param josdkContext the JOSDK context for Kubernetes API access
+     * @param context the Blue/Green transition context
      * @return true if the deployment was successfully deleted, false otherwise
      */
     public static boolean deleteKubernetesDeployment(
-            FlinkDeployment currentDeployment, Context<FlinkBlueGreenDeployment> josdkContext) {
+            FlinkDeployment currentDeployment, BlueGreenTransitionContext context) {
         String deploymentName = currentDeployment.getMetadata().getName();
         List<StatusDetails> deletedStatus =
-                josdkContext
+                context.getJosdkContext()
                         .getClient()
                         .resources(FlinkDeployment.class)
                         .inNamespace(currentDeployment.getMetadata().getNamespace())
@@ -82,19 +82,22 @@ public class BlueGreenKubernetesUtils {
     }
 
     public static void deployCluster(
-            FlinkBlueGreenDeployment bgDeployment,
+            BlueGreenTransitionContext context,
             DeploymentType deploymentType,
             Savepoint lastCheckpoint,
-            Context<FlinkBlueGreenDeployment> josdkContext,
             boolean isFirstDeployment) {
-        ObjectMeta bgMeta = bgDeployment.getMetadata();
+        ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
 
         FlinkDeployment flinkDeployment =
                 prepareFlinkDeployment(
-                        bgDeployment, deploymentType, lastCheckpoint, isFirstDeployment, bgMeta);
+                        context.getBgDeployment(),
+                        deploymentType,
+                        lastCheckpoint,
+                        isFirstDeployment,
+                        bgMeta);
 
         // Deploy
-        josdkContext.getClient().resource(flinkDeployment).createOrReplace();
+        context.getJosdkContext().getClient().resource(flinkDeployment).createOrReplace();
     }
 
     /**
@@ -109,18 +112,17 @@ public class BlueGreenKubernetesUtils {
     }
 
     public static void suspendDeployment(
-            Context<FlinkBlueGreenDeployment> josdkContext, FlinkDeployment nextDeployment) {
+            BlueGreenTransitionContext context, FlinkDeployment nextDeployment) {
         nextDeployment.getSpec().getJob().setState(JobState.SUSPENDED);
-        updateFlinkDeployment(nextDeployment, josdkContext);
+        updateFlinkDeployment(nextDeployment, context);
     }
 
     public static void updateFlinkDeployment(
-            FlinkDeployment nextDeployment, Context<FlinkBlueGreenDeployment> josdkContext) {
-        josdkContext.getClient().resource(nextDeployment).update();
+            FlinkDeployment nextDeployment, BlueGreenTransitionContext context) {
+        context.getJosdkContext().getClient().resource(nextDeployment).update();
     }
 
-    public static void replaceFlinkBlueGreenDeployment(
-            FlinkBlueGreenDeployment bgDeployment, Context<FlinkBlueGreenDeployment> josdkContext) {
-        josdkContext.getClient().resource(bgDeployment).replace();
+    public static void replaceFlinkBlueGreenDeployment(BlueGreenTransitionContext context) {
+        context.getJosdkContext().getClient().resource(context.getBgDeployment()).replace();
     }
 }

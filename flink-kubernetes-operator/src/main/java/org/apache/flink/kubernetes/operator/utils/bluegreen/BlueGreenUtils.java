@@ -17,8 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
+import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 
 import java.time.Instant;
@@ -56,13 +55,13 @@ public class BlueGreenUtils {
     /**
      * Gets the reconciliation rescheduling interval for the Blue/Green deployment.
      *
-     * @param bgDeployment the Blue/Green deployment
+     * @param context the Blue/Green transition context
      * @return reconciliation interval in milliseconds
      */
-    public static long getReconciliationReschedInterval(FlinkBlueGreenDeployment bgDeployment) {
+    public static long getReconciliationReschedInterval(BlueGreenTransitionContext context) {
         return Math.max(
                 BlueGreenSpecUtils.getConfigOption(
-                                bgDeployment, RECONCILIATION_RESCHEDULING_INTERVAL)
+                                context.getBgDeployment(), RECONCILIATION_RESCHEDULING_INTERVAL)
                         .toMillis(),
                 0);
     }
@@ -70,12 +69,13 @@ public class BlueGreenUtils {
     /**
      * Gets the deployment deletion delay for the Blue/Green deployment.
      *
-     * @param bgDeployment the Blue/Green deployment
+     * @param context the Blue/Green transition context
      * @return deletion delay in milliseconds
      */
-    public static long getDeploymentDeletionDelay(FlinkBlueGreenDeployment bgDeployment) {
+    public static long getDeploymentDeletionDelay(BlueGreenTransitionContext context) {
         return Math.max(
-                BlueGreenSpecUtils.getConfigOption(bgDeployment, DEPLOYMENT_DELETION_DELAY)
+                BlueGreenSpecUtils.getConfigOption(
+                                context.getBgDeployment(), DEPLOYMENT_DELETION_DELAY)
                         .toMillis(),
                 0);
     }
@@ -83,12 +83,13 @@ public class BlueGreenUtils {
     /**
      * Gets the abort grace period for the Blue/Green deployment.
      *
-     * @param bgDeployment the Blue/Green deployment
+     * @param context the Blue/Green transition context
      * @return abort grace period in milliseconds
      */
-    public static long getAbortGracePeriod(FlinkBlueGreenDeployment bgDeployment) {
+    public static long getAbortGracePeriod(BlueGreenTransitionContext context) {
         long abortGracePeriod =
-                BlueGreenSpecUtils.getConfigOption(bgDeployment, ABORT_GRACE_PERIOD).toMillis();
+                BlueGreenSpecUtils.getConfigOption(context.getBgDeployment(), ABORT_GRACE_PERIOD)
+                        .toMillis();
         return Math.max(
                 abortGracePeriod, FlinkBlueGreenDeploymentController.minimumAbortGracePeriodMs);
     }
@@ -96,13 +97,12 @@ public class BlueGreenUtils {
     /**
      * Sets the abort timestamp in the deployment status based on current time and grace period.
      *
-     * @param bgDeployment the Blue/Green deployment
-     * @param deploymentStatus the deployment status to update
+     * @param context the Blue/Green transition context
      */
-    public static void setAbortTimestamp(
-            FlinkBlueGreenDeployment bgDeployment,
-            FlinkBlueGreenDeploymentStatus deploymentStatus) {
-        deploymentStatus.setAbortTimestamp(
-                millisToInstantStr(System.currentTimeMillis() + getAbortGracePeriod(bgDeployment)));
+    public static void setAbortTimestamp(BlueGreenTransitionContext context) {
+        context.getDeploymentStatus()
+                .setAbortTimestamp(
+                        millisToInstantStr(
+                                System.currentTimeMillis() + getAbortGracePeriod(context)));
     }
 }
