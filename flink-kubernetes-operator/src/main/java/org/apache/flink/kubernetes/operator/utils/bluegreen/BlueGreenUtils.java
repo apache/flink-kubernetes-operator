@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 
 import java.time.Instant;
@@ -58,7 +58,7 @@ public class BlueGreenUtils {
      * @param context the Blue/Green transition context
      * @return reconciliation interval in milliseconds
      */
-    public static long getReconciliationReschedInterval(BlueGreenTransitionContext context) {
+    public static long getReconciliationReschedInterval(BlueGreenContext context) {
         return Math.max(
                 BlueGreenSpecUtils.getConfigOption(
                                 context.getBgDeployment(), RECONCILIATION_RESCHEDULING_INTERVAL)
@@ -72,7 +72,7 @@ public class BlueGreenUtils {
      * @param context the Blue/Green transition context
      * @return deletion delay in milliseconds
      */
-    public static long getDeploymentDeletionDelay(BlueGreenTransitionContext context) {
+    public static long getDeploymentDeletionDelay(BlueGreenContext context) {
         return Math.max(
                 BlueGreenSpecUtils.getConfigOption(
                                 context.getBgDeployment(), DEPLOYMENT_DELETION_DELAY)
@@ -86,7 +86,7 @@ public class BlueGreenUtils {
      * @param context the Blue/Green transition context
      * @return abort grace period in milliseconds
      */
-    public static long getAbortGracePeriod(BlueGreenTransitionContext context) {
+    public static long getAbortGracePeriod(BlueGreenContext context) {
         long abortGracePeriod =
                 BlueGreenSpecUtils.getConfigOption(context.getBgDeployment(), ABORT_GRACE_PERIOD)
                         .toMillis();
@@ -99,7 +99,7 @@ public class BlueGreenUtils {
      *
      * @param context the Blue/Green transition context
      */
-    public static void setAbortTimestamp(BlueGreenTransitionContext context) {
+    public static void setAbortTimestamp(BlueGreenContext context) {
         context.getDeploymentStatus()
                 .setAbortTimestamp(
                         millisToInstantStr(

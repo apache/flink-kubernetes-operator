@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.utils.bluegreen;
+package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
@@ -35,7 +34,7 @@ import java.util.List;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
 
 /** Utility methods for handling Kubernetes operations in Blue/Green deployments. */
-public class BlueGreenKubernetesUtils {
+public class BlueGreenKubernetesService {
 
     /**
      * Creates ObjectMeta for a dependent Kubernetes resource with proper owner references.
@@ -59,30 +58,8 @@ public class BlueGreenKubernetesUtils {
         return objectMeta;
     }
 
-    /**
-     * Deletes a Kubernetes FlinkDeployment resource.
-     *
-     * @param currentDeployment the FlinkDeployment to delete
-     * @param context the Blue/Green transition context
-     * @return true if the deployment was successfully deleted, false otherwise
-     */
-    public static boolean deleteKubernetesDeployment(
-            FlinkDeployment currentDeployment, BlueGreenTransitionContext context) {
-        String deploymentName = currentDeployment.getMetadata().getName();
-        List<StatusDetails> deletedStatus =
-                context.getJosdkContext()
-                        .getClient()
-                        .resources(FlinkDeployment.class)
-                        .inNamespace(currentDeployment.getMetadata().getNamespace())
-                        .withName(deploymentName)
-                        .delete();
-
-        return deletedStatus.size() == 1
-                && deletedStatus.get(0).getKind().equals("FlinkDeployment");
-    }
-
     public static void deployCluster(
-            BlueGreenTransitionContext context,
+            BlueGreenContext context,
             DeploymentType deploymentType,
             Savepoint lastCheckpoint,
             boolean isFirstDeployment) {
@@ -106,23 +83,45 @@ public class BlueGreenKubernetesUtils {
      * @param deployment the FlinkDeployment to check
      * @return true if the deployment is ready, false otherwise
      */
-    public static boolean isDeploymentReady(FlinkDeployment deployment) {
+    public static boolean isFlinkDeploymentReady(FlinkDeployment deployment) {
         return ResourceLifecycleState.STABLE == deployment.getStatus().getLifecycleState()
                 && JobStatus.RUNNING == deployment.getStatus().getJobStatus().getState();
     }
 
-    public static void suspendDeployment(
-            BlueGreenTransitionContext context, FlinkDeployment nextDeployment) {
+    public static void suspendFlinkDeployment(
+            BlueGreenContext context, FlinkDeployment nextDeployment) {
         nextDeployment.getSpec().getJob().setState(JobState.SUSPENDED);
         updateFlinkDeployment(nextDeployment, context);
     }
 
     public static void updateFlinkDeployment(
-            FlinkDeployment nextDeployment, BlueGreenTransitionContext context) {
+            FlinkDeployment nextDeployment, BlueGreenContext context) {
         context.getJosdkContext().getClient().resource(nextDeployment).update();
     }
 
-    public static void replaceFlinkBlueGreenDeployment(BlueGreenTransitionContext context) {
+    public static void replaceFlinkBlueGreenDeployment(BlueGreenContext context) {
         context.getJosdkContext().getClient().resource(context.getBgDeployment()).replace();
+    }
+
+    /**
+     * Deletes a Kubernetes FlinkDeployment resource.
+     *
+     * @param currentDeployment the FlinkDeployment to delete
+     * @param context the Blue/Green transition context
+     * @return true if the deployment was successfully deleted, false otherwise
+     */
+    public static boolean deleteFlinkDeployment(
+            FlinkDeployment currentDeployment, BlueGreenContext context) {
+        String deploymentName = currentDeployment.getMetadata().getName();
+        List<StatusDetails> deletedStatus =
+                context.getJosdkContext()
+                        .getClient()
+                        .resources(FlinkDeployment.class)
+                        .inNamespace(currentDeployment.getMetadata().getNamespace())
+                        .withName(deploymentName)
+                        .delete();
+
+        return deletedStatus.size() == 1
+                && deletedStatus.get(0).getKind().equals("FlinkDeployment");
     }
 }

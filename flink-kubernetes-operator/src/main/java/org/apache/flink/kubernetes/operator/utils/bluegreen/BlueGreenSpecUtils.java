@@ -26,12 +26,10 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
-import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
-import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
-import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.diff.FlinkBlueGreenDeploymentSpecDiff;
 
@@ -43,8 +41,8 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenKubernetesUtils.getDependentObjectMeta;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenKubernetesUtils.replaceFlinkBlueGreenDeployment;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.getDependentObjectMeta;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.replaceFlinkBlueGreenDeployment;
 
 /** Utility methods for handling Blue/Green deployment specifications. */
 public class BlueGreenSpecUtils {
@@ -78,7 +76,7 @@ public class BlueGreenSpecUtils {
      * @param context the Blue/Green transition context
      * @return true if the spec has changed, false otherwise
      */
-    public static boolean hasSpecChanged(BlueGreenTransitionContext context) {
+    public static boolean hasSpecChanged(BlueGreenContext context) {
 
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
         String lastReconciledSpec = deploymentStatus.getLastReconciledSpec();
@@ -166,23 +164,7 @@ public class BlueGreenSpecUtils {
         return flinkDeployment;
     }
 
-    public static FlinkBlueGreenDeploymentState getPreviousState(
-            FlinkBlueGreenDeploymentState nextState, FlinkBlueGreenDeployments deployments) {
-        FlinkBlueGreenDeploymentState previousState;
-        if (deployments.getNumberOfDeployments() == 1) {
-            previousState = FlinkBlueGreenDeploymentState.INITIALIZING_BLUE;
-        } else if (deployments.getNumberOfDeployments() == 2) {
-            previousState =
-                    nextState == FlinkBlueGreenDeploymentState.ACTIVE_BLUE
-                            ? FlinkBlueGreenDeploymentState.ACTIVE_GREEN
-                            : FlinkBlueGreenDeploymentState.ACTIVE_BLUE;
-        } else {
-            throw new IllegalStateException("No blue/green FlinkDeployments found!");
-        }
-        return previousState;
-    }
-
-    public static void setLastReconciledSpec(BlueGreenTransitionContext context) {
+    public static void setLastReconciledSpec(BlueGreenContext context) {
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
         deploymentStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecAsJSON(context.getBgDeployment().getSpec(), "spec"));
@@ -215,7 +197,7 @@ public class BlueGreenSpecUtils {
         return lastCheckpoint.get();
     }
 
-    public static void revertToLastSpec(BlueGreenTransitionContext context) {
+    public static void revertToLastSpec(BlueGreenContext context) {
         context.getBgDeployment()
                 .setSpec(
                         SpecUtils.readSpecFromJSON(

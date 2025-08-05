@@ -19,8 +19,12 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
-import org.apache.flink.kubernetes.operator.controller.BlueGreenStateMachine.BlueGreenTransitionContext;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenStateHandlerRegistry;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 
 import io.javaoperatorsdk.operator.api.config.informer.InformerEventSourceConfiguration;
@@ -48,13 +52,13 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
     private final FlinkResourceContextFactory ctxFactory;
-    private final BlueGreenStateMachine stateMachine;
+    private final BlueGreenStateHandlerRegistry handlerRegistry;
 
     public static long minimumAbortGracePeriodMs = ABORT_GRACE_PERIOD.defaultValue().toMillis();
 
     public FlinkBlueGreenDeploymentController(FlinkResourceContextFactory ctxFactory) {
         this.ctxFactory = ctxFactory;
-        this.stateMachine = new BlueGreenStateMachine();
+        this.handlerRegistry = new BlueGreenStateHandlerRegistry();
     }
 
     @Override
@@ -85,27 +89,36 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
         if (deploymentStatus == null) {
             var context =
-                    new BlueGreenTransitionContext(
+                    new BlueGreenContext(
                             bgDeployment,
                             new FlinkBlueGreenDeploymentStatus(),
                             josdkContext,
                             null,
                             ctxFactory);
-            return stateMachine
+            return BlueGreenDeploymentService
                     .patchStatusUpdateControl(context, INITIALIZING_BLUE, null)
                     .rescheduleAfter(100);
         } else {
+            FlinkBlueGreenDeploymentState currentState = deploymentStatus.getBlueGreenState();
             var context =
-                    new BlueGreenTransitionContext(
+                    new BlueGreenContext(
                             bgDeployment,
                             deploymentStatus,
                             josdkContext,
-                            deploymentStatus.getBlueGreenState() == INITIALIZING_BLUE
+                            currentState == INITIALIZING_BLUE
                                     ? null
                                     : FlinkBlueGreenDeployments.fromSecondaryResources(
                                             josdkContext),
                             ctxFactory);
-            return stateMachine.processState(context);
+
+            LOG.debug(
+                    "Processing state: {} for deployment: {}",
+                    currentState,
+                    context.getDeploymentName());
+
+            BlueGreenStateHandler handler = handlerRegistry.getHandler(currentState);
+            return handler.handle(context);
+//            return stateMachine.processState(context);
         }
     }
 
