@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -44,6 +45,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.apache.flink.kubernetes.operator.utils.IngressUtils.ingressInNetworkingV1;
 
 /** Utility class to locate secondary resources. */
 public class EventSourceUtils {
@@ -95,7 +98,31 @@ public class EventSourceUtils {
         var configuration =
                 InformerEventSourceConfiguration.from(Deployment.class, FlinkDeployment.class)
                         .withLabelSelector(labelSelector)
-                        .withSecondaryToPrimaryMapper(fromLabel(Constants.LABEL_APP_KEY))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+
+        return new InformerEventSource<>(configuration, context);
+    }
+
+    public static InformerEventSource<?, FlinkDeployment> getIngressInformerEventSource(
+            EventSourceContext<FlinkDeployment> context) {
+        //        final String labelSelector =
+        //                Map.of(Constants.LABEL_COMPONENT_KEY,
+        // Constants.LABEL_COMPONENT_JOB_MANAGER)
+        //                        .entrySet()
+        //                        .stream()
+        //                        .map(Object::toString)
+        //                        .collect(Collectors.joining(","));
+
+        var ingressClass =
+                ingressInNetworkingV1(context.getClient())
+                        ? Ingress.class
+                        : io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress.class;
+
+        var configuration =
+                InformerEventSourceConfiguration.from(ingressClass, FlinkDeployment.class)
+                        //                        .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();

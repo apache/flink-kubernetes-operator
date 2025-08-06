@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.util.Preconditions;
 
@@ -33,8 +34,10 @@ import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRuleBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressTLS;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,28 +66,47 @@ public class IngressUtils {
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
 
     public static void updateIngressRules(
-            ObjectMeta objectMeta,
+            FlinkResourceContext<?> ctx,
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
-            KubernetesClient client) {
+            KubernetesClient client,
+            boolean usePrimaryAsOwner) {
 
+        var objectMeta = ctx.getResource().getMetadata();
         if (spec.getIngress() != null) {
             HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
-
-            Deployment deployment =
-                    client.apps()
-                            .deployments()
-                            .inNamespace(objectMeta.getNamespace())
-                            .withName(objectMeta.getName())
-                            .get();
-            if (deployment == null) {
-                LOG.error("Could not find deployment {}", objectMeta.getName());
+            if (usePrimaryAsOwner) {
+                setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
             } else {
-                setOwnerReference(deployment, Collections.singletonList(ingress));
+                Deployment deployment =
+                        client.apps()
+                                .deployments()
+                                .inNamespace(objectMeta.getNamespace())
+                                .withName(objectMeta.getName())
+                                .get();
+                if (deployment == null) {
+                    LOG.error("Could not find deployment {}", objectMeta.getName());
+                } else {
+                    setOwnerReference(deployment, Collections.singletonList(ingress));
+                }
             }
 
             LOG.info("Updating ingress rules {}", ingress);
-            client.resourceList(ingress).inNamespace(objectMeta.getNamespace()).createOrReplace();
+            client.resource(ingress)
+                    .inNamespace(objectMeta.getNamespace())
+                    .createOr(NonDeletingOperation::update);
+        } else if (usePrimaryAsOwner) {
+            Optional<? extends HasMetadata> ingress;
+            if (ingressInNetworkingV1(client)) {
+                ingress =
+                        ctx.getJosdkContext()
+                                .getSecondaryResource(
+                                        io.fabric8.kubernetes.api.model.networking.v1.Ingress
+                                                .class);
+            } else {
+                ingress = ctx.getJosdkContext().getSecondaryResource(Ingress.class);
+            }
+            ingress.ifPresent(i -> ctx.getKubernetesClient().resource(i).delete());
         }
     }
 
