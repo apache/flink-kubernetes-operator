@@ -1,14 +1,15 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
+
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Simplified context object containing all the necessary state and dependencies for Blue/Green

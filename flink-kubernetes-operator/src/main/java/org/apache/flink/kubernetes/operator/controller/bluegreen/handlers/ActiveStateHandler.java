@@ -17,34 +17,32 @@
 
 package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
+import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
-/** Abstract base class providing common functionality for Blue/Green state handlers. */
-public abstract class AbstractBlueGreenStateHandler implements BlueGreenStateHandler {
+/** Consolidated state handler for both ACTIVE_BLUE and ACTIVE_GREEN states. */
+public class ActiveStateHandler extends AbstractBlueGreenStateHandler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AbstractBlueGreenStateHandler.class);
-
-    private final FlinkBlueGreenDeploymentState supportedState;
-
-    protected final BlueGreenDeploymentService deploymentService;
-
-    protected AbstractBlueGreenStateHandler(
+    public ActiveStateHandler(
             FlinkBlueGreenDeploymentState supportedState,
             BlueGreenDeploymentService deploymentService) {
-        this.supportedState = supportedState;
-        this.deploymentService = deploymentService;
+        super(supportedState, deploymentService);
     }
 
     @Override
-    public FlinkBlueGreenDeploymentState getSupportedState() {
-        return supportedState;
+    public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
+        DeploymentType currentType = getCurrentDeploymentType();
+        return deploymentService.checkAndInitiateDeployment(context, currentType);
     }
 
-    protected Logger getLogger() {
-        return LOG;
+    private DeploymentType getCurrentDeploymentType() {
+        return getSupportedState() == FlinkBlueGreenDeploymentState.ACTIVE_BLUE
+                ? DeploymentType.BLUE
+                : DeploymentType.GREEN;
     }
 }

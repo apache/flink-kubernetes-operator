@@ -17,8 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 
 import java.time.Instant;
 

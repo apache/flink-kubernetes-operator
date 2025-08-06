@@ -107,8 +107,7 @@ public class BlueGreenDeploymentService {
                         lastCheckpoint,
                         false);
             } else {
-                if (context.getDeploymentStatus().getJobStatus().getState()
-                        != JobStatus.FAILING) {
+                if (context.getDeploymentStatus().getJobStatus().getState() != JobStatus.FAILING) {
                     return patchStatusUpdateControl(context, null, JobStatus.FAILING);
                 }
             }
@@ -168,15 +167,17 @@ public class BlueGreenDeploymentService {
         TransitionState transitionState;
 
         if (DeploymentType.BLUE == currentDeploymentType) {
-            transitionState = new TransitionState(
-                    context.getBlueDeployment(),                    // currentDeployment
-                    context.getGreenDeployment(),                   // nextDeployment
-                    FlinkBlueGreenDeploymentState.ACTIVE_GREEN);    // next State
+            transitionState =
+                    new TransitionState(
+                            context.getBlueDeployment(), // currentDeployment
+                            context.getGreenDeployment(), // nextDeployment
+                            FlinkBlueGreenDeploymentState.ACTIVE_GREEN); // next State
         } else {
-            transitionState = new TransitionState(
-                    context.getGreenDeployment(),               // currentDeployment
-                    context.getBlueDeployment(),                // nextDeployment
-                    FlinkBlueGreenDeploymentState.ACTIVE_BLUE); // next State
+            transitionState =
+                    new TransitionState(
+                            context.getGreenDeployment(), // currentDeployment
+                            context.getBlueDeployment(), // nextDeployment
+                            FlinkBlueGreenDeploymentState.ACTIVE_BLUE); // next State
         }
 
         Preconditions.checkNotNull(
@@ -263,8 +264,7 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState) {
 
         String deploymentName = nextDeployment.getMetadata().getName();
-        long abortTimestamp =
-                instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
+        long abortTimestamp = instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
 
         if (abortTimestamp == 0) {
             throw new IllegalStateException("Unexpected abortTimestamp == 0");
@@ -337,10 +337,7 @@ public class BlueGreenDeploymentService {
     public UpdateControl<FlinkBlueGreenDeployment> finalizeBlueGreenDeployment(
             BlueGreenContext context, FlinkBlueGreenDeploymentState nextState) {
 
-        LOG.info(
-                "Finalizing deployment '{}' to {} state",
-                context.getDeploymentName(),
-                nextState);
+        LOG.info("Finalizing deployment '{}' to {} state", context.getDeploymentName(), nextState);
 
         context.getDeploymentStatus().setDeploymentReadyTimestamp(millisToInstantStr(0));
         context.getDeploymentStatus().setAbortTimestamp(millisToInstantStr(0));

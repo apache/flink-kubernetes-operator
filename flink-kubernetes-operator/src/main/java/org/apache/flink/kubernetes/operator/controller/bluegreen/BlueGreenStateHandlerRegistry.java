@@ -18,13 +18,10 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
-import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.ActiveBlueStateHandler;
-import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.ActiveGreenStateHandler;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.ActiveStateHandler;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.InitializingBlueStateHandler;
-import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.TransitioningToBlueStateHandler;
-import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.TransitioningToGreenStateHandler;
-import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.TransitioningStateHandler;
 
 import java.util.Map;
 
@@ -47,12 +44,14 @@ public class BlueGreenStateHandlerRegistry {
         this.handlers =
                 Map.of(
                         INITIALIZING_BLUE, new InitializingBlueStateHandler(deploymentService),
-                        ACTIVE_BLUE, new ActiveBlueStateHandler(deploymentService),
-                        ACTIVE_GREEN, new ActiveGreenStateHandler(deploymentService),
+                        ACTIVE_BLUE, new ActiveStateHandler(ACTIVE_BLUE, deploymentService),
+                        ACTIVE_GREEN, new ActiveStateHandler(ACTIVE_GREEN, deploymentService),
                         TRANSITIONING_TO_BLUE,
-                                new TransitioningToBlueStateHandler(deploymentService),
+                                new TransitioningStateHandler(
+                                        TRANSITIONING_TO_BLUE, deploymentService),
                         TRANSITIONING_TO_GREEN,
-                                new TransitioningToGreenStateHandler(deploymentService));
+                                new TransitioningStateHandler(
+                                        TRANSITIONING_TO_GREEN, deploymentService));
     }
 
     /**
