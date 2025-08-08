@@ -29,7 +29,6 @@ import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
@@ -69,33 +68,17 @@ public class IngressUtils {
             FlinkResourceContext<?> ctx,
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
-            KubernetesClient client,
-            boolean usePrimaryAsOwner) {
+            KubernetesClient client) {
 
         var objectMeta = ctx.getResource().getMetadata();
         if (spec.getIngress() != null) {
             HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
-            if (usePrimaryAsOwner) {
-                setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
-            } else {
-                Deployment deployment =
-                        client.apps()
-                                .deployments()
-                                .inNamespace(objectMeta.getNamespace())
-                                .withName(objectMeta.getName())
-                                .get();
-                if (deployment == null) {
-                    LOG.error("Could not find deployment {}", objectMeta.getName());
-                } else {
-                    setOwnerReference(deployment, Collections.singletonList(ingress));
-                }
-            }
-
+            setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
             LOG.info("Updating ingress rules {}", ingress);
             client.resource(ingress)
                     .inNamespace(objectMeta.getNamespace())
                     .createOr(NonDeletingOperation::update);
-        } else if (usePrimaryAsOwner) {
+        } else {
             Optional<? extends HasMetadata> ingress;
             if (ingressInNetworkingV1(client)) {
                 ingress =
