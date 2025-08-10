@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller.bluegreen;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
@@ -29,14 +30,20 @@ import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.configureSavepoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 
@@ -64,9 +71,17 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState,
             Savepoint lastCheckpoint,
             boolean isFirstDeployment) {
+        ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
 
-        BlueGreenKubernetesService.deployCluster(
-                context, nextDeploymentType, lastCheckpoint, isFirstDeployment);
+        FlinkDeployment flinkDeployment =
+                prepareFlinkDeployment(
+                        context.getBgDeployment(),
+                        nextDeploymentType,
+                        lastCheckpoint,
+                        isFirstDeployment,
+                        bgMeta);
+
+        deployCluster(context, flinkDeployment);
 
         BlueGreenUtils.setAbortTimestamp(context);
 
@@ -83,29 +98,20 @@ public class BlueGreenDeploymentService {
      */
     public UpdateControl<FlinkBlueGreenDeployment> checkAndInitiateDeployment(
             BlueGreenContext context, DeploymentType currentDeploymentType) {
+        BlueGreenDiffType specDiff = BlueGreenSpecUtils.getSpecDiff(context);
 
-        if (BlueGreenSpecUtils.hasSpecChanged(context)) {
+        if (specDiff != BlueGreenDiffType.IGNORE) {
             BlueGreenSpecUtils.setLastReconciledSpec(context);
 
             FlinkDeployment currentFlinkDeployment =
                     context.getDeploymentByType(currentDeploymentType);
 
-            if (BlueGreenKubernetesService.isFlinkDeploymentReady(currentFlinkDeployment)) {
-                DeploymentTransition transition = calculateTransition(currentDeploymentType);
-
-                FlinkResourceContext<FlinkDeployment> resourceContext =
-                        context.getCtxFactory()
-                                .getResourceContext(
-                                        currentFlinkDeployment, context.getJosdkContext());
-
-                Savepoint lastCheckpoint = configureSavepoint(resourceContext);
-
-                return initiateDeployment(
-                        context,
-                        transition.nextDeploymentType,
-                        transition.nextState,
-                        lastCheckpoint,
-                        false);
+            if (isFlinkDeploymentReady(currentFlinkDeployment)) {
+                if (specDiff == BlueGreenDiffType.TRANSITION) {
+                    return startTransition(context, currentDeploymentType, currentFlinkDeployment);
+                } else {
+                    return patchFlinkDeployment(context, currentDeploymentType, specDiff);
+                }
             } else {
                 if (context.getDeploymentStatus().getJobStatus().getState() != JobStatus.FAILING) {
                     return patchStatusUpdateControl(context, null, JobStatus.FAILING);
@@ -116,6 +122,50 @@ public class BlueGreenDeploymentService {
         return UpdateControl.noUpdate();
     }
 
+    private UpdateControl<FlinkBlueGreenDeployment> patchFlinkDeployment(
+            BlueGreenContext context,
+            DeploymentType currentDeploymentType,
+            BlueGreenDiffType specDiff) {
+
+        if (specDiff == BlueGreenDiffType.PATCH_BOTH || specDiff == BlueGreenDiffType.PATCH_CHILD) {
+            FlinkDeployment nextFlinkDeployment =
+                    context.getDeploymentByType(currentDeploymentType);
+
+            nextFlinkDeployment.setSpec(
+                    context.getBgDeployment().getSpec().getTemplate().getSpec());
+
+            updateFlinkDeployment(nextFlinkDeployment, context);
+
+            return patchStatusUpdateControl(
+                            context,
+                            calculatePatchingState(currentDeploymentType),
+                            JobStatus.RECONCILING)
+                    .rescheduleAfter(BlueGreenUtils.getReconciliationReschedInterval(context));
+        }
+
+        return UpdateControl.noUpdate();
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> startTransition(
+            BlueGreenContext context,
+            DeploymentType currentDeploymentType,
+            FlinkDeployment currentFlinkDeployment) {
+        DeploymentTransition transition = calculateTransition(currentDeploymentType);
+
+        FlinkResourceContext<FlinkDeployment> resourceContext =
+                context.getCtxFactory()
+                        .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
+
+        Savepoint lastCheckpoint = configureSavepoint(resourceContext);
+
+        return initiateDeployment(
+                context,
+                transition.nextDeploymentType,
+                transition.nextState,
+                lastCheckpoint,
+                false);
+    }
+
     private DeploymentTransition calculateTransition(DeploymentType currentType) {
         if (DeploymentType.BLUE == currentType) {
             return new DeploymentTransition(
@@ -123,6 +173,14 @@ public class BlueGreenDeploymentService {
         } else {
             return new DeploymentTransition(
                     DeploymentType.BLUE, FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE);
+        }
+    }
+
+    private FlinkBlueGreenDeploymentState calculatePatchingState(DeploymentType currentType) {
+        if (DeploymentType.BLUE == currentType) {
+            return FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE;
+        } else {
+            return FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN;
         }
     }
 
@@ -244,8 +302,7 @@ public class BlueGreenDeploymentService {
     private UpdateControl<FlinkBlueGreenDeployment> deleteDeployment(
             FlinkDeployment currentDeployment, BlueGreenContext context) {
 
-        boolean deleted =
-                BlueGreenKubernetesService.deleteFlinkDeployment(currentDeployment, context);
+        boolean deleted = deleteFlinkDeployment(currentDeployment, context);
 
         if (!deleted) {
             LOG.info("FlinkDeployment '{}' not deleted, will retry", currentDeployment);
@@ -295,7 +352,7 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState,
             String deploymentName) {
 
-        BlueGreenKubernetesService.suspendFlinkDeployment(context, nextDeployment);
+        suspendFlinkDeployment(context, nextDeployment);
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());

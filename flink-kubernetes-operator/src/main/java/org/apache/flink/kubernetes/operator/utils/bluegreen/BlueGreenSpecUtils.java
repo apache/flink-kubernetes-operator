@@ -78,6 +78,12 @@ public class BlueGreenSpecUtils {
      */
     public static boolean hasSpecChanged(BlueGreenContext context) {
 
+        BlueGreenDiffType diffType = getSpecDiff(context);
+
+        return diffType != BlueGreenDiffType.IGNORE;
+    }
+
+    public static BlueGreenDiffType getSpecDiff(BlueGreenContext context) {
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
         String lastReconciledSpec = deploymentStatus.getLastReconciledSpec();
         FlinkBlueGreenDeploymentSpec lastSpec =
@@ -90,9 +96,7 @@ public class BlueGreenSpecUtils {
                         lastSpec,
                         context.getBgDeployment().getSpec());
 
-        BlueGreenDiffType diffType = diff.compare();
-
-        return diffType != BlueGreenDiffType.IGNORE;
+        return diff.compare();
     }
 
     /**

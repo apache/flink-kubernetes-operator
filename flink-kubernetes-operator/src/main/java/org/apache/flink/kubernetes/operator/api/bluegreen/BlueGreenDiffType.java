@@ -25,11 +25,12 @@ public enum BlueGreenDiffType {
     /** Changes that require a Blue/Green transition. */
     TRANSITION,
 
-    /** Changes that only affect the top-level configuration. */
-    PATCH_TOP_LEVEL,
-
     /** Changes that only affect the child FlinkDeploymentSpec. */
     PATCH_CHILD,
+
+    // TODO: the PATCH_TOP_LEVEL and PATCH_BOTH values are redundant, eliminate
+    /** Changes that only affect the top-level configuration. */
+    PATCH_TOP_LEVEL,
 
     /** Changes that affect both top-level and child specifications. */
     PATCH_BOTH

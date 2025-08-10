@@ -20,18 +20,14 @@ package org.apache.flink.kubernetes.operator.controller.bluegreen;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
-import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.StatusDetails;
 
 import java.util.List;
-
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
 
 /** Utility methods for handling Kubernetes operations in Blue/Green deployments. */
 public class BlueGreenKubernetesService {
@@ -58,21 +54,7 @@ public class BlueGreenKubernetesService {
         return objectMeta;
     }
 
-    public static void deployCluster(
-            BlueGreenContext context,
-            DeploymentType deploymentType,
-            Savepoint lastCheckpoint,
-            boolean isFirstDeployment) {
-        ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
-
-        FlinkDeployment flinkDeployment =
-                prepareFlinkDeployment(
-                        context.getBgDeployment(),
-                        deploymentType,
-                        lastCheckpoint,
-                        isFirstDeployment,
-                        bgMeta);
-
+    public static void deployCluster(BlueGreenContext context, FlinkDeployment flinkDeployment) {
         // Deploy
         context.getJosdkContext().getClient().resource(flinkDeployment).createOrReplace();
     }

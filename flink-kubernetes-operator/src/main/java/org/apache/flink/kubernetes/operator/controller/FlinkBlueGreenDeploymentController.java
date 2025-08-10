@@ -45,7 +45,25 @@ import java.util.List;
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.INITIALIZING_BLUE;
 
-/** Controller that runs the main reconcile loop for Flink Blue/Green deployments. */
+/**
+ * Controller that runs the main reconcile loop for Flink Blue/Green deployments.
+ *
+ * <p>State Machine Flow
+ *
+ * <p>Deployment States
+ *
+ * <p>1. INITIALIZING_BLUE - First-time deployment setup 2. ACTIVE_BLUE - Blue environment serving
+ * traffic, monitoring for updates 3. TRANSITIONING_TO_GREEN - Deploying Green environment while
+ * Blue serves traffic 4. ACTIVE_GREEN - Green environment serving traffic, monitoring for updates
+ * 5. TRANSITIONING_TO_BLUE - Deploying Blue environment while Green serves traffic
+ *
+ * <p>Orchestration Process
+ *
+ * <p>FlinkBlueGreenDeploymentController.reconcile() ↓ 1. Create BlueGreenContext with current
+ * deployment state ↓ 2. Query StateHandlerRegistry for appropriate handler ↓ 3. Delegate to
+ * specific StateHandler.handle(context) ↓ 4. StateHandler invokes BlueGreenDeploymentService
+ * operations ↓ 5. Return UpdateControl with next reconciliation schedule
+ */
 @ControllerConfiguration
 public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueGreenDeployment> {
 
@@ -118,7 +136,6 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
             BlueGreenStateHandler handler = handlerRegistry.getHandler(currentState);
             return handler.handle(context);
-            //            return stateMachine.processState(context);
         }
     }
 
