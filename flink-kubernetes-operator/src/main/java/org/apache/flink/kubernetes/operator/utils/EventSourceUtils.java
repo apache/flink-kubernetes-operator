@@ -51,6 +51,8 @@ import static org.apache.flink.kubernetes.operator.utils.IngressUtils.ingressInN
 /** Utility class to locate secondary resources. */
 public class EventSourceUtils {
 
+    public static final String LABEL_COMPONENT_INGRESS = "ingress";
+
     private static final String FLINK_DEPLOYMENT_IDX = FlinkDeploymentController.class.getName();
     private static final String FLINK_SESSIONJOB_IDX = FlinkSessionJobController.class.getName();
     private static final String FLINK_STATE_SNAPSHOT_IDX = FlinkStateSnapshot.class.getName();
@@ -107,13 +109,10 @@ public class EventSourceUtils {
 
     public static InformerEventSource<?, FlinkDeployment> getIngressInformerEventSource(
             EventSourceContext<FlinkDeployment> context) {
-        //        final String labelSelector =
-        //                Map.of(Constants.LABEL_COMPONENT_KEY,
-        // Constants.LABEL_COMPONENT_JOB_MANAGER)
-        //                        .entrySet()
-        //                        .stream()
-        //                        .map(Object::toString)
-        //                        .collect(Collectors.joining(","));
+        final String labelSelector =
+                Map.of(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS).entrySet().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.joining(","));
 
         var ingressClass =
                 ingressInNetworkingV1(context.getClient())
@@ -122,7 +121,7 @@ public class EventSourceUtils {
 
         var configuration =
                 InformerEventSourceConfiguration.from(ingressClass, FlinkDeployment.class)
-                        //                        .withLabelSelector(labelSelector)
+                        .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();

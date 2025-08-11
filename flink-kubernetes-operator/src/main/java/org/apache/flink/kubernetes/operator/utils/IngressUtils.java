@@ -22,6 +22,7 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -45,10 +46,13 @@ import java.lang.module.ModuleDescriptor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static org.apache.flink.kubernetes.operator.utils.EventSourceUtils.LABEL_COMPONENT_INGRESS;
 
 /** Ingress utilities. */
 public class IngressUtils {
@@ -98,10 +102,12 @@ public class IngressUtils {
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
+        var labels = new HashMap<>(spec.getIngress().getLabels());
+        labels.put(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS);
         if (ingressInNetworkingV1(client)) {
             return new IngressBuilder()
                     .withNewMetadata()
-                    .withLabels(spec.getIngress().getLabels())
+                    .withLabels(labels)
                     .withAnnotations(spec.getIngress().getAnnotations())
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
@@ -133,7 +139,7 @@ public class IngressUtils {
             return new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
                     .withNewMetadata()
                     .withAnnotations(spec.getIngress().getAnnotations())
-                    .withLabels(spec.getIngress().getLabels())
+                    .withLabels(labels)
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()
