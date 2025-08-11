@@ -68,7 +68,11 @@ public class Basic {
                                 .build());
 
         try (KubernetesClient kubernetesClient = new KubernetesClientBuilder().build()) {
-            kubernetesClient.resource(flinkDeployment).createOrReplace();
+            if (kubernetesClient.resource(flinkDeployment).get() == null) {
+                kubernetesClient.resource(flinkDeployment).create();
+            } else {
+                kubernetesClient.resource(flinkDeployment).update();
+            }
         }
     }
 }
