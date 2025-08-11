@@ -48,6 +48,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -102,7 +103,10 @@ public class IngressUtils {
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
-        var labels = new HashMap<>(spec.getIngress().getLabels());
+        Map<String, String> labels =
+                spec.getIngress().getLabels() == null
+                        ? new HashMap<>()
+                        : new HashMap<>(spec.getIngress().getLabels());
         labels.put(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS);
         if (ingressInNetworkingV1(client)) {
             return new IngressBuilder()
