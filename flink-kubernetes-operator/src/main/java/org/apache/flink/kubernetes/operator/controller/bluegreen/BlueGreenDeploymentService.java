@@ -135,15 +135,13 @@ public class BlueGreenDeploymentService {
                     context.getBgDeployment().getSpec().getTemplate().getSpec());
 
             updateFlinkDeployment(nextFlinkDeployment, context);
-
-            return patchStatusUpdateControl(
-                            context,
-                            calculatePatchingState(currentDeploymentType),
-                            JobStatus.RECONCILING)
-                    .rescheduleAfter(BlueGreenUtils.getReconciliationReschedInterval(context));
         }
 
-        return UpdateControl.noUpdate();
+        return patchStatusUpdateControl(
+                        context,
+                        calculatePatchingState(currentDeploymentType),
+                        JobStatus.RECONCILING)
+                .rescheduleAfter(BlueGreenUtils.getReconciliationReschedInterval(context));
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> startTransition(

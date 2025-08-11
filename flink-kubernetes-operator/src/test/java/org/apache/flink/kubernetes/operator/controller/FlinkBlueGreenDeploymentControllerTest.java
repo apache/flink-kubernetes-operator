@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -51,6 +52,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
@@ -58,6 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY;
@@ -328,47 +331,185 @@ public class FlinkBlueGreenDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void verifyPatchChildScenario(FlinkVersion flinkVersion) throws Exception {
+    @MethodSource("patchScenarioProvider")
+    public void verifyPatchScenario(FlinkVersion flinkVersion, PatchTestCase testCase)
+            throws Exception {
+        var rs = setupActiveBlueDeployment(flinkVersion);
+
+        testCase.applyChanges(rs.deployment, kubernetesClient);
+
+        var result = reconcileAndVerifyPatchBehavior(rs);
+
+        testCase.verifySpecificBehavior(result, getFlinkDeployments());
+
+        assertFinalized(
+                result.minReconciliationTs, result.rs, FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
+    }
+
+    static Stream<Arguments> patchScenarioProvider() {
+        // Extract FlinkVersions from TestUtils and combine with PatchTypes
+        return TestUtils.flinkVersions()
+                .flatMap(
+                        args -> {
+                            FlinkVersion version = (FlinkVersion) args.get()[0];
+                            return Stream.of(
+                                    Arguments.of(version, new PatchChildTestCase()),
+                                    Arguments.of(version, new PatchTopLevelTestCase()),
+                                    Arguments.of(version, new PatchBothTestCase()));
+                        });
+    }
+
+    // ==================== Test Case Interfaces and Implementations ====================
+
+    interface PatchTestCase {
+        void applyChanges(FlinkBlueGreenDeployment deployment, KubernetesClient client);
+
+        void verifySpecificBehavior(ReconcileResult result, List<FlinkDeployment> deployments);
+    }
+
+    static class PatchChildTestCase implements PatchTestCase {
+        @Override
+        public void applyChanges(FlinkBlueGreenDeployment deployment, KubernetesClient client) {
+            FlinkDeploymentSpec spec = deployment.getSpec().getTemplate().getSpec();
+            spec.getJob().setSavepointRedeployNonce(12345L);
+            deployment.getSpec().getTemplate().setSpec(spec);
+            client.resource(deployment).createOrReplace();
+        }
+
+        @Override
+        public void verifySpecificBehavior(
+                ReconcileResult result, List<FlinkDeployment> deployments) {
+            assertEquals(1, deployments.size());
+            assertEquals(
+                    12345L,
+                    (long) deployments.get(0).getSpec().getJob().getSavepointRedeployNonce());
+        }
+    }
+
+    static class PatchTopLevelTestCase implements PatchTestCase {
+        @Override
+        public void applyChanges(FlinkBlueGreenDeployment deployment, KubernetesClient client) {
+            FlinkDeploymentTemplateSpec template = deployment.getSpec().getTemplate();
+            Map<String, String> configuration = new HashMap<>(template.getConfiguration());
+            configuration.put("custom.top.level", "custom-top-level-value");
+            template.setConfiguration(configuration);
+            deployment.getSpec().setTemplate(template);
+            client.resource(deployment).createOrReplace();
+        }
+
+        @Override
+        public void verifySpecificBehavior(
+                ReconcileResult result, List<FlinkDeployment> deployments) {
+            assertEquals(1, deployments.size());
+            var existingDeployment = result.existingFlinkDeployment;
+            var currentDeployment = deployments.get(0);
+
+            // FlinkDeployment should remain unchanged for top-level only changes
+            assertEquals(existingDeployment, currentDeployment);
+        }
+    }
+
+    static class PatchBothTestCase implements PatchTestCase {
+        @Override
+        public void applyChanges(FlinkBlueGreenDeployment deployment, KubernetesClient client) {
+            FlinkDeploymentTemplateSpec template = deployment.getSpec().getTemplate();
+
+            // 1. Add top-level configuration change
+            Map<String, String> configuration = new HashMap<>(template.getConfiguration());
+            configuration.put("custom.both.level", "custom-both-level-value");
+            template.setConfiguration(configuration);
+
+            // 2. Add nested spec change
+            FlinkDeploymentSpec spec = template.getSpec();
+            spec.getJob().setSavepointRedeployNonce(67890L);
+            template.setSpec(spec);
+
+            deployment.getSpec().setTemplate(template);
+            client.resource(deployment).createOrReplace();
+        }
+
+        @Override
+        public void verifySpecificBehavior(
+                ReconcileResult result, List<FlinkDeployment> deployments) {
+            assertEquals(1, deployments.size());
+            var updatedDeployment = deployments.get(0);
+
+            // Child spec change should be applied to FlinkDeployment
+            assertEquals(
+                    67890L,
+                    (long) updatedDeployment.getSpec().getJob().getSavepointRedeployNonce());
+
+            // Top-level changes should be preserved in reconciled spec
+            assertNotNull(result.rs.reconciledStatus.getLastReconciledSpec());
+            assertEquals(
+                    SpecUtils.writeSpecAsJSON(result.rs.deployment.getSpec(), "spec"),
+                    result.rs.reconciledStatus.getLastReconciledSpec());
+        }
+    }
+
+    // ==================== Helper Classes ====================
+
+    static class ReconcileResult {
+        final long minReconciliationTs;
+        final TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs;
+        final FlinkDeployment existingFlinkDeployment;
+
+        ReconcileResult(
+                long minReconciliationTs,
+                TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs,
+                FlinkDeployment existingFlinkDeployment) {
+            this.minReconciliationTs = minReconciliationTs;
+            this.rs = rs;
+            this.existingFlinkDeployment = existingFlinkDeployment;
+        }
+    }
+
+    // ==================== Common Test Helper Methods ====================
+
+    private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
+            setupActiveBlueDeployment(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
                 buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
+        return executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+    }
 
-        // Execute basic deployment to get to ACTIVE_BLUE state
-        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+    private ReconcileResult reconcileAndVerifyPatchBehavior(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs)
+            throws Exception {
 
-        // Modify template.spec to trigger PATCH_CHILD (non-scale/upgrade change)
-        simulatePatchChildChange(rs.deployment);
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size());
+        var existingFlinkDeployment = flinkDeployments.get(0);
 
-        // Reconcile to trigger the PATCH_CHILD path
         var minReconciliationTs = System.currentTimeMillis() - 1;
         rs = reconcile(rs.deployment);
 
-        // Verify the patch operation was triggered
+        assertPatchOperationTriggered(rs, minReconciliationTs);
+        assertTransitioningState(rs);
+
+        minReconciliationTs = System.currentTimeMillis() - 1;
+        rs = reconcile(rs.deployment);
+
+        return new ReconcileResult(minReconciliationTs, rs, existingFlinkDeployment);
+    }
+
+    private void assertPatchOperationTriggered(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs,
+            long minReconciliationTs) {
         assertTrue(rs.updateControl.isPatchStatus());
         assertTrue(rs.updateControl.getScheduleDelay().isPresent());
         assertTrue(rs.updateControl.getScheduleDelay().get() > 0);
         assertTrue(
                 minReconciliationTs
                         < instantStrToMillis(rs.reconciledStatus.getLastReconciledTimestamp()));
+    }
 
-        // Verify state transition to TRANSITIONING_TO_BLUE (patching the blue deployment)
+    private void assertTransitioningState(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs) {
         assertEquals(
                 FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE,
                 rs.reconciledStatus.getBlueGreenState());
         assertEquals(JobStatus.RECONCILING, rs.reconciledStatus.getJobStatus().getState());
-
-        minReconciliationTs = System.currentTimeMillis() - 1;
-        rs = reconcile(rs.deployment);
-
-        assertTrue(rs.updateControl.isPatchStatus());
-
-        // Verify that the FlinkDeployment was updated with the new configuration
-        var flinkDeployments = getFlinkDeployments();
-        assertEquals(1, flinkDeployments.size());
-        var updatedDeployment = flinkDeployments.get(0);
-
-        assertTrue(updatedDeployment.getSpec().getJob().getSavepointRedeployNonce() == 12345L);
-        assertFinalized(minReconciliationTs, rs, FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
     }
 
     private void assertFinalized(
@@ -376,6 +517,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
             TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs,
             FlinkBlueGreenDeploymentState expectedBGDeploymentState)
             throws Exception {
+        assertTrue(rs.updateControl.isPatchStatus());
         assertTrue(
                 minReconciliationTs
                         < instantStrToMillis(rs.reconciledStatus.getLastReconciledTimestamp()));
@@ -391,19 +533,6 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // Subsequent reconciliation calls after finalization = NO-OP
         rs = reconcile(rs.deployment);
         assertTrue(rs.updateControl.isNoUpdate());
-    }
-
-    private void simulatePatchChildChange(FlinkBlueGreenDeployment blueGreenDeployment) {
-        // Modify a field in template.spec that would trigger PATCH_CHILD
-        // This is a change that doesn't trigger SCALE or UPGRADE according to
-        // FlinkBlueGreenDeploymentSpecDiff
-        FlinkDeploymentSpec spec = blueGreenDeployment.getSpec().getTemplate().getSpec();
-
-        // Change nested spec property that doesn't trigger SCALE/UPGRADE
-        spec.getJob().setSavepointRedeployNonce(12345L);
-
-        blueGreenDeployment.getSpec().getTemplate().setSpec(spec);
-        kubernetesClient.resource(blueGreenDeployment).createOrReplace();
     }
 
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
