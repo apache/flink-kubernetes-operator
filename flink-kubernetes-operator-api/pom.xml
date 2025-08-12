@@ -70,7 +70,7 @@ under the License.
         <!-- Fabric 8 -->
         <dependency>
             <groupId>io.fabric8</groupId>
-            <artifactId>crd-generator-apt</artifactId>
+            <artifactId>crd-generator-api-v2</artifactId>
             <version>${fabric8.version}</version>
             <scope>provided</scope>
         </dependency>
@@ -284,6 +284,18 @@ under the License.
                     <execution>
                         <goals>
                             <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>crd-generator-maven-plugin</artifactId>
+                <version>${fabric8.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
                         </goals>
                     </execution>
                 </executions>
