@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 
 import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
 import io.fabric8.kubernetes.client.Config;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
@@ -39,8 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *     ConfigurationServiceProvider) we write multiple tests as a single function, please provide
  *     ample comments.
  */
-@EnableKubeAPIServer(updateKubeConfigFile = true)
+@EnableKubeAPIServer
 class FlinkOperatorTest {
+
+    static KubernetesClient kubernetesClient;
 
     @Test
     void testConfigurationPassedToJOSDK() {
@@ -61,7 +64,7 @@ class FlinkOperatorTest {
         operatorConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME, testLeaseName);
 
-        var testOperator = new FlinkOperator(operatorConfig);
+        var testOperator = new FlinkOperator(operatorConfig, kubernetesClient);
         testOperator.registerDeploymentController();
         testOperator.registerSessionJobController();
 
