@@ -38,3 +38,6 @@ buildNumber.properties
 *.DS_Store
 
 .kube
+
+# VSCode settings
+.vscode/
