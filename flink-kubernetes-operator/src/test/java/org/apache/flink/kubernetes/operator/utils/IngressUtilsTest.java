@@ -53,7 +53,8 @@ class IngressUtilsTest {
 
     private FlinkResourceContext<?> createResourceContext(FlinkDeployment appCluster) {
         // todo
-        return new FlinkDeploymentContext(appCluster, null, null, null, null, null);
+        return new FlinkDeploymentContext(
+                appCluster, new TestingJosdkContext<>(client, Map.of()), null, null, null, null);
     }
 
     @Test
