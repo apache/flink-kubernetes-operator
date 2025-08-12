@@ -69,7 +69,7 @@ public class IngressUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
 
-    public static void updateIngressRules(
+    public static void reconcileIngress(
             FlinkResourceContext<?> ctx,
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,

@@ -26,11 +26,14 @@ import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
+import lombok.Setter;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -40,11 +43,21 @@ import java.util.concurrent.ExecutorService;
  */
 public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
 
-    private final KubernetesClient kubernetesClient;
-    private final Map<Class<?>, List<Object>> secondaryResources;
+    @Setter private KubernetesClient kubernetesClient;
+
+    @Setter
+    private Map<Class<? extends HasMetadata>, List<? extends HasMetadata>> secondaryResources =
+            new ConcurrentHashMap<>();
+
+    public TestingJosdkContext() {}
+
+    public TestingJosdkContext(KubernetesClient kubernetesClient) {
+        this.kubernetesClient = kubernetesClient;
+    }
 
     public TestingJosdkContext(
-            KubernetesClient kubernetesClient, Map<Class<?>, List<Object>> secondaryResources) {
+            KubernetesClient kubernetesClient,
+            Map<Class<? extends HasMetadata>, List<? extends HasMetadata>> secondaryResources) {
         this.kubernetesClient = kubernetesClient;
         this.secondaryResources = secondaryResources;
     }
@@ -60,7 +73,7 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
         if (res == null) {
             return Set.of();
         }
-        return (Set<R>) Set.of(res);
+        return (Set<R>) new HashSet<>(res);
     }
 
     @Override
@@ -92,7 +105,7 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
 
     @Override
     public KubernetesClient getClient() {
-        return null;
+        return kubernetesClient;
     }
 
     @Override
