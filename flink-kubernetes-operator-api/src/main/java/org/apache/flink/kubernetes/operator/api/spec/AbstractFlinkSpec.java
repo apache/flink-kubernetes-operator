@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -58,4 +59,6 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
                 mode = KubernetesDeploymentMode.NATIVE)
     })
     private Map<String, String> flinkConfiguration;
+
+    private JsonNode config;
 }

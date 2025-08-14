@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
@@ -122,7 +123,7 @@ public class FlinkDeploymentController
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context josdkContext)
             throws Exception {
-
+        SpecUtils.moveConfigToFlinkConfiguration(flinkApp.getSpec());
         if (canaryResourceManager.handleCanaryResourceReconciliation(
                 flinkApp, josdkContext.getClient())) {
             return UpdateControl.noUpdate();
@@ -132,6 +133,8 @@ public class FlinkDeploymentController
 
         statusRecorder.updateStatusFromCache(flinkApp);
         FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
+        SpecUtils.moveConfigToFlinkConfiguration(previousDeployment.getSpec());
+
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
 
         // If we get an unsupported Flink version, trigger event and exit

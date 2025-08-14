@@ -22,27 +22,34 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link SpecUtils}. */
-public class SpecUtilsTest {
+class SpecUtilsTest {
 
     @Test
-    public void testSpecSerializationWithVersion() throws JsonProcessingException {
+    void testSpecSerializationWithVersion() throws JsonProcessingException {
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         String serialized = SpecUtils.writeSpecWithMeta(app.getSpec(), app);
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
 
         ObjectNode internalMeta = (ObjectNode) node.get(SpecUtils.INTERNAL_METADATA_JSON_KEY);
+        var deserialized =
+                SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec();
+        deserialized.setConfig(null);
         assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
-        assertEquals(
-                app.getSpec(),
-                SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec());
+        assertEquals(app.getSpec(), deserialized);
 
         // test backward compatibility
         String oldSerialized =
@@ -56,7 +63,7 @@ public class SpecUtilsTest {
     }
 
     @Test
-    public void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
+    void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
         // with regards to ReconcialiationMetadata & SpecWithMeta
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(12L);
@@ -64,10 +71,11 @@ public class SpecUtilsTest {
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
 
         ObjectNode internalMeta = (ObjectNode) node.get(SpecUtils.INTERNAL_METADATA_JSON_KEY);
+        var deserialized =
+                SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec();
+        deserialized.setConfig(null);
         assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
-        assertEquals(
-                app.getSpec(),
-                SpecUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class).getSpec());
+        assertEquals(app.getSpec(), deserialized);
         assertNull(app.getStatus().getObservedGeneration());
 
         // test backward compatibility
@@ -75,5 +83,45 @@ public class SpecUtilsTest {
                 "{\"apiVersion\":\"flink.apache.org/v1beta1\",\"metadata\":{\"generation\":5},\"firstDeployment\":false}";
         var migrated = SpecUtils.deserializeSpecWithMeta(oldSerialized, FlinkDeploymentSpec.class);
         assertNull(migrated.getMeta());
+    }
+
+    @Test
+    void testMovePropertiesFromConfigToFlinkConfiguration() {
+        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
+        var properties = new HashMap<String, String>();
+        properties.put("taskmanager.numberOfTaskSlots", "2");
+        properties.put("high-availability.storageDir", "file:///flink-data/ha");
+
+        app.getSpec().setFlinkConfiguration(properties);
+        app.getSpec()
+                .setConfig(
+                        toJsonNode(
+                                """
+                taskmanager:
+                  numberOfTaskSlots: 3
+                high-availability:
+                  type: "KUBERNETES"
+                """));
+
+        SpecUtils.moveConfigToFlinkConfiguration(app.getSpec());
+
+        assertThat(app.getSpec().getFlinkConfiguration())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                "taskmanager.numberOfTaskSlots",
+                                "3",
+                                "high-availability.type",
+                                "KUBERNETES",
+                                "high-availability.storageDir",
+                                "file:///flink-data/ha"));
+    }
+
+    JsonNode toJsonNode(String yaml) {
+        try {
+            var objectMapper = new ObjectMapper(new YAMLFactory());
+            return objectMapper.readTree(yaml);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

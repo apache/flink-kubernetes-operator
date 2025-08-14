@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -88,7 +89,7 @@ public class FlinkSessionJobController
     @Override
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context josdkContext) {
-
+        SpecUtils.moveConfigToFlinkConfiguration(flinkSessionJob.getSpec());
         if (canaryResourceManager.handleCanaryResourceReconciliation(
                 flinkSessionJob, josdkContext.getClient())) {
             return UpdateControl.noUpdate();
@@ -98,6 +99,7 @@ public class FlinkSessionJobController
 
         statusRecorder.updateStatusFromCache(flinkSessionJob);
         FlinkSessionJob previousJob = ReconciliationUtils.clone(flinkSessionJob);
+        SpecUtils.moveConfigToFlinkConfiguration(previousJob.getSpec());
         var ctx = ctxFactory.getResourceContext(flinkSessionJob, josdkContext);
 
         // If we get an unsupported Flink version, trigger event and exit
