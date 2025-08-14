@@ -17,11 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
@@ -67,7 +67,7 @@ public class BlueGreenKubernetesService {
      */
     public static boolean isFlinkDeploymentReady(FlinkDeployment deployment) {
         return ResourceLifecycleState.STABLE == deployment.getStatus().getLifecycleState()
-                && JobStatus.RUNNING == deployment.getStatus().getJobStatus().getState();
+                && ReconciliationUtils.isJobRunning(deployment.getStatus());
     }
 
     public static void suspendFlinkDeployment(
@@ -78,11 +78,21 @@ public class BlueGreenKubernetesService {
 
     public static void updateFlinkDeployment(
             FlinkDeployment nextDeployment, BlueGreenContext context) {
-        context.getJosdkContext().getClient().resource(nextDeployment).update();
+        String namespace = context.getBgDeployment().getMetadata().getNamespace();
+        context.getJosdkContext()
+                .getClient()
+                .resource(nextDeployment)
+                .inNamespace(namespace)
+                .update();
     }
 
     public static void replaceFlinkBlueGreenDeployment(BlueGreenContext context) {
-        context.getJosdkContext().getClient().resource(context.getBgDeployment()).replace();
+        String namespace = context.getBgDeployment().getMetadata().getNamespace();
+        context.getJosdkContext()
+                .getClient()
+                .resource(context.getBgDeployment())
+                .inNamespace(namespace)
+                .replace();
     }
 
     /**

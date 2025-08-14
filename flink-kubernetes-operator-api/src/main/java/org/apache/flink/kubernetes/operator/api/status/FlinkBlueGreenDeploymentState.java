@@ -37,4 +37,10 @@ public enum FlinkBlueGreenDeploymentState {
 
     /** Identifies the system is transitioning from "Blue" to "Green". */
     TRANSITIONING_TO_GREEN,
+
+    /** Identifies the system is savepointing "Blue" before it transitions to "Green". */
+    SAVEPOINTING_BLUE,
+
+    /** Identifies the system is savepointing "Green" before it transitions to "Blue". */
+    SAVEPOINTING_GREEN,
 }

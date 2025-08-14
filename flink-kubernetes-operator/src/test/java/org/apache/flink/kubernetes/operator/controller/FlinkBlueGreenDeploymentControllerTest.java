@@ -114,37 +114,56 @@ public class FlinkBlueGreenDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void verifyBasicDeployment(FlinkVersion flinkVersion) throws Exception {
+    @MethodSource("flinkVersionsAndSavepointPaths")
+    public void verifyBasicDeployment(FlinkVersion flinkVersion, String initialSavepointPath)
+            throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
-        executeBasicDeployment(flinkVersion, blueGreenDeployment, true);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        initialSavepointPath,
+                        UpgradeMode.STATELESS);
+        executeBasicDeployment(flinkVersion, blueGreenDeployment, true, initialSavepointPath);
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void verifyBasicTransition(FlinkVersion flinkVersion) throws Exception {
+    @MethodSource("flinkVersionsAndSavepointPathsAndUpgradeModes")
+    public void verifyBasicTransition(
+            FlinkVersion flinkVersion, String initialSavepointPath, UpgradeMode upgradeMode)
+            throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
-        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion, null, upgradeMode);
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
 
         // Simulate a change in the spec to trigger a Green deployment
         String customValue = UUID.randomUUID().toString();
-        simulateChangeInSpec(rs.deployment, customValue, ALT_DELETION_DELAY_VALUE);
+        simulateChangeInSpec(
+                rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, initialSavepointPath);
 
         // Transitioning to the Green deployment
-        testTransitionToGreen(rs, customValue);
+        var expectedSavepointPath =
+                upgradeMode == UpgradeMode.LAST_STATE ? TEST_CHECKPOINT_PATH : initialSavepointPath;
+        testTransitionToGreen(rs, customValue, expectedSavepointPath);
     }
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyFailureBeforeTransition(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
-        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        TEST_INITIAL_SAVEPOINT_PATH,
+                        UpgradeMode.STATELESS);
+        var rs =
+                executeBasicDeployment(
+                        flinkVersion, blueGreenDeployment, false, TEST_INITIAL_SAVEPOINT_PATH);
 
         // Simulate a change in the spec to trigger a Blue deployment
-        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0);
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
 
         // Simulate a failure in the running deployment
         simulateJobFailure(getFlinkDeployments().get(0));
@@ -178,7 +197,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
     @MethodSource({"org.apache.flink.kubernetes.operator.TestUtils#flinkVersions"})
     public void verifyFailureDuringTransition(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
 
         // Overriding the maxNumRetries and Reschedule Interval
         var abortGracePeriodMs = 1200;
@@ -190,11 +214,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 RECONCILIATION_RESCHEDULING_INTERVAL.key(),
                 String.valueOf(reconciliationReschedulingIntervalMs));
 
-        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+        var rs =
+                executeBasicDeployment(
+                        flinkVersion, blueGreenDeployment, false, TEST_INITIAL_SAVEPOINT_PATH);
 
         // Simulate a change in the spec to trigger a Blue deployment
         String customValue = UUID.randomUUID().toString();
-        simulateChangeInSpec(rs.deployment, customValue, 0);
+        simulateChangeInSpec(rs.deployment, customValue, 0, null);
 
         // Initiate the Green deployment
         rs = reconcile(rs.deployment);
@@ -256,17 +282,22 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Simulate another change in the spec to trigger a redeployment
         customValue = UUID.randomUUID().toString();
-        simulateChangeInSpec(rs.deployment, customValue, ALT_DELETION_DELAY_VALUE);
+        simulateChangeInSpec(rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, null);
 
         // Initiate the redeployment
-        testTransitionToGreen(rs, customValue);
+        testTransitionToGreen(rs, customValue, null);
     }
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifySpecChangeDuringTransition(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        TEST_INITIAL_SAVEPOINT_PATH,
+                        UpgradeMode.STATELESS);
 
         // Initiate the Blue deployment
         var originalSpec = blueGreenDeployment.getSpec();
@@ -276,7 +307,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         simulateSubmitAndSuccessfulJobStart(getFlinkDeployments().get(0));
 
         // Simulate a spec change before the transition is complete
-        simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0);
+        simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0, null);
         rs = reconcile(rs.deployment);
 
         // The spec should have been reverted
@@ -289,7 +320,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyFailureBeforeFirstDeployment(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        TEST_INITIAL_SAVEPOINT_PATH,
+                        UpgradeMode.STATELESS);
 
         // Initiate the Blue deployment
         var rs = initialPhaseBasicDeployment(blueGreenDeployment, false);
@@ -314,7 +350,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var rs2 = reconcile(rs.deployment);
         assertTrue(rs2.updateControl.isNoUpdate());
 
-        simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0);
+        simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0, null);
 
         // Resubmitting should re-start the Initialization to Blue
         rs = reconcile(rs.deployment);
@@ -346,6 +382,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 result.minReconciliationTs, result.rs, FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
     }
 
+    // ==================== Parameterized Test Inputs ====================
+
     static Stream<Arguments> patchScenarioProvider() {
         // Extract FlinkVersions from TestUtils and combine with PatchTypes
         return TestUtils.flinkVersions()
@@ -356,6 +394,41 @@ public class FlinkBlueGreenDeploymentControllerTest {
                                     Arguments.of(version, new PatchChildTestCase()),
                                     Arguments.of(version, new PatchTopLevelTestCase()),
                                     Arguments.of(version, new PatchBothTestCase()));
+                        });
+    }
+
+    static Stream<Arguments> flinkVersionsAndSavepointPaths() {
+        return TestUtils.flinkVersions()
+                .flatMap(
+                        args -> {
+                            FlinkVersion version = (FlinkVersion) args.get()[0];
+                            return Stream.of(
+                                    Arguments.of(version, null),
+                                    Arguments.of(version, TEST_INITIAL_SAVEPOINT_PATH));
+                        });
+    }
+
+    static Stream<Arguments> flinkVersionsAndSavepointPathsAndUpgradeModes() {
+        return TestUtils.flinkVersions()
+                .flatMap(
+                        args -> {
+                            FlinkVersion version = (FlinkVersion) args.get()[0];
+                            return Stream.of(
+                                    Arguments.of(version, null, UpgradeMode.SAVEPOINT),
+                                    Arguments.of(version, null, UpgradeMode.LAST_STATE),
+                                    Arguments.of(version, null, UpgradeMode.STATELESS),
+                                    Arguments.of(
+                                            version,
+                                            TEST_INITIAL_SAVEPOINT_PATH,
+                                            UpgradeMode.SAVEPOINT),
+                                    Arguments.of(
+                                            version,
+                                            TEST_INITIAL_SAVEPOINT_PATH,
+                                            UpgradeMode.LAST_STATE),
+                                    Arguments.of(
+                                            version,
+                                            TEST_INITIAL_SAVEPOINT_PATH,
+                                            UpgradeMode.STATELESS));
                         });
     }
 
@@ -469,8 +542,14 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
             setupActiveBlueDeployment(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
-                buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion);
-        return executeBasicDeployment(flinkVersion, blueGreenDeployment, false);
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        TEST_INITIAL_SAVEPOINT_PATH,
+                        UpgradeMode.STATELESS);
+        return executeBasicDeployment(
+                flinkVersion, blueGreenDeployment, false, TEST_INITIAL_SAVEPOINT_PATH);
     }
 
     private ReconcileResult reconcileAndVerifyPatchBehavior(
@@ -539,12 +618,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
             executeBasicDeployment(
                     FlinkVersion flinkVersion,
                     FlinkBlueGreenDeployment blueGreenDeployment,
-                    boolean execAssertions)
+                    boolean execAssertions,
+                    String expectedInitialSavepointPath)
                     throws Exception {
 
         // 1. Initiate the Blue deployment
-        var bgSpecBefore = blueGreenDeployment.getSpec();
-
         var rs = initialPhaseBasicDeployment(blueGreenDeployment, execAssertions);
 
         var flinkDeployments = getFlinkDeployments();
@@ -554,7 +632,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertEquals(1, flinkDeployments.size());
             verifyOwnerReferences(rs.deployment, deploymentA);
             assertEquals(
-                    TEST_INITIAL_SAVEPOINT_PATH,
+                    expectedInitialSavepointPath,
                     deploymentA.getSpec().getJob().getInitialSavepointPath());
         }
 
@@ -635,7 +713,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
     private void testTransitionToGreen(
             TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs,
-            String customValue)
+            String customValue,
+            String expectedSavepointPath)
             throws Exception {
 
         // Initiate the Green deployment
@@ -651,11 +730,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 minReconciliationTs
                         < instantStrToMillis(rs.reconciledStatus.getLastReconciledTimestamp()));
         assertEquals(2, flinkDeployments.size());
+        assertNull(flinkDeployments.get(0).getSpec().getJob().getInitialSavepointPath());
         assertEquals(
-                TEST_INITIAL_SAVEPOINT_PATH,
-                flinkDeployments.get(0).getSpec().getJob().getInitialSavepointPath());
-        assertEquals(
-                TEST_CHECKPOINT_PATH,
+                expectedSavepointPath,
                 flinkDeployments.get(1).getSpec().getJob().getInitialSavepointPath());
 
         assertEquals(
@@ -697,7 +774,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private void simulateChangeInSpec(
             FlinkBlueGreenDeployment blueGreenDeployment,
             String customFieldValue,
-            int customDeletionDelayMs) {
+            int customDeletionDelayMs,
+            String initialSavepointPath) {
         FlinkDeploymentTemplateSpec template = blueGreenDeployment.getSpec().getTemplate();
 
         if (customDeletionDelayMs > 0) {
@@ -707,6 +785,10 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         FlinkDeploymentSpec spec = template.getSpec();
         spec.getFlinkConfiguration().put(CUSTOM_CONFIG_FIELD, customFieldValue);
+
+        if (initialSavepointPath != null) {
+            spec.getJob().setInitialSavepointPath(initialSavepointPath);
+        }
 
         template.setSpec(spec);
         kubernetesClient.resource(blueGreenDeployment).createOrReplace();
@@ -773,7 +855,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
     }
 
     private static FlinkBlueGreenDeployment buildSessionCluster(
-            String name, String namespace, FlinkVersion version) {
+            String name,
+            String namespace,
+            FlinkVersion version,
+            String initialSavepointPath,
+            UpgradeMode upgradeMode) {
         var deployment = new FlinkBlueGreenDeployment();
         deployment.setMetadata(
                 new ObjectMetaBuilder()
@@ -792,9 +878,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         JobSpec.builder()
                                 .jarURI(SAMPLE_JAR)
                                 .parallelism(1)
-                                .upgradeMode(UpgradeMode.STATELESS)
+                                .upgradeMode(upgradeMode)
                                 .state(JobState.RUNNING)
-                                .initialSavepointPath(TEST_INITIAL_SAVEPOINT_PATH)
+                                .initialSavepointPath(initialSavepointPath)
                                 .build());
 
         deployment.setSpec(bgDeploymentSpec);

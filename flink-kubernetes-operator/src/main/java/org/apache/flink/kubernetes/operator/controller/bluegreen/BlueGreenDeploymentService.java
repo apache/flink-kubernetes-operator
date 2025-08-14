@@ -24,6 +24,9 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils;
@@ -32,6 +35,8 @@ import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,8 +47,13 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.configureSavepoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.fetchSavepointInfo;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getLastCheckpoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.isSavepointRequired;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.lookForCheckpoint;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.triggerSavepoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 
@@ -90,7 +100,7 @@ public class BlueGreenDeploymentService {
     }
 
     /**
-     * Checks if a deployment can be initiated and initiates it if conditions are met.
+     * Checks if a full transition can be initiated and initiates it if conditions are met.
      *
      * @param context the transition context
      * @param currentDeploymentType the current deployment type
@@ -101,19 +111,28 @@ public class BlueGreenDeploymentService {
         BlueGreenDiffType specDiff = BlueGreenSpecUtils.getSpecDiff(context);
 
         if (specDiff != BlueGreenDiffType.IGNORE) {
-            BlueGreenSpecUtils.setLastReconciledSpec(context);
-
             FlinkDeployment currentFlinkDeployment =
                     context.getDeploymentByType(currentDeploymentType);
 
             if (isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
+                    if (handleSavepoint(context, currentFlinkDeployment)) {
+                        // This is the only portion where the last reconciled spec is not set,
+                        // so we can process TRANSITION after the savepoint is done
+                        var savepointingState = calculateSavepointingState(currentDeploymentType);
+                        return patchStatusUpdateControl(context, savepointingState, null)
+                                .rescheduleAfter(getReconciliationReschedInterval(context));
+                    }
+
+                    BlueGreenSpecUtils.setLastReconciledSpec(context);
                     return startTransition(context, currentDeploymentType, currentFlinkDeployment);
                 } else {
+                    BlueGreenSpecUtils.setLastReconciledSpec(context);
                     return patchFlinkDeployment(context, currentDeploymentType, specDiff);
                 }
             } else {
                 if (context.getDeploymentStatus().getJobStatus().getState() != JobStatus.FAILING) {
+                    BlueGreenSpecUtils.setLastReconciledSpec(context);
                     return patchStatusUpdateControl(context, null, JobStatus.FAILING);
                 }
             }
@@ -150,11 +169,7 @@ public class BlueGreenDeploymentService {
             FlinkDeployment currentFlinkDeployment) {
         DeploymentTransition transition = calculateTransition(currentDeploymentType);
 
-        FlinkResourceContext<FlinkDeployment> resourceContext =
-                context.getCtxFactory()
-                        .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
-
-        Savepoint lastCheckpoint = configureSavepoint(resourceContext);
+        Savepoint lastCheckpoint = configureInitialSavepoint(context, currentFlinkDeployment);
 
         return initiateDeployment(
                 context,
@@ -179,6 +194,85 @@ public class BlueGreenDeploymentService {
             return FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE;
         } else {
             return FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN;
+        }
+    }
+
+    // ==================== Savepointing Methods ====================
+
+    public boolean monitorSavepoint(
+            BlueGreenContext context, DeploymentType currentDeploymentType) {
+
+        FlinkResourceContext<FlinkDeployment> ctx =
+                context.getCtxFactory().getResourceContext(
+                        context.getDeploymentByType(currentDeploymentType),
+                        context.getJosdkContext());
+
+        String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
+        var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
+
+        return !savepointFetchResult.isPending();
+    }
+
+    private Savepoint configureInitialSavepoint(
+            BlueGreenContext context,
+            FlinkDeployment currentFlinkDeployment) {
+
+        FlinkResourceContext<FlinkDeployment> ctx =
+                context.getCtxFactory()
+                        .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
+
+        // If a savepoint is required we fetch it, should be ready by this point
+        if (isSavepointRequired(context)) {
+            String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
+            var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
+
+            org.apache.flink.core.execution.SavepointFormatType coreSavepointFormatType =
+                    ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+
+            var savepointFormatType = SavepointFormatType.valueOf(coreSavepointFormatType.toString());
+
+            return Savepoint.of(savepointFetchResult.getLocation(), SnapshotTriggerType.MANUAL, savepointFormatType);
+        }
+
+        // Else we start looking for the last checkpoint if needed
+
+        if (!lookForCheckpoint(context)) {
+            return null;
+        }
+
+        return getLastCheckpoint(ctx);
+    }
+
+    private boolean handleSavepoint(
+            BlueGreenContext context,
+            FlinkDeployment currentFlinkDeployment) {
+
+        if (!isSavepointRequired(context)) {
+            return false;
+        }
+
+        FlinkResourceContext<FlinkDeployment> ctx =
+                context.getCtxFactory()
+                        .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
+
+        String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
+
+        if (savepointTriggerId == null || savepointTriggerId.isEmpty()) {
+            String triggerId = triggerSavepoint(ctx);
+            LOG.info("Savepoint requested (triggerId: {}", triggerId);
+            context.getDeploymentStatus().setSavepointTriggerId(triggerId);
+            return true;
+        }
+
+        LOG.debug("Savepoint previously requested (triggerId: {})", savepointTriggerId);
+        return false;
+    }
+
+    private FlinkBlueGreenDeploymentState calculateSavepointingState(DeploymentType currentType) {
+        if (DeploymentType.BLUE == currentType) {
+            return FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE;
+        } else {
+            return FlinkBlueGreenDeploymentState.SAVEPOINTING_GREEN;
         }
     }
 
@@ -396,6 +490,7 @@ public class BlueGreenDeploymentService {
 
         context.getDeploymentStatus().setDeploymentReadyTimestamp(millisToInstantStr(0));
         context.getDeploymentStatus().setAbortTimestamp(millisToInstantStr(0));
+        context.getDeploymentStatus().setSavepointTriggerId(null);
 
         return patchStatusUpdateControl(context, nextState, JobStatus.RUNNING);
     }
@@ -423,31 +518,20 @@ public class BlueGreenDeploymentService {
         return UpdateControl.patchStatus(flinkBlueGreenDeployment);
     }
 
-    // ==================== Inner Classes ====================
+    // ==================== DTO/Result Classes ====================
 
+    @Getter
+    @AllArgsConstructor
     private static class DeploymentTransition {
         final DeploymentType nextDeploymentType;
         final FlinkBlueGreenDeploymentState nextState;
-
-        DeploymentTransition(
-                DeploymentType nextDeploymentType, FlinkBlueGreenDeploymentState nextState) {
-            this.nextDeploymentType = nextDeploymentType;
-            this.nextState = nextState;
-        }
     }
 
+    @Getter
+    @AllArgsConstructor
     private static class TransitionState {
         final FlinkDeployment currentDeployment;
         final FlinkDeployment nextDeployment;
         final FlinkBlueGreenDeploymentState nextState;
-
-        TransitionState(
-                FlinkDeployment currentDeployment,
-                FlinkDeployment nextDeployment,
-                FlinkBlueGreenDeploymentState nextState) {
-            this.currentDeployment = currentDeployment;
-            this.nextDeployment = nextDeployment;
-            this.nextState = nextState;
-        }
     }
 }

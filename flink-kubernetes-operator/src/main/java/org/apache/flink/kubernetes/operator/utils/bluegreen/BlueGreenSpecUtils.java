@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
+import lombok.SneakyThrows;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
@@ -26,12 +28,16 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
+import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.FlinkBlueGreenDeploymentSpecDiff;
+import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import org.slf4j.Logger;
@@ -97,6 +103,35 @@ public class BlueGreenSpecUtils {
                         context.getBgDeployment().getSpec());
 
         return diff.compare();
+    }
+
+    public static boolean isSavepointRequired(BlueGreenContext context) {
+        return UpgradeMode.SAVEPOINT
+                == context.getBgDeployment()
+                        .getSpec()
+                        .getTemplate()
+                        .getSpec()
+                        .getJob()
+                        .getUpgradeMode();
+    }
+
+    public static boolean lookForCheckpoint(BlueGreenContext context) {
+        FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
+        String lastReconciledSpec = deploymentStatus.getLastReconciledSpec();
+        FlinkBlueGreenDeploymentSpec lastSpec =
+                SpecUtils.readSpecFromJSON(
+                        lastReconciledSpec, "spec", FlinkBlueGreenDeploymentSpec.class);
+
+        var previousUpgradeMode = lastSpec.getTemplate().getSpec().getJob().getUpgradeMode();
+        var nextUpgradeMode =
+                context.getBgDeployment()
+                        .getSpec()
+                        .getTemplate()
+                        .getSpec()
+                        .getJob()
+                        .getUpgradeMode();
+
+        return previousUpgradeMode == nextUpgradeMode && nextUpgradeMode == UpgradeMode.LAST_STATE;
     }
 
     /**
@@ -175,9 +210,33 @@ public class BlueGreenSpecUtils {
         deploymentStatus.setLastReconciledTimestamp(Instant.now().toString());
     }
 
-    public static Savepoint configureSavepoint(
+    @SneakyThrows
+    public static String triggerSavepoint(FlinkResourceContext<FlinkDeployment> ctx) {
+
+        var jobId = ctx.getResource().getStatus().getJobStatus().getJobId();
+        var conf = ctx.getObserveConfig();
+        var savepointFormatType =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+        var savepointDirectory =
+                Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+
+        return ctx.getFlinkService()
+                .triggerSavepoint(jobId, savepointFormatType, savepointDirectory, conf);
+    }
+
+    public static SavepointFetchResult fetchSavepointInfo(
+            FlinkResourceContext<FlinkDeployment> ctx,
+            String triggerId) {
+        return ctx.getFlinkService()
+                .fetchSavepointInfo(
+                        triggerId,
+                        ctx.getResource().getStatus().getJobStatus().getJobId(),
+                        ctx.getObserveConfig());
+    }
+
+    public static Savepoint getLastCheckpoint(
             FlinkResourceContext<FlinkDeployment> resourceContext) {
-        // TODO: if the user specified an initialSavepointPath, use it and skip this?
+
         Optional<Savepoint> lastCheckpoint =
                 resourceContext
                         .getFlinkService()

@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.ActiveStateHandler;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.InitializingBlueStateHandler;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.SavepointingStateHandler;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.TransitioningStateHandler;
 
 import java.util.Map;
@@ -28,6 +29,8 @@ import java.util.Map;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.ACTIVE_BLUE;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.ACTIVE_GREEN;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.INITIALIZING_BLUE;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.SAVEPOINTING_GREEN;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN;
 
@@ -51,7 +54,11 @@ public class BlueGreenStateHandlerRegistry {
                                         TRANSITIONING_TO_BLUE, deploymentService),
                         TRANSITIONING_TO_GREEN,
                                 new TransitioningStateHandler(
-                                        TRANSITIONING_TO_GREEN, deploymentService));
+                                        TRANSITIONING_TO_GREEN, deploymentService),
+                        SAVEPOINTING_BLUE,
+                                new SavepointingStateHandler(SAVEPOINTING_BLUE, deploymentService),
+                        SAVEPOINTING_GREEN,
+                                new SavepointingStateHandler(SAVEPOINTING_GREEN, deploymentService));
     }
 
     /**
@@ -67,15 +74,5 @@ public class BlueGreenStateHandlerRegistry {
             throw new IllegalStateException("No handler found for state: " + state);
         }
         return handler;
-    }
-
-    /**
-     * Checks if a handler exists for the given state.
-     *
-     * @param state the Blue/Green deployment state
-     * @return true if a handler exists, false otherwise
-     */
-    public boolean hasHandler(FlinkBlueGreenDeploymentState state) {
-        return handlers.containsKey(state);
     }
 }

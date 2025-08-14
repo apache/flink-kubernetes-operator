@@ -10763,6 +10763,8 @@ spec:
                 - ACTIVE_BLUE
                 - ACTIVE_GREEN
                 - INITIALIZING_BLUE
+                - SAVEPOINTING_BLUE
+                - SAVEPOINTING_GREEN
                 - TRANSITIONING_TO_BLUE
                 - TRANSITIONING_TO_GREEN
                 type: string
@@ -10908,6 +10910,8 @@ spec:
               lastReconciledSpec:
                 type: string
               lastReconciledTimestamp:
+                type: string
+              savepointTriggerId:
                 type: string
             type: object
         type: object
