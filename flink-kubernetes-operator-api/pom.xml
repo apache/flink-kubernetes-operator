@@ -212,6 +212,7 @@ under the License.
                                         <include>flinkdeployments.flink.apache.org-v1.yml</include>
                                         <include>flinksessionjobs.flink.apache.org-v1.yml</include>
                                         <include>flinkstatesnapshots.flink.apache.org-v1.yml</include>
+                                        <include>flinkbluegreendeployments.flink.apache.org-v1.yml</include>
                                     </includes>
                                     <filtering>false</filtering>
                                 </resource>
@@ -236,6 +237,8 @@ under the License.
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -253,6 +256,24 @@ under the License.
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>flinkbgdeployments-remove-scale-subresource</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <java classname="org.apache.flink.kubernetes.operator.api.utils.RemoveScaleSubResource"
+                                      fork="true" failonerror="true">
+                                    <classpath refid="maven.compile.classpath"/>
+                                    <arg value="${rootDir}/helm/flink-kubernetes-operator/crds/flinkbluegreendeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
