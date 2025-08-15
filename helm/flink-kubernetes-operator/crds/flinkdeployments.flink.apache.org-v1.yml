@@ -31,6 +31,8 @@ spec:
         properties:
           spec:
             properties:
+              config:
+                x-kubernetes-preserve-unknown-fields: true
               flinkConfiguration:
                 additionalProperties:
                   type: string
