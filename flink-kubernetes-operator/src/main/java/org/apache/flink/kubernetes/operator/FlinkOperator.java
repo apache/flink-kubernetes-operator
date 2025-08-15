@@ -91,6 +91,11 @@ public class FlinkOperator {
     private final Configuration baseConfig;
 
     public FlinkOperator(@Nullable Configuration conf) {
+        this(conf, null);
+    }
+
+    @VisibleForTesting
+    FlinkOperator(@Nullable Configuration conf, KubernetesClient client) {
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
@@ -100,9 +105,13 @@ public class FlinkOperator {
 
         baseConfig = configManager.getDefaultConfig();
         this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig);
-        this.client =
-                KubernetesClientUtils.getKubernetesClient(
-                        configManager.getOperatorConfiguration(), this.metricGroup);
+        if (client == null) {
+            this.client =
+                    KubernetesClientUtils.getKubernetesClient(
+                            configManager.getOperatorConfiguration(), this.metricGroup);
+        } else {
+            this.client = client;
+        }
         this.operator = createOperator();
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);

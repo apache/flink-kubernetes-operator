@@ -68,6 +68,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -983,6 +984,9 @@ public class FlinkDeploymentControllerTest {
                                 appWithIngress.getMetadata().getName(),
                                 appWithIngress.getMetadata().getNamespace())
                         .getHost());
+        assertThat(ingress.getMetadata().getOwnerReferences()).hasSize(1);
+        assertThat(ingress.getMetadata().getOwnerReferences().get(0).getKind())
+                .isEqualTo(FlinkDeployment.class.getSimpleName());
     }
 
     @Test

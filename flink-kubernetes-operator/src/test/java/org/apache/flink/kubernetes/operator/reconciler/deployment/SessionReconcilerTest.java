@@ -75,7 +75,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
     public void testStartSession() throws Exception {
         var count = new AtomicInteger(0);
         flinkService =
-                new TestingFlinkService() {
+                new TestingFlinkService(kubernetesClient) {
                     @Override
                     public void submitSessionCluster(Configuration conf) throws Exception {
                         super.submitSessionCluster(conf);

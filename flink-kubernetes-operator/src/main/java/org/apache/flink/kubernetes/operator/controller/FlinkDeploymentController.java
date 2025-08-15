@@ -184,7 +184,7 @@ public class FlinkDeploymentController
         List<EventSource<?, FlinkDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
         eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
-
+        eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
         if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
             eventSources.add(
                     EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
@@ -192,7 +192,6 @@ public class FlinkDeploymentController
             LOG.warn(
                     "Could not initialize informer for snapshots as the CRD has not been installed!");
         }
-
         return eventSources;
     }
 
