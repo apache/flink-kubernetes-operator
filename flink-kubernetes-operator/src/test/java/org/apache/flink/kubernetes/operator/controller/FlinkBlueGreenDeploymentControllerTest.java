@@ -142,10 +142,57 @@ public class FlinkBlueGreenDeploymentControllerTest {
         simulateChangeInSpec(
                 rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, initialSavepointPath);
 
-        // Transitioning to the Green deployment
         var expectedSavepointPath =
                 upgradeMode == UpgradeMode.LAST_STATE ? TEST_CHECKPOINT_PATH : initialSavepointPath;
+
+        if (upgradeMode == UpgradeMode.SAVEPOINT) {
+            // In this case there will ALWAYS be a savepoint generated with this value,
+            // regardless of the initialSavepointPath
+            expectedSavepointPath = "savepoint_1";
+            rs = handleSavepoint(rs);
+        }
+
+        // Transitioning to the Green deployment
+
         testTransitionToGreen(rs, customValue, expectedSavepointPath);
+    }
+
+    @NotNull
+    private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult handleSavepoint(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs) throws Exception {
+        var triggers = flinkService.getSavepointTriggers();
+        triggers.clear();
+
+        rs = reconcile(rs.deployment);
+
+        // Simulating a pending savepoint
+        triggers.put(rs.deployment.getStatus().getSavepointTriggerId(), false);
+
+        // Should be in SAVEPOINTING_BLUE state first
+        assertEquals(
+                FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE,
+                rs.reconciledStatus.getBlueGreenState());
+        assertTrue(rs.updateControl.isPatchStatus());
+        assertTrue(rs.updateControl.getScheduleDelay().isPresent());
+
+        // This next reconciliation should continue waiting on the pending savepoint
+        var rs2 = reconcile(rs.deployment);
+
+        assertTrue(rs2.updateControl.isNoUpdate());
+        assertTrue(rs2.updateControl.getScheduleDelay().isPresent());
+
+        // Completing the savepoint
+        triggers.put(rs.deployment.getStatus().getSavepointTriggerId(), true);
+
+        // This next reconciliation should move on to the next state
+        rs = reconcile(rs.deployment);
+
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                rs.reconciledStatus.getBlueGreenState());
+        assertTrue(rs.updateControl.isPatchStatus());
+        assertTrue(rs.updateControl.getScheduleDelay().isPresent());
+        return rs;
     }
 
     @ParameterizedTest

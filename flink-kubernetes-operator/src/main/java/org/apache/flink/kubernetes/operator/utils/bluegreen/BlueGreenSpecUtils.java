@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import lombok.SneakyThrows;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -40,6 +39,7 @@ import org.apache.flink.kubernetes.operator.reconciler.diff.FlinkBlueGreenDeploy
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

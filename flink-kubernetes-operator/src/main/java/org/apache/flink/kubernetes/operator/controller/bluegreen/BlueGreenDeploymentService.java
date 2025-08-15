@@ -118,7 +118,7 @@ public class BlueGreenDeploymentService {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
                     if (handleSavepoint(context, currentFlinkDeployment)) {
                         // This is the only portion where the last reconciled spec is not set,
-                        // so we can process TRANSITION after the savepoint is done
+                        // so we can reprocess TRANSITION after the savepoint is done
                         var savepointingState = calculateSavepointingState(currentDeploymentType);
                         return patchStatusUpdateControl(context, savepointingState, null)
                                 .rescheduleAfter(getReconciliationReschedInterval(context));
