@@ -46,6 +46,8 @@ spec:
                 - v1_19
                 - v1_20
                 - v2_0
+                - v2_1
+                - v2_2
                 type: string
               image:
                 type: string
