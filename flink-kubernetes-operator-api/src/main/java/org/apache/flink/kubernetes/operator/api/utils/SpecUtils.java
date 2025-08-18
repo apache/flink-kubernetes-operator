@@ -188,12 +188,6 @@ public class SpecUtils {
         return mapToJsonNode(map);
     }
 
-    public static JsonNode addProperty(JsonNode node, String key, String value) {
-        var map = toStringMap(node);
-        map.put(key, value);
-        return mapToJsonNode(map);
-    }
-
     public static JsonNode removeProperty(JsonNode node, String key) {
         var map = toStringMap(node);
         map.remove(key);
