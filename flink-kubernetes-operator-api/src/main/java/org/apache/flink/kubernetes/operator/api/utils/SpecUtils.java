@@ -26,11 +26,13 @@ import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -140,6 +142,12 @@ public class SpecUtils {
     }
 
     public static Map<String, String> toStringMap(JsonNode node) {
+        if (node == null) {
+            return Collections.emptyMap();
+        }
+        if (node instanceof NullNode) {
+            return Collections.emptyMap();
+        }
         Map<String, String> flatMap = new LinkedHashMap<>();
         flattenHelper(node, "", flatMap);
         return flatMap;
