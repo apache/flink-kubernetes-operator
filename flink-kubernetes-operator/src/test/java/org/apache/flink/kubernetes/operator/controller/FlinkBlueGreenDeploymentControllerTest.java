@@ -41,12 +41,9 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
-import io.fabric8.kubernetes.api.model.Event;
-import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
@@ -94,17 +91,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private Context<FlinkBlueGreenDeployment> context;
     private TestingFlinkBlueGreenDeploymentController testController;
 
-    private KubernetesMockServer mockServer;
     private KubernetesClient kubernetesClient;
-
-    Event mockedEvent =
-            new EventBuilder()
-                    .withNewMetadata()
-                    .withName("name")
-                    .endMetadata()
-                    .withType("type")
-                    .withReason("reason")
-                    .build();
 
     @BeforeEach
     public void setup() {
@@ -159,7 +146,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
     @NotNull
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult handleSavepoint(
-            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs) throws Exception {
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs)
+            throws Exception {
         var triggers = flinkService.getSavepointTriggers();
         triggers.clear();
 
@@ -188,8 +176,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs = reconcile(rs.deployment);
 
         assertEquals(
-                FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
-                rs.reconciledStatus.getBlueGreenState());
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertTrue(rs.updateControl.isPatchStatus());
         assertTrue(rs.updateControl.getScheduleDelay().isPresent());
         return rs;

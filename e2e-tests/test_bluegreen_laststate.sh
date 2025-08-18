@@ -31,7 +31,7 @@ BG_CLUSTER_ID=$CLUSTER_ID
 BLUE_CLUSTER_ID="basic-bluegreen-example-blue"
 GREEN_CLUSTER_ID="basic-bluegreen-example-green"
 
-APPLICATION_YAML="${SCRIPT_DIR}/data/bluegreen.yaml"
+APPLICATION_YAML="${SCRIPT_DIR}/data/bluegreen-laststate.yaml"
 APPLICATION_IDENTIFIER="flinkbgdep/$CLUSTER_ID"
 BLUE_APPLICATION_IDENTIFIER="flinkdep/$BLUE_CLUSTER_ID"
 GREEN_APPLICATION_IDENTIFIER="flinkdep/$GREEN_CLUSTER_ID"
@@ -42,10 +42,11 @@ TIMEOUT=300
 #echo "APPLICATION_IDENTIFIER " $APPLICATION_IDENTIFIER
 #echo "BLUE_APPLICATION_IDENTIFIER " $BLUE_APPLICATION_IDENTIFIER
 
-on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
+#on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
+sleep 1
 wait_for_jobmanager_running $BLUE_CLUSTER_ID $TIMEOUT
 wait_for_status $BLUE_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1

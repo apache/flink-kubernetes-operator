@@ -53,6 +53,8 @@ public class FlinkBlueGreenDeploymentStatus {
     /** Timestamp when the deployment became READY/STABLE. Used to determine when to delete it. */
     private String deploymentReadyTimestamp;
 
-    /** Persisted triggerId to track transition with savepoint. Only used with UpgradeMode.SAVEPOINT */
+    /**
+     * Persisted triggerId to track transition with savepoint. Only used with UpgradeMode.SAVEPOINT
+     */
     private String savepointTriggerId;
 }

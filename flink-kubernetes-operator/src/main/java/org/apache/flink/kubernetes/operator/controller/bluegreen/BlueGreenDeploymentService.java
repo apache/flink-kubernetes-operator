@@ -203,9 +203,10 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, DeploymentType currentDeploymentType) {
 
         FlinkResourceContext<FlinkDeployment> ctx =
-                context.getCtxFactory().getResourceContext(
-                        context.getDeploymentByType(currentDeploymentType),
-                        context.getJosdkContext());
+                context.getCtxFactory()
+                        .getResourceContext(
+                                context.getDeploymentByType(currentDeploymentType),
+                                context.getJosdkContext());
 
         String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
         var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
@@ -214,8 +215,7 @@ public class BlueGreenDeploymentService {
     }
 
     private Savepoint configureInitialSavepoint(
-            BlueGreenContext context,
-            FlinkDeployment currentFlinkDeployment) {
+            BlueGreenContext context, FlinkDeployment currentFlinkDeployment) {
 
         FlinkResourceContext<FlinkDeployment> ctx =
                 context.getCtxFactory()
@@ -227,11 +227,16 @@ public class BlueGreenDeploymentService {
             var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
 
             org.apache.flink.core.execution.SavepointFormatType coreSavepointFormatType =
-                    ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+                    ctx.getObserveConfig()
+                            .get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
 
-            var savepointFormatType = SavepointFormatType.valueOf(coreSavepointFormatType.toString());
+            var savepointFormatType =
+                    SavepointFormatType.valueOf(coreSavepointFormatType.toString());
 
-            return Savepoint.of(savepointFetchResult.getLocation(), SnapshotTriggerType.MANUAL, savepointFormatType);
+            return Savepoint.of(
+                    savepointFetchResult.getLocation(),
+                    SnapshotTriggerType.MANUAL,
+                    savepointFormatType);
         }
 
         // Else we start looking for the last checkpoint if needed
@@ -244,8 +249,7 @@ public class BlueGreenDeploymentService {
     }
 
     private boolean handleSavepoint(
-            BlueGreenContext context,
-            FlinkDeployment currentFlinkDeployment) {
+            BlueGreenContext context, FlinkDeployment currentFlinkDeployment) {
 
         if (!isSavepointRequired(context)) {
             return false;

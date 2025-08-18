@@ -58,7 +58,8 @@ public class BlueGreenStateHandlerRegistry {
                         SAVEPOINTING_BLUE,
                                 new SavepointingStateHandler(SAVEPOINTING_BLUE, deploymentService),
                         SAVEPOINTING_GREEN,
-                                new SavepointingStateHandler(SAVEPOINTING_GREEN, deploymentService));
+                                new SavepointingStateHandler(
+                                        SAVEPOINTING_GREEN, deploymentService));
     }
 
     /**

@@ -225,8 +225,7 @@ public class BlueGreenSpecUtils {
     }
 
     public static SavepointFetchResult fetchSavepointInfo(
-            FlinkResourceContext<FlinkDeployment> ctx,
-            String triggerId) {
+            FlinkResourceContext<FlinkDeployment> ctx, String triggerId) {
         return ctx.getFlinkService()
                 .fetchSavepointInfo(
                         triggerId,

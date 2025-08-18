@@ -29,34 +29,49 @@ spec:
       flinkVersion: v1_20
       flinkConfiguration:
         rest.port: "8081"
-        execution.checkpointing.interval: "1 min"
+        execution.checkpointing.interval: "10s"
         execution.checkpointing.storage: "filesystem"
         state.backend.incremental: "true"
         state.checkpoints.dir: "file:///flink-data/checkpoints"
-        state.checkpoints.num-retained: "50"
+        state.savepoints.dir: "file:///flink-data/savepoints"
+        state.checkpoints.num-retained: "5"
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
       jobManager:
         resource:
-          memory: "2048m"
+          memory: 1G
           cpu: 1
         podTemplate:
           spec:
             containers:
               - name: flink-main-container
                 volumeMounts:
-                  - mountPath: /flink-data
-                    name: flink-volume
+                  - mountPath: /flink-data/checkpoints
+                    name: checkpoint-volume
+                  - mountPath: /flink-data/savepoints
+                    name: savepoint-volume
             volumes:
-              - name: flink-volume
+              - name: checkpoint-volume
                 hostPath:
-                  path: /tmp/flink
+                  # directory location on host
+                  path: /tmp/flink/checkpoints
+                  type: Directory
+              - name: savepoint-volume
+                hostPath:
+                  # directory location on host
+                  path: /tmp/flink/savepoints
                   type: Directory
       taskManager:
         resource:
-          memory: "2048m"
+          memory: 2G
           cpu: 1
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
         parallelism: 1
-        upgradeMode: stateless
+        entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
+        args:
+          - "--error-rate"
+          - "0.15"
+          - "--sleep"
+          - "30"
+        upgradeMode: last-state

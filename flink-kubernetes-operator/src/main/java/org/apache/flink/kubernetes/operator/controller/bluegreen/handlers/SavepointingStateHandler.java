@@ -11,9 +11,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService.patchStatusUpdateControl;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 
-/**
- * State handler for managing Blue/Green deployment savepointing transitions.
- */
+/** State handler for managing Blue/Green deployment savepointing transitions. */
 public class SavepointingStateHandler extends AbstractBlueGreenStateHandler {
 
     public SavepointingStateHandler(
@@ -29,11 +27,11 @@ public class SavepointingStateHandler extends AbstractBlueGreenStateHandler {
 
         // Savepoint complete, continue with the transition
         if (isSavepointReady) {
-            var nextState = getSupportedState() == FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE ?
-                    FlinkBlueGreenDeploymentState.ACTIVE_BLUE :
-                    FlinkBlueGreenDeploymentState.ACTIVE_GREEN;
-            return patchStatusUpdateControl(context, nextState, null)
-                    .rescheduleAfter(500);
+            var nextState =
+                    getSupportedState() == FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE
+                            ? FlinkBlueGreenDeploymentState.ACTIVE_BLUE
+                            : FlinkBlueGreenDeploymentState.ACTIVE_GREEN;
+            return patchStatusUpdateControl(context, nextState, null).rescheduleAfter(500);
         }
 
         return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
