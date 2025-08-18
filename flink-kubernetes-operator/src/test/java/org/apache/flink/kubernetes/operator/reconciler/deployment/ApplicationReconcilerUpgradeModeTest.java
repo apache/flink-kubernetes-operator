@@ -72,6 +72,7 @@ import static org.apache.flink.api.common.JobStatus.RESTARTING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.removeConfigProperties;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.toJsonNode;
 import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.toStringMap;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -938,7 +939,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
             default:
                 throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
         }
-
+        deployment.getSpec().setFlinkConfiguration(toJsonNode(conf));
         return deployment;
     }
 
