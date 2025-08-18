@@ -23,15 +23,22 @@ import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadat
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import javax.annotation.Nullable;
+
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Spec utilities. */
 public class SpecUtils {
     public static final String INTERNAL_METADATA_JSON_KEY = "resource_metadata";
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper yamlObjectMapper = new ObjectMapper(new YAMLFactory());
 
     /**
      * Deserializes the spec and custom metadata object from JSON.
@@ -118,6 +125,33 @@ public class SpecUtils {
                             objectMapper.writeValueAsString(object), object.getClass());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    public static Map<String, String> parseConfigToStringMap(JsonNode node) {
+        Map<String, String> flatMap = new LinkedHashMap<>();
+        flattenHelper(node, "", flatMap);
+        return flatMap;
+    }
+
+    private static void flattenHelper(
+            JsonNode node, String parentKey, Map<String, String> flatMap) {
+        if (node.isObject()) {
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                String newKey =
+                        parentKey.isEmpty() ? field.getKey() : parentKey + "." + field.getKey();
+                flattenHelper(field.getValue(), newKey, flatMap);
+            }
+        } else if (node.isArray()) {
+            for (int i = 0; i < node.size(); i++) {
+                String newKey = parentKey + "[" + i + "]";
+                flattenHelper(node.get(i), newKey, flatMap);
+            }
+        } else {
+            // Store values as strings
+            flatMap.put(parentKey, node.asText());
         }
     }
 }
