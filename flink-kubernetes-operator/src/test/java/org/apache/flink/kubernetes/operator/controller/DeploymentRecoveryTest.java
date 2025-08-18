@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -177,10 +178,8 @@ public class DeploymentRecoveryTest {
 
         // We disable HA for stateless to test recovery without HA metadata
         if (upgradeMode == UpgradeMode.STATELESS) {
-            appCluster
-                    .getSpec()
-                    .getFlinkConfiguration()
-                    .put(HighAvailabilityOptions.HA_MODE.key(), "none");
+            SpecUtils.addConfigProperty(
+                    appCluster.getSpec(), HighAvailabilityOptions.HA_MODE.key(), "none");
         }
 
         testController.reconcile(appCluster, context);

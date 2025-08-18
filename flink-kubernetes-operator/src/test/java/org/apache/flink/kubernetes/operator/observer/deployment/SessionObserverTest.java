@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -118,7 +119,7 @@ public class SessionObserverTest extends OperatorTestBase {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         // Test regular upgrades
-        deployment.getSpec().getFlinkConfiguration().put("k", "1");
+        SpecUtils.addConfigProperty(deployment.getSpec(), "k", "1");
         deployment.getMetadata().setGeneration(321L);
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                 deployment,
@@ -142,7 +143,7 @@ public class SessionObserverTest extends OperatorTestBase {
                 .put(FlinkUtils.CR_GENERATION_LABEL, "321");
 
         deployment.getMetadata().setGeneration(322L);
-        deployment.getSpec().getFlinkConfiguration().put("k", "2");
+        SpecUtils.addConfigProperty(deployment.getSpec(), "k", "2");
 
         observer.observe(deployment, context);
 
@@ -153,6 +154,6 @@ public class SessionObserverTest extends OperatorTestBase {
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
         assertEquals(321L, status.getObservedGeneration());
-        assertEquals("1", specWithMeta.getSpec().getFlinkConfiguration().get("k"));
+        assertEquals(1, specWithMeta.getSpec().getFlinkConfiguration().get("k").asInt());
     }
 }

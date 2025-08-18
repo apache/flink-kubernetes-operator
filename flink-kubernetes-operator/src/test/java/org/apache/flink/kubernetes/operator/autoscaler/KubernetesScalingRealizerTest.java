@@ -23,12 +23,15 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.removeProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for KubernetesScalingRealizer. */
@@ -46,9 +49,7 @@ public class KubernetesScalingRealizerTest {
                 .realizeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
 
         assertThat(
-                        ctx.getResource()
-                                .getSpec()
-                                .getFlinkConfiguration()
+                        SpecUtils.toStringMap(ctx.getResource().getSpec().getFlinkConfiguration())
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
                 .satisfiesAnyOf(
                         // Currently no enforced order inside the overrides string
@@ -95,22 +96,19 @@ public class KubernetesScalingRealizerTest {
         FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
 
         // Create resource with existing parallelism overrides
-        resource.getSpec()
-                .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), currentOverrides);
+        addConfigProperty(
+                resource.getSpec(), PipelineOptions.PARALLELISM_OVERRIDES.key(), currentOverrides);
         resource.getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
-        resource.getSpec()
-                .getFlinkConfiguration()
-                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
+        removeProperty(
+                resource.getSpec().getFlinkConfiguration(),
+                PipelineOptions.PARALLELISM_OVERRIDES.key());
 
         new KubernetesScalingRealizer().realizeParallelismOverrides(ctx, newOverrides);
 
         assertThat(
-                        ctx.getResource()
-                                .getSpec()
-                                .getFlinkConfiguration()
+                        SpecUtils.toStringMap(ctx.getResource().getSpec().getFlinkConfiguration())
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
                 .isEqualTo(currentOverrides);
     }

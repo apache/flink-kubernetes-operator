@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -102,7 +103,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
                         .toMap();
         if (spec.getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(spec.getFlinkConfiguration());
+            effectiveConfig.putAll(SpecUtils.toStringMap(spec.getFlinkConfiguration()));
         }
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
@@ -531,11 +532,13 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 sessionCluster.getSpec().getFlinkVersion())
                         .toMap();
         if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(
+                    SpecUtils.toStringMap(sessionCluster.getSpec().getFlinkConfiguration()));
         }
 
         if (sessionJob.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(
+                    SpecUtils.toStringMap(sessionJob.getSpec().getFlinkConfiguration()));
         }
 
         return firstPresent(

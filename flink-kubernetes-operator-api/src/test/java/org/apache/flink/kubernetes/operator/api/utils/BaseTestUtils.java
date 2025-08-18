@@ -53,6 +53,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.toJsonNode;
+
 /** Base Testing utilities. */
 public class BaseTestUtils {
 
@@ -156,7 +158,7 @@ public class BaseTestUtils {
                                         .upgradeMode(UpgradeMode.STATELESS)
                                         .state(jobState)
                                         .build())
-                        .flinkConfiguration(conf)
+                        .flinkConfiguration(toJsonNode(conf))
                         .build());
         return sessionJob;
     }
@@ -186,7 +188,7 @@ public class BaseTestUtils {
                 .imagePullPolicy(IMAGE_POLICY)
                 .serviceAccount(SERVICE_ACCOUNT)
                 .flinkVersion(version)
-                .flinkConfiguration(conf)
+                .flinkConfiguration(toJsonNode(conf))
                 .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
                 .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
                 .build();

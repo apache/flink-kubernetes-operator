@@ -52,6 +52,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperties;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_WATCHED_NAMESPACES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,17 +80,21 @@ public class FlinkConfigManagerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
 
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "reconciled");
-        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "reconciled");
+        addConfigProperties(
+                deployment.getSpec(),
+                Map.of(testConf.key(), "reconciled", opTestConf.key(), "reconciled"));
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.markReconciledSpecAsStable();
 
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "latest");
-        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "latest");
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
+        addConfigProperties(
+                deployment.getSpec(),
+                Map.of(
+                        testConf.key(),
+                        "latest",
+                        opTestConf.key(),
+                        "latest",
+                        AutoScalerOptions.METRICS_WINDOW.key(),
+                        "1234m"));
 
         assertEquals(
                 "latest",
@@ -106,11 +112,11 @@ public class FlinkConfigManagerTest {
                 Duration.ofMinutes(1234),
                 configManager.getObserveConfig(deployment).get(AutoScalerOptions.METRICS_WINDOW));
 
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "stable");
+        addConfigProperty(deployment.getSpec(), testConf.key(), "stable");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.markReconciledSpecAsStable();
 
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "rolled-back");
+        addConfigProperty(deployment.getSpec(), testConf.key(), "rolled-back");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
 

@@ -34,6 +34,7 @@ import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 import java.util.Map;
 
 import static java.util.Map.entry;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.toJsonNode;
 
 /** client code for ../basic.yaml. */
 public class Basic {
@@ -49,7 +50,7 @@ public class Basic {
         flinkDeploymentSpec.setImage("flink:1.19");
         Map<String, String> flinkConfiguration =
                 Map.ofEntries(entry("taskmanager.numberOfTaskSlots", "2"));
-        flinkDeploymentSpec.setFlinkConfiguration(flinkConfiguration);
+        flinkDeploymentSpec.setFlinkConfiguration(toJsonNode(flinkConfiguration));
         flinkDeployment.setSpec(flinkDeploymentSpec);
         flinkDeploymentSpec.setServiceAccount("flink");
         JobManagerSpec jobManagerSpec = new JobManagerSpec();

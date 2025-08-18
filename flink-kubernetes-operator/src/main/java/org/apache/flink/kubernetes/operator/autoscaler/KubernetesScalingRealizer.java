@@ -26,6 +26,7 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -45,13 +46,11 @@ public class KubernetesScalingRealizer
     @Override
     public void realizeParallelismOverrides(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
-
-        context.getResource()
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
+        SpecUtils.addConfigProperties(
+                context.getResource().getSpec(),
+                Map.of(
                         PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                        getOverrideString(context, parallelismOverrides));
+                        getOverrideString(context, parallelismOverrides)));
     }
 
     @Override
@@ -63,15 +62,17 @@ public class KubernetesScalingRealizer
         }
         FlinkDeployment flinkDeployment = ((FlinkDeployment) context.getResource());
         // Apply config overrides
-        Map<String, String> flinkConf = flinkDeployment.getSpec().getFlinkConfiguration();
-        for (String keyToRemove : configChanges.getRemovals()) {
-            flinkConf.remove(keyToRemove);
-        }
-        flinkConf.putAll(configChanges.getOverrides());
+
+        SpecUtils.removeConfigProperties(flinkDeployment.getSpec(), configChanges.getRemovals());
+        SpecUtils.addConfigProperties(flinkDeployment.getSpec(), configChanges.getOverrides());
 
         // Update total memory in spec
         var totalMemoryOverride =
-                MemoryTuning.getTotalMemory(Configuration.fromMap(flinkConf), context);
+                MemoryTuning.getTotalMemory(
+                        Configuration.fromMap(
+                                SpecUtils.toStringMap(
+                                        flinkDeployment.getSpec().getFlinkConfiguration())),
+                        context);
         if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
             return;

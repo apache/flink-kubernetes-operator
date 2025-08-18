@@ -124,6 +124,8 @@ import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobState;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getSavepointInfo;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperties;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
@@ -207,10 +209,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testSubmitAndCleanUpWithSavepointOnResource(FlinkVersion flinkVersion)
             throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+        addConfigProperty(
+                deployment.getSpec(),
+                KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(),
+                "true");
 
         // session ready
         reconciler.reconcile(
@@ -270,7 +272,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Test stateless upgrade
         FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
         getJobSpec(statelessUpgrade).setUpgradeMode(UpgradeMode.STATELESS);
-        statelessUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
+        addConfigProperty(statelessUpgrade.getSpec(), "new", "conf");
         reconciler.reconcile(statelessUpgrade, context);
         assertFalse(
                 statelessUpgrade
@@ -304,7 +306,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Test stateful upgrade
         FlinkDeployment statefulUpgrade = ReconciliationUtils.clone(deployment);
         getJobSpec(statefulUpgrade).setUpgradeMode(UpgradeMode.SAVEPOINT);
-        statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf2");
+        addConfigProperty(statefulUpgrade.getSpec(), "new", "conf2");
 
         reconciler.reconcile(statefulUpgrade, context);
 
@@ -426,14 +428,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void triggerCheckpointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        addConfigProperty(deployment.getSpec(), SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testSnapshotLegacy(deployment, CHECKPOINT);
     }
 
     @Test
     public void triggerSavepointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        addConfigProperty(deployment.getSpec(), SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testSnapshotLegacy(deployment, SAVEPOINT);
     }
 
@@ -442,10 +444,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void triggerSavepointWithSnapshotResource(boolean disposeOnDelete) throws Exception {
         var deployment = TestUtils.buildApplicationCluster();
         if (disposeOnDelete) {
-            deployment
-                    .getSpec()
-                    .getFlinkConfiguration()
-                    .put(OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE.key(), "true");
+            addConfigProperty(
+                    deployment.getSpec(), OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE.key(), "true");
         }
 
         reconciler.reconcile(deployment, context);
@@ -666,11 +666,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertFalse(isSnapshotInProgress.test(getJobStatus(snDeployment)));
 
         // trigger by periodic interval settings
-        snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "1");
+        addConfigProperty(snDeployment.getSpec(), triggerSnapshotExpression.key(), "1");
         reconciler.reconcile(snDeployment, context);
         assertTrue(isSnapshotInProgress.test(getJobStatus(snDeployment)));
         assertEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
-        snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "0");
+        addConfigProperty(snDeployment.getSpec(), triggerSnapshotExpression.key(), "0");
     }
 
     @NotNull
@@ -740,7 +740,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void testJobUpgradeIgnorePendingSavepointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        addConfigProperty(deployment.getSpec(), SNAPSHOT_RESOURCE_ENABLED.key(), "false");
 
         reconciler.reconcile(deployment, context);
         var runningJobs = flinkService.listJobs();
@@ -755,12 +755,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 getJobStatus(spDeployment).getState());
 
         // Force upgrade when savepoint is in progress.
-        spDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT.key(),
-                        "true");
+        addConfigProperty(
+                spDeployment.getSpec(),
+                KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT.key(),
+                "true");
         spDeployment.getSpec().setImage("flink:greatest");
         reconciler.reconcile(spDeployment, context);
         assertEquals("savepoint_trigger_0", getSavepointInfo(spDeployment).getTriggerId());
@@ -773,9 +771,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testRandomJobResultStorePath() throws Exception {
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
         final String haStoragePath = "file:///flink-data/ha";
-        flinkApp.getSpec()
-                .getFlinkConfiguration()
-                .put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), haStoragePath);
+        addConfigProperty(
+                flinkApp.getSpec(), HighAvailabilityOptions.HA_STORAGE_PATH.key(), haStoragePath);
 
         ObjectMeta deployMeta = flinkApp.getMetadata();
         FlinkDeploymentStatus status = flinkApp.getStatus();
@@ -843,21 +840,16 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER_MODE.key(),
-                        SchedulerExecutionMode.REACTIVE.name());
+        addConfigProperty(
+                deployment.getSpec(),
+                JobManagerOptions.SCHEDULER_MODE.key(),
+                SchedulerExecutionMode.REACTIVE.name());
 
         reconciler.reconcile(deployment, context);
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // the default.parallelism is always ignored
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
+        addConfigProperty(deployment.getSpec(), CoreOptions.DEFAULT_PARALLELISM.key(), "100");
 
         reconciler.reconcile(deployment, context);
         assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
@@ -922,12 +914,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Set all the properties required by the rescale api
         deployment.getSpec().setFlinkVersion(FlinkVersion.v1_18);
         deployment.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER.key(),
-                        JobManagerOptions.SchedulerType.Adaptive.name());
+        addConfigProperty(
+                deployment.getSpec(),
+                JobManagerOptions.SCHEDULER.key(),
+                JobManagerOptions.SchedulerType.Adaptive.name());
         deployment.getMetadata().setGeneration(1L);
 
         // Deploy the job and update the status accordingly so we can proceed to rescaling it
@@ -935,10 +925,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // Override parallelism for a vertex and trigger rescaling
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1.toHexString() + ":2");
+        addConfigProperty(
+                deployment.getSpec(),
+                PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                v1.toHexString() + ":2");
         deployment.getMetadata().setGeneration(2L);
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         assertEquals(1, rescaleCounter.get());
@@ -955,7 +945,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 reconStatus
                         .deserializeLastReconciledSpec()
                         .getFlinkConfiguration()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key())
+                        .asText());
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
         assertFalse(reconStatus.isLastReconciledSpecStable());
 
@@ -990,9 +981,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscaler);
 
         var deployment = TestUtils.buildApplicationCluster();
-        var config = deployment.getSpec().getFlinkConfiguration();
-        config.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
-        config.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1");
+        addConfigProperties(
+                deployment.getSpec(),
+                Map.of(
+                        AutoScalerOptions.AUTOSCALER_ENABLED.key(),
+                        "true",
+                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                        v1 + ":1"));
 
         var specCopy = SpecUtils.clone(deployment.getSpec());
 
@@ -1010,9 +1005,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // Test overrides are applied correctly
         overrideFunction.set(
-                s ->
-                        s.getFlinkConfiguration()
-                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":2"));
+                s -> addConfigProperty(s, PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":2"));
 
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         deployment.setSpec(SpecUtils.clone(specCopy));
@@ -1152,12 +1145,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         var status = deployment.getStatus();
         assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
 
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL.key(),
-                        String.valueOf(Duration.ofMinutes(5).toMillis()));
+        addConfigProperty(
+                deployment.getSpec(),
+                KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL.key(),
+                String.valueOf(Duration.ofMinutes(5).toMillis()));
 
         var now = Instant.now();
         status.getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
@@ -1233,10 +1224,9 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void testRestartUnhealthyEvent() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
+        addConfigProperty(
+                deployment.getSpec(), OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
+
         reconciler.reconcile(deployment, context);
         Assertions.assertEquals(
                 MSG_SUBMIT, flinkResourceEventCollector.events.remove().getMessage());
@@ -1259,14 +1249,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // We disable last state fallback as we want to test that the deployment is properly
         // recovered before upgrade
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
-                                .key(),
-                        "false");
+        addConfigProperty(
+                deployment.getSpec(),
+                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                        .key(),
+                "false");
 
         // Initial deployment
         reconciler.reconcile(deployment, context);
@@ -1327,7 +1314,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(1L, deployment.getStatus().getObservedGeneration());
 
         // Submit no-op upgrade
-        deployment.getSpec().getFlinkConfiguration().put("kubernetes.operator.test", "value");
+        addConfigProperty(deployment.getSpec(), "kubernetes.operator.test", "value");
         deployment.getMetadata().setGeneration(2L);
 
         reconciler.reconcile(deployment, context);
@@ -1341,15 +1328,17 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         offsetReconcilerClock(deployment, Duration.ZERO);
 
-        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
-                        .key(),
-                "false");
+        addConfigProperties(
+                deployment.getSpec(),
+                Map.of(
+                        KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(),
+                        "true",
+                        KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(),
+                        "10s",
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                .key(),
+                        "false"));
 
         // Initial deployment, mark as stable
         reconciler.reconcile(deployment, context);

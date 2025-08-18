@@ -56,6 +56,7 @@ import static org.apache.flink.api.common.JobStatus.CANCELLING;
 import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -194,7 +195,7 @@ class FlinkSessionJobControllerTest {
 
         sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         sessionJob.getSpec().getJob().setInitialSavepointPath("s0");
-        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        addConfigProperty(sessionJob.getSpec(), SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testController.reconcile(sessionJob, context);
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
@@ -516,10 +517,10 @@ class FlinkSessionJobControllerTest {
         UpdateControl<FlinkDeployment> updateControl;
         // Override headers, and it should be saved in lastReconciledSpec once a successful
         // reconcile() finishes.
-        sessionJob
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "changed");
+        addConfigProperty(
+                sessionJob.getSpec(),
+                KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(),
+                "changed");
         updateControl = testController.reconcile(sessionJob, context);
         assertFalse(updateControl.isPatchStatus());
         assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
@@ -539,10 +540,10 @@ class FlinkSessionJobControllerTest {
         // Make sure we do validation before getting effective config in reconcile().
         // Verify the saved headers in lastReconciledSpec is actually used in observe() by
         // utilizing listJobConsumer
-        sessionJob
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "again");
+        addConfigProperty(
+                sessionJob.getSpec(),
+                KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(),
+                "again");
         flinkService.setListJobConsumer(
                 (configuration) ->
                         assertEquals(

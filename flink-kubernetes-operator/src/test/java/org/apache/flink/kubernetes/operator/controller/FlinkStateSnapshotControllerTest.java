@@ -77,6 +77,7 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshot
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.removeConfigProperties;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkStateSnapshotMetricsUtils.assertSnapshotMetrics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -750,10 +751,8 @@ public class FlinkStateSnapshotControllerTest {
                 .getStatus()
                 .setJobStatus(JobStatus.builder().state(RUNNING).jobId(JOB_ID).build());
         deployment.getSpec().setFlinkVersion(flinkVersion);
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
+        removeConfigProperties(
+                deployment.getSpec(), CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         client.resource(deployment).create();
         return deployment;

@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
@@ -43,6 +44,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -133,12 +135,10 @@ public class StandaloneFlinkServiceTest {
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
 
         // Add parallelism change, verify it is honoured in reactive mode
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER_MODE.key(),
-                        SchedulerExecutionMode.REACTIVE.name());
+        addConfigProperty(
+                flinkDeployment.getSpec(),
+                JobManagerOptions.SCHEDULER_MODE.key(),
+                SchedulerExecutionMode.REACTIVE.name());
         flinkDeployment
                 .getStatus()
                 .getReconciliationStatus()
@@ -163,10 +163,8 @@ public class StandaloneFlinkServiceTest {
                         .getSpec()
                         .getReplicas());
 
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .remove(JobManagerOptions.SCHEDULER_MODE.key());
+        SpecUtils.removeConfigProperties(
+                flinkDeployment.getSpec(), JobManagerOptions.SCHEDULER_MODE.key());
         flinkDeployment
                 .getStatus()
                 .getReconciliationStatus()
@@ -191,12 +189,10 @@ public class StandaloneFlinkServiceTest {
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
         // Add replicas
         flinkDeployment.getSpec().getTaskManager().setReplicas(3);
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER_MODE.key(),
-                        SchedulerExecutionMode.REACTIVE.name());
+        addConfigProperty(
+                flinkDeployment.getSpec(),
+                JobManagerOptions.SCHEDULER_MODE.key(),
+                SchedulerExecutionMode.REACTIVE.name());
         flinkDeployment
                 .getStatus()
                 .getReconciliationStatus()

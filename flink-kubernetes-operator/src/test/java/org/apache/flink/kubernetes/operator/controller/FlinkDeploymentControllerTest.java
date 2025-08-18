@@ -65,6 +65,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
+import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
@@ -197,12 +198,10 @@ public class FlinkDeploymentControllerTest {
                 TestUtils.buildApplicationCluster(flinkVersion, JobState.SUSPENDED);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
-        appCluster
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                        "file:///flink-data/savepoints");
+        addConfigProperty(
+                appCluster.getSpec(),
+                CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                "file:///flink-data/savepoints");
 
         int reconcileTimes = 0;
         while (reconcileTimes < MAX_RECONCILE_TIMES) {
@@ -304,13 +303,11 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
-        appCluster
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                        "file:///flink-data/savepoints");
-        appCluster.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        addConfigProperty(
+                appCluster.getSpec(),
+                CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                "file:///flink-data/savepoints");
+        addConfigProperty(appCluster.getSpec(), SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testController.reconcile(appCluster, context);
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
@@ -562,7 +559,7 @@ public class FlinkDeploymentControllerTest {
         UpdateControl<FlinkDeployment> updateControl;
         // Override rest port, and it should be saved in lastReconciledSpec once a successful
         // reconcile() finishes.
-        appCluster.getSpec().getFlinkConfiguration().put(RestOptions.PORT.key(), "8088");
+        addConfigProperty(appCluster.getSpec(), RestOptions.PORT.key(), "8088");
         updateControl = testController.reconcile(appCluster, context);
         assertFalse(updateControl.isPatchStatus());
         assertEquals(
@@ -588,7 +585,7 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJob().setParallelism(0);
         // Verify the saved rest port in lastReconciledSpec is actually used in observe() by
         // utilizing listJobConsumer
-        appCluster.getSpec().getFlinkConfiguration().put(RestOptions.PORT.key(), "12345");
+        addConfigProperty(appCluster.getSpec(), RestOptions.PORT.key(), "12345");
         flinkService.setListJobConsumer(
                 (configuration) -> assertEquals(8088, configuration.get(RestOptions.PORT)));
         testController.reconcile(appCluster, context);
@@ -796,10 +793,10 @@ public class FlinkDeploymentControllerTest {
 
         // triggering upgrade with no last-state fallback on non-healthy app
         flinkService.setPortReady(false);
-        appCluster
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED.key(), "false");
+        addConfigProperty(
+                appCluster.getSpec(),
+                OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED.key(),
+                "false");
         appCluster.getSpec().setServiceAccount(appCluster.getSpec().getServiceAccount() + "-5");
         // not upgrading the cluster with no last-state fallback
         testController.reconcile(appCluster, context);
