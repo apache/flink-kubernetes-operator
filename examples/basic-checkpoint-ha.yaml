@@ -29,6 +29,7 @@ spec:
     state.checkpoints.dir: file:///flink-data/checkpoints
     high-availability.type: kubernetes
     high-availability.storageDir: file:///flink-data/ha
+    kubernetes.operator.savepoint.format.type: NATIVE
   serviceAccount: flink
   jobManager:
     resource:
