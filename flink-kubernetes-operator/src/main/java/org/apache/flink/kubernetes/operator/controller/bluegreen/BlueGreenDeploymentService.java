@@ -426,14 +426,15 @@ public class BlueGreenDeploymentService {
         if (abortTimestamp < System.currentTimeMillis()) {
             return abortDeployment(context, nextDeployment, nextState, deploymentName);
         } else {
-            return retryDeployment(context, abortTimestamp, deploymentName);
+            return retryDeployment(context, deploymentName);
         }
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> retryDeployment(
-            BlueGreenContext context, long abortTimestamp, String deploymentName) {
+            BlueGreenContext context, String deploymentName) {
 
-        long delay = abortTimestamp - System.currentTimeMillis();
+        long delay = getReconciliationReschedInterval(context);
+
         LOG.info(
                 "FlinkDeployment '{}' not ready yet, retrying in {} seconds.",
                 deploymentName,

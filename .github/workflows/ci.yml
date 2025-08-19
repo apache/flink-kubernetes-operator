@@ -172,6 +172,8 @@ jobs:
           - test_flink_operator_ha.sh
           - test_snapshot.sh
           - test_batch_job.sh
+          - test_bluegreen_laststate.sh
+          - test_bluegreen_stateless.sh
         exclude:
           - flink-version: v1_16
             test: test_autoscaler.sh

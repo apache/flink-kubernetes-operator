@@ -84,6 +84,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private static final String CUSTOM_CONFIG_FIELD = "custom-configuration-field";
     private static final int DEFAULT_DELETION_DELAY_VALUE = 500;
     private static final int ALT_DELETION_DELAY_VALUE = 1000;
+    private static final int MINIMUM_ABORT_GRACE_PERIOD = 1000;
     private static final String TEST_CHECKPOINT_PATH = "/tmp/checkpoints";
     private static final String TEST_INITIAL_SAVEPOINT_PATH = "/tmp/savepoints";
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
@@ -240,7 +241,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Overriding the maxNumRetries and Reschedule Interval
         var abortGracePeriodMs = 1200;
-        var reconciliationReschedulingIntervalMs = 5000;
+        var reconciliationReschedulingIntervalMs = 3000;
         Map<String, String> configuration =
                 blueGreenDeployment.getSpec().getTemplate().getConfiguration();
         configuration.put(ABORT_GRACE_PERIOD.key(), String.valueOf(abortGracePeriodMs));
@@ -280,7 +281,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertFalse(rs.updateControl.isPatchResource());
             assertTrue(rs.updateControl.getScheduleDelay().isPresent());
             reschedDelayMs = rs.updateControl.getScheduleDelay().get();
-            assertTrue(reschedDelayMs < abortGracePeriodMs && reschedDelayMs > 0);
+            assertTrue(reschedDelayMs == reconciliationReschedulingIntervalMs && reschedDelayMs > 0);
             assertTrue(
                     instantStrToMillis(rs.reconciledStatus.getAbortTimestamp())
                             > System.currentTimeMillis());
@@ -365,7 +366,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var rs = initialPhaseBasicDeployment(blueGreenDeployment, false);
 
         // Simulating the job did not start correctly before the AbortGracePeriodMs
-        Thread.sleep(FlinkBlueGreenDeploymentController.minimumAbortGracePeriodMs);
+        Thread.sleep(MINIMUM_ABORT_GRACE_PERIOD);
 
         rs = reconcile(rs.deployment);
 

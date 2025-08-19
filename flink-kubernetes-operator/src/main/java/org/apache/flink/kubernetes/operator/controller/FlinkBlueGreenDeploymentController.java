@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState.INITIALIZING_BLUE;
 
 /**
@@ -71,8 +70,6 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
     private final FlinkResourceContextFactory ctxFactory;
     private final BlueGreenStateHandlerRegistry handlerRegistry;
-
-    public static long minimumAbortGracePeriodMs = ABORT_GRACE_PERIOD.defaultValue().toMillis();
 
     public FlinkBlueGreenDeploymentController(FlinkResourceContextFactory ctxFactory) {
         this.ctxFactory = ctxFactory;

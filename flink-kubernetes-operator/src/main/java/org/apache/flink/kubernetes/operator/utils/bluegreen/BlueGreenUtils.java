@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 
 import java.time.Instant;
@@ -90,8 +89,10 @@ public class BlueGreenUtils {
         long abortGracePeriod =
                 BlueGreenSpecUtils.getConfigOption(context.getBgDeployment(), ABORT_GRACE_PERIOD)
                         .toMillis();
-        return Math.max(
-                abortGracePeriod, FlinkBlueGreenDeploymentController.minimumAbortGracePeriodMs);
+        return abortGracePeriod;
+        //        return Math.max(
+        //                abortGracePeriod,
+        // FlinkBlueGreenDeploymentController.minimumAbortGracePeriodMs);
     }
 
     /**
