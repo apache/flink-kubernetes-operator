@@ -56,6 +56,6 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
                 type = DiffType.SCALE,
                 mode = KubernetesDeploymentMode.NATIVE)
     })
-    @JsonDeserialize(using = ConfigJsonNodeDeserializer.class)
-    private ConfigJsonNode flinkConfiguration = new ConfigJsonNode();
+    @JsonDeserialize(using = ConfigObjectNodeDeserializer.class)
+    private ConfigObjectNode flinkConfiguration = new ConfigObjectNode();
 }

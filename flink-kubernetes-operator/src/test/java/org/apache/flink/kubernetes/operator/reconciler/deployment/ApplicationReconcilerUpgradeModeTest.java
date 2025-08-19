@@ -28,7 +28,7 @@ import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.ConfigJsonNode;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -954,7 +954,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
             default:
                 throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
         }
-        deployment.getSpec().setFlinkConfiguration(new ConfigJsonNode());
+        deployment.getSpec().setFlinkConfiguration(new ConfigObjectNode());
         deployment.getSpec().getFlinkConfiguration().putAllFrom(conf);
         return deployment;
     }

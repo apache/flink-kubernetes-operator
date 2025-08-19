@@ -24,15 +24,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 
-/** ConfigJsonNode deserializer. */
-public class ConfigJsonNodeDeserializer extends JsonDeserializer<ConfigJsonNode> {
+/** Allows to deserialize to ConfigObjectNode. */
+public class ConfigObjectNodeDeserializer extends JsonDeserializer<ConfigObjectNode> {
 
     @Override
-    public ConfigJsonNode deserialize(
+    public ConfigObjectNode deserialize(
             JsonParser jsonParser, DeserializationContext deserializationContext)
             throws IOException {
         ObjectNode tree = jsonParser.readValueAsTree();
-        var res = new ConfigJsonNode();
+        var res = new ConfigObjectNode();
         tree.fields().forEachRemaining(entry -> res.set(entry.getKey(), entry.getValue()));
         return res;
     }

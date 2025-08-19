@@ -26,17 +26,17 @@ import java.util.Iterator;
 import java.util.Map;
 
 /** */
-public class ConfigJsonNode extends ObjectNode {
+public class ConfigObjectNode extends ObjectNode {
 
-    public ConfigJsonNode() {
+    public ConfigObjectNode() {
         this(JsonNodeFactory.instance);
     }
 
-    public ConfigJsonNode(JsonNodeFactory nc, Map<String, JsonNode> kids) {
+    public ConfigObjectNode(JsonNodeFactory nc, Map<String, JsonNode> kids) {
         super(nc, kids);
     }
 
-    public ConfigJsonNode(JsonNodeFactory nc) {
+    public ConfigObjectNode(JsonNodeFactory nc) {
         super(nc);
     }
 
