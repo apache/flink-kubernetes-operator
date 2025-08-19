@@ -21,11 +21,10 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigJsonNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.NonNull;
 import org.apache.commons.lang3.ClassUtils;
@@ -87,13 +86,13 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                     var leftField = readField(field, before, true);
                     var rightField = readField(field, after, true);
                     if (field.getName().equals(FLINK_CONFIGURATION_PROPERTY_NAME)) {
-                        leftField = SpecUtils.toStringMap((JsonNode) leftField);
-                        rightField = SpecUtils.toStringMap((JsonNode) rightField);
+                        leftField = ((ConfigJsonNode) leftField).asFlatMap();
+                        rightField = ((ConfigJsonNode) rightField).asFlatMap();
                     }
 
                     if (field.isAnnotationPresent(SpecDiff.Config.class)
                             && (Map.class.isAssignableFrom(field.getType())
-                                    || (field.getType().equals(JsonNode.class)
+                                    || (field.getType().equals(ConfigJsonNode.class)
                                             && field.getName().equals("flinkConfiguration")))) {
                         diffBuilder.append(
                                 field.getName(),

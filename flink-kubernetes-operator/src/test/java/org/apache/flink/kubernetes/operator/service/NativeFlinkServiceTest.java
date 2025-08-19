@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -71,9 +70,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.configurationToJsonNode;
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.removeConfigProperties;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -281,17 +277,17 @@ public class NativeFlinkServiceTest {
         var spec = flinkDep.getSpec();
         spec.setFlinkVersion(FlinkVersion.v1_18);
 
-        var appConfig = Configuration.fromMap(SpecUtils.toStringMap(spec.getFlinkConfiguration()));
+        var appConfig = Configuration.fromMap(spec.getFlinkConfiguration().asFlatMap());
         appConfig.set(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Adaptive);
 
-        spec.setFlinkConfiguration(SpecUtils.mapToJsonNode(appConfig.toMap()));
+        spec.getFlinkConfiguration().set(appConfig.toMap());
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
 
         appConfig.set(
                 PipelineOptions.PARALLELISM_OVERRIDES,
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
-        spec.setFlinkConfiguration(SpecUtils.mapToJsonNode(appConfig.toMap()));
+        spec.getFlinkConfiguration().set(appConfig.toMap());
 
         flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
 
@@ -325,7 +321,7 @@ public class NativeFlinkServiceTest {
 
         // Baseline
         appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
-        spec.setFlinkConfiguration(configurationToJsonNode(appConfig));
+        spec.getFlinkConfiguration().set(appConfig.toMap());
         testScaleConditionDep(flinkDep, service, d -> {}, true);
         testScaleConditionLastSpec(flinkDep, service, d -> {}, true);
 
@@ -334,11 +330,13 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 d ->
-                        addConfigProperty(
-                                d.getSpec(),
-                                KubernetesOperatorConfigOptions.JOB_UPGRADE_INPLACE_SCALING_ENABLED
-                                        .key(),
-                                "false"),
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .put(
+                                        KubernetesOperatorConfigOptions
+                                                .JOB_UPGRADE_INPLACE_SCALING_ENABLED
+                                                .key(),
+                                        "false"),
                 false);
 
         // Do not scale without adaptive scheduler deployed
@@ -346,10 +344,10 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 ls ->
-                        addConfigProperty(
-                                ls,
-                                JobManagerOptions.SCHEDULER.key(),
-                                JobManagerOptions.SchedulerType.Default.name()),
+                        ls.getFlinkConfiguration()
+                                .put(
+                                        JobManagerOptions.SCHEDULER.key(),
+                                        JobManagerOptions.SchedulerType.Default.name()),
                 false);
 
         // Do not scale without adaptive scheduler deployed
@@ -384,7 +382,9 @@ public class NativeFlinkServiceTest {
         testScaleConditionLastSpec(
                 flinkDep,
                 service,
-                s -> addConfigProperty(s, PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
                 false);
 
         // Scale if parallelism overrides were removed only from a non-active vertex
@@ -392,20 +392,25 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 s ->
-                        addConfigProperty(
-                                s,
-                                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                                v1 + ":1," + new JobVertexID() + ":5"),
+                        s.getFlinkConfiguration()
+                                .put(
+                                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                        v1 + ":1," + new JobVertexID() + ":5"),
                 true);
 
         // Do not scale if parallelism overrides were completely removed
         var flinkDep2 = ReconciliationUtils.clone(flinkDep);
-        SpecUtils.removeConfigProperties(
-                flinkDep2.getSpec(), PipelineOptions.PARALLELISM_OVERRIDES.key());
+
+        flinkDep2
+                .getSpec()
+                .getFlinkConfiguration()
+                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
         testScaleConditionLastSpec(
                 flinkDep2,
                 service,
-                s -> addConfigProperty(s, PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
                 false);
 
         // Do not scale if overrides never set
@@ -413,8 +418,9 @@ public class NativeFlinkServiceTest {
                 flinkDep2,
                 service,
                 d ->
-                        removeConfigProperties(
-                                d.getSpec(), PipelineOptions.PARALLELISM_OVERRIDES.key()),
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key()),
                 false);
 
         // Do not scale if non active vertices are overridden only
@@ -430,10 +436,9 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 d ->
-                        addConfigProperty(
-                                d.getSpec(),
-                                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                                v2 + ":5"),
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":5"),
                 true);
         assertNull(updated.get());
 
@@ -442,10 +447,11 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 d ->
-                        addConfigProperty(
-                                d.getSpec(),
-                                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                                v2 + ":5," + v1 + ":1"),
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .put(
+                                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                        v2 + ":5," + v1 + ":1"),
                 true);
         assertNull(updated.get());
 
@@ -459,10 +465,11 @@ public class NativeFlinkServiceTest {
                 flinkDep,
                 service,
                 d ->
-                        addConfigProperty(
-                                d.getSpec(),
-                                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                                v2 + ":5," + v1 + ":1"),
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .put(
+                                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                        v2 + ":5," + v1 + ":1"),
                 true);
         assertEquals(
                 new JobVertexResourceRequirements.Parallelism(1, 1),

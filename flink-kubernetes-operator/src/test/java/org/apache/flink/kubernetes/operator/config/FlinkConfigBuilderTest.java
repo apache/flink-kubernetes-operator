@@ -40,7 +40,6 @@ import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -127,12 +126,11 @@ public class FlinkConfigBuilderTest {
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
         deployment
                 .getSpec()
-                .setFlinkConfiguration(
-                        SpecUtils.mapToJsonNode(
-                                Map.of(
-                                        KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE.key(),
-                                        KubernetesConfigOptions.ServiceExposedType.LoadBalancer
-                                                .name())));
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE.key(),
+                                KubernetesConfigOptions.ServiceExposedType.LoadBalancer.name()));
 
         configuration =
                 new FlinkConfigBuilder(deployment, new Configuration())
@@ -718,7 +716,7 @@ public class FlinkConfigBuilderTest {
         var dep = ReconciliationUtils.clone(deploymentClone);
         dep.getSpec().setTaskManager(new TaskManagerSpec());
         dep.getSpec().getTaskManager().setReplicas(3);
-        SpecUtils.addConfigProperty(dep.getSpec(), TaskManagerOptions.NUM_TASK_SLOTS.key(), "4");
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "4");
         configuration =
                 new FlinkConfigBuilder(dep, new Configuration())
                         .applyFlinkConfiguration()
@@ -760,10 +758,11 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testAllowNonRestoredStateInSpecOverrideInFlinkConf() throws URISyntaxException {
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(false);
-        SpecUtils.addConfigProperty(
-                flinkDeployment.getSpec(),
-                SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(),
-                "true");
+
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "true");
         Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobOrSessionSpec()
@@ -772,10 +771,11 @@ public class FlinkConfigBuilderTest {
                 configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
 
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
-        SpecUtils.addConfigProperty(
-                flinkDeployment.getSpec(),
-                SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(),
-                "false");
+
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "false");
         configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobOrSessionSpec()
@@ -795,7 +795,7 @@ public class FlinkConfigBuilderTest {
         dep.getSpec().getJob().setJarURI(jarUri);
         dep.getSpec().setTaskManager(new TaskManagerSpec());
         dep.getSpec().getTaskManager().setReplicas(3);
-        SpecUtils.addConfigProperty(dep.getSpec(), TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
 
         Configuration configuration =
                 new FlinkConfigBuilder(dep, new Configuration())
@@ -835,10 +835,9 @@ public class FlinkConfigBuilderTest {
                 configuration.get(
                         StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
 
-        SpecUtils.addConfigProperty(
-                dep.getSpec(),
-                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                "vertex1:10,vertex2:20");
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "vertex1:10,vertex2:20");
         configuration =
                 new FlinkConfigBuilder(dep, new Configuration())
                         .applyFlinkConfiguration()
@@ -858,7 +857,7 @@ public class FlinkConfigBuilderTest {
         dep.getSpec().setJob(null);
         dep.getSpec().setTaskManager(new TaskManagerSpec());
         dep.getSpec().getTaskManager().setReplicas(5);
-        SpecUtils.addConfigProperty(dep.getSpec(), TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
 
         Configuration configuration =
                 new FlinkConfigBuilder(dep, new Configuration())

@@ -49,7 +49,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -152,10 +151,11 @@ public class SessionReconcilerTest extends OperatorTestBase {
     @Test
     public void testGetNonTerminalJobs() throws Exception {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        addConfigProperty(
-                deployment.getSpec(),
-                KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key(),
-                "true");
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key(), "true");
 
         assertEquals(
                 true,

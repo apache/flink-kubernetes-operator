@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -356,7 +355,8 @@ public class FlinkConfigManager {
     private void addOperatorConfigsFromSpec(AbstractFlinkSpec spec, Configuration conf) {
         // Observe config should include the latest operator related settings
         if (spec.getFlinkConfiguration() != null) {
-            SpecUtils.toStringMap(spec.getFlinkConfiguration())
+            spec.getFlinkConfiguration()
+                    .asFlatMap()
                     .forEach(
                             (k, v) -> {
                                 if (k.startsWith(K8S_OP_CONF_PREFIX)
@@ -372,8 +372,7 @@ public class FlinkConfigManager {
             AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
         addOperatorConfigsFromSpec(spec, conf);
         if (spec.getFlinkConfiguration() != null) {
-            var deployConfig =
-                    Configuration.fromMap(SpecUtils.toStringMap(spec.getFlinkConfiguration()));
+            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration().asFlatMap());
             for (ConfigOption configOption : configOptions) {
                 deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
             }
@@ -396,8 +395,7 @@ public class FlinkConfigManager {
         // merge session job specific config
         var sessionJobFlinkConfiguration = sessionJobSpec.getFlinkConfiguration();
         if (sessionJobFlinkConfiguration != null) {
-            SpecUtils.toStringMap(sessionJobFlinkConfiguration)
-                    .forEach(sessionJobConfig::setString);
+            sessionJobFlinkConfiguration.asFlatMap().forEach(sessionJobConfig::setString);
         }
         applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;

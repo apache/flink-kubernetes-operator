@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -56,13 +55,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,8 +82,11 @@ public class ApplicationObserverTest extends OperatorTestBase {
         readyContext = TestUtils.createContextWithReadyJobManagerDeployment(kubernetesClient);
         deployment = TestUtils.buildApplicationCluster();
         var jobId = new JobID().toHexString();
-        addConfigProperty(
-                deployment.getSpec(), PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
 
         deployment.getStatus().getJobStatus().setJobId(jobId);
     }
@@ -247,10 +247,11 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setSavepointTriggerNonce(timedOutNonce);
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        addConfigProperty(
-                deployment.getSpec(),
-                KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED.key(),
-                "false");
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
@@ -512,10 +513,12 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         .getSavepointHistory()
                         .size());
 
-        addConfigProperty(
-                deployment.getSpec(),
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key(),
-                "1");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key(),
+                        "1");
         observer.observe(deployment, readyContext);
         assertEquals(
                 1,
@@ -715,12 +718,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
         deployment
                 .getSpec()
-                .setFlinkConfiguration(
-                        SpecUtils.mapToJsonNode(
-                                Map.of(
-                                        OPERATOR_SAVEPOINT_FORMAT_TYPE.key(),
-                                        org.apache.flink.core.execution.SavepointFormatType.NATIVE
-                                                .name())));
+                .getFlinkConfiguration()
+                .put(
+                        OPERATOR_SAVEPOINT_FORMAT_TYPE.key(),
+                        org.apache.flink.core.execution.SavepointFormatType.NATIVE.name());
         conf = configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.triggerSavepointLegacy(
                 deployment.getStatus().getJobStatus().getJobId(),

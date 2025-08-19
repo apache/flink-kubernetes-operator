@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,26 +83,27 @@ public class SpecDiffTest {
         right.getJob().setAllowNonRestoredState(true);
         right.getJob().setInitialSavepointPath("local:///tmp");
         right.getJob().setSavepointTriggerNonce(123L);
-        SpecUtils.addConfigProperties(
-                right,
-                Map.of(
-                        OPERATOR_RECONCILE_INTERVAL.key(),
-                        "100 SECONDS",
-                        SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
-                        "foo.bar",
-                        CoreOptions.DEFAULT_PARALLELISM.key(),
-                        "100",
-                        AutoScalerOptions.METRICS_WINDOW.key(),
-                        "1234m"));
+
+        right.getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                OPERATOR_RECONCILE_INTERVAL.key(),
+                                "100 SECONDS",
+                                SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                                "foo.bar",
+                                CoreOptions.DEFAULT_PARALLELISM.key(),
+                                "100",
+                                AutoScalerOptions.METRICS_WINDOW.key(),
+                                "1234m"));
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(8, diff.getNumDiffs());
 
-        SpecUtils.removeConfigProperties(
-                right,
-                SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
-                AutoScalerOptions.METRICS_WINDOW.key());
+        right.getFlinkConfiguration()
+                .removeAll(
+                        SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                        AutoScalerOptions.METRICS_WINDOW.key());
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
@@ -150,7 +150,7 @@ public class SpecDiffTest {
         assertEquals(DiffType.UPGRADE, diff.getType());
         assertEquals(21, diff.getNumDiffs());
 
-        addConfigProperty(right, CoreOptions.FLINK_TM_JVM_OPTIONS.key(), "-Dfoo=bar");
+        right.getFlinkConfiguration().put(CoreOptions.FLINK_TM_JVM_OPTIONS.key(), "-Dfoo=bar");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.UPGRADE, diff.getType());
@@ -176,7 +176,7 @@ public class SpecDiffTest {
         // verify parallelism override handling for native/standalone
         left = TestUtils.buildApplicationCluster().getSpec();
         right = TestUtils.buildApplicationCluster().getSpec();
-        addConfigProperty(left, PipelineOptions.PARALLELISM_OVERRIDES.key(), "new");
+        left.getFlinkConfiguration().put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "new");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.SCALE, diff.getType());
@@ -209,8 +209,9 @@ public class SpecDiffTest {
         right.getJob().setAllowNonRestoredState(true);
         right.getJob().setInitialSavepointPath("local:///tmp");
         right.getJob().setSavepointTriggerNonce(123L);
-        addConfigProperty(
-                right, KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "changed");
+
+        right.getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "changed");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());

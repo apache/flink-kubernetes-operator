@@ -142,7 +142,6 @@ import static org.apache.flink.api.common.JobStatus.CANCELLING;
 import static org.apache.flink.api.common.JobStatus.FAILING;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -383,10 +382,11 @@ public class AbstractFlinkServiceTest {
 
         JobID jobID = JobID.generate();
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        addConfigProperty(
-                deployment.getSpec(),
-                CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                savepointPath);
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
@@ -492,10 +492,11 @@ public class AbstractFlinkServiceTest {
 
         JobID jobID = JobID.generate();
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        addConfigProperty(
-                deployment.getSpec(),
-                CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                savepointPath);
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
@@ -503,14 +504,16 @@ public class AbstractFlinkServiceTest {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         if (drainOnSavepoint) {
-            addConfigProperty(
-                    deployment.getSpec(),
-                    KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(),
-                    "true");
-            addConfigProperty(
-                    deployment.getSpec(),
-                    KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(),
-                    "true");
+
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(), "true");
         }
 
         var result =
@@ -559,8 +562,9 @@ public class AbstractFlinkServiceTest {
                 .serializeAndSetLastReconciledSpec(session.getSpec(), session);
         var job = TestUtils.buildSessionJob();
 
-        addConfigProperty(
-                job.getSpec(), CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
+        job.getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
 
         JobStatus jobStatus = job.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
@@ -568,14 +572,14 @@ public class AbstractFlinkServiceTest {
         ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
 
         if (drainOnSavepoint) {
-            addConfigProperty(
-                    job.getSpec(),
-                    KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(),
-                    "true");
-            addConfigProperty(
-                    job.getSpec(),
-                    KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(),
-                    "true");
+
+            job.getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+
+            job.getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(), "true");
         }
         var deployConf =
                 configManager.getSessionJobConfig(
@@ -803,10 +807,11 @@ public class AbstractFlinkServiceTest {
         var flinkService = new TestingService(testingClusterClient);
 
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        addConfigProperty(
-                deployment.getSpec(),
-                CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                savepointPath);
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());

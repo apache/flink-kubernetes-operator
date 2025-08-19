@@ -51,7 +51,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -746,8 +745,11 @@ public class JobStatusObserverTest extends OperatorTestBase {
     private static FlinkDeployment initDeployment() {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var jobId = new JobID().toHexString();
-        addConfigProperty(
-                deployment.getSpec(), PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
         deployment.getStatus().getJobStatus().setJobId(jobId);
         deployment
                 .getStatus()
@@ -759,8 +761,10 @@ public class JobStatusObserverTest extends OperatorTestBase {
     private static FlinkSessionJob initSessionJob() {
         var job = TestUtils.buildSessionJob();
         var jobId = new JobID().toHexString();
-        addConfigProperty(
-                job.getSpec(), PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
+
+        job.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
 
         job.getStatus().getJobStatus().setJobId(jobId);
         job.getStatus()

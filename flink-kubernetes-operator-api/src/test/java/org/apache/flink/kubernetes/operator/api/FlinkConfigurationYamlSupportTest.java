@@ -17,8 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.api;
 
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
@@ -67,7 +65,7 @@ class FlinkConfigurationYamlSupportTest {
                         .withName("basic-example")
                         .get();
         assertThat(deployment.getSpec().getFlinkConfiguration()).hasSize(3);
-        assertThat(SpecUtils.toStringMap(deployment.getSpec().getFlinkConfiguration())).hasSize(5);
+        assertThat(deployment.getSpec().getFlinkConfiguration().asFlatMap()).hasSize(5);
     }
 
     private GenericKubernetesResource applyResource(String path) {

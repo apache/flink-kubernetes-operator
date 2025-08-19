@@ -83,7 +83,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperties;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -222,7 +221,7 @@ public class TestUtils extends BaseTestUtils {
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster(version);
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-                addConfigProperties(session.getSpec(), flinkDepConfig);
+                session.getSpec().getFlinkConfiguration().putAllFrom(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);
@@ -441,7 +440,7 @@ public class TestUtils extends BaseTestUtils {
                 throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
         }
 
-        addConfigProperties(deployment.getSpec(), Map.of(cronOptionKey, "0 0 12 5 6 ? 2022"));
+        deployment.getSpec().getFlinkConfiguration().put(cronOptionKey, "0 0 12 5 6 ? 2022");
         reconcileSpec(deployment);
         return calendar.toInstant();
     }

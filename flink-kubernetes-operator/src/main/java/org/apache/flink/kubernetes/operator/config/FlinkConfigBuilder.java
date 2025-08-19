@@ -40,7 +40,6 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -141,7 +140,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyFlinkConfiguration() {
         // Parse config from spec's flinkConfiguration
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
-            SpecUtils.toStringMap(spec.getFlinkConfiguration()).forEach(effectiveConfig::setString);
+            spec.getFlinkConfiguration().asFlatMap().forEach(effectiveConfig::setString);
         }
 
         // Adapt default rest service type from 1.15+

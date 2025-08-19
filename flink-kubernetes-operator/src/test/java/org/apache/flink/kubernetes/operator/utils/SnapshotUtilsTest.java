@@ -41,7 +41,6 @@ import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.reconcileSpec;
 import static org.apache.flink.kubernetes.operator.TestUtils.setupCronTrigger;
-import static org.apache.flink.kubernetes.operator.api.utils.SpecUtils.addConfigProperty;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
@@ -83,7 +82,7 @@ public class SnapshotUtilsTest {
                         snapshotType,
                         Instant.MIN));
 
-        addConfigProperty(deployment.getSpec(), PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
+        deployment.getSpec().getFlinkConfiguration().put(PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
         reconcileSpec(deployment);
 
         assertEquals(
@@ -129,7 +128,10 @@ public class SnapshotUtilsTest {
                         snapshotType,
                         Instant.MIN));
 
-        addConfigProperty(deployment.getSpec(), periodicSnapshotIntervalOption.key(), "10m");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(periodicSnapshotIntervalOption.key(), "10m");
 
         reconcileSpec(deployment);
 
@@ -141,7 +143,7 @@ public class SnapshotUtilsTest {
                         snapshotType,
                         Instant.MIN));
         resetTrigger(deployment, snapshotType);
-        addConfigProperty(deployment.getSpec(), periodicSnapshotIntervalOption.key(), "0");
+        deployment.getSpec().getFlinkConfiguration().put(periodicSnapshotIntervalOption.key(), "0");
         reconcileSpec(deployment);
 
         setTriggerNonce(deployment, snapshotType, 123L);
