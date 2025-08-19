@@ -63,7 +63,6 @@ public class FlinkBlueGreenDeploymentSpecDiff {
             return BlueGreenDiffType.IGNORE;
         }
 
-        boolean hasTopLevelDiff = hasTopLevelDifferences();
         BlueGreenDiffType childDiffType = getChildSpecDiffType();
 
         // If nested spec has SCALE or UPGRADE differences, return TRANSITION regardless
@@ -74,13 +73,11 @@ public class FlinkBlueGreenDeploymentSpecDiff {
         // Determine result based on where differences are found
         boolean hasChildDiff = childDiffType != BlueGreenDiffType.IGNORE;
 
-        if (hasTopLevelDiff && hasChildDiff) {
-            return BlueGreenDiffType.PATCH_BOTH;
-        } else if (hasTopLevelDiff) {
-            return BlueGreenDiffType.PATCH_TOP_LEVEL;
-        } else if (hasChildDiff) {
+        if (hasChildDiff) {
+            // Child spec changes take precedence, return the child diff type
             return BlueGreenDiffType.PATCH_CHILD;
-        } else {
+        }
+        else {
             return BlueGreenDiffType.IGNORE;
         }
     }

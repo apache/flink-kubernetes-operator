@@ -101,7 +101,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
-    public void testPatchTopLevelForMetadataDifference() {
+    public void testIgnoreForMetadataDifference() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
@@ -113,11 +113,11 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        assertEquals(BlueGreenDiffType.PATCH_TOP_LEVEL, diff.compare());
+        assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
     }
 
     @Test
-    public void testPatchTopLevelForConfigurationDifference() {
+    public void testIgnoreForConfigurationDifference() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
@@ -129,7 +129,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        assertEquals(BlueGreenDiffType.PATCH_TOP_LEVEL, diff.compare());
+        assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
     }
 
     @Test
@@ -150,7 +150,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
-    public void testPatchBothForTopLevelAndNestedDifferences() {
+    public void testPatchChildForTopLevelAndNestedDifferences() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
@@ -166,7 +166,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        assertEquals(BlueGreenDiffType.PATCH_BOTH, diff.compare());
+        assertEquals(BlueGreenDiffType.PATCH_CHILD, diff.compare());
     }
 
     @Test
@@ -198,7 +198,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
-    public void testTransitionOverridesPatchBoth() {
+    public void testTransitionOverridesPatchChild() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
@@ -211,7 +211,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        // Should return TRANSITION, not PATCH_BOTH
+        // Should return TRANSITION, not PATCH_CHILD
         assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
     }
 

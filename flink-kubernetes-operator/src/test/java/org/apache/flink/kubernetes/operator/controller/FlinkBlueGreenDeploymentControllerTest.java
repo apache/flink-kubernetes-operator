@@ -281,7 +281,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertFalse(rs.updateControl.isPatchResource());
             assertTrue(rs.updateControl.getScheduleDelay().isPresent());
             reschedDelayMs = rs.updateControl.getScheduleDelay().get();
-            assertTrue(reschedDelayMs == reconciliationReschedulingIntervalMs && reschedDelayMs > 0);
+            assertTrue(
+                    reschedDelayMs == reconciliationReschedulingIntervalMs && reschedDelayMs > 0);
             assertTrue(
                     instantStrToMillis(rs.reconciledStatus.getAbortTimestamp())
                             > System.currentTimeMillis());
@@ -409,12 +410,18 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         testCase.applyChanges(rs.deployment, kubernetesClient);
 
-        var result = reconcileAndVerifyPatchBehavior(rs);
-
-        testCase.verifySpecificBehavior(result, getFlinkDeployments());
-
-        assertFinalized(
-                result.minReconciliationTs, result.rs, FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
+        // PatchTopLevelTestCase should now be ignored (return noUpdate)
+        if (testCase instanceof PatchTopLevelTestCase) {
+            var result = reconcileAndVerifyIgnoreBehavior(rs);
+            testCase.verifySpecificBehavior(result, getFlinkDeployments());
+        } else {
+            var result = reconcileAndVerifyPatchBehavior(rs);
+            testCase.verifySpecificBehavior(result, getFlinkDeployments());
+            assertFinalized(
+                    result.minReconciliationTs,
+                    result.rs,
+                    FlinkBlueGreenDeploymentState.ACTIVE_BLUE);
+        }
     }
 
     // ==================== Parameterized Test Inputs ====================
@@ -605,6 +612,30 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs = reconcile(rs.deployment);
 
         return new ReconcileResult(minReconciliationTs, rs, existingFlinkDeployment);
+    }
+
+    private ReconcileResult reconcileAndVerifyIgnoreBehavior(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs)
+            throws Exception {
+
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size());
+        var existingFlinkDeployment = flinkDeployments.get(0);
+
+        var minReconciliationTs = System.currentTimeMillis() - 1;
+        rs = reconcile(rs.deployment);
+
+        assertIgnoreOperationTriggered(rs);
+
+        return new ReconcileResult(minReconciliationTs, rs, existingFlinkDeployment);
+    }
+
+    private void assertIgnoreOperationTriggered(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs) {
+        // For IGNORE behavior, we expect noUpdate (no patch status, no reschedule)
+        assertFalse(rs.updateControl.isPatchStatus());
+        assertFalse(rs.updateControl.isPatchResource());
+        assertFalse(rs.updateControl.getScheduleDelay().isPresent());
     }
 
     private void assertPatchOperationTriggered(

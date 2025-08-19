@@ -146,7 +146,7 @@ public class BlueGreenDeploymentService {
             DeploymentType currentDeploymentType,
             BlueGreenDiffType specDiff) {
 
-        if (specDiff == BlueGreenDiffType.PATCH_BOTH || specDiff == BlueGreenDiffType.PATCH_CHILD) {
+        if (specDiff == BlueGreenDiffType.PATCH_CHILD) {
             FlinkDeployment nextFlinkDeployment =
                     context.getDeploymentByType(currentDeploymentType);
 
