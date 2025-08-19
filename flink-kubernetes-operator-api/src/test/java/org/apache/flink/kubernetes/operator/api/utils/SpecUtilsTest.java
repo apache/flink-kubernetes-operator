@@ -24,16 +24,22 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link SpecUtils}. */
-public class SpecUtilsTest {
+class SpecUtilsTest {
+
+    private static final ObjectMapper yamlObjectMapper = new ObjectMapper(new YAMLFactory());
 
     @Test
-    public void testSpecSerializationWithVersion() throws JsonProcessingException {
+    void testSpecSerializationWithVersion() throws JsonProcessingException {
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         String serialized = SpecUtils.writeSpecWithMeta(app.getSpec(), app);
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
@@ -56,7 +62,7 @@ public class SpecUtilsTest {
     }
 
     @Test
-    public void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
+    void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
         // with regards to ReconcialiationMetadata & SpecWithMeta
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(12L);
@@ -75,5 +81,58 @@ public class SpecUtilsTest {
                 "{\"apiVersion\":\"flink.apache.org/v1beta1\",\"metadata\":{\"generation\":5},\"firstDeployment\":false}";
         var migrated = SpecUtils.deserializeSpecWithMeta(oldSerialized, FlinkDeploymentSpec.class);
         assertNull(migrated.getMeta());
+    }
+
+    @Test
+    void convertsStringMapToJsonNode() {
+        var map = Map.of("k1", "v1", "k2", "v2", "k3.nested", "v3");
+        var node = SpecUtils.mapToJsonNode(map);
+
+        assertThat(node).hasSize(3);
+        assertThat(node.get("k1").asText()).isEqualTo("v1");
+        assertThat(node.get("k2").asText()).isEqualTo("v2");
+        assertThat(node.get("k3.nested").asText()).isEqualTo("v3");
+    }
+
+    @Test
+    void convertsJsonNodeToMap() throws JsonProcessingException {
+        var node =
+                yamlObjectMapper.readTree("k1: v1 \n" + "k2: v2 \n" + "k3:\n" + "  nested: v3\n");
+
+        var map = SpecUtils.toStringMap(node);
+        assertThat(map).hasSize(3);
+        assertThat(map.get("k1")).isEqualTo("v1");
+        assertThat(map.get("k2")).isEqualTo("v2");
+        assertThat(map.get("k3.nested")).isEqualTo("v3");
+    }
+
+    @Test
+    void addConfigPropertyToSpec() {
+        var spec = new FlinkDeploymentSpec();
+
+        SpecUtils.addConfigProperty(spec, "k1", "v1");
+
+        assertThat(spec.getFlinkConfiguration().get("k1").asText()).isEqualTo("v1");
+    }
+
+    @Test
+    void addConfigPropertiesToSpec() {
+        var spec = new FlinkDeploymentSpec();
+
+        SpecUtils.addConfigProperties(spec, Map.of("k1", "v1", "k2", "v2"));
+
+        assertThat(spec.getFlinkConfiguration().get("k1").asText()).isEqualTo("v1");
+        assertThat(spec.getFlinkConfiguration().get("k2").asText()).isEqualTo("v2");
+    }
+
+    @Test
+    void removeConfigPropertiesFromSpec() {
+        var spec = new FlinkDeploymentSpec();
+        SpecUtils.addConfigProperties(spec, Map.of("k1", "v1", "k2", "v2"));
+
+        SpecUtils.removeConfigProperties(spec, "k1");
+
+        assertThat(spec.getFlinkConfiguration().get("k1")).isNull();
+        assertThat(spec.getFlinkConfiguration().get("k2").asText()).isEqualTo("v2");
     }
 }

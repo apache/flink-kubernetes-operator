@@ -32,9 +32,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import javax.annotation.Nullable;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -132,7 +131,6 @@ public class SpecUtils {
         }
     }
 
-    // todo unit test
     public static JsonNode toJsonNode(Map<String, String> properties) {
         ObjectNode jsonNode = yamlObjectMapper.createObjectNode();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -143,12 +141,12 @@ public class SpecUtils {
 
     public static Map<String, String> toStringMap(JsonNode node) {
         if (node == null) {
-            return Collections.emptyMap();
+            return new HashMap<>();
         }
         if (node instanceof NullNode) {
-            return Collections.emptyMap();
+            return new HashMap<>();
         }
-        Map<String, String> flatMap = new LinkedHashMap<>();
+        Map<String, String> flatMap = new HashMap<>();
         flattenHelper(node, "", flatMap);
         return flatMap;
     }
