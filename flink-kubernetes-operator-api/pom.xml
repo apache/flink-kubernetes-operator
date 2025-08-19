@@ -152,6 +152,26 @@ under the License.
             <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kube-api-test-client-inject</artifactId>
+            <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>
+            <version>${fabric8.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.squareup.okhttp3</groupId>
+                    <artifactId>okhttp</artifactId>
+                </exclusion>
+            </exclusions>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <profiles>
