@@ -404,7 +404,8 @@ public class KubernetesOperatorConfigOptions {
             operatorConfig("dynamic.namespaces.enabled")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Enables dynamic change of watched/monitored namespaces.");
+                    .withDescription(
+                            "Enables the operator to dynamically update the list of namespaces it watches. Requires dynamic.config.enabled to be set to true.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
