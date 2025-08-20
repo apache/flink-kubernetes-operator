@@ -24,7 +24,7 @@ spec:
   image: flink:1.20
   flinkVersion: v1_20
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
+    taskmanager.numberOfTaskSlots: 2
     security.ssl:
       enabled: 'true'
       truststore: /opt/flink/tls-cert/truststore.jks

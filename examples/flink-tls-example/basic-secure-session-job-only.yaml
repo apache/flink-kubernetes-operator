@@ -23,7 +23,7 @@ spec:
   flinkConfiguration:
     security.ssl:
       internal:
-        enabled: 'true'
+        enabled: true
         keystore: /opt/flink/tls-cert/keystore.jks
         keystore-password: password1234
         truststore: /opt/flink/tls-cert/truststore.jks
@@ -34,9 +34,9 @@ spec:
         truststore: /opt/flink/tls-cert/truststore.jks
         key-password: password1234
         truststore-password: password1234
-        enabled: 'true'
+        enabled: true
         keystore-password: password1234
-    kubernetes.secrets: 'basic-secure-cert:/opt/flink/tls-cert'
+    kubernetes.secrets: basic-secure-cert:/opt/flink/tls-cert
   deploymentName: basic-secure-deployment-only
   job:
     jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1-TopSpeedWindowing.jar

@@ -25,13 +25,13 @@ spec:
   flinkVersion: v1_20
   flinkConfiguration:
     job.autoscaler:
-      enabled: "true"
-      stabilization.interval: "1m"
-      metrics.window: "15m"
-      utilization.target: "0.5"
-      target.utilization.boundary: "0.3"
-    pipeline.max-parallelism: "32"
-    taskmanager.numberOfTaskSlots: "4"
+      enabled: true
+      stabilization.interval: 1m
+      metrics.window: 15m
+      utilization.target: 0.5
+      target.utilization.boundary: 0.3
+    pipeline.max-parallelism: 32
+    taskmanager.numberOfTaskSlots: 4
   serviceAccount: flink
   jobManager:
     resource:

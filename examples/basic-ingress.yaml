@@ -26,7 +26,7 @@ spec:
   ingress:
     template: "{{name}}.{{namespace}}.flink.k8s.io"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
+    taskmanager.numberOfTaskSlots: 2
   serviceAccount: flink
   jobManager:
     resource:

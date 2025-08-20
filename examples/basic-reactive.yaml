@@ -25,7 +25,7 @@ spec:
   flinkVersion: v1_20
   flinkConfiguration:
     scheduler-mode: REACTIVE
-    taskmanager.numberOfTaskSlots: "2"
+    taskmanager.numberOfTaskSlots: 2
     state:
       savepoints.dir: file:///flink-data/savepoints
       checkpoints.dir: file:///flink-data/checkpoints
