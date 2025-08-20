@@ -280,14 +280,14 @@ public class NativeFlinkServiceTest {
         var appConfig = spec.getFlinkConfiguration().asConfiguration();
         appConfig.set(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Adaptive);
 
-        spec.setConfiguration(appConfig);
+        spec.setFlinkConfiguration(appConfig);
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
 
         appConfig.set(
                 PipelineOptions.PARALLELISM_OVERRIDES,
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
-        spec.setConfiguration(appConfig);
+        spec.setFlinkConfiguration(appConfig);
 
         flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
 
@@ -321,7 +321,7 @@ public class NativeFlinkServiceTest {
 
         // Baseline
         appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
-        spec.setConfiguration(appConfig);
+        spec.setFlinkConfiguration(appConfig);
         testScaleConditionDep(flinkDep, service, d -> {}, true);
         testScaleConditionLastSpec(flinkDep, service, d -> {}, true);
 

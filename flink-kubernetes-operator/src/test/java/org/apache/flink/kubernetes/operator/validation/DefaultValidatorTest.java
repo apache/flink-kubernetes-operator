@@ -163,7 +163,7 @@ public class DefaultValidatorTest {
         testError(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                         .PERIODIC_SAVEPOINT_INTERVAL
@@ -176,7 +176,7 @@ public class DefaultValidatorTest {
         testError(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                         .OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE
@@ -190,11 +190,12 @@ public class DefaultValidatorTest {
         testSuccess(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(Collections.singletonMap("random", "config")));
+                                .setFlinkConfiguration(
+                                        Collections.singletonMap("random", "config")));
         testError(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Collections.singletonMap(
                                                 KubernetesConfigOptions.NAMESPACE.key(), "myns")),
                 "Forbidden Flink config key");
@@ -212,7 +213,7 @@ public class DefaultValidatorTest {
         testError(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                                 .OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED
@@ -260,7 +261,7 @@ public class DefaultValidatorTest {
 
         testError(
                 dep -> {
-                    dep.getSpec().setConfiguration(new HashMap<>());
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJobManager().setReplicas(2);
                 },
                 "High availability should be enabled when starting standby JobManagers.");
@@ -268,7 +269,7 @@ public class DefaultValidatorTest {
         testError(
                 dep ->
                         dep.getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                         .DEPLOYMENT_ROLLBACK_ENABLED
@@ -303,25 +304,25 @@ public class DefaultValidatorTest {
         testError(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
-                    dep.getSpec().setConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
+                    dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
                 },
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
 
         testSuccess(
                 dep -> {
                     dep.getSpec().getJobManager().getResource().setMemory(null);
-                    dep.getSpec().setConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
+                    dep.getSpec().setFlinkConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
                 });
         testSuccess(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
-                    dep.getSpec().setConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
+                    dep.getSpec().setFlinkConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
                 });
         testSuccess(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec()
-                            .setConfiguration(
+                            .setFlinkConfiguration(
                                     Map.of(
                                             TASK_HEAP_MEMORY.key(),
                                             "1024m",
@@ -508,7 +509,7 @@ public class DefaultValidatorTest {
                 new DefaultValidator(new FlinkConfigManager(defaultFlinkConf));
         testSuccess(
                 dep -> {
-                    dep.getSpec().setConfiguration(new HashMap<>());
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
                 validatorWithDefaultConfig);
@@ -694,7 +695,7 @@ public class DefaultValidatorTest {
                 sessionJob ->
                         sessionJob
                                 .getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                         .JAR_ARTIFACT_HTTP_HEADER
@@ -707,7 +708,7 @@ public class DefaultValidatorTest {
                 sessionJob ->
                         sessionJob
                                 .getSpec()
-                                .setConfiguration(
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                         .PERIODIC_SAVEPOINT_INTERVAL
@@ -741,7 +742,7 @@ public class DefaultValidatorTest {
                                                     "test-checkpoint-dir"));
                 },
                 flinkDeployment -> {
-                    flinkDeployment.getSpec().setConfiguration(Map.of());
+                    flinkDeployment.getSpec().setFlinkConfiguration(Map.of());
                 },
                 null);
     }
@@ -1094,7 +1095,7 @@ public class DefaultValidatorTest {
         var sessionJob = TestUtils.buildSessionJob();
         var flinkConfiguration = getDefaultTestAutoScalerFlinkConfigurationMap();
         flinkConfigurationModifier.accept(flinkConfiguration);
-        sessionCluster.getSpec().setConfiguration(flinkConfiguration);
+        sessionCluster.getSpec().setFlinkConfiguration(flinkConfiguration);
         return validator.validateSessionJob(sessionJob, Optional.of(sessionCluster));
     }
 
@@ -1103,7 +1104,7 @@ public class DefaultValidatorTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var flinkConfiguration = getDefaultTestAutoScalerFlinkConfigurationMap();
         flinkConfigurationModifier.accept(flinkConfiguration);
-        deployment.getSpec().setConfiguration(flinkConfiguration);
+        deployment.getSpec().setFlinkConfiguration(flinkConfiguration);
         return validator.validateDeployment(deployment);
     }
 

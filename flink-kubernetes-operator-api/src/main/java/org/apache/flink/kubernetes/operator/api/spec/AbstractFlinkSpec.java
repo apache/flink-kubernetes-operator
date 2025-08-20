@@ -66,13 +66,13 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
 
     @Tolerate
     @JsonIgnore
-    public void setConfiguration(Map<String, String> config) {
+    public void setFlinkConfiguration(Map<String, String> config) {
         flinkConfiguration.setAllFrom(config);
     }
 
     @Tolerate
     @JsonIgnore
-    public void setConfiguration(Configuration config) {
-        setConfiguration(config.toMap());
+    public void setFlinkConfiguration(Configuration config) {
+        setFlinkConfiguration(config.toMap());
     }
 }
