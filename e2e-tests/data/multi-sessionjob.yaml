@@ -30,7 +30,7 @@ spec:
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
+    taskmanager.numberOfTaskSlots: 2
     high-availability:
       type: kubernetes
       storageDir: file:///opt/flink/volume/flink-ha

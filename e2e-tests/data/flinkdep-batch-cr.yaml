@@ -30,8 +30,8 @@ spec:
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
-    kubernetes.operator.snapshot.resource.enabled: "false"
+    taskmanager.numberOfTaskSlots: 2
+    kubernetes.operator.snapshot.resource.enabled: false
   serviceAccount: flink
   podTemplate:
     spec:
