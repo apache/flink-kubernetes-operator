@@ -24,18 +24,21 @@ spec:
   image: autoscaling-example
   flinkVersion: v1_20
   flinkConfiguration:
-    job.autoscaler.enabled: "true"
-    job.autoscaler.stabilization.interval: "1m"
-    job.autoscaler.metrics.window: "3m"
+    job.autoscaler:
+      enabled: "true"
+      stabilization.interval: "1m"
+      metrics.window: "3m"
+      target.utilization.boundary: "0.1"
     pipeline.max-parallelism: "24"
     taskmanager.numberOfTaskSlots: "4"
-    state.savepoints.dir: file:///flink-data/savepoints
-    state.checkpoints.dir: file:///flink-data/checkpoints
-    high-availability.type: kubernetes
-    high-availability.storageDir: file:///flink-data/ha
+    state:
+      savepoints.dir: file:///flink-data/savepoints
+      checkpoints.dir: file:///flink-data/checkpoints
+    high-availability:
+      type: kubernetes
+      storageDir: file:///flink-data/ha
     execution.checkpointing.interval: "1m"
     jobmanager.scheduler: adaptive
-    job.autoscaler.target.utilization.boundary: "0.1"
   serviceAccount: flink
   jobManager:
     resource:

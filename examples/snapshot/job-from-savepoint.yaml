@@ -37,8 +37,9 @@ spec:
   image: flink:1.20
   flinkVersion: v1_20
   flinkConfiguration:
-    state.checkpoints.dir: file:///flink-data/checkpoints
-    state.savepoints.dir: file:///flink-data/savepoints
+    state:
+      checkpoints.dir: file:///flink-data/checkpoints
+      savepoints.dir: file:///flink-data/savepoints
   serviceAccount: flink
   jobManager:
     resource:

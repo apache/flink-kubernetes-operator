@@ -25,12 +25,13 @@ spec:
   flinkVersion: v1_20
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
-    security.ssl.enabled: 'true'
-    security.ssl.truststore: /opt/flink/tls-cert/truststore.jks
-    security.ssl.truststore-password: password1234
-    security.ssl.keystore: /opt/flink/tls-cert/keystore.jks
-    security.ssl.keystore-password: password1234
-    security.ssl.key-password: password1234
+    security.ssl:
+      enabled: 'true'
+      truststore: /opt/flink/tls-cert/truststore.jks
+      truststore-password: password1234
+      keystore: /opt/flink/tls-cert/keystore.jks
+      keystore-password: password1234
+      key-password: password1234
     kubernetes.secrets: 'basic-secure-cert:/opt/flink/tls-cert'
   serviceAccount: flink
   jobManager:
