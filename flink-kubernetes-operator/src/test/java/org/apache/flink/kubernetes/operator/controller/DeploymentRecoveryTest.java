@@ -177,7 +177,6 @@ public class DeploymentRecoveryTest {
 
         // We disable HA for stateless to test recovery without HA metadata
         if (upgradeMode == UpgradeMode.STATELESS) {
-
             appCluster
                     .getSpec()
                     .getFlinkConfiguration()

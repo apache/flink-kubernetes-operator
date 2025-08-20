@@ -400,7 +400,6 @@ public class NativeFlinkServiceTest {
 
         // Do not scale if parallelism overrides were completely removed
         var flinkDep2 = ReconciliationUtils.clone(flinkDep);
-
         flinkDep2
                 .getSpec()
                 .getFlinkConfiguration()

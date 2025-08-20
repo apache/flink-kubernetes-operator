@@ -133,7 +133,6 @@ public class StandaloneFlinkServiceTest {
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
 
         // Add parallelism change, verify it is honoured in reactive mode
-
         flinkDeployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -192,7 +191,6 @@ public class StandaloneFlinkServiceTest {
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
         // Add replicas
         flinkDeployment.getSpec().getTaskManager().setReplicas(3);
-
         flinkDeployment
                 .getSpec()
                 .getFlinkConfiguration()

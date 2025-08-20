@@ -750,7 +750,6 @@ public class FlinkStateSnapshotControllerTest {
                 .getStatus()
                 .setJobStatus(JobStatus.builder().state(RUNNING).jobId(JOB_ID).build());
         deployment.getSpec().setFlinkVersion(flinkVersion);
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

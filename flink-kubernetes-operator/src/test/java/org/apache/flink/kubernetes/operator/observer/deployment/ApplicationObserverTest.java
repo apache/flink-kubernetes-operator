@@ -82,12 +82,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
         readyContext = TestUtils.createContextWithReadyJobManagerDeployment(kubernetesClient);
         deployment = TestUtils.buildApplicationCluster();
         var jobId = new JobID().toHexString();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
-
         deployment.getStatus().getJobStatus().setJobId(jobId);
     }
 
@@ -247,7 +245,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setSavepointTriggerNonce(timedOutNonce);
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

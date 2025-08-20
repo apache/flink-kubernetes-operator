@@ -148,7 +148,6 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     public void testSubmitAndCleanUpWithSavepointOnResource(boolean legacySnapshots)
             throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-
         sessionJob
                 .getSpec()
                 .getFlinkConfiguration()

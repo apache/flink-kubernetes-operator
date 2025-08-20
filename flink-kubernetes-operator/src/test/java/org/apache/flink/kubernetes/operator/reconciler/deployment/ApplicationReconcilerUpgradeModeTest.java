@@ -162,7 +162,6 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
         FlinkDeployment modifiedDeployment =
                 cloneDeploymentWithUpgradeMode(deployment, UpgradeMode.SAVEPOINT);
-
         modifiedDeployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -245,7 +244,6 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                             .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
                     reconciler.reconcile(deployment, context);
                 });
-
         flinkService.clear();
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(200L);
@@ -503,7 +501,6 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     @ValueSource(booleans = {true, false})
     public void testLastStateMaxCheckpointAge(boolean cancellable) throws Exception {
         var deployment = TestUtils.buildApplicationCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -621,13 +618,11 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
         var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_18);
         if (!savepointsEnabled) {
-
             deployment
                     .getSpec()
                     .getFlinkConfiguration()
                     .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
         }
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -685,7 +680,6 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
             throws Exception {
         var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
         var deployment = TestUtils.buildApplicationCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

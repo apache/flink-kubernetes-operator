@@ -516,7 +516,6 @@ class FlinkSessionJobControllerTest {
         UpdateControl<FlinkDeployment> updateControl;
         // Override headers, and it should be saved in lastReconciledSpec once a successful
         // reconcile() finishes.
-
         sessionJob
                 .getSpec()
                 .getFlinkConfiguration()
@@ -540,7 +539,6 @@ class FlinkSessionJobControllerTest {
         // Make sure we do validation before getting effective config in reconcile().
         // Verify the saved headers in lastReconciledSpec is actually used in observe() by
         // utilizing listJobConsumer
-
         sessionJob
                 .getSpec()
                 .getFlinkConfiguration()

@@ -745,7 +745,6 @@ public class JobStatusObserverTest extends OperatorTestBase {
     private static FlinkDeployment initDeployment() {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var jobId = new JobID().toHexString();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -761,11 +760,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
     private static FlinkSessionJob initSessionJob() {
         var job = TestUtils.buildSessionJob();
         var jobId = new JobID().toHexString();
-
         job.getSpec()
                 .getFlinkConfiguration()
                 .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
-
         job.getStatus().getJobStatus().setJobId(jobId);
         job.getStatus()
                 .getReconciliationStatus()

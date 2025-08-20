@@ -132,7 +132,6 @@ public class SnapshotUtilsTest {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(periodicSnapshotIntervalOption.key(), "10m");
-
         reconcileSpec(deployment);
 
         assertEquals(

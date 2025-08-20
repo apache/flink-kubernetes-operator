@@ -151,7 +151,6 @@ public class SessionReconcilerTest extends OperatorTestBase {
     @Test
     public void testGetNonTerminalJobs() throws Exception {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

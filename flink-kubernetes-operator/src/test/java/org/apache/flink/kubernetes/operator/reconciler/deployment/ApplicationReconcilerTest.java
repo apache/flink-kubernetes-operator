@@ -207,7 +207,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testSubmitAndCleanUpWithSavepointOnResource(FlinkVersion flinkVersion)
             throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -443,7 +442,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void triggerSavepointWithSnapshotResource(boolean disposeOnDelete) throws Exception {
         var deployment = TestUtils.buildApplicationCluster();
         if (disposeOnDelete) {
-
             deployment
                     .getSpec()
                     .getFlinkConfiguration()
@@ -757,7 +755,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 getJobStatus(spDeployment).getState());
 
         // Force upgrade when savepoint is in progress.
-
         spDeployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -776,7 +773,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testRandomJobResultStorePath() throws Exception {
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
         final String haStoragePath = "file:///flink-data/ha";
-
         flinkApp.getSpec()
                 .getFlinkConfiguration()
                 .put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), haStoragePath);
@@ -847,7 +843,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -927,7 +922,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Set all the properties required by the rescale api
         deployment.getSpec().setFlinkVersion(FlinkVersion.v1_18);
         deployment.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -941,7 +935,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // Override parallelism for a vertex and trigger rescaling
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -1253,7 +1246,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
-
         reconciler.reconcile(deployment, context);
         Assertions.assertEquals(
                 MSG_SUBMIT, flinkResourceEventCollector.events.remove().getMessage());
@@ -1276,7 +1268,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // We disable last state fallback as we want to test that the deployment is properly
         // recovered before upgrade
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

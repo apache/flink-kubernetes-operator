@@ -170,8 +170,6 @@ public class RollbackTest {
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         offsetReconcilerClock(deployment, Duration.ZERO);
 
-        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -221,7 +219,6 @@ public class RollbackTest {
     public void testRollbackFailureWithLastState() throws Exception {
         var dep = TestUtils.buildApplicationCluster();
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-
         dep.getSpec().getFlinkConfiguration().put("t", "1");
         offsetReconcilerClock(dep, Duration.ZERO);
 
@@ -308,7 +305,6 @@ public class RollbackTest {
                                     .getSubmittedConf()
                                     .getString("test.deploy.config", "unknown"));
                     // Validate that rollback config is picked up from latest deploy conf
-
                     dep.getSpec()
                             .getFlinkConfiguration()
                             .put(

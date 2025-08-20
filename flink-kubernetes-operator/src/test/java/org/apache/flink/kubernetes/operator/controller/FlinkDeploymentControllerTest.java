@@ -197,7 +197,6 @@ public class FlinkDeploymentControllerTest {
                 TestUtils.buildApplicationCluster(flinkVersion, JobState.SUSPENDED);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
-
         appCluster
                 .getSpec()
                 .getFlinkConfiguration()
@@ -305,7 +304,6 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
-
         appCluster
                 .getSpec()
                 .getFlinkConfiguration()
@@ -798,7 +796,6 @@ public class FlinkDeploymentControllerTest {
 
         // triggering upgrade with no last-state fallback on non-healthy app
         flinkService.setPortReady(false);
-
         appCluster
                 .getSpec()
                 .getFlinkConfiguration()

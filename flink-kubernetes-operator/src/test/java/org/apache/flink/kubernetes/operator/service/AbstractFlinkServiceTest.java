@@ -382,7 +382,6 @@ public class AbstractFlinkServiceTest {
 
         JobID jobID = JobID.generate();
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -492,7 +491,6 @@ public class AbstractFlinkServiceTest {
 
         JobID jobID = JobID.generate();
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -504,12 +502,10 @@ public class AbstractFlinkServiceTest {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         if (drainOnSavepoint) {
-
             deployment
                     .getSpec()
                     .getFlinkConfiguration()
                     .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
-
             deployment
                     .getSpec()
                     .getFlinkConfiguration()
@@ -572,11 +568,9 @@ public class AbstractFlinkServiceTest {
         ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
 
         if (drainOnSavepoint) {
-
             job.getSpec()
                     .getFlinkConfiguration()
                     .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
-
             job.getSpec()
                     .getFlinkConfiguration()
                     .put(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(), "true");
@@ -807,7 +801,6 @@ public class AbstractFlinkServiceTest {
         var flinkService = new TestingService(testingClusterClient);
 
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

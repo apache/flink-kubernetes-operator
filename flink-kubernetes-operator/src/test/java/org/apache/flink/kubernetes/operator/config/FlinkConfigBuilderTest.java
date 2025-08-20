@@ -758,7 +758,6 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testAllowNonRestoredStateInSpecOverrideInFlinkConf() throws URISyntaxException {
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(false);
-
         flinkDeployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -771,7 +770,6 @@ public class FlinkConfigBuilderTest {
                 configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
 
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
-
         flinkDeployment
                 .getSpec()
                 .getFlinkConfiguration()

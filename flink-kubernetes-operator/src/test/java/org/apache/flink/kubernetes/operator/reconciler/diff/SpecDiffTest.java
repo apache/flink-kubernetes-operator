@@ -209,7 +209,6 @@ public class SpecDiffTest {
         right.getJob().setAllowNonRestoredState(true);
         right.getJob().setInitialSavepointPath("local:///tmp");
         right.getJob().setSavepointTriggerNonce(123L);
-
         right.getFlinkConfiguration()
                 .put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "changed");
 

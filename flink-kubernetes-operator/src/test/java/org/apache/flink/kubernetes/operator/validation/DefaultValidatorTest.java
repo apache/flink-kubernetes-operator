@@ -136,7 +136,6 @@ public class DefaultValidatorTest {
                     dep.getSpec()
                             .getFlinkConfiguration()
                             .remove(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key());
-
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
                 "Checkpoint directory");
@@ -475,7 +474,6 @@ public class DefaultValidatorTest {
         testSuccess(
                 dep -> {
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-
                     dep.getSpec()
                             .getFlinkConfiguration()
                             .put(

@@ -96,14 +96,12 @@ public class KubernetesScalingRealizerTest {
         FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
 
         // Create resource with existing parallelism overrides
-
         resource.getSpec()
                 .getFlinkConfiguration()
                 .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), currentOverrides);
         resource.getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
-
         resource.getSpec()
                 .getFlinkConfiguration()
                 .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
