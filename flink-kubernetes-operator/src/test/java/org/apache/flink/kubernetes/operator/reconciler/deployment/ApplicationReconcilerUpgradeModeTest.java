@@ -751,7 +751,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // Delete cluster and keep HA metadata
-        var conf = Configuration.fromMap(deployment.getSpec().getFlinkConfiguration().asFlatMap());
+        var conf = deployment.getSpec().getFlinkConfiguration().asConfiguration();
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), conf, false);
         flinkService.setHaDataAvailable(true);

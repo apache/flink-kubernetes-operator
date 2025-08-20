@@ -372,7 +372,7 @@ public class FlinkConfigManager {
             AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
         addOperatorConfigsFromSpec(spec, conf);
         if (spec.getFlinkConfiguration() != null) {
-            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration().asFlatMap());
+            var deployConfig = spec.getFlinkConfiguration().asConfiguration();
             for (ConfigOption configOption : configOptions) {
                 deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
             }

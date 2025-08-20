@@ -18,15 +18,20 @@
 package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import lombok.experimental.Tolerate;
+
+import java.util.Map;
 
 /** The common spec. */
 @Experimental
@@ -58,4 +63,16 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
     })
     @JsonDeserialize(using = ConfigObjectNodeDeserializer.class)
     private ConfigObjectNode flinkConfiguration = new ConfigObjectNode();
+
+    @Tolerate
+    @JsonIgnore
+    public void setConfiguration(Map<String, String> config) {
+        flinkConfiguration.setAllFrom(config);
+    }
+
+    @Tolerate
+    @JsonIgnore
+    public void setConfiguration(Configuration config) {
+        setConfiguration(config.toMap());
+    }
 }

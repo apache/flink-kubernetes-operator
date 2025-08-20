@@ -17,10 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.api.spec;
 
+import org.apache.flink.configuration.Configuration;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -40,17 +43,15 @@ public class ConfigObjectNode extends ObjectNode {
         super(nc);
     }
 
-    public void removeAll(String... names) {
-        for (String name : names) {
-            remove(name);
-        }
+    public void remove(String... names) {
+        remove(Arrays.asList(names));
     }
 
     public void putAllFrom(Map<String, String> value) {
         value.forEach(this::put);
     }
 
-    public void set(Map<String, String> value) {
+    public void setAllFrom(Map<String, String> value) {
         removeAll();
         putAllFrom(value);
     }
@@ -59,6 +60,10 @@ public class ConfigObjectNode extends ObjectNode {
         Map<String, String> flatMap = new HashMap<>();
         flattenHelper(this, "", flatMap);
         return flatMap;
+    }
+
+    public Configuration asConfiguration() {
+        return Configuration.fromMap(asFlatMap());
     }
 
     private static void flattenHelper(

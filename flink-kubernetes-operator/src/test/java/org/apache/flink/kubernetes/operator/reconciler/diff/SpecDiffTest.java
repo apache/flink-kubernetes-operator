@@ -101,7 +101,7 @@ public class SpecDiffTest {
         assertEquals(8, diff.getNumDiffs());
 
         right.getFlinkConfiguration()
-                .removeAll(
+                .remove(
                         SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
                         AutoScalerOptions.METRICS_WINDOW.key());
 

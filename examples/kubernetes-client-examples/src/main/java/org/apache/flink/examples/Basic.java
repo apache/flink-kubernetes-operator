@@ -49,7 +49,7 @@ public class Basic {
         flinkDeploymentSpec.setImage("flink:1.19");
         Map<String, String> flinkConfiguration =
                 Map.ofEntries(entry("taskmanager.numberOfTaskSlots", "2"));
-        flinkDeploymentSpec.getFlinkConfiguration().set(flinkConfiguration);
+        flinkDeploymentSpec.setConfiguration(flinkConfiguration);
         flinkDeployment.setSpec(flinkDeploymentSpec);
         flinkDeploymentSpec.setServiceAccount("flink");
         JobManagerSpec jobManagerSpec = new JobManagerSpec();
