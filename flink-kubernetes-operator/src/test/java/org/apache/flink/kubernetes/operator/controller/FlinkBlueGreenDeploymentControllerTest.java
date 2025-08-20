@@ -68,6 +68,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -344,12 +345,17 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Simulate a spec change before the transition is complete
         simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0, null);
+        var moddedSpec = rs.deployment.getSpec();
         rs = reconcile(rs.deployment);
 
-        // The spec should have been reverted
-        assertEquals(
+        // The spec change should have been preserved
+        assertNotEquals(
                 SpecUtils.writeSpecAsJSON(originalSpec, "spec"),
                 SpecUtils.writeSpecAsJSON(rs.deployment.getSpec(), "spec"));
+
+        assertEquals(
+                SpecUtils.writeSpecAsJSON(moddedSpec, "spec"),
+                rs.deployment.getStatus().getLastReconciledSpec(), "spec");
     }
 
     @ParameterizedTest

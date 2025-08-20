@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -49,13 +48,17 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.fetchSavepointInfo;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getLastCheckpoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getSpecDiff;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.hasSpecChanged;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.lookForCheckpoint;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.triggerSavepoint;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setAbortTimestamp;
 
 /** Consolidated service for all Blue/Green deployment operations. */
 public class BlueGreenDeploymentService {
@@ -108,7 +111,7 @@ public class BlueGreenDeploymentService {
      */
     public UpdateControl<FlinkBlueGreenDeployment> checkAndInitiateDeployment(
             BlueGreenContext context, DeploymentType currentDeploymentType) {
-        BlueGreenDiffType specDiff = BlueGreenSpecUtils.getSpecDiff(context);
+        BlueGreenDiffType specDiff = getSpecDiff(context);
 
         if (specDiff != BlueGreenDiffType.IGNORE) {
             FlinkDeployment currentFlinkDeployment =
@@ -124,15 +127,15 @@ public class BlueGreenDeploymentService {
                                 .rescheduleAfter(getReconciliationReschedInterval(context));
                     }
 
-                    BlueGreenSpecUtils.setLastReconciledSpec(context);
+                    setLastReconciledSpec(context);
                     return startTransition(context, currentDeploymentType, currentFlinkDeployment);
                 } else {
-                    BlueGreenSpecUtils.setLastReconciledSpec(context);
+                    setLastReconciledSpec(context);
                     return patchFlinkDeployment(context, currentDeploymentType, specDiff);
                 }
             } else {
                 if (context.getDeploymentStatus().getJobStatus().getState() != JobStatus.FAILING) {
-                    BlueGreenSpecUtils.setLastReconciledSpec(context);
+                    setLastReconciledSpec(context);
                     return patchStatusUpdateControl(context, null, JobStatus.FAILING);
                 }
             }
@@ -292,9 +295,9 @@ public class BlueGreenDeploymentService {
     public UpdateControl<FlinkBlueGreenDeployment> monitorTransition(
             BlueGreenContext context, DeploymentType currentDeploymentType) {
 
-        handleSpecChangesDuringTransition(context);
-
         TransitionState transitionState = determineTransitionState(context, currentDeploymentType);
+
+        handleSpecChangesDuringTransition(context, transitionState);
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
             return shouldWeDelete(
@@ -308,11 +311,27 @@ public class BlueGreenDeploymentService {
         }
     }
 
-    private void handleSpecChangesDuringTransition(BlueGreenContext context) {
-        if (BlueGreenSpecUtils.hasSpecChanged(context)) {
-            BlueGreenSpecUtils.revertToLastSpec(context);
-            LOG.warn(
-                    "Blue/Green Spec change detected during transition, ignored and reverted to the last reconciled spec");
+    private void handleSpecChangesDuringTransition(
+            BlueGreenContext context, TransitionState transitionState) {
+        if (hasSpecChanged(context)) {
+            BlueGreenDiffType diffType = getSpecDiff(context);
+
+            FlinkDeployment incomingFlinkDeployment = transitionState.nextDeployment;
+
+            if (diffType != BlueGreenDiffType.IGNORE) {
+                // Apply the new spec changes to the currently active deployment
+                incomingFlinkDeployment.setSpec(
+                        context.getBgDeployment().getSpec().getTemplate().getSpec());
+                // Resetting the abort grace period
+                setAbortTimestamp(context);
+                // Ack'ing the spec change
+                setLastReconciledSpec(context);
+                updateFlinkDeployment(incomingFlinkDeployment, context);
+
+                LOG.info(
+                        "Blue/Green Spec change detected during transition, patching incoming '{}' deployment with new changes",
+                        incomingFlinkDeployment.getMetadata().getName());
+            }
         }
     }
 
