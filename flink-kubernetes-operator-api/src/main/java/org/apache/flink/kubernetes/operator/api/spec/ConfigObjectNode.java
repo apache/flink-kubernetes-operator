@@ -28,7 +28,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-/** */
+/** Allows parsing configurations as YAML, and adds related utility methods. */
 public class ConfigObjectNode extends ObjectNode {
 
     public ConfigObjectNode() {

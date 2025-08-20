@@ -60,7 +60,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 ### ConfigObjectNode
 **Class**: org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode
 
-**Description**: 
+**Description**: Allows parsing configurations as YAML, and adds related utility methods.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
