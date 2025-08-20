@@ -31,10 +31,12 @@ spec:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
-    high-availability.type: kubernetes
-    high-availability.storageDir: file:///opt/flink/volume/flink-ha
-    state.checkpoints.dir: file:///opt/flink/volume/flink-cp
-    state.savepoints.dir: file:///opt/flink/volume/flink-sp
+    high-availability:
+      type: kubernetes
+      storageDir: file:///opt/flink/volume/flink-ha
+    state:
+      checkpoints.dir: file:///opt/flink/volume/flink-cp
+      savepoints.dir: file:///opt/flink/volume/flink-sp
   serviceAccount: flink
   podTemplate:
     spec:

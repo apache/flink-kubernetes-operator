@@ -125,6 +125,16 @@ public class CrdCompatibilityChecker {
             }
         }
 
+        if (oldNode.get("type") == null && newNode.get("type") != null) {
+            err("Type mismatch for " + path + ". Old node type is null, while new node is not");
+        }
+        if (oldNode.get("type") != null && newNode.get("type") == null) {
+            if (isGeneralizingAdditionalPropertiesForYaml(oldNode, newNode)) {
+                return;
+            }
+            err("Type mismatch for " + path + ". Old node type is not null, while new node null");
+        }
+
         String oldType = oldNode.get("type").asText();
 
         if (!oldType.equals(newNode.get("type").asText())) {
@@ -147,6 +157,16 @@ public class CrdCompatibilityChecker {
         if (oldType.equals("array")) {
             checkObjectCompatibility(path + ".items", oldNode.get("items"), newNode.get("items"));
         }
+    }
+
+    private static boolean isGeneralizingAdditionalPropertiesForYaml(
+            JsonNode oldNode, JsonNode newNode) {
+        var oldAdditionalProperties = oldNode.get("additionalProperties");
+
+        return oldAdditionalProperties != null
+                && "object".equals(oldNode.get("type").asText())
+                && "string".equals(oldAdditionalProperties.get("type").asText())
+                && "true".equals(newNode.get("x-kubernetes-preserve-unknown-fields").asText());
     }
 
     protected static void verifyOtherPropsMatch(String path, JsonNode oldNode, JsonNode newNode) {
