@@ -221,7 +221,7 @@ public class TestUtils extends BaseTestUtils {
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster(version);
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-                session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
+                session.getSpec().getFlinkConfiguration().putAllFrom(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);

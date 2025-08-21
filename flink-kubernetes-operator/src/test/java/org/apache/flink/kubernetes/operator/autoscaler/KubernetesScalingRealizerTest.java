@@ -49,6 +49,7 @@ public class KubernetesScalingRealizerTest {
                         ctx.getResource()
                                 .getSpec()
                                 .getFlinkConfiguration()
+                                .asFlatMap()
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
                 .satisfiesAnyOf(
                         // Currently no enforced order inside the overrides string
@@ -111,6 +112,7 @@ public class KubernetesScalingRealizerTest {
                         ctx.getResource()
                                 .getSpec()
                                 .getFlinkConfiguration()
+                                .asFlatMap()
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
                 .isEqualTo(currentOverrides);
     }

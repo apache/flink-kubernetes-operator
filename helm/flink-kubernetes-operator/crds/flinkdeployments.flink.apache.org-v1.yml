@@ -32,9 +32,7 @@ spec:
           spec:
             properties:
               flinkConfiguration:
-                additionalProperties:
-                  type: string
-                type: object
+                x-kubernetes-preserve-unknown-fields: true
               flinkVersion:
                 enum:
                 - v1_13

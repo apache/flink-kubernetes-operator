@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
@@ -48,9 +49,7 @@ import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /** Base Testing utilities. */
@@ -144,7 +143,7 @@ public class BaseTestUtils {
                         .withResourceVersion("1")
                         .build());
 
-        Map<String, String> conf = new HashMap<>();
+        ConfigObjectNode conf = new ConfigObjectNode();
         conf.put("kubernetes.operator.user.artifacts.http.header", "header");
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
@@ -170,7 +169,7 @@ public class BaseTestUtils {
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
-        Map<String, String> conf = new HashMap<>();
+        ConfigObjectNode conf = new ConfigObjectNode();
         conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
         conf.put(
                 HighAvailabilityOptions.HA_MODE.key(),

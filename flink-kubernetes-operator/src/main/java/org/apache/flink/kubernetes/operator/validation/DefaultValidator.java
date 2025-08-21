@@ -102,7 +102,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
                         .toMap();
         if (spec.getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(spec.getFlinkConfiguration());
+            effectiveConfig.putAll(spec.getFlinkConfiguration().asFlatMap());
         }
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
@@ -531,11 +531,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 sessionCluster.getSpec().getFlinkVersion())
                         .toMap();
         if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration().asFlatMap());
         }
 
         if (sessionJob.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration().asFlatMap());
         }
 
         return firstPresent(

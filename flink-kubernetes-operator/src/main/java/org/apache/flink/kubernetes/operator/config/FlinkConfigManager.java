@@ -356,6 +356,7 @@ public class FlinkConfigManager {
         // Observe config should include the latest operator related settings
         if (spec.getFlinkConfiguration() != null) {
             spec.getFlinkConfiguration()
+                    .asFlatMap()
                     .forEach(
                             (k, v) -> {
                                 if (k.startsWith(K8S_OP_CONF_PREFIX)
@@ -371,7 +372,7 @@ public class FlinkConfigManager {
             AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
         addOperatorConfigsFromSpec(spec, conf);
         if (spec.getFlinkConfiguration() != null) {
-            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+            var deployConfig = spec.getFlinkConfiguration().asConfiguration();
             for (ConfigOption configOption : configOptions) {
                 deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
             }
@@ -394,7 +395,7 @@ public class FlinkConfigManager {
         // merge session job specific config
         var sessionJobFlinkConfiguration = sessionJobSpec.getFlinkConfiguration();
         if (sessionJobFlinkConfiguration != null) {
-            sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
+            sessionJobFlinkConfiguration.asFlatMap().forEach(sessionJobConfig::setString);
         }
         applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;

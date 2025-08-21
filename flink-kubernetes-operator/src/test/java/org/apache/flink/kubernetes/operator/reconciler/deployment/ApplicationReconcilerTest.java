@@ -955,7 +955,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 reconStatus
                         .deserializeLastReconciledSpec()
                         .getFlinkConfiguration()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key())
+                        .asText());
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
         assertFalse(reconStatus.isLastReconciledSpecStable());
 
@@ -990,9 +991,16 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscaler);
 
         var deployment = TestUtils.buildApplicationCluster();
-        var config = deployment.getSpec().getFlinkConfiguration();
-        config.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
-        config.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1");
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                AutoScalerOptions.AUTOSCALER_ENABLED.key(),
+                                "true",
+                                PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                v1 + ":1"));
 
         var specCopy = SpecUtils.clone(deployment.getSpec());
 
@@ -1233,6 +1241,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void testRestartUnhealthyEvent() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -1341,15 +1350,19 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         offsetReconcilerClock(deployment, Duration.ZERO);
 
-        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
-                        .key(),
-                "false");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(),
+                                "true",
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(),
+                                "10s",
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                        .key(),
+                                "false"));
 
         // Initial deployment, mark as stable
         reconciler.reconcile(deployment, context);
