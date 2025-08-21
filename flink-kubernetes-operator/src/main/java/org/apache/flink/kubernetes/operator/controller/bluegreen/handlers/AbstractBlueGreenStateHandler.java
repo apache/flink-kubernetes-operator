@@ -26,9 +26,10 @@ import org.slf4j.LoggerFactory;
 /** Abstract base class providing common functionality for Blue/Green state handlers. */
 public abstract class AbstractBlueGreenStateHandler implements BlueGreenStateHandler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AbstractBlueGreenStateHandler.class);
-
     private final FlinkBlueGreenDeploymentState supportedState;
+
+    protected static final Logger LOG =
+            LoggerFactory.getLogger(AbstractBlueGreenStateHandler.class);
 
     protected final BlueGreenDeploymentService deploymentService;
 
@@ -42,9 +43,5 @@ public abstract class AbstractBlueGreenStateHandler implements BlueGreenStateHan
     @Override
     public FlinkBlueGreenDeploymentState getSupportedState() {
         return supportedState;
-    }
-
-    protected Logger getLogger() {
-        return LOG;
     }
 }

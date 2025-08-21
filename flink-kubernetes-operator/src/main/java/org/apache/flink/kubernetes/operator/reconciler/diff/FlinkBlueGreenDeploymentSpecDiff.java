@@ -26,12 +26,9 @@ import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
 import lombok.NonNull;
 
-import java.util.Objects;
-
 /**
  * Diff class for comparing FlinkBlueGreenDeploymentSpec objects. Provides specialized comparison
- * logic that delegates nested FlinkDeploymentSpec comparison to ReflectiveDiffBuilder while
- * handling top-level differences.
+ * logic that delegates nested FlinkDeploymentSpec comparison to ReflectiveDiffBuilder.
  */
 @Experimental
 public class FlinkBlueGreenDeploymentSpecDiff {
@@ -53,28 +50,32 @@ public class FlinkBlueGreenDeploymentSpecDiff {
     }
 
     /**
-     * Compares the Blue/Green deployment specs and returns the appropriate diff type.
+     * Compares the Blue/Green deployment specs and returns the appropriate diff type. The
+     * comparison focuses solely on the nested FlinkDeploymentSpec differences.
      *
      * @return BlueGreenDiffType indicating the type of difference found
      */
     public BlueGreenDiffType compare() {
-        // Check if both specs are identical
-        if (left.equals(right)) {
+        FlinkDeploymentSpec leftSpec = left.getTemplate().getSpec();
+        FlinkDeploymentSpec rightSpec = right.getTemplate().getSpec();
+
+        // Case 1: FlinkDeploymentSpecs are identical
+        if (leftSpec.equals(rightSpec)) {
             return BlueGreenDiffType.IGNORE;
         }
 
-        BlueGreenDiffType childDiffType = getChildSpecDiffType();
+        // Case 2 & 3: Delegate to ReflectiveDiffBuilder for nested spec comparison
+        DiffResult<FlinkDeploymentSpec> diffResult =
+                new ReflectiveDiffBuilder<>(deploymentMode, leftSpec, rightSpec).build();
 
-        // If nested spec has SCALE or UPGRADE differences, return TRANSITION
-        if (childDiffType == BlueGreenDiffType.TRANSITION) {
-            return BlueGreenDiffType.TRANSITION;
-        }
+        DiffType diffType = diffResult.getType();
 
-        if (childDiffType != BlueGreenDiffType.IGNORE) {
-            // Child spec changes take precedence, return the child diff type
+        // Case 2: ReflectiveDiffBuilder returns IGNORE
+        if (diffType == DiffType.IGNORE) {
             return BlueGreenDiffType.PATCH_CHILD;
         } else {
-            return BlueGreenDiffType.IGNORE;
+            // Case 3: ReflectiveDiffBuilder returns anything else map it to TRANSITION as well
+            return BlueGreenDiffType.TRANSITION;
         }
     }
 
@@ -94,53 +95,6 @@ public class FlinkBlueGreenDeploymentSpecDiff {
         }
         if (right.getTemplate().getSpec() == null) {
             throw new IllegalArgumentException("Right spec template.spec cannot be null");
-        }
-    }
-
-    /**
-     * Checks if there are differences in top-level properties (metadata, configuration).
-     *
-     * @return true if top-level differences exist, false otherwise
-     */
-    private boolean hasTopLevelDifferences() {
-        // Compare template metadata
-        boolean metadataDifferent =
-                !Objects.equals(
-                        left.getTemplate().getMetadata(), right.getTemplate().getMetadata());
-
-        // Compare template configuration
-        boolean configurationDifferent =
-                !Objects.equals(
-                        left.getTemplate().getConfiguration(),
-                        right.getTemplate().getConfiguration());
-
-        return metadataDifferent || configurationDifferent;
-    }
-
-    /**
-     * Gets the diff type for the nested FlinkDeploymentSpec using ReflectiveDiffBuilder.
-     *
-     * @return BlueGreenDiffType representing the child spec difference
-     */
-    private BlueGreenDiffType getChildSpecDiffType() {
-        FlinkDeploymentSpec leftSpec = left.getTemplate().getSpec();
-        FlinkDeploymentSpec rightSpec = right.getTemplate().getSpec();
-
-        // Delegate to ReflectiveDiffBuilder for nested spec comparison
-        DiffResult<FlinkDeploymentSpec> diffResult =
-                new ReflectiveDiffBuilder<>(deploymentMode, leftSpec, rightSpec).build();
-
-        DiffType diffType = diffResult.getType();
-
-        // Map DiffType to BlueGreenDiffType
-        switch (diffType) {
-            case IGNORE:
-                return BlueGreenDiffType.IGNORE;
-            case SCALE:
-            case UPGRADE:
-                return BlueGreenDiffType.TRANSITION;
-            default:
-                return BlueGreenDiffType.PATCH_CHILD;
         }
     }
 }

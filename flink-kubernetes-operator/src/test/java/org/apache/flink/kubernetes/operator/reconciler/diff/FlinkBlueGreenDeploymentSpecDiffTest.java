@@ -105,7 +105,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
-        // Change metadata in spec2
+        // Change metadata in spec2 - should be ignored since only FlinkDeploymentSpec matters
         ObjectMeta metadata = new ObjectMeta();
         metadata.setName("different-name");
         spec2.getTemplate().setMetadata(metadata);
@@ -121,7 +121,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
-        // Change configuration in spec2
+        // Change configuration in spec2 - should be ignored since only FlinkDeploymentSpec matters
         Map<String, String> config = new HashMap<>();
         config.put("custom.config", "different-value");
         spec2.getTemplate().setConfiguration(config);
@@ -133,15 +133,30 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
-    public void testPatchChildForNestedSpecDifference() {
+    public void testTransitionForNestedSpecDifference() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
-        // Change nested spec property that doesn't trigger SCALE/UPGRADE
-        spec2.getTemplate()
-                .getSpec()
-                .getJob()
-                .setSavepointRedeployNonce(12345L); // .setImage("different-image:latest");
+        // Change nested spec property - setSavepointRedeployNonce triggers TRANSITION
+        spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
+    }
+
+    @Test
+    public void testPatchChildForIgnorableNestedChanges() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Make changes that ReflectiveDiffBuilder considers IGNORE but specs are different
+        // Based on SpecDiffTest, these changes result in DiffType.IGNORE
+        spec2.getTemplate().getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        spec2.getTemplate().getSpec().getJob().setAllowNonRestoredState(true);
+        spec2.getTemplate().getSpec().getJob().setInitialSavepointPath("local:///tmp");
+        spec2.getTemplate().getSpec().getJob().setSavepointTriggerNonce(123L);
 
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
@@ -150,23 +165,69 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
-    public void testPatchChildForTopLevelAndNestedDifferences() {
+    public void testPatchChildForIgnorableConfigChanges() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
-        // Change both top-level (configuration) and nested spec
-        Map<String, String> config = new HashMap<>();
-        config.put("custom.config", "different-value");
-        spec2.getTemplate().setConfiguration(config);
+        spec2.getTemplate().getSpec().setFlinkConfiguration(new HashMap<>());
+
+        // Add configuration changes that ReflectiveDiffBuilder considers ignorable
         spec2.getTemplate()
                 .getSpec()
-                .getJob()
-                .setSavepointRedeployNonce(12345L); // ("different-image:latest");
+                .getFlinkConfiguration()
+                .put("kubernetes.operator.reconcile.interval", "100 SECONDS");
 
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
         assertEquals(BlueGreenDiffType.PATCH_CHILD, diff.compare());
+    }
+
+    @Test
+    public void testPatchChildWithTopLevelAndIgnorableNestedChanges() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Change both top-level (which should be ignored) and nested spec (ignorable changes)
+        Map<String, String> config = new HashMap<>();
+        config.put("custom.config", "different-value");
+        spec2.getTemplate().setConfiguration(config);
+
+        // Add nested changes that are ignorable by ReflectiveDiffBuilder
+        spec2.getTemplate().getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        spec2.getTemplate().getSpec().getJob().setInitialSavepointPath("local:///tmp/savepoints");
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        // Should return PATCH_CHILD since only FlinkDeploymentSpec matters and it has ignorable
+        // changes
+        assertEquals(BlueGreenDiffType.PATCH_CHILD, diff.compare());
+    }
+
+    // Note: Case 2 (ReflectiveDiffBuilder returns IGNORE for different FlinkDeploymentSpecs)
+    // may not occur in practice with current ReflectiveDiffBuilder implementation.
+    // If FlinkDeploymentSpecs are different, ReflectiveDiffBuilder typically returns
+    // a meaningful diff type (SCALE, UPGRADE, etc.) rather than IGNORE.
+    // The logic is preserved in the implementation for completeness.
+
+    @Test
+    public void testTransitionForTopLevelAndNestedDifferences() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Change both top-level (configuration) and nested spec
+        // With new logic, only nested spec changes matter - setSavepointRedeployNonce triggers
+        // TRANSITION
+        Map<String, String> config = new HashMap<>();
+        config.put("custom.config", "different-value");
+        spec2.getTemplate().setConfiguration(config);
+        spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
     }
 
     @Test
@@ -203,6 +264,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
         // Change both top-level and nested spec, but nested change should trigger TRANSITION
+        // With new logic, only the nested FlinkDeploymentSpec change matters
         Map<String, String> config = new HashMap<>();
         config.put("custom.config", "different-value");
         spec2.getTemplate().setConfiguration(config);
@@ -211,7 +273,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        // Should return TRANSITION, not PATCH_CHILD
+        // Should return TRANSITION since parallelism change triggers SCALE
         assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
     }
 

@@ -70,10 +70,6 @@ public class BlueGreenStateHandlerRegistry {
      * @throws IllegalStateException if no handler is found for the state
      */
     public BlueGreenStateHandler getHandler(FlinkBlueGreenDeploymentState state) {
-        BlueGreenStateHandler handler = handlers.get(state);
-        if (handler == null) {
-            throw new IllegalStateException("No handler found for state: " + state);
-        }
-        return handler;
+        return handlers.get(state);
     }
 }

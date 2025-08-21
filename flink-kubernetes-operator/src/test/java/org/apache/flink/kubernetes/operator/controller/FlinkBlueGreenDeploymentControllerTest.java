@@ -355,7 +355,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         assertEquals(
                 SpecUtils.writeSpecAsJSON(moddedSpec, "spec"),
-                rs.deployment.getStatus().getLastReconciledSpec(), "spec");
+                rs.deployment.getStatus().getLastReconciledSpec(),
+                "spec");
     }
 
     @ParameterizedTest
@@ -492,7 +493,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
         @Override
         public void applyChanges(FlinkBlueGreenDeployment deployment, KubernetesClient client) {
             FlinkDeploymentSpec spec = deployment.getSpec().getTemplate().getSpec();
-            spec.getJob().setSavepointRedeployNonce(12345L);
+
+            // Add a configuration change that ReflectiveDiffBuilder considers ignorable
+            spec.getFlinkConfiguration()
+                    .put("kubernetes.operator.reconcile.interval", "100 SECONDS");
+
             deployment.getSpec().getTemplate().setSpec(spec);
             client.resource(deployment).createOrReplace();
         }
@@ -502,8 +507,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 ReconcileResult result, List<FlinkDeployment> deployments) {
             assertEquals(1, deployments.size());
             assertEquals(
-                    12345L,
-                    (long) deployments.get(0).getSpec().getJob().getSavepointRedeployNonce());
+                    "100 SECONDS",
+                    deployments
+                            .get(0)
+                            .getSpec()
+                            .getFlinkConfiguration()
+                            .get("kubernetes.operator.reconcile.interval"));
         }
     }
 
@@ -542,7 +551,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
             // 2. Add nested spec change
             FlinkDeploymentSpec spec = template.getSpec();
-            spec.getJob().setSavepointRedeployNonce(67890L);
+            spec.getFlinkConfiguration()
+                    .put("kubernetes.operator.reconcile.interval", "100 SECONDS");
             template.setSpec(spec);
 
             deployment.getSpec().setTemplate(template);
@@ -557,8 +567,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
             // Child spec change should be applied to FlinkDeployment
             assertEquals(
-                    67890L,
-                    (long) updatedDeployment.getSpec().getJob().getSavepointRedeployNonce());
+                    "100 SECONDS",
+                    deployments
+                            .get(0)
+                            .getSpec()
+                            .getFlinkConfiguration()
+                            .get("kubernetes.operator.reconcile.interval"));
 
             // Top-level changes should be preserved in reconciled spec
             assertNotNull(result.rs.reconciledStatus.getLastReconciledSpec());

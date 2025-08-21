@@ -53,11 +53,10 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
                     null,
                     true);
         } else {
-            getLogger()
-                    .warn(
-                            "Ignoring initial deployment. Last Reconciled Spec null: {}. BG Status: {}.",
-                            deploymentStatus.getLastReconciledSpec() == null,
-                            deploymentStatus.getJobStatus().getState());
+            LOG.warn(
+                    "Ignoring initial deployment. Last Reconciled Spec null: {}. BG Status: {}.",
+                    deploymentStatus.getLastReconciledSpec() == null,
+                    deploymentStatus.getJobStatus().getState());
             return UpdateControl.noUpdate();
         }
     }
