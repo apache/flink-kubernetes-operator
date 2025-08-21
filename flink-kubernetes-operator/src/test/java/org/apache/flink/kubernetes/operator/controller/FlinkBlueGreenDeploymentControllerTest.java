@@ -131,10 +131,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         simulateChangeInSpec(
                 rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, initialSavepointPath);
 
-        var expectedSavepointPath =
-                upgradeMode == UpgradeMode.LAST_STATE ? TEST_CHECKPOINT_PATH : initialSavepointPath;
+        var expectedSavepointPath = initialSavepointPath;
 
-        if (upgradeMode == UpgradeMode.SAVEPOINT) {
+        if (upgradeMode != UpgradeMode.STATELESS) {
             // In this case there will ALWAYS be a savepoint generated with this value,
             // regardless of the initialSavepointPath
             expectedSavepointPath = "savepoint_1";

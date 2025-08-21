@@ -106,13 +106,16 @@ public class BlueGreenSpecUtils {
     }
 
     public static boolean isSavepointRequired(BlueGreenContext context) {
-        return UpgradeMode.SAVEPOINT
-                == context.getBgDeployment()
+        UpgradeMode upgradeMode =
+                context.getBgDeployment()
                         .getSpec()
                         .getTemplate()
                         .getSpec()
                         .getJob()
                         .getUpgradeMode();
+        //        return UpgradeMode.SAVEPOINT == upgradeMode;
+        // For now we're taking savepoints in STATELESS or LAST-STATE
+        return UpgradeMode.STATELESS != upgradeMode;
     }
 
     public static boolean lookForCheckpoint(BlueGreenContext context) {

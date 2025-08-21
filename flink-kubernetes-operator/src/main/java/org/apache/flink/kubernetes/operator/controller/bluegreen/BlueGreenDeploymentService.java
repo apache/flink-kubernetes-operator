@@ -47,11 +47,9 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.fetchSavepointInfo;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getLastCheckpoint;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getSpecDiff;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.hasSpecChanged;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.isSavepointRequired;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.lookForCheckpoint;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.triggerSavepoint;
@@ -224,7 +222,7 @@ public class BlueGreenDeploymentService {
                 context.getCtxFactory()
                         .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
 
-        // If a savepoint is required we fetch it, should be ready by this point
+        // For now UpgradeMode != STATELESS will use a savepoint, originally only SAVEPOINT
         if (isSavepointRequired(context)) {
             String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
             var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
@@ -242,13 +240,15 @@ public class BlueGreenDeploymentService {
                     savepointFormatType);
         }
 
-        // Else we start looking for the last checkpoint if needed
+        // The logic below looked for the last checkpoint in case upgradeMode = LAST_STATE
+        // We don't want to rely on last checkpoint for now.
+        return null;
 
-        if (!lookForCheckpoint(context)) {
-            return null;
-        }
-
-        return getLastCheckpoint(ctx);
+        //        if (!lookForCheckpoint(context)) {
+        //            return null;
+        //        }
+        //
+        //        return getLastCheckpoint(ctx);
     }
 
     private boolean handleSavepoint(
