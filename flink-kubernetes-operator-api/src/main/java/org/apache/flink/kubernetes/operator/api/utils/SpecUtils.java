@@ -99,7 +99,7 @@ public class SpecUtils {
         }
     }
 
-    // We do not have access to  Flink's Preconditions from here
+    // We do not have access to Flink's Preconditions from here
     private static <T> T checkNotNull(T object) {
         if (object == null) {
             throw new NullPointerException();

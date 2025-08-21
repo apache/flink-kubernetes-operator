@@ -34,9 +34,7 @@ spec:
               deploymentName:
                 type: string
               flinkConfiguration:
-                additionalProperties:
-                  type: string
-                type: object
+                x-kubernetes-preserve-unknown-fields: true
               job:
                 properties:
                   allowNonRestoredState:
@@ -220,6 +218,8 @@ spec:
               lifecycleState:
                 enum:
                 - CREATED
+                - DELETED
+                - DELETING
                 - DEPLOYED
                 - FAILED
                 - ROLLED_BACK

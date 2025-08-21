@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
+import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
@@ -47,6 +48,8 @@ import io.fabric8.kubernetes.api.model.Probe;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,8 +62,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
-
-import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -214,13 +215,20 @@ public class FlinkUtils {
 
     public static void deleteKubernetesHAMetadata(
             String clusterId, String namespace, KubernetesClient kubernetesClient) {
-        kubernetesClient
+        getFlinkKubernetesHaConfigmaps(clusterId, namespace, kubernetesClient).delete();
+    }
+
+    private static FilterWatchListDeletable<ConfigMap, ConfigMapList, Resource<ConfigMap>>
+            getFlinkKubernetesHaConfigmaps(
+                    String clusterId, String namespace, KubernetesClient kubernetesClient) {
+        return kubernetesClient
                 .configMaps()
                 .inNamespace(namespace)
-                .withLabels(
-                        KubernetesUtils.getConfigMapLabels(
-                                clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                .delete();
+                .withNewFilter()
+                .withLabels(KubernetesUtils.getCommonLabels(clusterId))
+                .withoutLabel(
+                        Constants.LABEL_COMPONENT_KEY, ConfigMapStore.LABEL_COMPONENT_AUTOSCALER)
+                .endFilter();
     }
 
     public static void deleteJobGraphInZookeeperHA(Configuration conf) throws Exception {
@@ -233,16 +241,8 @@ public class FlinkUtils {
 
     public static void deleteJobGraphInKubernetesHA(
             String clusterId, String namespace, KubernetesClient kubernetesClient) {
-        // The HA ConfigMap names have been changed from 1.15, so we use the labels to filter out
-        // them and delete job graph key
-        final Map<String, String> haConfigMapLabels =
-                KubernetesUtils.getConfigMapLabels(
-                        clusterId, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
-        final ConfigMapList configMaps =
-                kubernetesClient
-                        .configMaps()
-                        .inNamespace(namespace)
-                        .withLabels(haConfigMapLabels)
+        var configMaps =
+                FlinkUtils.getFlinkKubernetesHaConfigmaps(clusterId, namespace, kubernetesClient)
                         .list();
 
         boolean shouldUpdate = false;
@@ -303,18 +303,11 @@ public class FlinkUtils {
             KubernetesClient kubernetesClient,
             Predicate<ConfigMap> cmPredicate) {
 
-        String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-        String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-
-        var haConfigMapLabels =
-                KubernetesUtils.getConfigMapLabels(
-                        clusterId, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
-
         var configMaps =
-                kubernetesClient
-                        .configMaps()
-                        .inNamespace(namespace)
-                        .withLabels(haConfigMapLabels)
+                FlinkUtils.getFlinkKubernetesHaConfigmaps(
+                                conf.get(KubernetesConfigOptions.CLUSTER_ID),
+                                conf.get(KubernetesConfigOptions.NAMESPACE),
+                                kubernetesClient)
                         .list()
                         .getItems();
 
@@ -342,7 +335,8 @@ public class FlinkUtils {
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
-        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
+        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX)
+                || entry.getKey().startsWith("executionPlan-");
     }
 
     public static boolean isZookeeperHAActivated(Configuration configuration) {

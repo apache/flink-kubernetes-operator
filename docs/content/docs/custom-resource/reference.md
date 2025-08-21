@@ -57,6 +57,22 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 
+### ConfigObjectNode
+**Class**: org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode
+
+**Description**: Allows parsing configurations as YAML, and adds related utility methods.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### ConfigObjectNodeDeserializer
+**Class**: org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNodeDeserializer
+
+**Description**: Allows to deserialize to ConfigObjectNode.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec
 
@@ -66,7 +82,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
-| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
+| flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
@@ -87,7 +103,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
-| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
+| flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
 ### FlinkStateSnapshotSpec
@@ -112,11 +128,14 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | v1_13 | No longer supported since 1.7 operator release. |
 | v1_14 | No longer supported since 1.7 operator release. |
 | v1_15 | Deprecated since 1.10 operator release. |
-| v1_16 |  |
+| v1_16 | Deprecated since 1.11 operator release. |
 | v1_17 |  |
 | v1_18 |  |
 | v1_19 |  |
 | v1_20 |  |
+| v2_0 |  |
+| v2_1 |  |
+| v2_2 |  |
 | majorVersion | int | The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. |
 | minorVersion | int | The minor integer from the Flink semver. For example for Flink 1.18.1 this would be 18. |
 

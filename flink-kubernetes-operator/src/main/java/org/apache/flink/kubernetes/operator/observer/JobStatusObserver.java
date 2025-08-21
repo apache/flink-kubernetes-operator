@@ -27,11 +27,23 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
+import org.apache.flink.kubernetes.operator.utils.K8sAnnotationsSanitizer;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
@@ -42,6 +54,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
     public static final String JOB_NOT_FOUND_ERR = "Job Not Found";
+    public static final String EXCEPTION_TIMESTAMP = "exception-timestamp";
+    public static final Duration MAX_K8S_EVENT_AGE = Duration.ofMinutes(30);
 
     protected final EventRecorder eventRecorder;
 
@@ -68,17 +82,20 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.debug("Observing job status");
         var previousJobStatus = jobStatus.getState();
-
+        var jobId = jobStatus.getJobId();
         try {
             var newJobStatusOpt =
                     ctx.getFlinkService()
-                            .getJobStatus(
-                                    ctx.getObserveConfig(),
-                                    JobID.fromHexString(jobStatus.getJobId()));
+                            .getJobStatus(ctx.getObserveConfig(), JobID.fromHexString(jobId));
 
             if (newJobStatusOpt.isPresent()) {
-                updateJobStatus(ctx, newJobStatusOpt.get());
+                var newJobStatus = newJobStatusOpt.get();
+                updateJobStatus(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
+                // see if the JM server is up, try to get the exceptions
+                if (!previousJobStatus.isGloballyTerminalState()) {
+                    observeJobManagerExceptions(ctx);
+                }
                 return true;
             } else {
                 onTargetJobNotFound(ctx);
@@ -92,6 +109,159 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
         }
         return false;
+    }
+
+    /**
+     * Observe the exceptions raised in the job manager and take appropriate action.
+     *
+     * @param ctx the context with which the operation is executed
+     */
+    protected void observeJobManagerExceptions(FlinkResourceContext<R> ctx) {
+        var resource = ctx.getResource();
+        var operatorConfig = ctx.getOperatorConfig();
+        var jobStatus = resource.getStatus().getJobStatus();
+
+        try {
+            var jobId = JobID.fromHexString(jobStatus.getJobId());
+            // TODO: Ideally the best way to restrict the number of events is to use the query param
+            // `maxExceptions`
+            //  but the JobExceptionsMessageParameters does not expose the parameters and nor does
+            // it have setters.
+            var history =
+                    ctx.getFlinkService().getJobExceptions(resource, jobId, ctx.getObserveConfig());
+
+            if (history == null || history.getExceptionHistory() == null) {
+                return;
+            }
+
+            var exceptionHistory = history.getExceptionHistory();
+            var exceptions = exceptionHistory.getEntries();
+            if (exceptions != null) {
+                exceptions = new ArrayList<>(exceptions);
+                exceptions.sort(
+                        Comparator.comparingLong(
+                                        JobExceptionsInfoWithHistory.RootExceptionInfo
+                                                ::getTimestamp)
+                                .reversed());
+            } else {
+                exceptions = Collections.emptyList();
+            }
+
+            String currentJobId = jobStatus.getJobId();
+            var cacheEntry = ctx.getExceptionCacheEntry();
+
+            if (!cacheEntry.isInitialized()) {
+                Instant lastExceptionTs;
+                if (exceptions.isEmpty()) {
+                    // If the job doesn't have any exceptions set to MIN as we always have to record
+                    // the next
+                    lastExceptionTs = Instant.MIN;
+                } else {
+                    var k8sExpirationTs = Instant.now().minus(MAX_K8S_EVENT_AGE);
+                    var maxJobExceptionTs = Instant.ofEpochMilli(exceptions.get(0).getTimestamp());
+                    if (maxJobExceptionTs.isBefore(k8sExpirationTs)) {
+                        // If the last job exception was a long time ago, then there is no point in
+                        // checking in k8s. We won't report this as exception
+                        lastExceptionTs = maxJobExceptionTs;
+                    } else {
+                        // If there were recent exceptions, we check the triggered events from kube
+                        // to make sure we don't double trigger
+                        lastExceptionTs =
+                                EventUtils.findLastJobExceptionTsFromK8s(
+                                                ctx.getKubernetesClient(), resource)
+                                        .orElse(k8sExpirationTs);
+                    }
+                }
+
+                cacheEntry.setLastTimestamp(lastExceptionTs);
+                cacheEntry.setInitialized(true);
+                cacheEntry.setJobId(currentJobId);
+            }
+
+            var lastRecorded =
+                    currentJobId.equals(cacheEntry.getJobId())
+                            ? cacheEntry.getLastTimestamp()
+                            : Instant.MIN;
+
+            if (exceptions.isEmpty()) {
+                return;
+            }
+
+            int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
+            int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
+
+            int count = 0;
+            for (var exception : exceptions) {
+                var exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
+                // Skip already recorded exceptions and after max count
+                if (!exceptionTime.isAfter(lastRecorded) || count++ >= maxEvents) {
+                    break;
+                }
+                emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
+            }
+
+            if (count > maxEvents) {
+                LOG.warn("Job exception history is truncated. Some exceptions may be missing.");
+            }
+
+            cacheEntry.setJobId(currentJobId);
+            cacheEntry.setLastTimestamp(Instant.ofEpochMilli(exceptions.get(0).getTimestamp()));
+        } catch (Exception e) {
+            LOG.warn("Failed to fetch JobManager exception info.", e);
+        }
+    }
+
+    private void emitJobManagerExceptionEvent(
+            FlinkResourceContext<R> ctx,
+            JobExceptionsInfoWithHistory.RootExceptionInfo exception,
+            Instant exceptionTime,
+            int maxStackTraceLines) {
+        Map<String, String> annotations = new HashMap<>();
+        if (exceptionTime != null) {
+            annotations.put(EXCEPTION_TIMESTAMP, exceptionTime.toString());
+        }
+        if (exception.getTaskName() != null) {
+            annotations.put("task-name", exception.getTaskName());
+        }
+        if (exception.getEndpoint() != null) {
+            annotations.put("endpoint", exception.getEndpoint());
+        }
+        if (exception.getTaskManagerId() != null) {
+            annotations.put("tm-id", exception.getTaskManagerId());
+        }
+        if (exception.getFailureLabels() != null) {
+            exception
+                    .getFailureLabels()
+                    .forEach((k, v) -> annotations.put("failure-label-" + k, v));
+        }
+
+        StringBuilder eventMessage = new StringBuilder();
+        String stacktrace = exception.getStacktrace();
+        if (stacktrace != null && !stacktrace.isBlank()) {
+            String[] lines = stacktrace.split("\n");
+            for (int i = 0; i < Math.min(maxStackTraceLines, lines.length); i++) {
+                eventMessage.append(lines[i]).append("\n");
+            }
+            if (lines.length > maxStackTraceLines) {
+                eventMessage
+                        .append("... (")
+                        .append(lines.length - maxStackTraceLines)
+                        .append(" more lines)");
+            }
+        }
+
+        String identityKey =
+                "jobmanager-exception-"
+                        + Integer.toHexString(Objects.hash(eventMessage.toString()));
+        eventRecorder.triggerEventWithAnnotations(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.JobException,
+                eventMessage.toString().trim(),
+                EventRecorder.Component.Job,
+                identityKey,
+                ctx.getKubernetesClient(),
+                K8sAnnotationsSanitizer.sanitizeAnnotations(annotations));
     }
 
     /**
@@ -182,7 +352,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 markSuspended(resource);
             }
 
-            setErrorIfPresent(ctx, clusterJobStatus);
+            recordJobErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Normal,
@@ -203,7 +373,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 });
     }
 
-    private void setErrorIfPresent(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+    private void recordJobErrorIfPresent(
+            FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
         if (clusterJobStatus.getJobState() == JobStatus.FAILED) {
             try {
                 var result =
@@ -215,10 +386,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                 t -> {
                                     updateFlinkResourceException(
                                             t, ctx.getResource(), ctx.getOperatorConfig());
-                                    LOG.error(
-                                            "Job {} failed with error: {}",
-                                            clusterJobStatus.getJobId(),
-                                            t.getFullStringifiedStackTrace());
+
+                                    eventRecorder.triggerEvent(
+                                            ctx.getResource(),
+                                            EventRecorder.Type.Warning,
+                                            EventRecorder.Reason.Error,
+                                            EventRecorder.Component.Job,
+                                            ExceptionUtils.getExceptionMessage(t),
+                                            ctx.getKubernetesClient());
                                 });
             } catch (Exception e) {
                 LOG.warn("Failed to request the job result", e);

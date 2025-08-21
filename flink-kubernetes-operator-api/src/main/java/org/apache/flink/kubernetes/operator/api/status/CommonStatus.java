@@ -37,6 +37,12 @@ import org.apache.commons.lang3.StringUtils;
 @SuperBuilder
 public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
+    // Frequent error message constants for resource failure reporting
+    public static final String MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED =
+            "It is possible that the job has finished or terminally failed, or the configmaps have been deleted.";
+    public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
+    public static final String MSG_MANUAL_RESTORE_REQUIRED = "Manual restore required.";
+
     /** Last observed status of the Flink job on Application/Session cluster. */
     private JobStatus jobStatus = new JobStatus();
 
@@ -60,6 +66,11 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 
     public ResourceLifecycleState getLifecycleState() {
+        if (ResourceLifecycleState.DELETING == lifecycleState
+                || ResourceLifecycleState.DELETED == lifecycleState) {
+            return lifecycleState;
+        }
+
         var reconciliationStatus = getReconciliationStatus();
 
         if (reconciliationStatus.isBeforeFirstDeployment()) {
@@ -83,6 +94,23 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
         if (getJobStatus().getState() == org.apache.flink.api.common.JobStatus.FAILED) {
             return ResourceLifecycleState.FAILED;
+        }
+
+        // Check for unrecoverable deployments that should be marked as FAILED if the error contains
+        // the following substrings
+        if (this instanceof FlinkDeploymentStatus) {
+            FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
+            var jmDeployStatus = deploymentStatus.getJobManagerDeploymentStatus();
+
+            // ERROR/MISSING deployments are in terminal error state and should always be FAILED
+            if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
+                            || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
+                    && error != null
+                    && (error.contains(MSG_MANUAL_RESTORE_REQUIRED)
+                            || error.contains(MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED)
+                            || error.contains(MSG_HA_METADATA_NOT_AVAILABLE))) {
+                return ResourceLifecycleState.FAILED;
+            }
         }
 
         if (reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK) {

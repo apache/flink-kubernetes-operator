@@ -21,14 +21,14 @@ import org.apache.flink.autoscaler.jdbc.testutils.databases.DatabaseTest;
 
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
 
 /** PostgreSQL database for testing. */
 public interface PostgreSQLTestBase extends DatabaseTest {
 
     @RegisterExtension PostgreSQLExtension POSTGRE_SQL_EXTENSION = new PostgreSQLExtension("15.1");
 
-    default Connection getConnection() throws Exception {
-        return POSTGRE_SQL_EXTENSION.getConnection();
+    default DataSource getDataSource() throws Exception {
+        return POSTGRE_SQL_EXTENSION.getDataSource();
     }
 }

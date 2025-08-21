@@ -231,8 +231,14 @@ function delete_operator_pod_with_leadership() {
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
+    kubectl get flinkdeployments
+    kubectl get flinksessionjobs
     kubectl get all
+    kubectl get configmaps
+    kubectl describe flinkdeployments
+    kubectl describe flinksessionjobs
     kubectl describe all
+    kubectl describe configmaps
 
     operator_pod_namespace=$(get_operator_pod_namespace)
     operator_pod_names=$(get_operator_pod_name)

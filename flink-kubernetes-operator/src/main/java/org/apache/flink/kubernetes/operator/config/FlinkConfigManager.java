@@ -50,13 +50,13 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -87,7 +87,7 @@ public class FlinkConfigManager {
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
-    private volatile Map<FlinkVersion, List<String>> relevantFlinkVersionPrefixes;
+    private volatile ConcurrentHashMap<FlinkVersion, List<String>> relevantFlinkVersionPrefixes;
 
     protected static final Pattern FLINK_VERSION_PATTERN =
             Pattern.compile(
@@ -114,7 +114,7 @@ public class FlinkConfigManager {
         this.namespaceListener = namespaceListener;
         Duration cacheTimeout =
                 defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
-        this.relevantFlinkVersionPrefixes = new HashMap<>();
+        this.relevantFlinkVersionPrefixes = new ConcurrentHashMap<>();
         this.cache =
                 CacheBuilder.newBuilder()
                         .maximumSize(
@@ -189,7 +189,7 @@ public class FlinkConfigManager {
         // We clear the cached relevant Flink version prefixes as the base config may include new
         // version overrides.
         // This will trigger a regeneration of the prefixes in the next call to getDefaultConfig.
-        relevantFlinkVersionPrefixes = new HashMap<>();
+        relevantFlinkVersionPrefixes = new ConcurrentHashMap<>();
     }
 
     /**
@@ -238,6 +238,7 @@ public class FlinkConfigManager {
      *
      * @param baseConfMap The configuration map that should be searched for relevant Flink version
      *     prefixes.
+     * @param flinkVersion The FlinkVersion to be used
      * @return A list of relevant Flink version prefixes in order of ascending Flink version.
      */
     protected static List<String> getRelevantVersionPrefixes(
@@ -355,6 +356,7 @@ public class FlinkConfigManager {
         // Observe config should include the latest operator related settings
         if (spec.getFlinkConfiguration() != null) {
             spec.getFlinkConfiguration()
+                    .asFlatMap()
                     .forEach(
                             (k, v) -> {
                                 if (k.startsWith(K8S_OP_CONF_PREFIX)
@@ -370,7 +372,7 @@ public class FlinkConfigManager {
             AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
         addOperatorConfigsFromSpec(spec, conf);
         if (spec.getFlinkConfiguration() != null) {
-            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+            var deployConfig = spec.getFlinkConfiguration().asConfiguration();
             for (ConfigOption configOption : configOptions) {
                 deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
             }
@@ -381,6 +383,7 @@ public class FlinkConfigManager {
      * Get configuration for interacting with session jobs. Similar to the observe configuration for
      * FlinkDeployments.
      *
+     * @param name The name of the job
      * @param deployment FlinkDeployment for the session cluster
      * @param sessionJobSpec Session job spec
      * @return Session job config
@@ -392,7 +395,7 @@ public class FlinkConfigManager {
         // merge session job specific config
         var sessionJobFlinkConfiguration = sessionJobSpec.getFlinkConfiguration();
         if (sessionJobFlinkConfiguration != null) {
-            sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
+            sessionJobFlinkConfiguration.asFlatMap().forEach(sessionJobConfig::setString);
         }
         applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;

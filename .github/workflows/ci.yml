@@ -28,7 +28,7 @@ on:
       - release-*
   pull_request:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
     name: maven build
     strategy:
       matrix:
-        java-version: [ 11, 17, 21 ]
+        java-version: [ 17, 21 ]
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -76,7 +76,7 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp", "jdk", "jetty", "vertx" ]
-        java-version: [ "11", "17", "21" ]
+        java-version: [ "17", "21" ]
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: ${{ matrix.java-version }}
@@ -89,11 +89,12 @@ jobs:
     strategy:
       matrix:
         http-client: [ "okhttp" ]
-        java-version: [ "11", "17"]
+        java-version: [ "17"]
         flink-version:
+          - "v2_1"
+          - "v2_0"
           - "v1_20"
           - "v1_19"
-          - "v1_18"
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: ${{ matrix.java-version }}
@@ -107,11 +108,10 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_1"
+          - "v2_0"
           - "v1_20"
           - "v1_19"
-          - "v1_18"
-          - "v1_17"
-          - "v1_16"
         mode:
          - "native"
          - "standalone"
@@ -120,19 +120,18 @@ jobs:
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
           - test_dynamic_config.sh
+          - test_dynamic_flink_conf.sh
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
           - mode: standalone
             test: test_dynamic_config.sh
-          - flink-version: v1_16
-            test: test_autoscaler.sh
-          - flink-version: v1_16
-            test: test_dynamic_config.sh
+          - mode: standalone
+            test: test_dynamic_flink_conf.sh
 
     uses: ./.github/workflows/e2e.yaml
     with:
-      java-version: 11
+      java-version: 17
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       namespace: "flink"
@@ -143,11 +142,10 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_1"
+          - "v2_0"
           - "v1_20"
-          - "v1_18"
           - "v1_19"
-          - "v1_17"
-          - "v1_16"
         mode:
           - "native"
           - "standalone"
@@ -155,39 +153,21 @@ jobs:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
           - test_dynamic_config.sh
+          - test_dynamic_flink_conf.sh
           - test_sessionjob_kubernetes_ha.sh
           - test_sessionjob_operations.sh
           - test_autoscaler.sh
           - test_flink_operator_ha.sh
           - test_snapshot.sh
+          - test_batch_job.sh
         exclude:
-          - flink-version: v1_16
-            test: test_autoscaler.sh
           - mode: standalone
             test: test_autoscaler.sh
-          - flink-version: v1_16
-            test: test_dynamic_config.sh
-          - flink-version: v1_16
-            test: test_flink_operator_ha.sh
-          - flink-version: v1_16
-            test: test_snapshot.sh
-          - flink-version: v1_17
-            test: test_dynamic_config.sh
-          - flink-version: v1_17
-            test: test_flink_operator_ha.sh
-          - flink-version: v1_17
-            test: test_snapshot.sh
-          - flink-version: v1_18
-            test: test_dynamic_config.sh
-          - flink-version: v1_18
-            test: test_flink_operator_ha.sh
-          - flink-version: v1_18
-            test: test_snapshot.sh
           - flink-version: v1_19
             test: test_snapshot.sh
     uses: ./.github/workflows/e2e.yaml
     with:
-      java-version: 11
+      java-version: 17
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       mode: ${{ matrix.mode }}

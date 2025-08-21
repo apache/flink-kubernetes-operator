@@ -22,25 +22,27 @@ metadata:
   namespace: default
   name: flink-autoscaler-e2e
 spec:
-  image: flink:1.18
-  flinkVersion: v1_18
+  image: flink:1.20
+  flinkVersion: v1_20
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
-    high-availability.type: kubernetes
-    high-availability.storageDir: file:///opt/flink/volume/flink-ha
-    state.checkpoints.dir: file:///opt/flink/volume/flink-cp
-    state.savepoints.dir: file:///opt/flink/volume/flink-sp
-
-    job.autoscaler.enabled: "true"
-    job.autoscaler.scaling.enabled: "true"
-    job.autoscaler.stabilization.interval: "5s"
-    job.autoscaler.metrics.window: "1m"
-    job.autoscaler.scale-down.interval: "0m"
+    taskmanager.numberOfTaskSlots: 2
+    high-availability:
+      type: kubernetes
+      storageDir: file:///opt/flink/volume/flink-ha
+    state:
+      checkpoints.dir: file:///opt/flink/volume/flink-cp
+      savepoints.dir: file:///opt/flink/volume/flink-sp
+    job.autoscaler:
+      enabled: "true"
+      scaling.enabled: "true"
+      stabilization.interval: "5s"
+      metrics.window: "1m"
+      scale-down.interval: "0m"
 
 #    Invalid Validations for testing autoscaler configurations
 #    kubernetes.operator.job.autoscaler.scale-down.max-factor: "-0.6"

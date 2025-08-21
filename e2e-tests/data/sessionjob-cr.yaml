@@ -22,20 +22,22 @@ metadata:
   namespace: default
   name: session-cluster-1
 spec:
-  image: flink:1.17
-  flinkVersion: v1_17
+  image: flink:1.20
+  flinkVersion: v1_20
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
-    high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
-    high-availability.storageDir: file:///opt/flink/volume/flink-ha
-    state.checkpoints.dir: file:///opt/flink/volume/flink-cp
-    state.savepoints.dir: file:///opt/flink/volume/flink-sp
-    kubernetes.operator.snapshot.resource.enabled: "false"
+    taskmanager.numberOfTaskSlots: 2
+    high-availability:
+      type: kubernetes
+      storageDir: file:///opt/flink/volume/flink-ha
+    state:
+      checkpoints.dir: file:///opt/flink/volume/flink-cp
+      savepoints.dir: file:///opt/flink/volume/flink-sp
+    kubernetes.operator.snapshot.resource.enabled: false
   serviceAccount: flink
   podTemplate:
     spec:
@@ -73,7 +75,7 @@ metadata:
 spec:
   deploymentName: session-cluster-1
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
+    jarURI: STREAMING_EXAMPLES_JAR_URL
     parallelism: 2
     upgradeMode: savepoint
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample

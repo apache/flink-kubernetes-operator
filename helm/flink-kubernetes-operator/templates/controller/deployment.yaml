@@ -1,21 +1,19 @@
-################################################################################
-#  Licensed to the Apache Software Foundation (ASF) under one
-#  or more contributor license agreements.  See the NOTICE file
-#  distributed with this work for additional information
-#  regarding copyright ownership.  The ASF licenses this file
-#  to you under the Apache License, Version 2.0 (the
-#  "License"); you may not use this file except in compliance
-#  with the License.  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-# limitations under the License.
-################################################################################
----
+{{- /*
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -75,6 +73,10 @@ spec:
       {{- if .Values.operatorPod.topologySpreadConstraints }}
       topologySpreadConstraints: {{ toYaml .Values.operatorPod.topologySpreadConstraints | nindent 8 }}
       {{- end }}
+      {{- if .Values.operatorPod.initContainers }}
+      initContainers:
+      {{- toYaml .Values.operatorPod.initContainers | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "flink-operator.imagePath" . }}
@@ -115,7 +117,7 @@ spec:
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+              value: {{ .Values.jvmArgs.logConfig }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             {{- if .Values.tls.create }}
@@ -196,7 +198,7 @@ spec:
             - name: WEBHOOK_SERVER_PORT
               value: "9443"
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+              value: {{ .Values.jvmArgs.logConfig }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.webhook }}
             - name: FLINK_CONF_DIR
@@ -221,6 +223,9 @@ spec:
           - name: flink-operator-config-volume
             mountPath: /opt/flink/conf
         {{- end }}
+        {{- if .Values.operatorPod.sidecarContainers }}
+        {{- toYaml .Values.operatorPod.sidecarContainers | nindent 8 }}
+        {{- end }}
       {{- if index (.Values.operatorPod) "dnsPolicy" }}
       dnsPolicy: {{ .Values.operatorPod.dnsPolicy | quote }}
       {{- end }}
@@ -235,8 +240,13 @@ spec:
           configMap:
             name: flink-operator-config
             items:
+            {{- if hasKey .Values.defaultConfiguration "flink-conf.yaml" }}
               - key: flink-conf.yaml
                 path: flink-conf.yaml
+            {{- else }}
+              - key: config.yaml
+                path: config.yaml
+            {{- end }}
               - key: log4j-operator.properties
                 path: log4j-operator.properties
               - key: log4j-console.properties
@@ -261,42 +271,3 @@ spec:
             secretName: {{ .Values.tls.secretName }}
             optional: true
         {{- end }}
----
-{{- if .Values.defaultConfiguration.create }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: flink-operator-config
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "flink-operator.labels" . | nindent 4 }}
-data:
-  flink-conf.yaml: |+
-{{- if .Values.defaultConfiguration.append }}
-  {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
-{{- end }}
-{{- if index (.Values.defaultConfiguration) "flink-conf.yaml" }}
-  {{- index (.Values.defaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
-{{- end }}
-{{- if .Values.watchNamespaces }}
-    kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
-{{- end }}
-{{- if index .Values "operatorHealth" }}
-    kubernetes.operator.health.probe.enabled: true
-    kubernetes.operator.health.probe.port: {{ .Values.operatorHealth.port }}
-{{- end }}
-  log4j-operator.properties: |+
-{{- if .Values.defaultConfiguration.append }}
-  {{- $.Files.Get "conf/log4j-operator.properties"  | nindent 4 -}}
-{{- end }}
-{{- if index (.Values.defaultConfiguration) "log4j-operator.properties" }}
-  {{- index (.Values.defaultConfiguration) "log4j-operator.properties" | nindent 4 -}}
-{{- end }}
-  log4j-console.properties: |+
-{{- if .Values.defaultConfiguration.append }}
-  {{- $.Files.Get "conf/log4j-console.properties"  | nindent 4 -}}
-{{- end }}
-{{- if index (.Values.defaultConfiguration) "log4j-console.properties" }}
-  {{- index (.Values.defaultConfiguration) "log4j-console.properties" | nindent 4 -}}
-{{- end }}
-{{- end }}

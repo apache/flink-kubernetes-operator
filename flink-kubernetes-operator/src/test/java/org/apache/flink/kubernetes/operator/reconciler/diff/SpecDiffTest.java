@@ -83,17 +83,27 @@ public class SpecDiffTest {
         right.getJob().setAllowNonRestoredState(true);
         right.getJob().setInitialSavepointPath("local:///tmp");
         right.getJob().setSavepointTriggerNonce(123L);
-        right.getFlinkConfiguration().put(OPERATOR_RECONCILE_INTERVAL.key(), "100 SECONDS");
-        right.getFlinkConfiguration().put(SCOPE_NAMING_KUBERNETES_OPERATOR.key(), "foo.bar");
-        right.getFlinkConfiguration().put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
-        right.getFlinkConfiguration().put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
+
+        right.getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                OPERATOR_RECONCILE_INTERVAL.key(),
+                                "100 SECONDS",
+                                SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                                "foo.bar",
+                                CoreOptions.DEFAULT_PARALLELISM.key(),
+                                "100",
+                                AutoScalerOptions.METRICS_WINDOW.key(),
+                                "1234m"));
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(8, diff.getNumDiffs());
 
-        right.getFlinkConfiguration().remove(SCOPE_NAMING_KUBERNETES_OPERATOR.key());
-        right.getFlinkConfiguration().remove(AutoScalerOptions.METRICS_WINDOW.key());
+        right.getFlinkConfiguration()
+                .remove(
+                        SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                        AutoScalerOptions.METRICS_WINDOW.key());
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());

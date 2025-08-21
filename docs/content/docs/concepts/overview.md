@@ -36,7 +36,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Stateful and stateless application upgrades
   - Triggering and managing savepoints
   - Handling errors, rolling-back broken upgrades
-- Multiple Flink version support: v1.16, v1.17, v1.18, v1.19, v1.20
+- Multiple Flink version support: v1.17, v1.18, v1.19, v1.20, v2.0, v2.1
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application cluster
   - Session cluster
@@ -94,7 +94,7 @@ The examples are maintained as part of the operator repo and can be found [here]
 ## Known Issues & Limitations
 
 ### JobManager High-availability
-The Operator supports both [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) and [Zookeeper HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/zookeeper_ha/) for providing High-availability for Flink jobs. The HA solution can benefit form using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
+The Operator supports both [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) and [Zookeeper HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/zookeeper_ha/) for providing High-availability for Flink jobs. The HA solution can benefit from using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
 
 ### JobResultStore Resource Leak
 To mitigate the impact of [FLINK-27569](https://issues.apache.org/jira/browse/FLINK-27569) the operator introduced a workaround [FLINK-27573](https://issues.apache.org/jira/browse/FLINK-27573) by setting `job-result-store.delete-on-commit=false` and a unique value for `job-result-store.storage-path` for every cluster launch. The storage path for older runs must be cleaned up manually, keeping the latest directory always:

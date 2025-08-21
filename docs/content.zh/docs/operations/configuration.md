@@ -86,6 +86,18 @@ Verify whether the config value of `kubernetes.operator.reconcile.interval` is u
 2022-05-28 13:08:30,115 o.a.f.k.o.c.FlinkConfigManager [INFO ] Updating default configuration to {kubernetes.operator.reconcile.interval=PT30S}
 ```
 
+### Example: Enabling Dynamic Namespace Watching
+
+To allow the operator to react to changes in the `watchNamespaces` list dynamically, i.e., without restarting its pod, you must set both of the following in your configuration:
+
+```yaml
+# 1. Enable the global dynamic configuration feature
+kubernetes.operator.dynamic.config.enabled: true
+
+# 2. Enable the specific feature for dynamic namespaces
+kubernetes.operator.dynamic.namespaces.enabled: true
+```
+
 ## Leader Election and High Availability
 
 The operator supports high availability through leader election and standby operator instances. To enable leader election you need to add the following two mandatory operator configuration parameters.

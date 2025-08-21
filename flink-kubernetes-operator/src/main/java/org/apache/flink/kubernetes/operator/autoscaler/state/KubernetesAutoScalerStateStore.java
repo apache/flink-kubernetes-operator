@@ -403,4 +403,7 @@ public class KubernetesAutoScalerStateStore
         loaderOptions.setCodePointLimit(20 * 1024 * 1024);
         return YAMLFactory.builder().loaderOptions(loaderOptions).build();
     }
+
+    @Override
+    public void close() throws Exception {}
 }

@@ -21,7 +21,7 @@ import org.apache.flink.autoscaler.jdbc.testutils.databases.DatabaseTest;
 
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-import java.sql.Connection;
+import javax.sql.DataSource;
 
 /** Derby database for testing. */
 public interface DerbyTestBase extends DatabaseTest {
@@ -29,7 +29,7 @@ public interface DerbyTestBase extends DatabaseTest {
     @RegisterExtension DerbyExtension DERBY_EXTENSION = new DerbyExtension();
 
     @Override
-    default Connection getConnection() throws Exception {
-        return DERBY_EXTENSION.getConnection();
+    default DataSource getDataSource() throws Exception {
+        return DERBY_EXTENSION.getDataSource();
     }
 }

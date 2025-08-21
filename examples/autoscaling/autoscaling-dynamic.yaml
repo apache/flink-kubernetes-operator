@@ -22,12 +22,12 @@ metadata:
   name: autoscaling-dynamic
 spec:
   image: autoscaling-example
-  flinkVersion: v1_18
+  flinkVersion: v1_20
   flinkConfiguration:
     job.autoscaler.enabled: "true"
     job.autoscaler.stabilization.interval: "1m"
     job.autoscaler.metrics.window: "15m"
-    job.autoscaler.target.utilization: "0.5"
+    job.autoscaler.utilization.target: "0.5"
     job.autoscaler.target.utilization.boundary: "0.3"
     pipeline.max-parallelism: "32"
     taskmanager.numberOfTaskSlots: "4"

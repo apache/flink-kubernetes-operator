@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -39,8 +40,15 @@ public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment
             Context<?> josdkContext,
             KubernetesResourceMetricGroup resourceMetricGroup,
             FlinkConfigManager configManager,
-            Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory) {
-        super(resource, josdkContext, resourceMetricGroup, configManager, flinkServiceFactory);
+            Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory,
+            FlinkResourceContextFactory.ExceptionCacheEntry exceptionCacheEntry) {
+        super(
+                resource,
+                josdkContext,
+                resourceMetricGroup,
+                configManager,
+                flinkServiceFactory,
+                exceptionCacheEntry);
     }
 
     @Override

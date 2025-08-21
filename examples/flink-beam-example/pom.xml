@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.11-SNAPSHOT</version>
+        <version>1.13-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
 
@@ -33,7 +33,7 @@ under the License.
     <!-- Given that this is an example skip maven deployment -->
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>
-        <beam.version>2.47.0</beam.version>
+        <beam.version>2.62.0</beam.version>
     </properties>
 
     <repositories>
@@ -71,7 +71,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.beam</groupId>
-            <artifactId>beam-runners-flink-1.16</artifactId>
+            <artifactId>beam-runners-flink-1.19</artifactId>
             <version>${beam.version}</version>
         </dependency>
 

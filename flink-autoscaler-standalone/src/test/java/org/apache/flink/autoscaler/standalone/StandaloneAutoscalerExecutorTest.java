@@ -110,7 +110,7 @@ class StandaloneAutoscalerExecutorTest {
     }
 
     @Test
-    void testFetchException() {
+    void testFetchException() throws Exception {
         var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
@@ -137,7 +137,7 @@ class StandaloneAutoscalerExecutorTest {
     }
 
     @Test
-    void testScalingParallelism() {
+    void testScalingParallelism() throws Exception {
         var parallelism = 10;
 
         var jobList = new ArrayList<JobAutoScalerContext<JobID>>();

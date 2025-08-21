@@ -21,14 +21,17 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.SecurityOptions;
+import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -50,10 +53,10 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
-import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
@@ -63,6 +66,8 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
@@ -73,6 +78,9 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusHeader
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -96,7 +104,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
-import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -140,6 +147,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -147,6 +155,9 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.util.ExceptionUtils.findThrowable;
@@ -161,6 +172,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
+    public static final String FIELD_NAME_STATE_SIZE = "state-size";
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -543,6 +555,12 @@ public abstract class AbstractFlinkService implements FlinkService {
         try {
             latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
         } catch (Exception e) {
+            if (e instanceof ExecutionException
+                    && e.getMessage() != null
+                    && e.getMessage().contains("Checkpointing has not been enabled")) {
+                LOG.warn("Checkpointing not enabled for job {}", jobId, e);
+                return Optional.empty();
+            }
             throw new ReconciliationException("Could not observe latest savepoint information", e);
         }
 
@@ -552,7 +570,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
             throw new UpgradeFailureException(
-                    "Latest checkpoint not externally addressable, manual recovery required.",
+                    "Latest checkpoint not externally addressable, " + MSG_MANUAL_RESTORE_REQUIRED,
                     "CheckpointNotFound");
         }
         return latestCheckpointOpt.map(
@@ -735,9 +753,27 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
+    public Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId)
+            throws Exception {
         Map<String, String> clusterInfo = new HashMap<>();
 
+        populateFlinkVersion(conf, clusterInfo);
+
+        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_CPU,
+                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_MEMORY,
+                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
+
+        populateStateSize(conf, jobId, clusterInfo);
+
+        return clusterInfo;
+    }
+
+    private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
+            throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
 
             CustomDashboardConfiguration dashboardConfiguration =
@@ -757,16 +793,35 @@ public abstract class AbstractFlinkService implements FlinkService {
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     dashboardConfiguration.getFlinkRevision());
         }
+    }
 
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_CPU,
-                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_MEMORY,
-                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
+    private void populateStateSize(
+            Configuration conf, @Nullable String jobId, Map<String, String> clusterInfo)
+            throws Exception {
+        if (jobId != null) {
+            try (RestClusterClient<String> clusterClient = getClusterClient(conf)) {
+                var checkpointingStatisticsHeaders = CheckpointingStatisticsHeaders.getInstance();
+                var parameters = checkpointingStatisticsHeaders.getUnresolvedMessageParameters();
+                parameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
 
-        return clusterInfo;
+                CheckpointingStatistics checkpointingStatistics =
+                        clusterClient
+                                .sendRequest(
+                                        checkpointingStatisticsHeaders,
+                                        parameters,
+                                        EmptyRequestBody.getInstance())
+                                .get();
+                CheckpointStatistics.CompletedCheckpointStatistics completedCheckpointStatistics =
+                        checkpointingStatistics
+                                .getLatestCheckpoints()
+                                .getCompletedCheckpointStatistics();
+                if (completedCheckpointStatistics != null) {
+                    clusterInfo.put(
+                            FIELD_NAME_STATE_SIZE,
+                            String.valueOf(completedCheckpointStatistics.getStateSize()));
+                }
+            }
+        }
     }
 
     @Override
@@ -797,6 +852,27 @@ public abstract class AbstractFlinkService implements FlinkService {
                 (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
+    @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
+            throws IOException {
+        JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
+        JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
+        params.jobPathParameter.resolve(jobId);
+
+        try (var clusterClient = getClusterClient(observeConfig)) {
+            return clusterClient
+                    .sendRequest(jobExceptionsHeaders, params, EmptyRequestBody.getInstance())
+                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.warn(
+                    String.format(
+                            "Failed to fetch job exceptions from REST API for jobId %s", jobId),
+                    e);
+            return null;
+        }
+    }
+
     @VisibleForTesting
     protected void runJar(
             JobSpec job,
@@ -810,6 +886,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             JarRunHeaders headers = JarRunHeaders.getInstance();
             JarRunMessageParameters parameters = headers.getUnresolvedMessageParameters();
             parameters.jarIdPathParameter.resolve(jarId);
+            var flinkVersion = conf.get(FLINK_VERSION);
             JarRunRequestBody runRequestBody =
                     new JarRunRequestBody(
                             job.getEntryClass(),
@@ -819,7 +896,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                             jobID,
                             job.getAllowNonRestoredState(),
                             savepoint,
-                            RestoreMode.DEFAULT,
+                            flinkVersion.isEqualOrNewer(FlinkVersion.v1_20)
+                                    ? null
+                                    : RestoreMode.DEFAULT,
+                            flinkVersion.isEqualOrNewer(FlinkVersion.v1_20)
+                                    ? RestoreMode.DEFAULT
+                                    : null,
                             conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
                                     ? conf.toMap()
                                     : null);
@@ -901,7 +983,15 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    /** Wait until Deployment is removed, return remaining timeout. */
+    /**
+     * Wait until Deployment is removed, return remaining timeout.
+     *
+     * @param name name of the deployment
+     * @param deployment The deployment resource
+     * @param propagation DeletePropagation
+     * @param timeout Timeout to wait
+     * @return remaining timeout after deletion
+     */
     @VisibleForTesting
     protected Duration deleteDeploymentBlocking(
             String name,
@@ -923,7 +1013,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         config.toMap()
                 .forEach(
                         (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
+                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                                 newConfig.setString(k, v);
                             }
                         });
@@ -934,8 +1025,9 @@ public abstract class AbstractFlinkService implements FlinkService {
     private void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
             throw new UpgradeFailureException(
-                    "HA metadata not available to restore from last state. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. ",
+                    MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to restore from last state."
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED,
                     "RestoreFailed");
         }
     }

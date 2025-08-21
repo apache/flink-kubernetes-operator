@@ -53,6 +53,7 @@ public class SnapshotTriggerTimestampStore {
      * updated with this value.
      *
      * @param resource Flink resource
+     * @param snapshotType the snapshot type
      * @param snapshotsSupplier supplies related snapshot resources
      * @return instant of last trigger
      */
@@ -103,6 +104,7 @@ public class SnapshotTriggerTimestampStore {
      * Updates the time a periodic snapshot was last triggered for this resource.
      *
      * @param resource Kubernetes resource
+     * @param snapshotType the snapshot type
      * @param instant new timestamp
      */
     public void updateLastPeriodicTriggerTimestamp(

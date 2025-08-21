@@ -39,7 +39,8 @@ import java.util.SortedMap;
  * @param <Context> Instance of JobAutoScalerContext.
  */
 @Experimental
-public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<KEY>> {
+public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<KEY>>
+        extends AutoCloseable {
 
     void storeScalingHistory(
             Context jobContext, Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory)

@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
@@ -58,6 +59,8 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Predicate;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
@@ -226,7 +229,8 @@ public abstract class AbstractJobReconciler<
 
             if (!SnapshotUtils.lastSavepointKnown(status)) {
                 throw new UpgradeFailureException(
-                        "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. Manual restore required.",
+                        "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. "
+                                + MSG_MANUAL_RESTORE_REQUIRED,
                         "UpgradeFailed");
             }
             LOG.info("Job is in terminal state, ready for upgrade from observed latest state");
@@ -285,11 +289,13 @@ public abstract class AbstractJobReconciler<
 
             boolean cancellable = allowLastStateCancel(ctx);
             if (running) {
-                return getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
+                var mode = getUpgradeModeBasedOnStateAge(ctx, deployConfig, cancellable);
+                LOG.info("Job is running, using {} for last-state upgrade", mode);
+                return mode;
             }
 
             if (cancellable) {
-                LOG.info("Using cancel to perform last-state upgrade");
+                LOG.info("Job is not running, using cancel to perform last-state upgrade");
                 return JobUpgrade.lastStateUsingCancel();
             }
         }
@@ -356,8 +362,12 @@ public abstract class AbstractJobReconciler<
         }
 
         var conf = ctx.getObserveConfig();
-        return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB)
-                || !ctx.getFlinkService().isHaMetadataAvailable(conf);
+        if (!ctx.getFlinkService().isHaMetadataAvailable(conf)) {
+            LOG.info(
+                    "{}, cancel will be used instead of last-state", MSG_HA_METADATA_NOT_AVAILABLE);
+            return true;
+        }
+        return conf.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB);
     }
 
     protected void restoreJob(
@@ -393,21 +403,40 @@ public abstract class AbstractJobReconciler<
      *
      * @param ctx context
      * @param savepointLocation location of savepoint taken
+     * @param cancelTs Timestamp when upgrade/cancel was triggered
      */
-    protected void setUpgradeSavepointPath(FlinkResourceContext<?> ctx, String savepointLocation) {
+    protected void setUpgradeSavepointPath(
+            FlinkResourceContext<?> ctx, String savepointLocation, Instant cancelTs) {
         var conf = ctx.getObserveConfig();
         var savepointFormatType =
-                ctx.getObserveConfig()
-                        .get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+                SavepointFormatType.valueOf(
+                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                .name());
 
-        FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
-                conf,
-                ctx.getOperatorConfig(),
-                ctx.getKubernetesClient(),
-                ctx.getResource(),
-                SavepointFormatType.valueOf(savepointFormatType.name()),
-                savepointLocation);
-        ctx.getResource().getStatus().getJobStatus().setUpgradeSavepointPath(savepointLocation);
+        var snapshotCrOpt =
+                FlinkStateSnapshotUtils.createUpgradeSnapshotResource(
+                        conf,
+                        ctx.getOperatorConfig(),
+                        ctx.getKubernetesClient(),
+                        ctx.getResource(),
+                        savepointFormatType,
+                        savepointLocation);
+        var jobStatus = ctx.getResource().getStatus().getJobStatus();
+        jobStatus.setUpgradeSavepointPath(savepointLocation);
+
+        if (snapshotCrOpt.isEmpty()) {
+            // Register created savepoint in the now deprecated savepoint info and history
+            // only if snapshot CR was not created, otherwise it would be double recorded
+            // and disposed immediately
+            var savepoint =
+                    new Savepoint(
+                            cancelTs.toEpochMilli(),
+                            savepointLocation,
+                            SnapshotTriggerType.UPGRADE,
+                            savepointFormatType,
+                            null);
+            jobStatus.getSavepointInfo().updateLastSavepoint(savepoint);
+        }
     }
 
     /**

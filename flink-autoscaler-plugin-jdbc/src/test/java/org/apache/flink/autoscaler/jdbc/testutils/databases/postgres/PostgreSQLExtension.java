@@ -17,14 +17,14 @@
 
 package org.apache.flink.autoscaler.jdbc.testutils.databases.postgres;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.util.List;
 
 /** The extension of PostgreSQL. */
@@ -49,9 +49,13 @@ class PostgreSQLExtension implements BeforeAllCallback, AfterAllCallback, AfterE
                         .withEnv("POSTGRES_MAX_CONNECTIONS", "10");
     }
 
-    public Connection getConnection() throws Exception {
-        return DriverManager.getConnection(
-                container.getJdbcUrl(), container.getUsername(), container.getPassword());
+    public HikariDataSource getDataSource() throws Exception {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(container.getJdbcUrl());
+        config.setUsername(container.getUsername());
+        config.setPassword(container.getPassword());
+        config.setValidationTimeout(1000);
+        return new HikariDataSource(config);
     }
 
     @Override
@@ -66,7 +70,8 @@ class PostgreSQLExtension implements BeforeAllCallback, AfterAllCallback, AfterE
 
     @Override
     public void afterEach(ExtensionContext extensionContext) throws Exception {
-        try (var conn = getConnection();
+        try (var dataSource = getDataSource();
+                var conn = dataSource.getConnection();
                 var st = conn.createStatement()) {
             for (var tableName : TABLES) {
                 st.executeUpdate(String.format("DELETE from %s", tableName));

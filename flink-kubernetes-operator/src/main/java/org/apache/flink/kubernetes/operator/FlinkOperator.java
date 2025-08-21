@@ -66,6 +66,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -90,6 +91,11 @@ public class FlinkOperator {
     private final Configuration baseConfig;
 
     public FlinkOperator(@Nullable Configuration conf) {
+        this(conf, null);
+    }
+
+    @VisibleForTesting
+    FlinkOperator(@Nullable Configuration conf, KubernetesClient client) {
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
@@ -99,9 +105,13 @@ public class FlinkOperator {
 
         baseConfig = configManager.getDefaultConfig();
         this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig);
-        this.client =
-                KubernetesClientUtils.getKubernetesClient(
-                        configManager.getOperatorConfiguration(), this.metricGroup);
+        if (client == null) {
+            this.client =
+                    KubernetesClientUtils.getKubernetesClient(
+                            configManager.getOperatorConfiguration(), this.metricGroup);
+        } else {
+            this.client = client;
+        }
         this.operator = createOperator();
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
@@ -150,14 +160,15 @@ public class FlinkOperator {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
 
-        overrider.withTerminationTimeoutSeconds(
-                (int)
+        overrider.withReconciliationTerminationTimeout(
+                Duration.ofSeconds(
                         conf.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT)
-                                .toSeconds());
+                                .toSeconds()));
 
         overrider.withStopOnInformerErrorDuringStartup(
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR));
 
+        overrider.withUseSSAToPatchPrimaryResource(false);
         var leaderElectionConf = operatorConf.getLeaderElectionConfiguration();
         if (leaderElectionConf != null) {
             overrider.withLeaderElectionConfiguration(leaderElectionConf);

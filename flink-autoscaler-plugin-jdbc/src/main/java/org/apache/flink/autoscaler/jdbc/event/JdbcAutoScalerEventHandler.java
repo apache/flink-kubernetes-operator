@@ -135,11 +135,12 @@ public class JdbcAutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
     }
 
     @Override
-    public void close() {
+    public void close() throws Exception {
         if (Objects.nonNull(scheduledEventHandlerCleaner)
                 && !scheduledEventHandlerCleaner.isShutdown()) {
             scheduledEventHandlerCleaner.shutdownNow();
         }
+        jdbcEventInteractor.close();
     }
 
     @VisibleForTesting

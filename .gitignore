@@ -36,3 +36,8 @@ buildNumber.properties
 .idea
 *.iml
 *.DS_Store
+
+.kube
+
+# VSCode settings
+.vscode/

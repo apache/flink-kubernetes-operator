@@ -18,7 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -27,12 +26,12 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
-import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
@@ -49,7 +48,10 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.HttpURLConnection;
 import java.util.Collections;
@@ -124,12 +126,13 @@ public class FlinkUtilsTest {
         assertEquals(expectedProbe, pod.getSpec().getContainers().get(1).getStartupProbe());
     }
 
-    @Test
-    public void testDeleteJobGraphInKubernetesHA() {
+    @ParameterizedTest
+    @ValueSource(strings = {"jobGraph-jobId", "executionPlan-jobId"})
+    public void testDeleteJobGraphInKubernetesHA(String key) {
         final String name = "ha-configmap";
         final String clusterId = "cluster-id";
         final Map<String, String> data = new HashMap<>();
-        data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
+        data.put(key, "job-graph-data");
         data.put("leader", "localhost");
         createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, data);
         assertNotNull(kubernetesClient.configMaps().withName(name).get());
@@ -403,21 +406,39 @@ public class FlinkUtilsTest {
         assertEquals(List.of(v1merged, volume2, volume3), mergedPod.getSpec().getVolumes());
     }
 
+    @Test
+    public void testKubernetesHaMetaDeletion() {
+        var clusterId = "cluster-id";
+        var ns = kubernetesClient.getNamespace();
+        createHAConfigMapWithData("test", ns, clusterId, Map.of("k", "v"));
+
+        // Create autoscaler configmap to test that it's not deleted
+        var autoscalerData =
+                new ConfigMapBuilder()
+                        .withNewMetadata()
+                        .withName("autoscaler-cm")
+                        .withNamespace(ns)
+                        .withLabels(ConfigMapStore.getAutoscalerCmLabels(new ResourceID(clusterId)))
+                        .endMetadata()
+                        .withData(Map.of("a", "s"))
+                        .build();
+        kubernetesClient.resource(autoscalerData).create();
+        FlinkUtils.deleteKubernetesHAMetadata(clusterId, ns, kubernetesClient);
+        assertNotNull(kubernetesClient.resource(autoscalerData).get());
+    }
+
     private void createHAConfigMapWithData(
             String configMapName, String namespace, String clusterId, Map<String, String> data) {
-        final ConfigMap kubernetesConfigMap =
+        var cm =
                 new ConfigMapBuilder()
                         .withNewMetadata()
                         .withName(configMapName)
                         .withNamespace(namespace)
-                        .withLabels(
-                                KubernetesUtils.getConfigMapLabels(
-                                        clusterId,
-                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
+                        .withLabels(KubernetesUtils.getCommonLabels(clusterId))
                         .endMetadata()
                         .withData(data)
                         .build();
 
-        kubernetesClient.configMaps().resource(kubernetesConfigMap).createOrReplace();
+        kubernetesClient.configMaps().resource(cm).createOrReplace();
     }
 }

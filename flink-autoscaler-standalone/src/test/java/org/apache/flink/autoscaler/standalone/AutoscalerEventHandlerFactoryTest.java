@@ -68,14 +68,16 @@ class AutoscalerEventHandlerFactoryTest {
         final var conf = new Configuration();
         conf.set(EVENT_HANDLER_TYPE, JDBC);
         conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
-        HikariJDBCUtil.getConnection(conf).close();
+        HikariJDBCUtil.getDataSource(conf).close();
 
         var eventHandler = AutoscalerEventHandlerFactory.create(conf);
         assertThat(eventHandler).isInstanceOf(JdbcAutoScalerEventHandler.class);
+        conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
 
         try {
-            conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
-            HikariJDBCUtil.getConnection(conf).close();
+            var datasource = HikariJDBCUtil.getDataSource(conf);
+            datasource.getConnection().close();
+            datasource.close();
         } catch (RuntimeException ignored) {
             // database shutdown ignored exception
         }

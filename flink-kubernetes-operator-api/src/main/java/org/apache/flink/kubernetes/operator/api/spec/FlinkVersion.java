@@ -32,11 +32,18 @@ public enum FlinkVersion {
     /** Deprecated since 1.10 operator release. */
     @Deprecated
     v1_15(1, 15),
+    /** Deprecated since 1.11 operator release. */
+    @Deprecated
     v1_16(1, 16),
+    @Deprecated
     v1_17(1, 17),
+    @Deprecated
     v1_18(1, 18),
     v1_19(1, 19),
-    v1_20(1, 20);
+    v1_20(1, 20),
+    v2_0(2, 0),
+    v2_1(2, 1),
+    v2_2(2, 2);
 
     /** The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. */
     private final int majorVersion;
@@ -57,15 +64,6 @@ public enum FlinkVersion {
             return this.minorVersion >= otherVersion.minorVersion;
         }
         return false;
-    }
-
-    /**
-     * Returns the current version.
-     *
-     * @return The current version.
-     */
-    public static FlinkVersion current() {
-        return values()[values().length - 1];
     }
 
     public static boolean isSupported(FlinkVersion version) {

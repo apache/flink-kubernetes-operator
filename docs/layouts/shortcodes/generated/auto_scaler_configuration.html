@@ -99,6 +99,24 @@
             <td>Scaling metrics aggregation window size.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.observed-scalability.coefficient-min</h5></td>
+            <td style="word-wrap: break-word;">0.5</td>
+            <td>Double</td>
+            <td>Minimum allowed value for the observed scalability coefficient. Prevents aggressive scaling by clamping low coefficient estimates. If the estimated coefficient falls below this value, it is capped at the configured minimum.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.observed-scalability.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Enables the use of an observed scalability coefficient when computing target parallelism. If enabled, the system will estimate the scalability coefficient based on historical scaling data instead of assuming perfect linear scaling. This helps account for real-world inefficiencies such as network overhead and coordination costs.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.observed-scalability.min-observations</h5></td>
+            <td style="word-wrap: break-word;">3</td>
+            <td>Integer</td>
+            <td>Defines the minimum number of historical scaling observations required to estimate the scalability coefficient. If the number of available observations is below this threshold, the system falls back to assuming linear scaling. Note: To effectively use a higher minimum observation count, you need to increase job.autoscaler.history.max.count. Avoid setting job.autoscaler.history.max.count to a very high value, as the number of retained data points is limited by the size of the state store—particularly when using Kubernetes-based state store.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.observed-true-processing-rate.lag-threshold</h5></td>
             <td style="word-wrap: break-word;">30 s</td>
             <td>Duration</td>
