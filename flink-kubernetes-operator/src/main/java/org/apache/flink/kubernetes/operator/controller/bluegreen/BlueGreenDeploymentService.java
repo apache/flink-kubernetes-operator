@@ -46,17 +46,17 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.fetchSavepointInfo;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.getSpecDiff;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.hasSpecChanged;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.isSavepointRequired;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.prepareFlinkDeployment;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.setLastReconciledSpec;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils.triggerSavepoint;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setAbortTimestamp;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.triggerSavepoint;
 
 /** Consolidated service for all Blue/Green deployment operations. */
 public class BlueGreenDeploymentService {
@@ -86,11 +86,7 @@ public class BlueGreenDeploymentService {
 
         FlinkDeployment flinkDeployment =
                 prepareFlinkDeployment(
-                        context.getBgDeployment(),
-                        nextDeploymentType,
-                        lastCheckpoint,
-                        isFirstDeployment,
-                        bgMeta);
+                        context, nextDeploymentType, lastCheckpoint, isFirstDeployment, bgMeta);
 
         deployCluster(context, flinkDeployment);
 

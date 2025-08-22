@@ -24,9 +24,11 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
-import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenSpecUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 
 /** State handler for the INITIALIZING_BLUE state. */
 public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler {
@@ -43,9 +45,9 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
         // or if we're recovering (failing status) and the spec has changed
         if (deploymentStatus.getLastReconciledSpec() == null
                 || (deploymentStatus.getJobStatus().getState().equals(JobStatus.FAILING)
-                        && BlueGreenSpecUtils.hasSpecChanged(context))) {
+                        && hasSpecChanged(context))) {
 
-            BlueGreenSpecUtils.setLastReconciledSpec(context);
+            setLastReconciledSpec(context);
             return deploymentService.initiateDeployment(
                     context,
                     DeploymentType.BLUE,
