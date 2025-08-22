@@ -58,10 +58,10 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDepl
  *
  * <p>Orchestration Process
  *
- * <p>FlinkBlueGreenDeploymentController.reconcile() ↓ 1. Create BlueGreenContext with current
- * deployment state ↓ 2. Query StateHandlerRegistry for appropriate handler ↓ 3. Delegate to
- * specific StateHandler.handle(context) ↓ 4. StateHandler invokes BlueGreenDeploymentService
- * operations ↓ 5. Return UpdateControl with next reconciliation schedule
+ * <p>FlinkBlueGreenDeploymentController.reconcile() 1. Create BlueGreenContext with current
+ * deployment state 2. Query StateHandlerRegistry for appropriate handler 3. Delegate to specific
+ * StateHandler.handle(context) 4. StateHandler invokes BlueGreenDeploymentService operations 5.
+ * Return UpdateControl with next reconciliation schedule
  */
 @ControllerConfiguration
 public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueGreenDeployment> {

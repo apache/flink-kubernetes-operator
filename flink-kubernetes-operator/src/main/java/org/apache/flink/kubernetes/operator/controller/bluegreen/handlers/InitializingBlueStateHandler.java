@@ -41,8 +41,8 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
 
-        // We only allow a deployment if it's indeed the first (null last spec)
-        // or if we're recovering (failing status) and the spec has changed
+        // Deploy only if this is the initial deployment (no previous spec exists)
+        // or if we're recovering from a failure and the spec has changed since the last attempt
         if (deploymentStatus.getLastReconciledSpec() == null
                 || (deploymentStatus.getJobStatus().getState().equals(JobStatus.FAILING)
                         && hasSpecChanged(context))) {

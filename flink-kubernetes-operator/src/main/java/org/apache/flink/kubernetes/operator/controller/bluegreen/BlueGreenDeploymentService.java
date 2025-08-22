@@ -114,8 +114,8 @@ public class BlueGreenDeploymentService {
             if (isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
                     if (handleSavepoint(context, currentFlinkDeployment)) {
-                        // This is the only portion where the last reconciled spec is not set,
-                        // so we can reprocess TRANSITION after the savepoint is done
+                        // Spec is intentionally not marked as reconciled here to allow
+                        // reprocessing the TRANSITION once savepoint creation completes
                         var savepointingState = calculateSavepointingState(currentDeploymentType);
                         return patchStatusUpdateControl(context, savepointingState, null)
                                 .rescheduleAfter(getReconciliationReschedInterval(context));
@@ -218,7 +218,8 @@ public class BlueGreenDeploymentService {
                 context.getCtxFactory()
                         .getResourceContext(currentFlinkDeployment, context.getJosdkContext());
 
-        // For now UpgradeMode != STATELESS will use a savepoint, originally only SAVEPOINT
+        // Create savepoint for all upgrade modes except STATELESS
+        // (originally only SAVEPOINT mode required savepoints)
         if (isSavepointRequired(context)) {
             String savepointTriggerId = context.getDeploymentStatus().getSavepointTriggerId();
             var savepointFetchResult = fetchSavepointInfo(ctx, savepointTriggerId);
@@ -236,8 +237,8 @@ public class BlueGreenDeploymentService {
                     savepointFormatType);
         }
 
-        // The logic below looked for the last checkpoint in case upgradeMode = LAST_STATE
-        // We don't want to rely on last checkpoint for now.
+        // Currently not using last checkpoint recovery for LAST_STATE upgrade mode
+        // This could be re-enabled in the future by uncommenting the logic below
         return null;
 
         //        if (!lookForCheckpoint(context)) {
@@ -315,12 +316,12 @@ public class BlueGreenDeploymentService {
             FlinkDeployment incomingFlinkDeployment = transitionState.nextDeployment;
 
             if (diffType != BlueGreenDiffType.IGNORE) {
-                // Apply the new spec changes to the currently active deployment
+                // Apply new spec changes to the deployment currently being transitioned to
                 incomingFlinkDeployment.setSpec(
                         context.getBgDeployment().getSpec().getTemplate().getSpec());
-                // Resetting the abort grace period
+                // Reset abort grace period to allow more time for the updated deployment
                 setAbortTimestamp(context);
-                // Ack'ing the spec change
+                // Mark spec change as reconciled
                 setLastReconciledSpec(context);
                 updateFlinkDeployment(incomingFlinkDeployment, context);
 

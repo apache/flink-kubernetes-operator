@@ -219,6 +219,13 @@ public class BlueGreenUtils {
 
     // ==================== Savepoint/Checkpoint Operations ====================
 
+    /**
+     * Determines if a savepoint is required based on the deployment's upgrade mode. Currently all
+     * upgrade modes except STATELESS require savepoints.
+     *
+     * @param context the Blue/Green transition context
+     * @return true if savepoint is required, false otherwise
+     */
     public static boolean isSavepointRequired(BlueGreenContext context) {
         UpgradeMode upgradeMode =
                 context.getBgDeployment()
@@ -228,7 +235,8 @@ public class BlueGreenUtils {
                         .getJob()
                         .getUpgradeMode();
         //        return UpgradeMode.SAVEPOINT == upgradeMode;
-        // For now we're taking savepoints in STATELESS or LAST-STATE
+        // Currently taking savepoints for all modes except STATELESS
+        // (previously only SAVEPOINT mode required savepoints)
         return UpgradeMode.STATELESS != upgradeMode;
     }
 
@@ -289,7 +297,7 @@ public class BlueGreenUtils {
                                                 .getJobId()),
                                 resourceContext.getObserveConfig());
 
-        // Alternative action if no checkpoint is available?
+        // Alternative fallback if no checkpoint is available could be implemented here
         if (lastCheckpoint.isEmpty()) {
             throw new IllegalStateException(
                     "Last Checkpoint for Job "
@@ -302,6 +310,17 @@ public class BlueGreenUtils {
 
     // ==================== Deployment Preparation Utilities ====================
 
+    /**
+     * Creates a new FlinkDeployment resource for a Blue/Green deployment transition. This method
+     * prepares the deployment with proper metadata, specs, and savepoint configuration.
+     *
+     * @param context the Blue/Green transition context
+     * @param deploymentType the type of deployment (BLUE or GREEN)
+     * @param lastCheckpoint the savepoint/checkpoint to restore from (can be null)
+     * @param isFirstDeployment whether this is the initial deployment
+     * @param bgMeta the metadata of the parent Blue/Green deployment
+     * @return configured FlinkDeployment ready for deployment
+     */
     public static FlinkDeployment prepareFlinkDeployment(
             BlueGreenContext context,
             DeploymentType deploymentType,
@@ -323,7 +342,7 @@ public class BlueGreenUtils {
                         "spec",
                         FlinkBlueGreenDeploymentSpec.class);
 
-        // The B/G initialSavepointPath is only used in first time deployments
+        // The Blue/Green initialSavepointPath is only used for first-time deployments
         if (isFirstDeployment) {
             String initialSavepointPath =
                     adjustedSpec.getTemplate().getSpec().getJob().getInitialSavepointPath();
@@ -335,11 +354,11 @@ public class BlueGreenUtils {
                         .getJob()
                         .setInitialSavepointPath(initialSavepointPath);
             } else {
-                LOG.info("Clean start up, no checkpoint/savepoint");
+                LOG.info("Clean startup with no checkpoint/savepoint restoration");
             }
         } else if (lastCheckpoint != null) {
             String location = lastCheckpoint.getLocation().replace("file:", "");
-            LOG.info("Using B/G checkpoint: " + location);
+            LOG.info("Using Blue/Green savepoint/checkpoint: " + location);
             adjustedSpec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
         }
 

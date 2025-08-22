@@ -42,7 +42,7 @@ public class SavepointingStateHandler extends AbstractBlueGreenStateHandler {
         DeploymentType currentType = getCurrentDeploymentType();
         var isSavepointReady = deploymentService.monitorSavepoint(context, currentType);
 
-        // Savepoint complete, continue with the transition
+        // Savepoint creation completed, transition back to active state to continue deployment
         if (isSavepointReady) {
             var nextState =
                     getSupportedState() == FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE
