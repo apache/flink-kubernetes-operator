@@ -20,12 +20,15 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.configuration.Configuration;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /** Allows parsing configurations as YAML, and adds related utility methods. */
@@ -78,12 +81,26 @@ public class ConfigObjectNode extends ObjectNode {
             }
         } else if (node.isArray()) {
             for (int i = 0; i < node.size(); i++) {
-                String newKey = parentKey + "[" + i + "]";
-                flattenHelper(node.get(i), newKey, flatMap);
+                if (node instanceof ArrayNode) {
+                    flatMap.put(parentKey, arrayNodeToSemicolonSepratedString((ArrayNode) node));
+                } else {
+                    String newKey = parentKey + "[" + i + "]";
+                    flattenHelper(node.get(i), newKey, flatMap);
+                }
             }
         } else {
-            // Store values as strings
             flatMap.put(parentKey, node.asText());
         }
+    }
+
+    private static String arrayNodeToSemicolonSepratedString(ArrayNode arrayNode) {
+        if (arrayNode == null || arrayNode.isEmpty()) {
+            return "";
+        }
+        List<String> stringValues = new ArrayList<>();
+        for (JsonNode node : arrayNode) {
+            stringValues.add(node.asText());
+        }
+        return String.join(";", stringValues);
     }
 }
