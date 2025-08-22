@@ -74,7 +74,9 @@ public class IngressUtils {
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
-
+        if (!ctx.getOperatorConfig().isManageIngress()) {
+            return;
+        }
         var objectMeta = ctx.getResource().getMetadata();
         if (spec.getIngress() != null) {
             HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);

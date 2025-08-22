@@ -110,7 +110,8 @@ public class TestingFlinkDeploymentController
                         new FlinkDeploymentObserverFactory(eventRecorder),
                         statusRecorder,
                         eventRecorder,
-                        canaryResourceManager);
+                        canaryResourceManager,
+                        new FlinkConfigManager(Configuration.fromMap(Map.of())));
     }
 
     @Override

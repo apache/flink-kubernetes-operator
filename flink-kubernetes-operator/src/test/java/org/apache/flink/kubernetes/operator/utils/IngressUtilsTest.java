@@ -38,9 +38,11 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_MANAGE_INGRESS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -57,7 +59,20 @@ class IngressUtilsTest {
 
     private FlinkResourceContext<?> createResourceContext(FlinkDeployment appCluster) {
         testingJosdkContext = new TestingJosdkContext<>(client);
-        return new FlinkDeploymentContext(appCluster, testingJosdkContext, null, null, null, null);
+        return new FlinkDeploymentContext(
+                appCluster,
+                testingJosdkContext,
+                null,
+                new FlinkConfigManager(Configuration.fromMap(new HashMap<>())),
+                null,
+                null);
+    }
+
+    private FlinkResourceContext<?> createResourceContext(
+            FlinkDeployment appCluster, FlinkConfigManager configManager) {
+        testingJosdkContext = new TestingJosdkContext<>(client);
+        return new FlinkDeploymentContext(
+                appCluster, testingJosdkContext, null, configManager, null, null);
     }
 
     @Test
@@ -550,6 +565,35 @@ class IngressUtilsTest {
                         List.of(ingress)));
 
         IngressUtils.reconcileIngress(context, appCluster.getSpec(), null, client);
+
+        var ingressV1beta1 =
+                client.network()
+                        .v1beta1()
+                        .ingresses()
+                        .inNamespace(appCluster.getMetadata().getNamespace())
+                        .withName(appCluster.getMetadata().getName())
+                        .get();
+        assertThat(ingressV1beta1).isNull();
+    }
+
+    @Test
+    void skipIngressReconciliationIfFeatureFlagOff() {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        FlinkConfigManager manager =
+                new FlinkConfigManager(
+                        Configuration.fromMap(Map.of(OPERATOR_MANAGE_INGRESS.key(), "false")));
+        var context = createResourceContext(appCluster, manager);
+        context.getOperatorConfig();
+        Configuration config =
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(appCluster.getMetadata(), appCluster.getSpec());
+
+        IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
+        builder.template("{{name}}.{{namespace}}.example.com");
+        builder.tls(new ArrayList<>());
+        appCluster.getSpec().setIngress(builder.build());
+
+        IngressUtils.reconcileIngress(context, appCluster.getSpec(), config, client);
 
         var ingressV1beta1 =
                 client.network()

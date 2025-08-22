@@ -679,4 +679,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(10)
                     .withDescription(
                             "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
+            operatorConfig("ingress.manage")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.");
 }

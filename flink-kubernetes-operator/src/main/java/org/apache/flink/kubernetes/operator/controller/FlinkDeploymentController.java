@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
@@ -69,6 +70,7 @@ public class FlinkDeploymentController
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
     private final CanaryResourceManager<FlinkDeployment> canaryResourceManager;
+    private final FlinkConfigManager flinkConfigManager;
 
     public FlinkDeploymentController(
             Set<FlinkResourceValidator> validators,
@@ -77,7 +79,8 @@ public class FlinkDeploymentController
             FlinkDeploymentObserverFactory observerFactory,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder,
-            CanaryResourceManager<FlinkDeployment> canaryResourceManager) {
+            CanaryResourceManager<FlinkDeployment> canaryResourceManager,
+            FlinkConfigManager flinkConfigManager) {
         this.validators = validators;
         this.ctxFactory = ctxFactory;
         this.reconcilerFactory = reconcilerFactory;
@@ -85,6 +88,7 @@ public class FlinkDeploymentController
         this.statusRecorder = statusRecorder;
         this.eventRecorder = eventRecorder;
         this.canaryResourceManager = canaryResourceManager;
+        this.flinkConfigManager = flinkConfigManager;
     }
 
     @Override
@@ -184,7 +188,9 @@ public class FlinkDeploymentController
         List<EventSource<?, FlinkDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
         eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
-        eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
+        if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
+            eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
+        }
         if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
             eventSources.add(
                     EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
