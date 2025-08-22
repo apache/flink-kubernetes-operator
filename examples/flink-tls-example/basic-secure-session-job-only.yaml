@@ -21,19 +21,22 @@ metadata:
   name: basic-secure-session-job-only
 spec:
   flinkConfiguration:
-    security.ssl.internal.enabled: 'true'
-    security.ssl.internal.keystore: /opt/flink/tls-cert/keystore.jks
-    security.ssl.internal.keystore-password: password1234
-    security.ssl.internal.truststore: /opt/flink/tls-cert/truststore.jks
-    security.ssl.internal.key-password: password1234
-    security.ssl.internal.truststore-password: password1234
-    security.ssl.rest.keystore: /opt/flink/tls-cert/keystore.jks
-    security.ssl.rest.truststore: /opt/flink/tls-cert/truststore.jks
-    security.ssl.rest.key-password: password1234
-    security.ssl.rest.truststore-password: password1234
-    security.ssl.rest.enabled: 'true'
-    security.ssl.rest.keystore-password: password1234
-    kubernetes.secrets: 'basic-secure-cert:/opt/flink/tls-cert'
+    security.ssl:
+      internal:
+        enabled: true
+        keystore: /opt/flink/tls-cert/keystore.jks
+        keystore-password: password1234
+        truststore: /opt/flink/tls-cert/truststore.jks
+        key-password: password1234
+        truststore-password: password1234
+      rest:
+        keystore: /opt/flink/tls-cert/keystore.jks
+        truststore: /opt/flink/tls-cert/truststore.jks
+        key-password: password1234
+        truststore-password: password1234
+        enabled: true
+        keystore-password: password1234
+    kubernetes.secrets: basic-secure-cert:/opt/flink/tls-cert
   deploymentName: basic-secure-deployment-only
   job:
     jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1-TopSpeedWindowing.jar

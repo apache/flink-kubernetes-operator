@@ -25,11 +25,13 @@ spec:
   flinkVersion: v1_20
   flinkConfiguration:
     scheduler-mode: REACTIVE
-    taskmanager.numberOfTaskSlots: "2"
-    state.savepoints.dir: file:///flink-data/savepoints
-    state.checkpoints.dir: file:///flink-data/checkpoints
-    high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
-    high-availability.storageDir: file:///flink-data/ha
+    taskmanager.numberOfTaskSlots: 2
+    state:
+      savepoints.dir: file:///flink-data/savepoints
+      checkpoints.dir: file:///flink-data/checkpoints
+    high-availability:
+      type: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
+      storageDir: file:///flink-data/ha
   serviceAccount: flink
   jobManager:
     resource:
