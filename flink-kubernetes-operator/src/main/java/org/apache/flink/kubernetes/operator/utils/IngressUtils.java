@@ -38,6 +38,7 @@ import io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressTLS;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.utils.EventSourceUtils.LABEL_COMPONENT_INGRESS;
 
 /** Ingress utilities. */
+@Slf4j
 public class IngressUtils {
 
     private static final Pattern NAME_PTN =
@@ -68,13 +70,28 @@ public class IngressUtils {
     private static final String REST_SVC_NAME_SUFFIX = "-rest";
 
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
+    public static final String INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET =
+            "Ingress management is turned off but ingress set in spec";
+    public static final String INGRESS_MANAGEMENT = "IngressManagement";
 
     public static void reconcileIngress(
             FlinkResourceContext<?> ctx,
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
-            KubernetesClient client) {
+            KubernetesClient client,
+            EventRecorder eventRecorder) {
         if (!ctx.getOperatorConfig().isManageIngress()) {
+            if (spec.getIngress() != null) {
+                log.warn(INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET);
+                eventRecorder.triggerEvent(
+                        ctx.getResource(),
+                        EventRecorder.Type.Warning,
+                        INGRESS_MANAGEMENT,
+                        INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET,
+                        EventRecorder.Component.Operator,
+                        client);
+            }
+
             return;
         }
         var objectMeta = ctx.getResource().getMetadata();
