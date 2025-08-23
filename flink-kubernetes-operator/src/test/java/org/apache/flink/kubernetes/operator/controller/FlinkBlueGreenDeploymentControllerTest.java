@@ -165,10 +165,10 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertTrue(rs.updateControl.getScheduleDelay().isPresent());
 
         // This next reconciliation should continue waiting on the pending savepoint
-        var rs2 = reconcile(rs.deployment);
+        rs = reconcile(rs.deployment);
 
-        assertTrue(rs2.updateControl.isNoUpdate());
-        assertTrue(rs2.updateControl.getScheduleDelay().isPresent());
+        assertTrue(rs.updateControl.isNoUpdate());
+        assertTrue(rs.updateControl.getScheduleDelay().isPresent());
 
         // Completing the savepoint
         triggers.put(rs.deployment.getStatus().getSavepointTriggerId(), true);
@@ -389,8 +389,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(JobState.SUSPENDED, flinkDeployments.get(0).getSpec().getJob().getState());
 
         // No-op if the spec remains the same
-        var rs2 = reconcile(rs.deployment);
-        assertTrue(rs2.updateControl.isNoUpdate());
+        rs = reconcile(rs.deployment);
+        assertTrue(rs.updateControl.isNoUpdate());
 
         simulateChangeInSpec(rs.deployment, "MODIFIED_VALUE", 0, null);
 
@@ -788,10 +788,10 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 rs.reconciledStatus.getLastReconciledSpec());
 
         // A reconciliation before the deletion delay has expired should result in no-op
-        var rs2 = reconcile(rs.deployment);
-        var remainingDeletionDelay = rs2.updateControl.getScheduleDelay().get();
+        rs = reconcile(rs.deployment);
+        var remainingDeletionDelay = rs.updateControl.getScheduleDelay().get();
         assertTrue(remainingDeletionDelay <= expectedDeletionDelay);
-        assertTrue(rs2.updateControl.isNoUpdate());
+        assertTrue(rs.updateControl.isNoUpdate());
 
         Thread.sleep(remainingDeletionDelay);
     }
@@ -889,8 +889,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         return new TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult(
                 updateControl,
-                updateControl.getResource().orElse(null),
-                updateControl.isNoUpdate() ? null : updateControl.getResource().get().getStatus());
+                updateControl.isNoUpdate()
+                        ? blueGreenDeployment
+                        : updateControl.getResource().get(),
+                updateControl.isNoUpdate()
+                        ? blueGreenDeployment.getStatus()
+                        : updateControl.getResource().get().getStatus());
     }
 
     private void simulateSubmitAndSuccessfulJobStart(FlinkDeployment deployment) throws Exception {
