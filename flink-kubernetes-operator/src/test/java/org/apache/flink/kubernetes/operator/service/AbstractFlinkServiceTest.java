@@ -112,6 +112,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -148,6 +149,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1318,32 +1320,47 @@ public class AbstractFlinkServiceTest {
 
     @Test
     public void listingJobExceptionsIsCompatibleWihFlinkV1_17Test() throws Exception {
-        JobExceptionsInfoWithHistory exceptionInfoWithNullFailureLabels =
-                new JobExceptionsInfoWithHistory(
-                        new JobExceptionsInfoWithHistory.JobExceptionHistory(
-                                java.util.Collections.singletonList(
-                                        new JobExceptionsInfoWithHistory.RootExceptionInfo(
-                                                "org.apache.flink.util.FlinkExpectedException",
-                                                "The TaskExecutor is shutting down.",
-                                                1755998006623L,
-                                                null,
-                                                "Source: Events Generator Source (2/2) - execution #0",
-                                                "10.244.0.105:44401",
-                                                "basic-example-taskmanager-1-1",
-                                                java.util.Collections.emptyList())),
-                                false));
-
+        var flinkV117JsonResponse =
+                "{\n"
+                        + "  \"root-exception\": \"org.apache.flink.util.FlinkExpectedException: The TaskExecutor is shutting down.\\n\\tat org.apache.flink.runtime.taskexecutor.TaskExecutor.onStop(TaskExecutor.java:476)\\n\\tat org.apache.flink.runtime.rpc.RpcEndpoint.internalCallOnStop(RpcEndpoint.java:239)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor$StartedState.lambda$terminate$0(AkkaRpcActor.java:578)\\n\\tat org.apache.flink.runtime.concurrent.akka.ClassLoadingUtils.runWithContextClassLoader(ClassLoadingUtils.java:83)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor$StartedState.terminate(AkkaRpcActor.java:577)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor.handleControlMessage(AkkaRpcActor.java:196)\\n\\tat akka.japi.pf.UnitCaseStatement.apply(CaseStatements.scala:24)\\n\\tat akka.japi.pf.UnitCaseStatement.apply(CaseStatements.scala:20)\\n\\tat scala.PartialFunction.applyOrElse(PartialFunction.scala:127)\\n\\tat scala.PartialFunction.applyOrElse$(PartialFunction.scala:126)\\n\\tat akka.japi.pf.UnitCaseStatement.applyOrElse(CaseStatements.scala:20)\\n\\tat scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:175)\\n\\tat scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:176)\\n\\tat akka.actor.Actor.aroundReceive(Actor.scala:537)\\n\\tat akka.actor.Actor.aroundReceive$(Actor.scala:535)\\n\\tat akka.actor.AbstractActor.aroundReceive(AbstractActor.scala:220)\\n\\tat akka.actor.ActorCell.receiveMessage(ActorCell.scala:579)\\n\\tat akka.actor.ActorCell.invoke(ActorCell.scala:547)\\n\\tat akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)\\n\\tat akka.dispatch.Mailbox.run(Mailbox.scala:231)\\n\\tat akka.dispatch.Mailbox.exec(Mailbox.scala:243)\\n\\tat java.base/java.util.concurrent.ForkJoinTask.doExec(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool.scan(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool.runWorker(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinWorkerThread.run(Unknown Source)\\n\",\n"
+                        + "  \"timestamp\": 1755995361447,\n"
+                        + "  \"all-exceptions\": [],\n"
+                        + "  \"truncated\": false,\n"
+                        + "  \"exceptionHistory\": {\n"
+                        + "    \"entries\": [\n"
+                        + "      {\n"
+                        + "        \"exceptionName\": \"org.apache.flink.util.FlinkExpectedException\",\n"
+                        + "        \"stacktrace\": \"org.apache.flink.util.FlinkExpectedException: The TaskExecutor is shutting down.\\n\\tat org.apache.flink.runtime.taskexecutor.TaskExecutor.onStop(TaskExecutor.java:476)\\n\\tat org.apache.flink.runtime.rpc.RpcEndpoint.internalCallOnStop(RpcEndpoint.java:239)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor$StartedState.lambda$terminate$0(AkkaRpcActor.java:578)\\n\\tat org.apache.flink.runtime.concurrent.akka.ClassLoadingUtils.runWithContextClassLoader(ClassLoadingUtils.java:83)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor$StartedState.terminate(AkkaRpcActor.java:577)\\n\\tat org.apache.flink.runtime.rpc.akka.AkkaRpcActor.handleControlMessage(AkkaRpcActor.java:196)\\n\\tat akka.japi.pf.UnitCaseStatement.apply(CaseStatements.scala:24)\\n\\tat akka.japi.pf.UnitCaseStatement.apply(CaseStatements.scala:20)\\n\\tat scala.PartialFunction.applyOrElse(PartialFunction.scala:127)\\n\\tat scala.PartialFunction.applyOrElse$(PartialFunction.scala:126)\\n\\tat akka.japi.pf.UnitCaseStatement.applyOrElse(CaseStatements.scala:20)\\n\\tat scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:175)\\n\\tat scala.PartialFunction$OrElse.applyOrElse(PartialFunction.scala:176)\\n\\tat akka.actor.Actor.aroundReceive(Actor.scala:537)\\n\\tat akka.actor.Actor.aroundReceive$(Actor.scala:535)\\n\\tat akka.actor.AbstractActor.aroundReceive(AbstractActor.scala:220)\\n\\tat akka.actor.ActorCell.receiveMessage(ActorCell.scala:579)\\n\\tat akka.actor.ActorCell.invoke(ActorCell.scala:547)\\n\\tat akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)\\n\\tat akka.dispatch.Mailbox.run(Mailbox.scala:231)\\n\\tat akka.dispatch.Mailbox.exec(Mailbox.scala:243)\\n\\tat java.base/java.util.concurrent.ForkJoinTask.doExec(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool.scan(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinPool.runWorker(Unknown Source)\\n\\tat java.base/java.util.concurrent.ForkJoinWorkerThread.run(Unknown Source)\\n\",\n"
+                        + "        \"timestamp\": 1755995361447,\n"
+                        + "        \"taskName\": \"Source: Custom Source (2/2) - execution #0\",\n"
+                        + "        \"location\": \"10.244.0.93:37079\",\n"
+                        + "        \"taskManagerId\": \"basic-example-taskmanager-1-1\",\n"
+                        + "        \"concurrentExceptions\": []\n"
+                        + "      }\n"
+                        + "    ],\n"
+                        + "    \"truncated\": false\n"
+                        + "  }\n"
+                        + "}";
         var flinkService =
                 getTestingService(
                         (messageHeaders, messageParameters, requestBody) ->
                                 CompletableFuture.completedFuture(
-                                        exceptionInfoWithNullFailureLabels));
-        assertDoesNotThrow(
-                () ->
-                        flinkService.getJobExceptions(
-                                TestUtils.buildApplicationCluster(),
-                                new JobID(),
-                                new Configuration()));
+                                        parseExceptionsJsonResponse(flinkV117JsonResponse)));
+
+        var jobExceptions =
+                flinkService.getJobExceptions(
+                        TestUtils.buildApplicationCluster(), new JobID(), new Configuration());
+        assertNotNull(jobExceptions);
+        assertEquals(1, jobExceptions.getExceptionHistory().getEntries().size());
+    }
+
+    @SneakyThrows
+    private static JobExceptionsInfoWithHistory parseExceptionsJsonResponse(
+            String flinkV117JsonResponse) {
+        var jsonNode = RestMapperUtils.getStrictObjectMapper().readTree(flinkV117JsonResponse);
+        var jsonParser = RestMapperUtils.getStrictObjectMapper().treeAsTokens(jsonNode);
+        return RestMapperUtils.getFlexibleObjectMapper()
+                .readValue(jsonParser, JobExceptionsInfoWithHistory.class);
     }
 
     class TestingService extends AbstractFlinkService {
