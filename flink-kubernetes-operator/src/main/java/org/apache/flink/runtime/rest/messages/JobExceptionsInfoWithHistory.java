@@ -35,7 +35,10 @@ import java.util.StringJoiner;
 import static org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
-/** Copied from Flink 2.0 to handle removed changes. */
+/**
+ * Copied from Flink 2.0 to handle removed changes, with small modifications like: FLINK-38148 that
+ * allows nullable `failureLabels` to support Flink v1.17.
+ */
 public class JobExceptionsInfoWithHistory implements ResponseBody {
 
     public static final String FIELD_NAME_EXCEPTION_HISTORY = "exceptionHistory";
@@ -189,14 +192,15 @@ public class JobExceptionsInfoWithHistory implements ResponseBody {
                 @JsonProperty(FIELD_NAME_EXCEPTION_NAME) String exceptionName,
                 @JsonProperty(FIELD_NAME_EXCEPTION_STACKTRACE) String stacktrace,
                 @JsonProperty(FIELD_NAME_EXCEPTION_TIMESTAMP) long timestamp,
-                @JsonProperty(FIELD_NAME_FAILURE_LABELS) Map<String, String> failureLabels,
+                @JsonProperty(FIELD_NAME_FAILURE_LABELS) @Nullable
+                        Map<String, String> failureLabels,
                 @JsonProperty(FIELD_NAME_TASK_NAME) @Nullable String taskName,
                 @JsonProperty(FIELD_NAME_ENDPOINT) @Nullable String endpoint,
                 @JsonProperty(FIELD_NAME_TASK_MANAGER_ID) @Nullable String taskManagerId) {
             this.exceptionName = checkNotNull(exceptionName);
             this.stacktrace = checkNotNull(stacktrace);
             this.timestamp = timestamp;
-            this.failureLabels = checkNotNull(failureLabels);
+            this.failureLabels = failureLabels;
             this.taskName = taskName;
             this.endpoint = endpoint;
             this.taskManagerId = taskManagerId;
