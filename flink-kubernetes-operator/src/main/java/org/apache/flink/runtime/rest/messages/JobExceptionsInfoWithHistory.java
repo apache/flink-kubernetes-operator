@@ -37,7 +37,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Copied from Flink 2.0 to handle removed changes, with small modifications like: FLINK-38148 that
- * allows nullable `failureLabels` to support Flink v1.17
+ * allows nullable `failureLabels` to support Flink v1.17.
  */
 public class JobExceptionsInfoWithHistory implements ResponseBody {
 
