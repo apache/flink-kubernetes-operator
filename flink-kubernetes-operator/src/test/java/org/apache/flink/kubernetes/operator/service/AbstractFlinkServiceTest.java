@@ -59,6 +59,7 @@ import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
 import org.apache.flink.runtime.rest.messages.MessageParameters;
 import org.apache.flink.runtime.rest.messages.RequestBody;
@@ -1313,6 +1314,36 @@ public class AbstractFlinkServiceTest {
 
         assertTrue(remaining.toMillis() > 0);
         assertTrue(remaining.toMillis() < 1000);
+    }
+
+    @Test
+    public void listingJobExceptionsIsCompatibleWihFlinkV1_17Test() throws Exception {
+        JobExceptionsInfoWithHistory exceptionInfoWithNullFailureLabels =
+                new JobExceptionsInfoWithHistory(
+                        new JobExceptionsInfoWithHistory.JobExceptionHistory(
+                                java.util.Collections.singletonList(
+                                        new JobExceptionsInfoWithHistory.RootExceptionInfo(
+                                                "org.apache.flink.util.FlinkExpectedException",
+                                                "The TaskExecutor is shutting down.",
+                                                1755998006623L,
+                                                null,
+                                                "Source: Events Generator Source (2/2) - execution #0",
+                                                "10.244.0.105:44401",
+                                                "basic-example-taskmanager-1-1",
+                                                java.util.Collections.emptyList())),
+                                false));
+
+        var flinkService =
+                getTestingService(
+                        (messageHeaders, messageParameters, requestBody) ->
+                                CompletableFuture.completedFuture(
+                                        exceptionInfoWithNullFailureLabels));
+        assertDoesNotThrow(
+                () ->
+                        flinkService.getJobExceptions(
+                                TestUtils.buildApplicationCluster(),
+                                new JobID(),
+                                new Configuration()));
     }
 
     class TestingService extends AbstractFlinkService {
