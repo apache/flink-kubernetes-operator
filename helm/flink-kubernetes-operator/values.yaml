@@ -147,7 +147,7 @@ operatorSecurityContext: {}
 webhookSecurityContext: {}
 
 webhook:
-  create: false
+  create: true
   # validator:
   #   create: true
   # mutator:
