@@ -190,7 +190,8 @@ public class ApplicationReconciler
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
-        IngressUtils.reconcileIngress(ctx, spec, deployConfig, ctx.getKubernetesClient());
+        IngressUtils.reconcileIngress(
+                ctx, spec, deployConfig, ctx.getKubernetesClient(), eventRecorder);
     }
 
     private void setJobIdIfNecessary(

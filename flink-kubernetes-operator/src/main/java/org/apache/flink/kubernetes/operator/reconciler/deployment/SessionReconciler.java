@@ -106,7 +106,8 @@ public class SessionReconciler
         setOwnerReference(cr, deployConfig);
         ctx.getFlinkService().submitSessionCluster(deployConfig);
         cr.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        IngressUtils.reconcileIngress(ctx, spec, deployConfig, ctx.getKubernetesClient());
+        IngressUtils.reconcileIngress(
+                ctx, spec, deployConfig, ctx.getKubernetesClient(), eventRecorder);
     }
 
     @Override
