@@ -22,6 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.FallbackKey;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -50,6 +51,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,6 +64,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -448,15 +451,63 @@ public class FlinkConfigManager {
 
     @VisibleForTesting
     protected static Configuration loadGlobalConfiguration(Optional<String> confOverrideDir) {
+        Configuration res;
         if (confOverrideDir.isPresent()) {
             Configuration configOverrides =
                     GlobalConfiguration.loadConfiguration(confOverrideDir.get());
             LOG.debug(
                     "Loading default configuration with overrides from {}", confOverrideDir.get());
-            return GlobalConfiguration.loadConfiguration(configOverrides);
+            res = GlobalConfiguration.loadConfiguration(configOverrides);
+        } else {
+            LOG.debug("Loading default configuration");
+            res = GlobalConfiguration.loadConfiguration();
         }
-        LOG.debug("Loading default configuration");
-        return GlobalConfiguration.loadConfiguration();
+        overriderConfigurationsFromEnvVariables(res, System::getenv);
+        return res;
+    }
+
+    @VisibleForTesting
+    static void overriderConfigurationsFromEnvVariables(
+            Configuration res, Supplier<Map<String, String>> envVariables) {
+        var envVars = envVariables.get();
+        var options = getConfigOptions(KubernetesOperatorConfigOptions.class);
+        options.forEach(
+                o -> {
+                    o.fallbackKeys()
+                            .forEach(
+                                    k -> {
+                                        var fallbackKey = ((FallbackKey) k).getKey();
+                                        String key = keyToEnvVarName(fallbackKey);
+                                        String val = envVars.get(key);
+                                        if (val != null) {
+                                            res.setString(fallbackKey, val);
+                                        }
+                                    });
+                    var val = envVars.get(keyToEnvVarName(o.key()));
+                    if (val != null) {
+                        res.setString(o.key(), val);
+                    }
+                });
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static List<ConfigOption> getConfigOptions(
+            Class<KubernetesOperatorConfigOptions> clazz) {
+        return Arrays.stream(clazz.getDeclaredFields())
+                .filter(f -> f.getType().equals(ConfigOption.class))
+                .map(
+                        f -> {
+                            try {
+                                return (ConfigOption) f.get(null);
+                            } catch (IllegalAccessException e) {
+                                throw new IllegalStateException(e);
+                            }
+                        })
+                .toList();
+    }
+
+    static String keyToEnvVarName(String key) {
+        return key.replaceAll("\\.", "_").toUpperCase();
     }
 
     private static void applyDefault(
