@@ -82,7 +82,6 @@ public class IngressUtils {
             EventRecorder eventRecorder) {
         if (!ctx.getOperatorConfig().isManageIngress()) {
             if (spec.getIngress() != null) {
-                log.warn(INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET);
                 eventRecorder.triggerEvent(
                         ctx.getResource(),
                         EventRecorder.Type.Warning,
