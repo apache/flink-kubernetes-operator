@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
@@ -36,10 +37,12 @@ public class AutoscalerFactory {
     public static JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> create(
             KubernetesClient client,
             EventRecorder eventRecorder,
-            ClusterResourceManager clusterResourceManager) {
+            ClusterResourceManager clusterResourceManager,
+            FlinkConfigManager configManager) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
+        var customEvaluators = AutoscalerUtils.discoverCustomEvaluators(configManager);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
@@ -47,6 +50,7 @@ public class AutoscalerFactory {
                 new ScalingExecutor<>(eventHandler, stateStore, clusterResourceManager),
                 eventHandler,
                 new KubernetesScalingRealizer(),
-                stateStore);
+                stateStore,
+                customEvaluators);
     }
 }
