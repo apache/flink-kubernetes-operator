@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_WATCHED_NAMESPACES;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -427,5 +428,19 @@ public class FlinkConfigManagerTest {
         assertTrue(completed1.get());
         assertTrue(completed2.get());
         assertTrue(completed3.get());
+    }
+
+    @Test
+    void envVarToFlinkConfig() {
+        assertThat(
+                        FlinkConfigManager.envVarToKey(
+                                "FLINK_CONF_RESTART__STRATEGY_FAILURE__RATE_DELAY"))
+                .isEqualTo("restart-strategy.failure-rate.delay");
+    }
+
+    @Test
+    void envVarValueToFlinkConfigValue() {
+        assertThat(FlinkConfigManager.envVarValueToValue("1")).isEqualTo("1");
+        assertThat(FlinkConfigManager.envVarValueToValue("1_m")).isEqualTo("1 m");
     }
 }

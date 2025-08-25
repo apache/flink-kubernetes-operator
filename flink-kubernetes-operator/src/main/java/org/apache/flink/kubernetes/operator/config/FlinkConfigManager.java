@@ -22,7 +22,6 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.FallbackKey;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -51,7 +50,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -79,6 +77,8 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 
 /** Configuration manager for the Flink operator. */
 public class FlinkConfigManager {
+
+    public static final String ENV_VAR_PREFIX = "FLINK_CONF_";
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -470,44 +470,22 @@ public class FlinkConfigManager {
     static void overriderConfigurationsFromEnvVariables(
             Configuration res, Supplier<Map<String, String>> envVariables) {
         var envVars = envVariables.get();
-        var options = getConfigOptions(KubernetesOperatorConfigOptions.class);
-        options.forEach(
-                o -> {
-                    o.fallbackKeys()
-                            .forEach(
-                                    k -> {
-                                        var fallbackKey = ((FallbackKey) k).getKey();
-                                        String key = keyToEnvVarName(fallbackKey);
-                                        String val = envVars.get(key);
-                                        if (val != null) {
-                                            res.setString(fallbackKey, val);
-                                        }
-                                    });
-                    var val = envVars.get(keyToEnvVarName(o.key()));
-                    if (val != null) {
-                        res.setString(o.key(), val);
+        envVars.forEach(
+                (k, v) -> {
+                    if (k.startsWith(ENV_VAR_PREFIX)) {
+                        res.setString(envVarToKey(k), envVarValueToValue(v));
                     }
                 });
     }
 
-    @SuppressWarnings("rawtypes")
-    private static List<ConfigOption> getConfigOptions(
-            Class<KubernetesOperatorConfigOptions> clazz) {
-        return Arrays.stream(clazz.getDeclaredFields())
-                .filter(f -> f.getType().equals(ConfigOption.class))
-                .map(
-                        f -> {
-                            try {
-                                return (ConfigOption) f.get(null);
-                            } catch (IllegalAccessException e) {
-                                throw new IllegalStateException(e);
-                            }
-                        })
-                .toList();
+    @VisibleForTesting
+    static String envVarValueToValue(String v) {
+        return v.replace("_", " ");
     }
 
-    static String keyToEnvVarName(String key) {
-        return key.replaceAll("\\.", "_").toUpperCase();
+    @VisibleForTesting
+    static String envVarToKey(String key) {
+        return key.replace(ENV_VAR_PREFIX, "").replace("__", "-").replace("_", ".").toLowerCase();
     }
 
     private static void applyDefault(
