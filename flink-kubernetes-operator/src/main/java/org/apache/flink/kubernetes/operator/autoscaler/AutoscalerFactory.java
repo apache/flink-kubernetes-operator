@@ -52,14 +52,14 @@ public class AutoscalerFactory {
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
 
-        Set<FlinkAutoscalerScalingRealizer> flinkAutoscalerScalingRealizers =
+        Set<FlinkAutoscalerScalingRealizer> discoveredFlinkAutoscalerRealizers =
                 PluginDiscoveryUtils.discoverResources(
                         configManager, FlinkAutoscalerScalingRealizer.class);
 
         ScalingRealizer scalingRealizer = new KubernetesScalingRealizer();
 
-        if (!flinkAutoscalerScalingRealizers.isEmpty()) {
-            scalingRealizer = flinkAutoscalerScalingRealizers.stream().findFirst().get();
+        if (!discoveredFlinkAutoscalerRealizers.isEmpty()) {
+            scalingRealizer = discoveredFlinkAutoscalerRealizers.stream().findFirst().get();
 
             LOG.info("Overriding ScalingRealizer to {}", scalingRealizer.getClass().getName());
         }
