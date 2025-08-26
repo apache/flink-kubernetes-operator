@@ -169,6 +169,16 @@ defaultConfiguration:
   # If set to false, loads just the overrides as in (2).
   # This option has not effect, if create is equal to false.
   append: true
+
+#  Uncomment to use the new config.yaml format, but also comment out the flink-config.yaml key.
+#  config.yaml:
+#    kubernetes.operator:
+#      metrics.reporter.slf4j:
+#        factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+#        interval: 5 MINUTE
+#      reconcile.interval: 15 s
+#      observer.progress-check.interval: 5 s
+
   flink-conf.yaml: |+
     # Flink Config Overrides
     kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
