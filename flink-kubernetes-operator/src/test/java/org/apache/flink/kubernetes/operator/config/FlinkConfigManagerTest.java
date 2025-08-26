@@ -437,10 +437,4 @@ public class FlinkConfigManagerTest {
                                 "FLINK_CONF_RESTART__STRATEGY_FAILURE__RATE_DELAY"))
                 .isEqualTo("restart-strategy.failure-rate.delay");
     }
-
-    @Test
-    void envVarValueToFlinkConfigValue() {
-        assertThat(FlinkConfigManager.envVarValueToValue("1")).isEqualTo("1");
-        assertThat(FlinkConfigManager.envVarValueToValue("1_m")).isEqualTo("1 m");
-    }
 }

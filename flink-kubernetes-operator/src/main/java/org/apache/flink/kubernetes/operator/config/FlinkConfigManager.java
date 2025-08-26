@@ -473,14 +473,9 @@ public class FlinkConfigManager {
         envVars.forEach(
                 (k, v) -> {
                     if (k.startsWith(ENV_VAR_PREFIX)) {
-                        res.setString(envVarToKey(k), envVarValueToValue(v));
+                        res.setString(envVarToKey(k), v);
                     }
                 });
-    }
-
-    @VisibleForTesting
-    static String envVarValueToValue(String v) {
-        return v.replace("_", " ");
     }
 
     @VisibleForTesting
