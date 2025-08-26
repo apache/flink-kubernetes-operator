@@ -56,17 +56,12 @@ public class AutoscalerFactory {
                 PluginDiscoveryUtils.discoverResources(
                         configManager, FlinkAutoscalerScalingRealizer.class);
 
-        flinkAutoscalerScalingRealizers.forEach(
-                realizer -> {
-                    LOG.info(
-                            "Discovered resource from plugin directory {}",
-                            realizer.getClass().getName());
-                });
-
         ScalingRealizer scalingRealizer = new KubernetesScalingRealizer();
 
         if (!flinkAutoscalerScalingRealizers.isEmpty()) {
             scalingRealizer = flinkAutoscalerScalingRealizers.stream().findFirst().get();
+
+            LOG.info("Overriding ScalingRealizer to {}", scalingRealizer.getClass().getName());
         }
 
         return new JobAutoScalerImpl<>(
