@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
@@ -36,13 +36,13 @@ public class TransitioningStateHandler extends AbstractBlueGreenStateHandler {
 
     @Override
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
-        DeploymentType currentType = getCurrentDeploymentType();
+        BlueGreenDeploymentType currentType = getCurrentDeploymentType();
         return deploymentService.monitorTransition(context, currentType);
     }
 
-    private DeploymentType getCurrentDeploymentType() {
+    private BlueGreenDeploymentType getCurrentDeploymentType() {
         return getSupportedState() == FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE
-                ? DeploymentType.GREEN // Transitioning FROM green TO blue
-                : DeploymentType.BLUE; // Transitioning FROM blue TO green
+                ? BlueGreenDeploymentType.GREEN // Transitioning FROM green TO blue
+                : BlueGreenDeploymentType.BLUE; // Transitioning FROM blue TO green
     }
 }

@@ -112,7 +112,7 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
                             ctxFactory);
             return BlueGreenDeploymentService.patchStatusUpdateControl(
                             context, INITIALIZING_BLUE, null)
-                    .rescheduleAfter(100);
+                    .rescheduleAfter(0);
         } else {
             FlinkBlueGreenDeploymentState currentState = deploymentStatus.getBlueGreenState();
             var context =

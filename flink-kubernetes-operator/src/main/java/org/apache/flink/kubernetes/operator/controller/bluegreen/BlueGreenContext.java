@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
@@ -53,7 +53,7 @@ public class BlueGreenContext {
         return deployments != null ? deployments.getFlinkDeploymentGreen() : null;
     }
 
-    public FlinkDeployment getDeploymentByType(DeploymentType type) {
-        return type == DeploymentType.BLUE ? getBlueDeployment() : getGreenDeployment();
+    public FlinkDeployment getDeploymentByType(BlueGreenDeploymentType type) {
+        return type == BlueGreenDeploymentType.BLUE ? getBlueDeployment() : getGreenDeployment();
     }
 }

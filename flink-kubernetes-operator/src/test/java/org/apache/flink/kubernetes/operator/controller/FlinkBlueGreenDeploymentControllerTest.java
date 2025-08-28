@@ -746,7 +746,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         if (execAssertions) {
             assertTrue(rs.updateControl.getScheduleDelay().isPresent());
-            assertTrue(rs.updateControl.getScheduleDelay().get() > 0);
+            assertEquals(0, (long) rs.updateControl.getScheduleDelay().get());
             assertEquals(
                     FlinkBlueGreenDeploymentState.INITIALIZING_BLUE,
                     rs.reconciledStatus.getBlueGreenState());

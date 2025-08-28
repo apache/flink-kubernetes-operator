@@ -23,7 +23,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
  * Enumeration of the two possible Flink Blue/Green deployment types. Only one of each type will be
  * present at all times for a particular job.
  */
-public enum DeploymentType {
+public enum BlueGreenDeploymentType {
     /** Identifier for the first or "Blue" deployment type. */
     BLUE,
 
@@ -32,8 +32,8 @@ public enum DeploymentType {
 
     public static final String LABEL_KEY = "flink/blue-green-deployment-type";
 
-    public static DeploymentType fromDeployment(FlinkDeployment flinkDeployment) {
+    public static BlueGreenDeploymentType fromDeployment(FlinkDeployment flinkDeployment) {
         String typeAnnotation = flinkDeployment.getMetadata().getLabels().get(LABEL_KEY);
-        return DeploymentType.valueOf(typeAnnotation);
+        return BlueGreenDeploymentType.valueOf(typeAnnotation);
     }
 }

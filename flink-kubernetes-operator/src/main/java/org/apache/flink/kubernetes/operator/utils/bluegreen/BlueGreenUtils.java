@@ -23,8 +23,8 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -315,7 +315,7 @@ public class BlueGreenUtils {
      * prepares the deployment with proper metadata, specs, and savepoint configuration.
      *
      * @param context the Blue/Green transition context
-     * @param deploymentType the type of deployment (BLUE or GREEN)
+     * @param blueGreenDeploymentType the type of deployment (BLUE or GREEN)
      * @param lastCheckpoint the savepoint/checkpoint to restore from (can be null)
      * @param isFirstDeployment whether this is the initial deployment
      * @param bgMeta the metadata of the parent Blue/Green deployment
@@ -323,7 +323,7 @@ public class BlueGreenUtils {
      */
     public static FlinkDeployment prepareFlinkDeployment(
             BlueGreenContext context,
-            DeploymentType deploymentType,
+            BlueGreenDeploymentType blueGreenDeploymentType,
             Savepoint lastCheckpoint,
             boolean isFirstDeployment,
             ObjectMeta bgMeta) {
@@ -332,7 +332,7 @@ public class BlueGreenUtils {
         FlinkBlueGreenDeploymentSpec spec = context.getBgDeployment().getSpec();
 
         String childDeploymentName =
-                bgMeta.getName() + "-" + deploymentType.toString().toLowerCase();
+                bgMeta.getName() + "-" + blueGreenDeploymentType.toString().toLowerCase();
 
         FlinkBlueGreenDeploymentSpec adjustedSpec =
                 adjustNameReferences(
@@ -367,7 +367,8 @@ public class BlueGreenUtils {
         // Deployment metadata
         ObjectMeta flinkDeploymentMeta = getDependentObjectMeta(context.getBgDeployment());
         flinkDeploymentMeta.setName(childDeploymentName);
-        flinkDeploymentMeta.setLabels(Map.of(DeploymentType.LABEL_KEY, deploymentType.toString()));
+        flinkDeploymentMeta.setLabels(
+                Map.of(BlueGreenDeploymentType.LABEL_KEY, blueGreenDeploymentType.toString()));
         flinkDeployment.setMetadata(flinkDeploymentMeta);
         return flinkDeployment;
     }

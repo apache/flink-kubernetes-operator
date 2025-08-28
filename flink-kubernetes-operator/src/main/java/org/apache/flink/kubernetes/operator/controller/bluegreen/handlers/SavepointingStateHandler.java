@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
@@ -39,7 +39,7 @@ public class SavepointingStateHandler extends AbstractBlueGreenStateHandler {
 
     @Override
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
-        DeploymentType currentType = getCurrentDeploymentType();
+        BlueGreenDeploymentType currentType = getCurrentDeploymentType();
         var isSavepointReady = deploymentService.monitorSavepoint(context, currentType);
 
         // Savepoint creation completed, transition back to active state to continue deployment
@@ -55,9 +55,9 @@ public class SavepointingStateHandler extends AbstractBlueGreenStateHandler {
                 .rescheduleAfter(getReconciliationReschedInterval(context));
     }
 
-    private DeploymentType getCurrentDeploymentType() {
+    private BlueGreenDeploymentType getCurrentDeploymentType() {
         return getSupportedState() == FlinkBlueGreenDeploymentState.SAVEPOINTING_BLUE
-                ? DeploymentType.BLUE
-                : DeploymentType.GREEN;
+                ? BlueGreenDeploymentType.BLUE
+                : BlueGreenDeploymentType.GREEN;
     }
 }

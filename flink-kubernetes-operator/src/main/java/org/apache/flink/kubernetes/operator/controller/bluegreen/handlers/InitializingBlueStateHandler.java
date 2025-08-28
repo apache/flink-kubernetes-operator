@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
@@ -50,7 +50,7 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
             setLastReconciledSpec(context);
             return deploymentService.initiateDeployment(
                     context,
-                    DeploymentType.BLUE,
+                    BlueGreenDeploymentType.BLUE,
                     FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE,
                     null,
                     true);

@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
@@ -36,13 +36,13 @@ public class ActiveStateHandler extends AbstractBlueGreenStateHandler {
 
     @Override
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
-        DeploymentType currentType = getCurrentDeploymentType();
+        BlueGreenDeploymentType currentType = getCurrentDeploymentType();
         return deploymentService.checkAndInitiateDeployment(context, currentType);
     }
 
-    private DeploymentType getCurrentDeploymentType() {
+    private BlueGreenDeploymentType getCurrentDeploymentType() {
         return getSupportedState() == FlinkBlueGreenDeploymentState.ACTIVE_BLUE
-                ? DeploymentType.BLUE
-                : DeploymentType.GREEN;
+                ? BlueGreenDeploymentType.BLUE
+                : BlueGreenDeploymentType.GREEN;
     }
 }

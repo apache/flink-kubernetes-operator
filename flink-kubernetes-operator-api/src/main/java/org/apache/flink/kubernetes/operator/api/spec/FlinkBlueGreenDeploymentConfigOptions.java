@@ -34,7 +34,7 @@ public class FlinkBlueGreenDeploymentConfigOptions {
     }
 
     /**
-     * NOTE: The string durations need to be in format "{length value}{time unit label}", e.g.
+     * NOTE: The string durations need to be in format "{time unit value}{time unit label}", e.g.
      * "123ms", "321 s". If no time unit label is specified, it will be considered as milliseconds.
      * There is no fall back to parse ISO-8601 duration format, until Flink 2.x
      *
@@ -46,7 +46,7 @@ public class FlinkBlueGreenDeploymentConfigOptions {
      *   <li>MINUTES： "m", "min", "minute"
      *   <li>SECONDS： "s", "sec", "second"
      *   <li>MILLISECONDS： "ms", "milli", "millisecond"
-     *   <li>MICROSECONDS： "µs", "micro", "microsecond"
+     *   <li>MICROSECONDS： "us", "micro", "microsecond"
      *   <li>NANOSECONDS： "ns", "nano", "nanosecond"
      * </ul>
      */
@@ -55,19 +55,19 @@ public class FlinkBlueGreenDeploymentConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
                     .withDescription(
-                            "The max time to wait in milliseconds for a deployment to become ready before aborting it. Cannot be smaller than 10 minutes.");
+                            "The max time to wait for a deployment to become ready before aborting it.");
 
     public static final ConfigOption<Duration> RECONCILIATION_RESCHEDULING_INTERVAL =
             operatorConfig("reconciliation.reschedule-interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(15))
                     .withDescription(
-                            "Configurable delay in milliseconds to use when the operator reschedules a reconciliation.");
+                            "Configurable delay to use when the operator reschedules a reconciliation.");
 
     public static final ConfigOption<Duration> DEPLOYMENT_DELETION_DELAY =
             operatorConfig("deployment-deletion.delay")
                     .durationType()
                     .defaultValue(Duration.ofMillis(0))
                     .withDescription(
-                            "Configurable delay in milliseconds before deleting a deployment after being marked done.");
+                            "Configurable delay before deleting a deployment after being marked done.");
 }

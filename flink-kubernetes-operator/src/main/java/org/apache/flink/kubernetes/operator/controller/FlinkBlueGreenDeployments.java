@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.bluegreen.DeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Data;
@@ -58,9 +58,10 @@ public class FlinkBlueGreenDeployments {
         FlinkBlueGreenDeployments flinkBlueGreenDeployments = new FlinkBlueGreenDeployments();
 
         for (FlinkDeployment dependentDeployment : secondaryResources) {
-            var flinkBlueGreenDeploymentType = DeploymentType.fromDeployment(dependentDeployment);
+            var flinkBlueGreenDeploymentType =
+                    BlueGreenDeploymentType.fromDeployment(dependentDeployment);
 
-            if (flinkBlueGreenDeploymentType == DeploymentType.BLUE) {
+            if (flinkBlueGreenDeploymentType == BlueGreenDeploymentType.BLUE) {
                 if (flinkBlueGreenDeployments.getFlinkDeploymentBlue() != null) {
                     FlinkBlueGreenDeploymentController.logAndThrow(
                             "Detected multiple Dependent Deployments of type BLUE");
