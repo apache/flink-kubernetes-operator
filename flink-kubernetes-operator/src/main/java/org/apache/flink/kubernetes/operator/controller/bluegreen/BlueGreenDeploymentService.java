@@ -45,7 +45,6 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
-import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
@@ -54,7 +53,6 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setAbortTimestamp;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.triggerSavepoint;
 
@@ -131,7 +129,7 @@ public class BlueGreenDeploymentService {
                             context, currentBlueGreenDeploymentType, currentFlinkDeployment);
                 } else {
                     setLastReconciledSpec(context);
-                    return patchFlinkDeployment(context, currentBlueGreenDeploymentType, specDiff);
+                    return patchFlinkDeployment(context, currentBlueGreenDeploymentType);
                 }
             } else {
                 if (context.getDeploymentStatus().getJobStatus().getState() != JobStatus.FAILING) {
@@ -152,25 +150,25 @@ public class BlueGreenDeploymentService {
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> patchFlinkDeployment(
-            BlueGreenContext context,
-            BlueGreenDeploymentType currentBlueGreenDeploymentType,
-            BlueGreenDiffType specDiff) {
+            BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
 
-        if (specDiff == BlueGreenDiffType.PATCH_CHILD) {
-            FlinkDeployment nextFlinkDeployment =
-                    context.getDeploymentByType(currentBlueGreenDeploymentType);
+        String childDeploymentName =
+                context.getBgDeployment().getMetadata().getName()
+                        + "-"
+                        + currentBlueGreenDeploymentType.toString().toLowerCase();
+        LOG.info("Patching FlinkDeployment '{}'", childDeploymentName);
 
-            nextFlinkDeployment.setSpec(
-                    context.getBgDeployment().getSpec().getTemplate().getSpec());
+        // We want to patch, therefore the transition should point to the existing deployment
+        // details
+        var patchingState = calculatePatchingState(currentBlueGreenDeploymentType);
 
-            updateFlinkDeployment(nextFlinkDeployment, context);
-        }
+        // If we're not transitioning between deployments, mark as a single deployment to have it
+        // not wait for synchronization
+        var isFirstDeployment = context.getDeployments().getNumberOfDeployments() != 2;
 
-        return patchStatusUpdateControl(
-                        context,
-                        calculatePatchingState(currentBlueGreenDeploymentType),
-                        JobStatus.RECONCILING)
-                .rescheduleAfter(BlueGreenUtils.getReconciliationReschedInterval(context));
+        // No checkpoint will be used when patching
+        return initiateDeployment(
+                context, currentBlueGreenDeploymentType, patchingState, null, isFirstDeployment);
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> startTransition(
@@ -284,7 +282,7 @@ public class BlueGreenDeploymentService {
             return true;
         }
 
-        LOG.debug("Savepoint previously requested (triggerId: {})", savepointTriggerId);
+        LOG.info("Savepoint previously requested (triggerId: {})", savepointTriggerId);
         return false;
     }
 
@@ -309,10 +307,15 @@ public class BlueGreenDeploymentService {
     public UpdateControl<FlinkBlueGreenDeployment> monitorTransition(
             BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
 
+        var updateControl =
+                handleSpecChangesDuringTransition(context, currentBlueGreenDeploymentType);
+
+        if (updateControl != null) {
+            return updateControl;
+        }
+
         TransitionState transitionState =
                 determineTransitionState(context, currentBlueGreenDeploymentType);
-
-        handleSpecChangesDuringTransition(context, transitionState);
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
             return shouldWeDelete(
@@ -326,28 +329,20 @@ public class BlueGreenDeploymentService {
         }
     }
 
-    private void handleSpecChangesDuringTransition(
-            BlueGreenContext context, TransitionState transitionState) {
+    private UpdateControl<FlinkBlueGreenDeployment> handleSpecChangesDuringTransition(
+            BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
         if (hasSpecChanged(context)) {
             BlueGreenDiffType diffType = getSpecDiff(context);
 
-            FlinkDeployment incomingFlinkDeployment = transitionState.nextDeployment;
-
             if (diffType != BlueGreenDiffType.IGNORE) {
-                // Apply new spec changes to the deployment currently being transitioned to
-                incomingFlinkDeployment.setSpec(
-                        context.getBgDeployment().getSpec().getTemplate().getSpec());
-                // Reset abort grace period to allow more time for the updated deployment
-                setAbortTimestamp(context);
-                // Mark spec change as reconciled
                 setLastReconciledSpec(context);
-                updateFlinkDeployment(incomingFlinkDeployment, context);
-
-                LOG.info(
-                        "Blue/Green Spec change detected during transition, patching incoming '{}' deployment with new changes",
-                        incomingFlinkDeployment.getMetadata().getName());
+                var oppositeDeploymentType =
+                        context.getOppositeDeploymentType(currentBlueGreenDeploymentType);
+                return patchFlinkDeployment(context, oppositeDeploymentType);
             }
         }
+
+        return null;
     }
 
     private TransitionState determineTransitionState(

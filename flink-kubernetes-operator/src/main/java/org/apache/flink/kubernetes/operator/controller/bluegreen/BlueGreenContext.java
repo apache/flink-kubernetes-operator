@@ -56,4 +56,10 @@ public class BlueGreenContext {
     public FlinkDeployment getDeploymentByType(BlueGreenDeploymentType type) {
         return type == BlueGreenDeploymentType.BLUE ? getBlueDeployment() : getGreenDeployment();
     }
+
+    public BlueGreenDeploymentType getOppositeDeploymentType(BlueGreenDeploymentType type) {
+        return type == BlueGreenDeploymentType.BLUE
+                ? BlueGreenDeploymentType.GREEN
+                : BlueGreenDeploymentType.BLUE;
+    }
 }

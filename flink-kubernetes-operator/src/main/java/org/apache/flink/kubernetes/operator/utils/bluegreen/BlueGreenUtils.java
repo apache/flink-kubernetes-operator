@@ -261,7 +261,6 @@ public class BlueGreenUtils {
 
     @SneakyThrows
     public static String triggerSavepoint(FlinkResourceContext<FlinkDeployment> ctx) {
-
         var jobId = ctx.getResource().getStatus().getJobStatus().getJobId();
         var conf = ctx.getObserveConfig();
         var savepointFormatType =
@@ -269,17 +268,31 @@ public class BlueGreenUtils {
         var savepointDirectory =
                 Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
 
-        return ctx.getFlinkService()
-                .triggerSavepoint(jobId, savepointFormatType, savepointDirectory, conf);
+        LOG.info("About to trigger savepoint info for jobId: {}", jobId);
+
+        String triggerId =
+                ctx.getFlinkService()
+                        .triggerSavepoint(jobId, savepointFormatType, savepointDirectory, conf);
+
+        LOG.info(
+                "Triggered savepoint for jobId: {}, triggerId: {}, savepoint dir: {}",
+                jobId,
+                triggerId,
+                savepointDirectory);
+
+        return triggerId;
     }
 
     public static SavepointFetchResult fetchSavepointInfo(
             FlinkResourceContext<FlinkDeployment> ctx, String triggerId) {
-        return ctx.getFlinkService()
-                .fetchSavepointInfo(
-                        triggerId,
-                        ctx.getResource().getStatus().getJobStatus().getJobId(),
-                        ctx.getObserveConfig());
+        String jobId = ctx.getResource().getStatus().getJobStatus().getJobId();
+        LOG.info("About to fetch savepoint info for jobId: {}, triggerId: {}", jobId, triggerId);
+
+        var savepointFetchResult =
+                ctx.getFlinkService().fetchSavepointInfo(triggerId, jobId, ctx.getObserveConfig());
+
+        LOG.info("Fetched savepoint info for jobId: {}, triggerId: {}", jobId, triggerId);
+        return savepointFetchResult;
     }
 
     public static Savepoint getLastCheckpoint(

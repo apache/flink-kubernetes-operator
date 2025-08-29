@@ -562,7 +562,6 @@ public class FlinkBlueGreenDeploymentControllerTest {
         public void verifySpecificBehavior(
                 ReconcileResult result, List<FlinkDeployment> deployments) {
             assertEquals(1, deployments.size());
-            var updatedDeployment = deployments.get(0);
 
             // Child spec change should be applied to FlinkDeployment
             assertEquals(
@@ -617,20 +616,23 @@ public class FlinkBlueGreenDeploymentControllerTest {
             TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs)
             throws Exception {
 
-        var flinkDeployments = getFlinkDeployments();
-        assertEquals(1, flinkDeployments.size());
-        var existingFlinkDeployment = flinkDeployments.get(0);
-
+        // Initiating a patch operation
         var minReconciliationTs = System.currentTimeMillis() - 1;
         rs = reconcile(rs.deployment);
 
         assertPatchOperationTriggered(rs, minReconciliationTs);
         assertTransitioningState(rs);
 
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size());
+
+        // The patch operation reinitialized the deployment, simulating startup
+        simulateSuccessfulJobStart(flinkDeployments.get(0));
+
         minReconciliationTs = System.currentTimeMillis() - 1;
         rs = reconcile(rs.deployment);
 
-        return new ReconcileResult(minReconciliationTs, rs, existingFlinkDeployment);
+        return new ReconcileResult(minReconciliationTs, rs, null);
     }
 
     private ReconcileResult reconcileAndVerifyIgnoreBehavior(
