@@ -285,6 +285,7 @@ This file is based on the checkstyle file of Apache Beam.
 		<module name="JavadocParagraph"/>
 
 		<module name="JavadocType">
+			<property name="scope" value="protected"/>
 			<property name="severity" value="error"/>
 			<property name="allowMissingParamTags" value="true"/>
 		</module>
