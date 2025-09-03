@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
@@ -284,6 +285,7 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
                         .image("flink:1.16")
                         .flinkVersion(FlinkVersion.v1_16)
                         .serviceAccount("flink")
+                        .flinkConfiguration(new ConfigObjectNode())
                         .jobManager(
                                 JobManagerSpec.builder()
                                         .resource(
