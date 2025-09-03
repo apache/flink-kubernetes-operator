@@ -42,7 +42,7 @@ TIMEOUT=300
 #echo "APPLICATION_IDENTIFIER " $APPLICATION_IDENTIFIER
 #echo "BLUE_APPLICATION_IDENTIFIER " $BLUE_APPLICATION_IDENTIFIER
 
-#on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
+on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
@@ -52,11 +52,11 @@ wait_for_status $BLUE_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${T
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_BLUE ${TIMEOUT} || exit 1
 
-blue_job_id=$(kubectl get -oyaml flinkdep/basic-bluegreen-example-blue | yq '.status.jobStatus.jobId')
+#blue_job_id=$(kubectl get -oyaml flinkdep/basic-bluegreen-example-blue | yq '.status.jobStatus.jobId')
 
-echo "Giving a chance for checkpoints to be generated..."
-sleep 5
 kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"rest.port":"8082","state.checkpoints.num-retained":"51"}}}}}'
+echo "Resource patched, giving a chance for the savepoint to be taken..."
+sleep 10
 
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLUE_CLUSTER_ID}"
@@ -65,7 +65,7 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${
 
 green_initialSavepointPath=$(kubectl get -oyaml $GREEN_APPLICATION_IDENTIFIER | yq '.spec.job.initialSavepointPath')
 
-if [[ $green_initialSavepointPath == '/flink-data/checkpoints/'$blue_job_id* ]]; then
+if [[ $green_initialSavepointPath == '/flink-data/savepoints/savepoint-'* ]]; then
   echo 'Green deployment started from the expected initialSavepointPath: ' $green_initialSavepointPath
 else
   echo 'Unexpected initialSavepointPath: ' $green_initialSavepointPath

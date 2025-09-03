@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
@@ -270,12 +271,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 rs.reconciledStatus.getBlueGreenState());
         assertEquals(
                 customValue,
-                rs.deployment
-                        .getSpec()
-                        .getTemplate()
-                        .getSpec()
-                        .getFlinkConfiguration()
-                        .get(CUSTOM_CONFIG_FIELD));
+                getFlinkConfigurationValue(
+                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
 
         // Simulating the Blue deployment doesn't start correctly (status will remain the same)
         Long reschedDelayMs = 0L;
@@ -326,6 +323,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Initiate the redeployment
         testTransitionToGreen(rs, customValue, null);
+    }
+
+    private static String getFlinkConfigurationValue(
+            FlinkDeploymentSpec flinkDeploymentSpec, String propertyName) {
+        return flinkDeploymentSpec.getFlinkConfiguration().get(propertyName).asText();
     }
 
     @ParameterizedTest
@@ -702,11 +704,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertEquals(1, deployments.size());
             assertEquals(
                     "100 SECONDS",
-                    deployments
-                            .get(0)
-                            .getSpec()
-                            .getFlinkConfiguration()
-                            .get("kubernetes.operator.reconcile.interval"));
+                    getFlinkConfigurationValue(
+                            deployments.get(0).getSpec(),
+                            "kubernetes.operator.reconcile.interval"));
         }
     }
 
@@ -763,11 +763,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
             // Child spec change should be applied to FlinkDeployment
             assertEquals(
                     "100 SECONDS",
-                    deployments
-                            .get(0)
-                            .getSpec()
-                            .getFlinkConfiguration()
-                            .get("kubernetes.operator.reconcile.interval"));
+                    getFlinkConfigurationValue(
+                            deployments.get(0).getSpec(),
+                            "kubernetes.operator.reconcile.interval"));
 
             // Top-level changes should be preserved in reconciled spec
             assertNotNull(result.rs.reconciledStatus.getLastReconciledSpec());
@@ -1043,12 +1041,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()));
         assertEquals(
                 customValue,
-                rs.deployment
-                        .getSpec()
-                        .getTemplate()
-                        .getSpec()
-                        .getFlinkConfiguration()
-                        .get(CUSTOM_CONFIG_FIELD));
+                getFlinkConfigurationValue(
+                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
 
         // Initiate and mark the Green deployment ready
         simulateSuccessfulJobStart(getFlinkDeployments().get(1));
@@ -1213,11 +1207,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         .imagePullPolicy(IMAGE_POLICY)
                         .serviceAccount(SERVICE_ACCOUNT)
                         .flinkVersion(version)
-                        .flinkConfiguration(conf)
+                        .flinkConfiguration(new ConfigObjectNode())
                         .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
                         .taskManager(
                                 new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
                         .build();
+
+        flinkDeploymentSpec.setFlinkConfiguration(conf);
 
         Map<String, String> configuration = new HashMap<>();
         configuration.put(ABORT_GRACE_PERIOD.key(), "1");
