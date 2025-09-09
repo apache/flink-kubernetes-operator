@@ -42,8 +42,6 @@ TIMEOUT=300
 #echo "APPLICATION_IDENTIFIER " $APPLICATION_IDENTIFIER
 #echo "BLUE_APPLICATION_IDENTIFIER " $BLUE_APPLICATION_IDENTIFIER
 
-on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
-
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
 sleep 1
@@ -71,5 +69,10 @@ else
   echo 'Unexpected initialSavepointPath: ' $green_initialSavepointPath
   exit 1
 fi;
+
+echo "Deleting test B/G resources " $BG_CLUSTER_ID
+kubectl delete flinkbluegreendeployments/$BG_CLUSTER_ID &
+echo "Waiting for deployment to be deleted..."
+kubectl wait --for=delete flinkbluegreendeployments/$BG_CLUSTER_ID
 
 echo "Successfully run the Flink Blue/Green Deployments test"

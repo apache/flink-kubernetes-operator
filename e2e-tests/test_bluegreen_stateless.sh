@@ -37,8 +37,6 @@ BLUE_APPLICATION_IDENTIFIER="flinkdep/$BLUE_CLUSTER_ID"
 GREEN_APPLICATION_IDENTIFIER="flinkdep/$GREEN_CLUSTER_ID"
 TIMEOUT=300
 
-on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $BG_CLUSTER_ID
-
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
 sleep 1
@@ -54,5 +52,10 @@ wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${
 kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLUE_CLUSTER_ID}"
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${TIMEOUT} || exit 1
+
+echo "Deleting test B/G resources " $BG_CLUSTER_ID
+kubectl delete flinkbluegreendeployments/$BG_CLUSTER_ID &
+echo "Waiting for deployment to be deleted..."
+kubectl wait --for=delete flinkbluegreendeployments/$BG_CLUSTER_ID
 
 echo "Successfully run the Flink Blue/Green Deployments test"
