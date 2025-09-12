@@ -19,7 +19,7 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkBlueGreenDeployment
 metadata:
-  name: basic-bluegreen-example
+  name: basic-bg-laststate-example
 spec:
   configuration:
     kubernetes.operator.bluegreen.deployment-deletion.delay: "1s"
@@ -32,8 +32,8 @@ spec:
         execution.checkpointing.interval: "10s"
         execution.checkpointing.storage: "filesystem"
         state.backend.incremental: "true"
-        state.checkpoints.dir: "file:///flink-data/checkpoints"
-        state.savepoints.dir: "file:///flink-data/savepoints"
+        state.checkpoints.dir: file:///opt/flink/volume/flink-cp
+        state.savepoints.dir: file:///opt/flink/volume/flink-sp
         state.checkpoints.num-retained: "5"
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
@@ -45,22 +45,18 @@ spec:
           spec:
             containers:
               - name: flink-main-container
+                resources:
+                  requests:
+                    ephemeral-storage: 2048Mi
+                  limits:
+                    ephemeral-storage: 2048Mi
                 volumeMounts:
-                  - mountPath: /flink-data/checkpoints
-                    name: checkpoint-volume
-                  - mountPath: /flink-data/savepoints
-                    name: savepoint-volume
+                  - mountPath: /opt/flink/volume
+                    name: flink-volume
             volumes:
-              - name: checkpoint-volume
-                hostPath:
-                  # directory location on host
-                  path: /tmp/flink/checkpoints
-                  type: Directory
-              - name: savepoint-volume
-                hostPath:
-                  # directory location on host
-                  path: /tmp/flink/savepoints
-                  type: Directory
+              - name: flink-volume
+                persistentVolumeClaim:
+                  claimName: flink-bg-laststate
       taskManager:
         resource:
           memory: 2G
@@ -75,3 +71,29 @@ spec:
           - "--sleep"
           - "30"
         upgradeMode: last-state
+      mode: native
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-bg-laststate
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+  labels:
+    app.kubernetes.io/component: controller
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx

@@ -19,7 +19,7 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkBlueGreenDeployment
 metadata:
-  name: basic-bluegreen-example
+  name: basic-bg-stateless-example
 spec:
   configuration:
     kubernetes.operator.bluegreen.deployment-deletion.delay: "2s"
@@ -49,3 +49,4 @@ spec:
           - "--sleep"
           - "30"
         upgradeMode: stateless
+      mode: native

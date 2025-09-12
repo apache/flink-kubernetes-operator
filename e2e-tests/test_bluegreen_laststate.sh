@@ -26,10 +26,10 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 source "${SCRIPT_DIR}/utils.sh"
 
-CLUSTER_ID="basic-bluegreen-example"
+CLUSTER_ID="basic-bg-laststate-example"
 BG_CLUSTER_ID=$CLUSTER_ID
-BLUE_CLUSTER_ID="basic-bluegreen-example-blue"
-GREEN_CLUSTER_ID="basic-bluegreen-example-green"
+BLUE_CLUSTER_ID=$CLUSTER_ID"-blue"
+GREEN_CLUSTER_ID=$CLUSTER_ID"-green"
 
 APPLICATION_YAML="${SCRIPT_DIR}/data/bluegreen-laststate.yaml"
 APPLICATION_IDENTIFIER="flinkbgdep/$CLUSTER_ID"
@@ -63,16 +63,16 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${
 
 green_initialSavepointPath=$(kubectl get -oyaml $GREEN_APPLICATION_IDENTIFIER | yq '.spec.job.initialSavepointPath')
 
-if [[ $green_initialSavepointPath == '/flink-data/savepoints/savepoint-'* ]]; then
-  echo 'Green deployment started from the expected initialSavepointPath: ' $green_initialSavepointPath
-else
-  echo 'Unexpected initialSavepointPath: ' $green_initialSavepointPath
-  exit 1
-fi;
-
-echo "Deleting test B/G resources " $BG_CLUSTER_ID
+echo "Deleting test B/G resources" $BG_CLUSTER_ID
 kubectl delete flinkbluegreendeployments/$BG_CLUSTER_ID &
 echo "Waiting for deployment to be deleted..."
 kubectl wait --for=delete flinkbluegreendeployments/$BG_CLUSTER_ID
+
+if [[ $green_initialSavepointPath == '/opt/flink/volume/flink-sp/savepoint-'* ]]; then
+  echo 'Green deployment started from the expected initialSavepointPath: ' $green_initialSavepointPath
+else
+  echo 'Unexpected initialSavepointPath:' $green_initialSavepointPath
+  exit 1
+fi;
 
 echo "Successfully run the Flink Blue/Green Deployments test"

@@ -26,10 +26,10 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 source "${SCRIPT_DIR}/utils.sh"
 
-CLUSTER_ID="basic-bluegreen-example"
+CLUSTER_ID="basic-bg-stateless-example"
 BG_CLUSTER_ID=$CLUSTER_ID
-BLUE_CLUSTER_ID="basic-bluegreen-example-blue"
-GREEN_CLUSTER_ID="basic-bluegreen-example-green"
+BLUE_CLUSTER_ID=$CLUSTER_ID"-blue"
+GREEN_CLUSTER_ID=$CLUSTER_ID"-green"
 
 APPLICATION_YAML="${SCRIPT_DIR}/data/bluegreen-stateless.yaml"
 APPLICATION_IDENTIFIER="flinkbgdep/$CLUSTER_ID"
@@ -53,7 +53,7 @@ kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLU
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${TIMEOUT} || exit 1
 
-echo "Deleting test B/G resources " $BG_CLUSTER_ID
+echo "Deleting test B/G resources" $BG_CLUSTER_ID
 kubectl delete flinkbluegreendeployments/$BG_CLUSTER_ID &
 echo "Waiting for deployment to be deleted..."
 kubectl wait --for=delete flinkbluegreendeployments/$BG_CLUSTER_ID
