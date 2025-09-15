@@ -128,6 +128,8 @@ rules:
   - apiGroups:
       - flink.apache.org
     resources:
+      - flinkbluegreendeployments
+      - flinkbluegreendeployments/finalizers
       - flinkdeployments
       - flinkdeployments/finalizers
       - flinksessionjobs
@@ -145,6 +147,7 @@ rules:
   - apiGroups:
       - flink.apache.org
     resources:
+      - flinkbluegreendeployments/status
       - flinkdeployments/status
       - flinksessionjobs/status
       - flinkstatesnapshots/status
