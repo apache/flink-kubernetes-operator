@@ -73,6 +73,24 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 
+### FlinkBlueGreenDeploymentConfigOptions
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions
+
+**Description**: Configuration options to be used by the Flink Blue/Green Deployments.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### FlinkBlueGreenDeploymentSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec
+
+**Description**: Spec that describes a Flink application with blue/green deployment capabilities.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| configuration | java.util.Map<java.lang.String,java.lang.String> |  |
+| template | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec |  |
+
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec
 
@@ -93,6 +111,16 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | taskManager | org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec | TaskManager specs. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName -> configContent. |
 | mode | org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode | Deployment mode of the Flink cluster, native or standalone. |
+
+### FlinkDeploymentTemplateSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec
+
+**Description**: Template Spec that describes a Flink application managed by the blue/green controller.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| metadata | io.fabric8.kubernetes.api.model.ObjectMeta |  |
+| spec | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec |  |
 
 ### FlinkSessionJobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec
@@ -307,6 +335,37 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | INCREMENTAL |  |
 | UNKNOWN | Checkpoint format unknown, if the checkpoint was not triggered by the operator. |
 | description | org.apache.flink.configuration.description.InlineElement |  |
+
+### FlinkBlueGreenDeploymentState
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState
+
+**Description**: Enumeration of the possible states of the blue/green transition.
+
+| Value | Docs |
+| ----- | ---- |
+| INITIALIZING_BLUE | We use this state while initializing for the first time, always with a "Blue" deployment type. |
+| ACTIVE_BLUE | Identifies the system is running normally with a "Blue" deployment type. |
+| ACTIVE_GREEN | Identifies the system is running normally with a "Green" deployment type. |
+| TRANSITIONING_TO_BLUE | Identifies the system is transitioning from "Green" to "Blue". |
+| TRANSITIONING_TO_GREEN | Identifies the system is transitioning from "Blue" to "Green". |
+| SAVEPOINTING_BLUE | Identifies the system is savepointing "Blue" before it transitions to "Green". |
+| SAVEPOINTING_GREEN | Identifies the system is savepointing "Green" before it transitions to "Blue". |
+
+### FlinkBlueGreenDeploymentStatus
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus
+
+**Description**: Last observed status of the Flink Blue/Green deployment.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus |  |
+| blueGreenState | org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState | The state of the blue/green transition. |
+| lastReconciledSpec | java.lang.String | Last reconciled (serialized) deployment spec. |
+| lastReconciledTimestamp | java.lang.String | Timestamp of last reconciliation. |
+| abortTimestamp | java.lang.String | Computed from abortGracePeriodMs, timestamp after which the deployment should be aborted. |
+| deploymentReadyTimestamp | java.lang.String | Timestamp when the deployment became READY/STABLE. Used to determine when to delete it. |
+| savepointTriggerId | java.lang.String | Persisted triggerId to track transition with savepoint. Only used with UpgradeMode.SAVEPOINT |
+| error | java.lang.String | Error information about the FlinkBlueGreenDeployment. |
 
 ### FlinkDeploymentReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus
