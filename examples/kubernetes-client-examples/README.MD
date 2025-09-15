@@ -25,7 +25,7 @@ This is an end-to-end example of running Flink Job via code using the Flink Kube
 
 *What's in this example?*
 
-1. Sample code for submitting an application similar to examples/basic.yaml programatically.
+1. Sample code for submitting an application similar to examples/basic.yaml programmatically.
 
 ## How does it work?
 
