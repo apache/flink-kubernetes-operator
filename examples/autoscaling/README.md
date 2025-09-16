@@ -23,8 +23,8 @@ under the License.
 
 This example contains two Flink applications showcasing the Flink Autoscaler capabilities:
 
-- `AutoscalingExample.java` with its accompanying `autoscaling.yaml` containing the `FlinkDeployment` definition
-- `LoadSimulationPipeline.java` with its accompanying `autoscaling-dynamic.yaml` containing the `FlinkDeployment` definition
+- `AutoscalingExample.java` with its accompanying `autoscaling.yaml` containing the `FlinkDeployment` definition.
+- `LoadSimulationPipeline.java` with its accompanying `autoscaling-dynamic.yaml` containing the `FlinkDeployment` definition.
 
 Both applications are packaged into a single fat jar, which is then included in a Docker image
 built from the provided `Dockerfile`.
