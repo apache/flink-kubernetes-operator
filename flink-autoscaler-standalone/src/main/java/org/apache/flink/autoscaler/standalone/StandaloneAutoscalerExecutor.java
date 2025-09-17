@@ -20,9 +20,11 @@ package org.apache.flink.autoscaler.standalone;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
 import org.apache.flink.autoscaler.validation.AutoscalerValidator;
-import org.apache.flink.autoscaler.validation.DefaultAutoscalerValidator;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
@@ -52,10 +54,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
 
 /** The executor of the standalone autoscaler. */
 public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -108,7 +106,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
                         parallelism, new ExecutorThreadFactory("autoscaler-standalone-scaling"));
         this.scalingJobKeys = new HashSet<>();
         this.baseConf = new UnmodifiableConfiguration(conf);
-        this.autoscalerValidator = new DefaultAutoscalerValidator();
+        this.autoscalerValidator = new AutoscalerValidator();
     }
 
     public void start() {

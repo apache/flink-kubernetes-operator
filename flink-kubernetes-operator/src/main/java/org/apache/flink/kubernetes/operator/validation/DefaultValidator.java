@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.autoscaler.validation.AutoscalerValidator;
-import org.apache.flink.autoscaler.validation.DefaultAutoscalerValidator;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -86,7 +85,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     public DefaultValidator(FlinkConfigManager configManager) {
         this.configManager = configManager;
-        this.autoscalerValidator = new DefaultAutoscalerValidator();
+        this.autoscalerValidator = new AutoscalerValidator();
     }
 
     @Override
