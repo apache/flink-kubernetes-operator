@@ -44,7 +44,7 @@ Flink Kubernetes Operator 旨在承担人工操作 Flink 部署的职责。 人�
   - 有状态和无状态应用程序升级
   - 保存点的触发和管理
   - 处理错误，回滚失败的升级
-- 多 Flink 版本支持：v1.16, v1.17, v1.18, v1.19, v1.20
+- 多 Flink 版本支持：v1.16, v1.17, v1.18, v1.19, v1.20, v2.0
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application 集群
   - Session 集群
