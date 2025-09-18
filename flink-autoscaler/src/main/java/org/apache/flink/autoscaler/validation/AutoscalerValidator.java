@@ -19,15 +19,16 @@
 package org.apache.flink.autoscaler.validation;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 
 import java.util.Optional;
+
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 
 /** Validator for Autoscaler. */
 public class AutoscalerValidator {
