@@ -288,7 +288,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                                             matcher.group("pulsarTopic");
                                                     String pulsarId = matcher.group("pulsarId");
                                                     return kafkaTopic != null
-                                                            ? kafkaCluster + "-" + kafkaTopic + "-" + kafkaId
+                                                            ? kafkaCluster
+                                                                    + "-"
+                                                                    + kafkaTopic
+                                                                    + "-"
+                                                                    + kafkaId
                                                             : pulsarTopic + "-" + pulsarId;
                                                 }
                                                 return null;
