@@ -67,7 +67,8 @@ class StandaloneAutoscalerValidatorTest {
         final var jobAutoScaler =
                 new JobAutoScaler<JobID, JobAutoScalerContext<JobID>>() {
                     @Override
-                    public void scale(JobAutoScalerContext<JobID> context) {
+                    public void scale(JobAutoScalerContext<JobID> context)
+                            throws InterruptedException {
                         scaleCounter.merge(context.getJobKey(), 1, Integer::sum);
                     }
 
@@ -82,6 +83,10 @@ class StandaloneAutoscalerValidatorTest {
                         new Configuration(), baseConf -> jobList, eventCollector, jobAutoScaler)) {
 
             List<CompletableFuture<Void>> scaledFutures = autoscalerExecutor.scaling();
+
+            for (CompletableFuture<Void> scaledFuture : scaledFutures) {
+                scaledFuture.get();
+            }
 
             // Verification triggers two scaling tasks
             assertThat(scaledFutures).hasSize(2);
