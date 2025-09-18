@@ -36,6 +36,8 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
+import org.apache.flink.shaded.netty4.io.netty.channel.EventLoopGroup;
+import org.apache.flink.shaded.netty4.io.netty.channel.nio.NioEventLoopGroup;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -74,6 +76,7 @@ public class FlinkResourceContextFactory {
 
     protected final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
             resourceMetricGroups = new ConcurrentHashMap<>();
+    private final EventLoopGroup flinkClientEventLoopGroup;
 
     public FlinkResourceContextFactory(
             FlinkConfigManager configManager,
@@ -87,6 +90,10 @@ public class FlinkResourceContextFactory {
                 Executors.newFixedThreadPool(
                         configManager.getOperatorConfiguration().getReconcilerMaxParallelism(),
                         new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+        this.flinkClientEventLoopGroup =
+                new NioEventLoopGroup(
+                        configManager.getOperatorConfiguration().getFlinkClientIOThreads(),
+                        new ExecutorThreadFactory("flink-rest-client-netty-shared"));
     }
 
     public FlinkStateSnapshotContext getFlinkStateSnapshotContext(
@@ -154,13 +161,15 @@ public class FlinkResourceContextFactory {
                         artifactManager,
                         clientExecutorService,
                         ctx.getOperatorConfig(),
-                        eventRecorder);
+                        eventRecorder,
+                        flinkClientEventLoopGroup);
             case STANDALONE:
                 return new StandaloneFlinkService(
                         ctx.getKubernetesClient(),
                         artifactManager,
                         clientExecutorService,
-                        ctx.getOperatorConfig());
+                        ctx.getOperatorConfig(),
+                        flinkClientEventLoopGroup);
             default:
                 throw new UnsupportedOperationException(
                         String.format("Unsupported deployment mode: %s", deploymentMode));

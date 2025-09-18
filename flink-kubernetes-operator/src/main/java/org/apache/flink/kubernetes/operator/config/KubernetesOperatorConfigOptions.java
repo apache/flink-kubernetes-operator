@@ -116,6 +116,14 @@ public class KubernetesOperatorConfigOptions {
                             "The timeout for the observer to wait the flink rest client to return.");
 
     @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Integer> OPERATOR_FLINK_CLIENT_IO_THREADS =
+            operatorConfig("flink.client.io.threads")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "The maximum number of io threads used by the flink rest client.");
+
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_CANCEL_TIMEOUT =
             operatorConfig("flink.client.cancel.timeout")
                     .durationType()
