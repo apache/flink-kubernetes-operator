@@ -269,7 +269,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         try (var restClient = ctx.getRestClusterClient()) {
             Pattern partitionRegex =
                     Pattern.compile(
-                            "^.*\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
+                            "^.*?(\\.kafkaCluster\\.(?<kafkaCluster>.+))?\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
                                     + "|^.*\\.PulsarConsumer\\.(?<pulsarTopic>.+)-partition-(?<pulsarId>\\d+)\\..*\\.numMsgsReceived$");
             for (var vertexInfo : topology.getVertexInfos().values()) {
                 if (vertexInfo.getInputs().isEmpty()) {
@@ -281,12 +281,14 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                                 Matcher matcher = partitionRegex.matcher(v);
                                                 if (matcher.matches()) {
                                                     String kafkaTopic = matcher.group("kafkaTopic");
+                                                    String kafkaCluster =
+                                                            matcher.group("kafkaCluster");
                                                     String kafkaId = matcher.group("kafkaId");
                                                     String pulsarTopic =
                                                             matcher.group("pulsarTopic");
                                                     String pulsarId = matcher.group("pulsarId");
                                                     return kafkaTopic != null
-                                                            ? kafkaTopic + "-" + kafkaId
+                                                            ? kafkaCluster + "-" + kafkaTopic + "-" + kafkaId
                                                             : pulsarTopic + "-" + pulsarId;
                                                 }
                                                 return null;

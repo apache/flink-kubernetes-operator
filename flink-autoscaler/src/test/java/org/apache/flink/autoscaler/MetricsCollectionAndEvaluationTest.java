@@ -260,6 +260,20 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector.setMetricNames(
                 Map.of(
+                        source1,
+                        List.of(
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-1.KafkaSourceReader.topic.testTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-1.KafkaSourceReader.topic.anotherTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.1.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.2.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
+
+        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        assertEquals(6, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
+
+        metricsCollector.setMetricNames(
+                Map.of(
                         source2,
                         List.of(
                                 "0.Source__pulsar_source[1].PulsarConsumer"
