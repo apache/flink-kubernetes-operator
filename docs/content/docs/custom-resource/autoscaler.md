@@ -275,6 +275,14 @@ org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 Updating the `autoscaler.standalone.fetcher.flink-cluster.host` and `autoscaler.standalone.fetcher.flink-cluster.port`
 based on your flink cluster. In general, the host and port are the same as Flink WebUI.
 
+To select the job fetcher use:
+
+```
+--autoscaler.standalone.fetcher.type FLINK_CLUSTER|YARN
+```
+
+When running against Flink-on-YARN (`YARN`), set the host/port to the YARN web proxy endpoint that exposes the JobManager REST API.
+
 All autoscaler related options can be set at autoscaler standalone level, and the configuration at job-level can 
 override the default value provided in the autoscaler standalone, such as:
 
