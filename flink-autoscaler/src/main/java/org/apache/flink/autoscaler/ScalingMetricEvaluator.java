@@ -18,16 +18,19 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.slf4j.Logger;
@@ -38,6 +41,7 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -72,13 +76,35 @@ public class ScalingMetricEvaluator {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     public EvaluatedMetrics evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
+            Configuration conf,
+            CollectedMetricHistory collectedMetrics,
+            Duration restartTime,
+            @Nullable
+                    Tuple2<FlinkAutoscalerEvaluator, Configuration>
+                            customEvaluatorWithConfig) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
         var topology = collectedMetrics.getJobTopology();
 
         boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
+
+        var customEvaluationSession =
+                Optional.ofNullable(customEvaluatorWithConfig)
+                        .map(
+                                info ->
+                                        Tuple2.of(
+                                                info.f0,
+                                                new FlinkAutoscalerEvaluator.Context(
+                                                        new UnmodifiableConfiguration(conf),
+                                                        Collections.unmodifiableSortedMap(
+                                                                metricsHistory),
+                                                        Collections.unmodifiableMap(scalingOutput),
+                                                        topology,
+                                                        processingBacklog,
+                                                        restartTime,
+                                                        info.f1)))
+                        .orElse(null);
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
             scalingOutput.put(
@@ -90,7 +116,8 @@ public class ScalingMetricEvaluator {
                             topology,
                             vertex,
                             processingBacklog,
-                            restartTime));
+                            restartTime,
+                            customEvaluationSession));
         }
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
@@ -132,7 +159,10 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             JobVertexID vertex,
             boolean processingBacklog,
-            Duration restartTime) {
+            Duration restartTime,
+            @Nullable
+                    Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+                            customEvaluationSession) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -142,6 +172,7 @@ public class ScalingMetricEvaluator {
         double inputRateAvg = getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
 
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
+
         computeTargetDataRate(
                 topology,
                 vertex,
@@ -175,6 +206,24 @@ public class ScalingMetricEvaluator {
                 EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()));
 
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
+
+        Optional.ofNullable(customEvaluationSession)
+                .map(
+                        session ->
+                                runCustomEvaluator(
+                                        vertex,
+                                        Collections.unmodifiableMap(evaluatedMetrics),
+                                        session))
+                .filter(customEvaluatedMetrics -> !customEvaluatedMetrics.isEmpty())
+                .ifPresent(
+                        customEvaluatedMetrics -> {
+                            LOG.info(
+                                    "Merging custom evaluated metrics for vertex {}: {}",
+                                    vertex,
+                                    customEvaluatedMetrics);
+                            mergeEvaluatedMetricsMaps(evaluatedMetrics, customEvaluatedMetrics);
+                        });
+
         return evaluatedMetrics;
     }
 
@@ -587,5 +636,77 @@ public class ScalingMetricEvaluator {
                 from,
                 to);
         return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
+    }
+
+    /**
+     * Executes the provided custom evaluator for the given job vertex. Calls {@link
+     * FlinkAutoscalerEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
+     *
+     * @param vertex The job vertex being evaluated.
+     * @param evaluatedMetrics Current evaluated metrics.
+     * @param customEvaluationSession A tuple containing the custom evaluator and evaluation
+     *     context.
+     * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
+     */
+    @VisibleForTesting
+    protected static Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
+            JobVertexID vertex,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+                    customEvaluationSession) {
+        try {
+            return customEvaluationSession.f0.evaluateVertexMetrics(
+                    vertex, evaluatedMetrics, customEvaluationSession.f1);
+        } catch (UnsupportedOperationException e) {
+            LOG.warn(
+                    "Custom evaluator {} tried accessing an un-modifiable view.",
+                    customEvaluationSession.f0.getClass(),
+                    e);
+        } catch (Exception e) {
+            LOG.warn(
+                    "Custom evaluator {} threw an exception.",
+                    customEvaluationSession.f0.getClass(),
+                    e);
+        }
+
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Merges the incoming evaluated metrics into actual evaluated metrics.
+     *
+     * @param actual The target evaluated metrics map to merge into.
+     * @param incoming The incoming map containing new evaluated metrics map to be merged
+     *     (nullable).
+     */
+    @VisibleForTesting
+    protected static void mergeEvaluatedMetricsMaps(
+            Map<ScalingMetric, EvaluatedScalingMetric> actual,
+            @Nullable Map<ScalingMetric, EvaluatedScalingMetric> incoming) {
+        Optional.ofNullable(incoming)
+                .ifPresent(
+                        customEvaluatedMetric ->
+                                customEvaluatedMetric.forEach(
+                                        (scalingMetric, evaluatedScalingMetric) ->
+                                                actual.merge(
+                                                        scalingMetric,
+                                                        evaluatedScalingMetric,
+                                                        ScalingMetricEvaluator
+                                                                ::mergeEvaluatedScalingMetric)));
+    }
+
+    /**
+     * Merges two {@link EvaluatedScalingMetric} instances.
+     *
+     * @param actual The existing evaluated scaling metric.
+     * @param incoming The incoming evaluated scaling metric.
+     * @return A new {@link EvaluatedScalingMetric} instance with merged values.
+     */
+    @VisibleForTesting
+    protected static EvaluatedScalingMetric mergeEvaluatedScalingMetric(
+            EvaluatedScalingMetric actual, EvaluatedScalingMetric incoming) {
+        return new EvaluatedScalingMetric(
+                !Double.isNaN(incoming.getCurrent()) ? incoming.getCurrent() : actual.getCurrent(),
+                !Double.isNaN(incoming.getAverage()) ? incoming.getAverage() : actual.getAverage());
     }
 }
