@@ -49,18 +49,26 @@ echo "PATCHING B/G deployment..."
 #kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"rest.port":"8082","taskmanager.numberOfTaskSlots":"2"}}}}}'
 kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"taskmanager.numberOfTaskSlots":"2"}}}}}'
 
-sleep 5
-jm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
-sleep 10
-tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
-echo "JM:" $jm_pod_name
-echo "TM:" $tm_pod_name
+jm_pod_name=""
+tm_pod_name=""
 for i in $(seq 1 10); do
   echo "==="
+  echo "LISTING PODS:"
+  kubectl get pods
+
+  if [ "$jm_pod_name" = "" ]; then
+    jm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+    echo "Set JM pod name:" $jm_pod_name
+  fi
   kubectl logs $jm_pod_name -c flink-main-container
+
   echo "---"
+  if [ "$tm_pod_name" = "" ]; then
+      tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
+      echo "Set TM pod name:" $tm_pod_name
+  fi
   kubectl logs $tm_pod_name -c flink-main-container
-  sleep 2
+  sleep 5
 done
 
 
