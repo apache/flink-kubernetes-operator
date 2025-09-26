@@ -61,6 +61,22 @@ jm_pod_name=$(get_jm_pod_name $BLUE_CLUSTER_ID)
 echo "Inspecting savepoint directory..."
 kubectl exec -it $jm_pod_name -- bash -c "ls -lt /opt/flink/volume/flink-sp/"
 
+
+sleep 5
+jm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+sleep 10
+tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
+echo "JM:" $jm_pod_name
+echo "TM:" $tm_pod_name
+for i in $(seq 1 10); do
+  echo "==="
+  kubectl logs $jm_pod_name -c flink-main-container
+  echo "---"
+  kubectl logs $tm_pod_name -c flink-main-container
+  sleep 2
+done
+
+
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLUE_CLUSTER_ID}"
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
