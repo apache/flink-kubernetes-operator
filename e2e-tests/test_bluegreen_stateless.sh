@@ -69,10 +69,11 @@ for i in $(seq 1 4); do
       echo "Set TM pod name:" $tm_pod_name
   fi
   echo "GETTING TM LOGS:"
-  kubectl logs $tm_pod_name -c flink-main-container
+  kubectl logs $tm_pod_name
 
   echo "--=EVs=--"
-  kubectl get events --field-selector involvedObject.kind=FlinkDeployment,involvedObject.name=$GREEN_CLUSTER_ID --sort-by=.metadata.creationTimestamp
+  kubectl describe flinkdep $GREEN_CLUSTER_ID
+#  kubectl get events --field-selector involvedObject.kind=FlinkDeployment,involvedObject.name=$GREEN_CLUSTER_ID --sort-by=.metadata.creationTimestamp
   sleep 15
 done
 
