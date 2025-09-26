@@ -28,7 +28,7 @@ spec:
       image: flink:1.20
       flinkVersion: v1_20
       flinkConfiguration:
-        rest.port: "8081"
+#        rest.port: "8081"
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
       jobManager:
@@ -37,7 +37,7 @@ spec:
           cpu: 1
       taskManager:
         resource:
-          memory: 2G
+          memory: 1G
           cpu: 1
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
