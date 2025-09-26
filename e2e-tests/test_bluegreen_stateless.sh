@@ -52,7 +52,7 @@ kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"templa
 jm_pod_name=""
 tm_pod_name=""
 for i in $(seq 1 4); do
-  echo "==="
+  echo "====="
   echo "LISTING PODS:"
   kubectl get pods
 
@@ -62,7 +62,7 @@ for i in $(seq 1 4); do
   fi
   kubectl logs $jm_pod_name -c flink-main-container
 
-  echo "---"
+  echo "--==--"
   if [ "$tm_pod_name" = "" ]; then
       tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
       echo "Set TM pod name:" $tm_pod_name

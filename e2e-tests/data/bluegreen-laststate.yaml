@@ -28,7 +28,7 @@ spec:
       image: flink:1.20
       flinkVersion: v1_20
       flinkConfiguration:
-        rest.port: "8081"
+#        rest.port: "8081"
         execution.checkpointing.interval: "10s"
         execution.checkpointing.storage: "filesystem"
         state.backend.incremental: "true"
@@ -59,7 +59,7 @@ spec:
                   claimName: flink-bg-laststate
       taskManager:
         resource:
-          memory: 2G
+          memory: 1G
           cpu: 1
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar

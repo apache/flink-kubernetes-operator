@@ -64,7 +64,7 @@ kubectl exec -it $jm_pod_name -- bash -c "ls -lt /opt/flink/volume/flink-sp/"
 
 tm_pod_name=""
 for i in $(seq 1 4); do
-  echo "==="
+  echo "====="
   echo "LISTING PODS:"
   kubectl get pods
 
@@ -74,7 +74,7 @@ for i in $(seq 1 4); do
   fi
   kubectl logs $jm_pod_name -c flink-main-container
 
-  echo "---"
+  echo "--==--"
   if [ "$tm_pod_name" = "" ]; then
       tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
       echo "Set TM pod name:" $tm_pod_name
