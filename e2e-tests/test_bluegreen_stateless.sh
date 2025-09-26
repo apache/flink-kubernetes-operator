@@ -51,7 +51,7 @@ kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"templa
 
 jm_pod_name=""
 tm_pod_name=""
-for i in $(seq 1 10); do
+for i in $(seq 1 4); do
   echo "==="
   echo "LISTING PODS:"
   kubectl get pods
@@ -68,7 +68,7 @@ for i in $(seq 1 10); do
       echo "Set TM pod name:" $tm_pod_name
   fi
   kubectl logs $tm_pod_name -c flink-main-container
-  sleep 5
+  sleep 15
 done
 
 
