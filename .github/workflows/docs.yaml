@@ -51,9 +51,8 @@ jobs:
         run: |
           docker run  --rm --volume "$PWD:/root/flink-kubernetes-operator" chesnay/flink-ci:java_8_11 bash -c "cd /root/flink-kubernetes-operator && ./.github/workflows/docs.sh"
       - name: Upload documentation
-        uses: burnett01/rsync-deployments@7.1.0
+        uses: ./.github/actions/rsync-deploy
         with:
-          switches: --archive --compress
           path: docs/target/
           remote_path: ${{ secrets.NIGHTLIES_RSYNC_PATH }}/flink/flink-kubernetes-operator-docs-${{ env.flink_branch }}/
           remote_host: ${{ secrets.NIGHTLIES_RSYNC_HOST }}
@@ -62,9 +61,8 @@ jobs:
           remote_key: ${{ secrets.NIGHTLIES_RSYNC_KEY }}
       - name: Upload documentation alias
         if: env.flink_alias != ''
-        uses: burnett01/rsync-deployments@7.1.0
+        uses: ./.github/actions/rsync-deploy
         with:
-          switches: --archive --compress
           path: docs/target/
           remote_path: ${{ secrets.NIGHTLIES_RSYNC_PATH }}/flink/flink-kubernetes-operator-docs-${{ env.flink_alias }}/
           remote_host: ${{ secrets.NIGHTLIES_RSYNC_HOST }}
