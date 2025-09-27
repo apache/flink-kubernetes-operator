@@ -1,0 +1,69 @@
+name: Rsync Deploy (local)
+description: Upload a folder to a single remote destination via rsync over SSH.
+inputs:
+  switches:
+    description: rsync switches
+    required: false
+    default: "--archive --compress"
+  path:
+    description: Local source directory (always copies its content)
+    required: true
+  remote_path:
+    description: Remote destination directory
+    required: true
+  remote_host:
+    description: SSH host
+    required: true
+  remote_port:
+    description: SSH port
+    required: false
+    default: "22"
+  remote_user:
+    description: SSH username
+    required: true
+  remote_key:
+    description: SSH private key (OpenSSH/PEM)
+    required: true
+  known_hosts:
+    description: Optional known_hosts entry for the remote host
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Prepare SSH
+      shell: bash
+      run: |
+        set -euo pipefail
+        install -m 700 -d ~/.ssh
+        printf '%s\n' "${{ inputs.remote_key }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+
+        SSH_PORT="${{ inputs.remote_port }}"
+        [[ -z "$SSH_PORT" ]] && SSH_PORT=22
+
+        if [[ -n "${{ inputs.known_hosts }}" ]]; then
+          printf '%s\n' "${{ inputs.known_hosts }}" > ~/.ssh/known_hosts
+        else
+          ssh-keyscan -p "$SSH_PORT" -H "${{ inputs.remote_host }}" >> ~/.ssh/known_hosts
+        fi
+
+    - name: Rsync upload
+      shell: bash
+      run: |
+        set -euo pipefail
+        SSH_PORT="${{ inputs.remote_port }}"
+        [[ -z "$SSH_PORT" ]] && SSH_PORT=22
+        SSH_CMD="ssh -p ${SSH_PORT} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes"
+
+        SRC="${{ inputs.path }}"
+        DEST="${{ inputs.remote_path }}"
+        USER="${{ inputs.remote_user }}"
+        HOST="${{ inputs.remote_host }}"
+
+        # Ensure destination directory exists
+        ${SSH_CMD} "${USER}@${HOST}" "mkdir -p '${DEST%/}'"
+
+        # Copy *contents* of SRC into DEST
+        rsync ${{ inputs.switches }} \
+          -e "${SSH_CMD}" \
+          "${SRC%/}/" "${USER}@${HOST}:'${DEST%/}/'"
