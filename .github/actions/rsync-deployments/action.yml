@@ -7,7 +7,7 @@ inputs:
     required: false
     default: "--archive --compress"
   path:
-    description: Local source directory (always copies its content)
+    description: Local source directory (always copies its content only)
     required: true
   remote_path:
     description: Remote destination directory
@@ -25,46 +25,28 @@ inputs:
   remote_key:
     description: SSH private key (OpenSSH/PEM)
     required: true
-  known_hosts:
-    description: Optional known_hosts entry for the remote host
-    required: false
 runs:
   using: composite
   steps:
-    - name: Prepare SSH
+    - name: rsync via ssh-agent
       shell: bash
       run: |
         set -euo pipefail
-        install -m 700 -d ~/.ssh
-        printf '%s\n' "${{ inputs.remote_key }}" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
 
-        SSH_PORT="${{ inputs.remote_port }}"
-        [[ -z "$SSH_PORT" ]] && SSH_PORT=22
+        # Start agent and load the key
+        eval "$(ssh-agent -s)"
+        ssh-add - <<< "${{ inputs.remote_key }}"
 
-        if [[ -n "${{ inputs.known_hosts }}" ]]; then
-          printf '%s\n' "${{ inputs.known_hosts }}" > ~/.ssh/known_hosts
-        else
-          ssh-keyscan -p "$SSH_PORT" -H "${{ inputs.remote_host }}" >> ~/.ssh/known_hosts
-        fi
+        # SSH command with host key checking disabled (matches your reference impl)
+        RSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ inputs.remote_port }}"
 
-    - name: Rsync upload
-      shell: bash
-      run: |
-        set -euo pipefail
-        SSH_PORT="${{ inputs.remote_port }}"
-        [[ -z "$SSH_PORT" ]] && SSH_PORT=22
-        SSH_CMD="ssh -p ${SSH_PORT} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes"
-
-        SRC="${{ inputs.path }}"
+        # Resolve paths and DSN
+        LOCAL_PATH="${GITHUB_WORKSPACE}/${{ inputs.path }}"
         DEST="${{ inputs.remote_path }}"
-        USER="${{ inputs.remote_user }}"
-        HOST="${{ inputs.remote_host }}"
+        DSN="${{ inputs.remote_user }}@${{ inputs.remote_host }}"
 
-        # Ensure destination directory exists
-        ${SSH_CMD} "${USER}@${HOST}" "mkdir -p '${DEST%/}'"
+        # Deploy (copy *contents* of LOCAL_PATH into DEST)
+        rsync ${{ inputs.switches }} -e "$RSH" "${LOCAL_PATH%/}/" "$DSN:'${DEST%/}/'"
 
-        # Copy *contents* of SRC into DEST
-        rsync ${{ inputs.switches }} \
-          -e "${SSH_CMD}" \
-          "${SRC%/}/" "${USER}@${HOST}:'${DEST%/}/'"
+        # Cleanup identities from the agent
+        ssh-add -D || true
