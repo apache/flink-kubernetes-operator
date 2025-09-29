@@ -1,3 +1,4 @@
+# This implementation took inspiration from https://github.com/Burnett01/rsync-deployments/blob/7.1.0/action.yml
 name: Rsync Deploy (local)
 description: Upload a folder to a single remote destination via rsync over SSH.
 inputs:
