@@ -7,7 +7,7 @@ inputs:
     required: false
     default: "--archive --compress"
   path:
-    description: Local source directory (always copies its content only)
+    description: Local source directory
     required: true
   remote_path:
     description: Remote destination directory
@@ -38,15 +38,14 @@ runs:
         ssh-add - <<< "${{ inputs.remote_key }}"
 
         # SSH command with host key checking disabled (matches your reference impl)
-        RSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ inputs.remote_port }}"
+        RSH="ssh -o StrictHostKeyChecking=no -p ${{ inputs.remote_port }}"
 
         # Resolve paths and DSN
-        LOCAL_PATH="${GITHUB_WORKSPACE}/${{ inputs.path }}"
-        DEST="${{ inputs.remote_path }}"
+        LOCAL_PATH="$GITHUB_WORKSPACE/${{ inputs.path }}"
         DSN="${{ inputs.remote_user }}@${{ inputs.remote_host }}"
 
-        # Deploy (copy *contents* of LOCAL_PATH into DEST)
-        rsync ${{ inputs.switches }} -e "$RSH" "${LOCAL_PATH%/}/" "$DSN:'${DEST%/}/'"
+        # Deploy
+        sh -c "rsync ${{ inputs.switches }} -e '$RSH' $LOCAL_PATH $DSN:${{ inputs.remote_path }}"
 
         # Cleanup identities from the agent
         ssh-add -D || true
