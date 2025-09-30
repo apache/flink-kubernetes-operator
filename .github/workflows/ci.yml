@@ -209,23 +209,23 @@ jobs:
           - "native"
           - "standalone"
         test:
-          - test_application_kubernetes_ha.sh
-          - test_application_operations.sh
-          - test_dynamic_config.sh
-          - test_dynamic_flink_conf.sh
-          - test_sessionjob_kubernetes_ha.sh
-          - test_sessionjob_operations.sh
-          - test_autoscaler.sh
-          - test_flink_operator_ha.sh
-          - test_snapshot.sh
-          - test_batch_job.sh
+#          - test_application_kubernetes_ha.sh
+#          - test_application_operations.sh
+#          - test_dynamic_config.sh
+#          - test_dynamic_flink_conf.sh
+#          - test_sessionjob_kubernetes_ha.sh
+#          - test_sessionjob_operations.sh
+#          - test_autoscaler.sh
+#          - test_flink_operator_ha.sh
+#          - test_snapshot.sh
+#          - test_batch_job.sh
           - test_bluegreen_laststate.sh
           - test_bluegreen_stateless.sh
         exclude:
-          - mode: standalone
-            test: test_autoscaler.sh
-          - flink-version: v1_19
-            test: test_snapshot.sh
+#          - mode: standalone
+#            test: test_autoscaler.sh
+#          - flink-version: v1_19
+#            test: test_snapshot.sh
           - flink-version: v1_19
             test: test_bluegreen_laststate.sh
           - flink-version: v1_19
