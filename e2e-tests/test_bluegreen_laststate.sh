@@ -63,7 +63,7 @@ kubectl exec -it $jm_pod_name -- bash -c "ls -lt /opt/flink/volume/flink-sp/"
 
 
 tm_pod_name=""
-for i in $(seq 1 4); do
+for i in $(seq 1 6); do
   echo "====="
   echo "LISTING PODS:"
   kubectl get pods
@@ -86,7 +86,10 @@ for i in $(seq 1 4); do
   echo "--=EVs=--"
   kubectl describe flinkdep $GREEN_CLUSTER_ID
 #  kubectl get events --field-selector involvedObject.kind=FlinkDeployment,involvedObject.name=$GREEN_CLUSTER_ID --sort-by=.metadata.creationTimestamp
-  sleep 15
+  sleep 30
+
+  status=$(kubectl get -oyaml $GREEN_APPLICATION_IDENTIFIER | yq '.status.lifecycleState')
+  echo "==> lifecycleState after 30 secs: " $status
 done
 
 
