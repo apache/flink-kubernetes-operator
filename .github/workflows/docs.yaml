@@ -23,15 +23,23 @@ jobs:
   build-documentation:
     if: github.repository == 'apache/flink-kubernetes-operator'
     runs-on: ubuntu-latest
+    env:
+      HUGO_REPO: https://github.com/gohugoio/hugo/releases/download/v0.104.0/hugo_extended_0.104.0_Linux-64bit.tar.gz
+      HUGO_ARTIFACT: hugo_extended_0.104.0_Linux-64bit.tar.gz
     strategy:
       max-parallel: 1
       matrix:
         branch:
           - main
-          - release-1.10
-          - release-1.11
+          - release-1.13
+          - release-1.12
     steps:
-      - uses: actions/checkout@v3
+      - name: Set up Temurin JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
       - name: Set branch environment variable
@@ -41,19 +49,45 @@ jobs:
           echo "flink_branch=${currentBranch}"
           echo "flink_branch=${currentBranch}" >> ${GITHUB_ENV}
           if [ "${currentBranch}" = "main" ]; then
-            echo "flink_alias=release-1.12" >> ${GITHUB_ENV}
-          elif [ "${currentBranch}" = "release-1.11" ]; then
+            echo "flink_alias=release-1.14" >> ${GITHUB_ENV}
+          elif [ "${currentBranch}" = "release-1.13" ]; then
             echo "flink_alias=stable" >> ${GITHUB_ENV}
           else
             echo "flink_alias=${currentBranch}" >> ${GITHUB_ENV}
           fi
       - name: Build documentation
         run: |
-          docker run  --rm --volume "$PWD:/root/flink-kubernetes-operator" chesnay/flink-ci:java_8_11 bash -c "cd /root/flink-kubernetes-operator && ./.github/workflows/docs.sh"
+          if ! curl --fail -OL "$HUGO_REPO" ; then
+            echo "Failed to download Hugo binary"
+            exit 1
+          fi
+          tar -zxvf "$HUGO_ARTIFACT"
+          git submodule update --init --recursive
+
+          # generate docs into docs/target
+          ./hugo -v --source docs --destination target
+          if [ $? -ne 0 ]; then
+            echo "Error building the docs"
+            exit 1
+          fi
+
+          # build Java docs
+          mkdir -p docs/target/api
+      
+          mvn javadoc:aggregate -B \
+          -DadditionalJOption="-Xdoclint:none" \
+          -DadditionalJOption="--allow-script-in-comments" \
+          -DexcludePackageNames="org.apache.flink.examples" \
+          -Dmaven.javadoc.failOnError=false \
+          -Dcheckstyle.skip=true \
+          -Dspotless.check.skip=true \
+          -Denforcer.skip=true \
+          -Dheader="<a href=\"http://flink.apache.org/\" target=\"_top\"><h1>Back to Flink Website</h1></a> <script>var _paq=window._paq=window._paq||[];_paq.push([\"disableCookies\"]),_paq.push([\"setDomains\",[\"*.flink.apache.org\",\"*.nightlies.apache.org/flink\"]]),_paq.push([\"trackPageView\"]),_paq.push([\"enableLinkTracking\"]),function(){var u=\"//matomo.privacy.apache.org/\";_paq.push([\"setTrackerUrl\",u+\"matomo.php\"]),_paq.push([\"setSiteId\",\"1\"]);var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s)}();</script>"
+      
+          mv target/site/apidocs docs/target/api/java
       - name: Upload documentation
-        uses: burnett01/rsync-deployments@5.2
+        uses: ./.github/actions/rsync-deployments
         with:
-          switches: --archive --compress
           path: docs/target/
           remote_path: ${{ secrets.NIGHTLIES_RSYNC_PATH }}/flink/flink-kubernetes-operator-docs-${{ env.flink_branch }}/
           remote_host: ${{ secrets.NIGHTLIES_RSYNC_HOST }}
@@ -62,9 +96,8 @@ jobs:
           remote_key: ${{ secrets.NIGHTLIES_RSYNC_KEY }}
       - name: Upload documentation alias
         if: env.flink_alias != ''
-        uses: burnett01/rsync-deployments@5.2
+        uses: ./.github/actions/rsync-deployments
         with:
-          switches: --archive --compress
           path: docs/target/
           remote_path: ${{ secrets.NIGHTLIES_RSYNC_PATH }}/flink/flink-kubernetes-operator-docs-${{ env.flink_alias }}/
           remote_host: ${{ secrets.NIGHTLIES_RSYNC_HOST }}

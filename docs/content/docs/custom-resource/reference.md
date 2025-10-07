@@ -57,6 +57,40 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 
+### ConfigObjectNode
+**Class**: org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode
+
+**Description**: Allows parsing configurations as YAML, and adds related utility methods.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### ConfigObjectNodeDeserializer
+**Class**: org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNodeDeserializer
+
+**Description**: Allows to deserialize to ConfigObjectNode.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### FlinkBlueGreenDeploymentConfigOptions
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions
+
+**Description**: Configuration options to be used by the Flink Blue/Green Deployments.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### FlinkBlueGreenDeploymentSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec
+
+**Description**: Spec that describes a Flink application with blue/green deployment capabilities.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| configuration | java.util.Map<java.lang.String,java.lang.String> |  |
+| template | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec |  |
+
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec
 
@@ -66,7 +100,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
-| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
+| flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
@@ -78,6 +112,16 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName -> configContent. |
 | mode | org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode | Deployment mode of the Flink cluster, native or standalone. |
 
+### FlinkDeploymentTemplateSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec
+
+**Description**: Template Spec that describes a Flink application managed by the blue/green controller.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| metadata | io.fabric8.kubernetes.api.model.ObjectMeta |  |
+| spec | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec |  |
+
 ### FlinkSessionJobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec
 
@@ -87,7 +131,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
-| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
+| flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
 ### FlinkStateSnapshotSpec
@@ -118,6 +162,8 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | v1_19 |  |
 | v1_20 |  |
 | v2_0 |  |
+| v2_1 |  |
+| v2_2 |  |
 | majorVersion | int | The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. |
 | minorVersion | int | The minor integer from the Flink semver. For example for Flink 1.18.1 this would be 18. |
 
@@ -289,6 +335,37 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | INCREMENTAL |  |
 | UNKNOWN | Checkpoint format unknown, if the checkpoint was not triggered by the operator. |
 | description | org.apache.flink.configuration.description.InlineElement |  |
+
+### FlinkBlueGreenDeploymentState
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState
+
+**Description**: Enumeration of the possible states of the blue/green transition.
+
+| Value | Docs |
+| ----- | ---- |
+| INITIALIZING_BLUE | We use this state while initializing for the first time, always with a "Blue" deployment type. |
+| ACTIVE_BLUE | Identifies the system is running normally with a "Blue" deployment type. |
+| ACTIVE_GREEN | Identifies the system is running normally with a "Green" deployment type. |
+| TRANSITIONING_TO_BLUE | Identifies the system is transitioning from "Green" to "Blue". |
+| TRANSITIONING_TO_GREEN | Identifies the system is transitioning from "Blue" to "Green". |
+| SAVEPOINTING_BLUE | Identifies the system is savepointing "Blue" before it transitions to "Green". |
+| SAVEPOINTING_GREEN | Identifies the system is savepointing "Green" before it transitions to "Blue". |
+
+### FlinkBlueGreenDeploymentStatus
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus
+
+**Description**: Last observed status of the Flink Blue/Green deployment.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus |  |
+| blueGreenState | org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState | The state of the blue/green transition. |
+| lastReconciledSpec | java.lang.String | Last reconciled (serialized) deployment spec. |
+| lastReconciledTimestamp | java.lang.String | Timestamp of last reconciliation. |
+| abortTimestamp | java.lang.String | Computed from abortGracePeriodMs, timestamp after which the deployment should be aborted. |
+| deploymentReadyTimestamp | java.lang.String | Timestamp when the deployment became READY/STABLE. Used to determine when to delete it. |
+| savepointTriggerId | java.lang.String | Persisted triggerId to track transition with savepoint. Only used with UpgradeMode.SAVEPOINT |
+| error | java.lang.String | Error information about the FlinkBlueGreenDeployment. |
 
 ### FlinkDeploymentReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus

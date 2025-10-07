@@ -404,7 +404,8 @@ public class KubernetesOperatorConfigOptions {
             operatorConfig("dynamic.namespaces.enabled")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Enables dynamic change of watched/monitored namespaces.");
+                    .withDescription(
+                            "Enables the operator to dynamically update the list of namespaces it watches. Requires dynamic.config.enabled to be set to true.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
@@ -496,13 +497,13 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.");
 
+    public static final int DEFAULT_TERMINATION_TIMEOUT_SECONDS = 10;
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_TERMINATION_TIMEOUT =
             operatorConfig("termination.timeout")
                     .durationType()
-                    .defaultValue(
-                            Duration.ofSeconds(
-                                    ConfigurationService.DEFAULT_TERMINATION_TIMEOUT_SECONDS))
+                    .defaultValue(Duration.ofSeconds(DEFAULT_TERMINATION_TIMEOUT_SECONDS))
                     .withDescription(
                             "Operator shutdown timeout before reconciliation threads are killed.");
 
@@ -647,6 +648,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Indicate whether the job should be drained when stopping with savepoint.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> BLOCK_ON_UNMANAGED_JOBS =
+            operatorConfig("session.block-on-unmanaged-jobs")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
             operatorConfig("cluster.resource-view.refresh-interval")
@@ -654,4 +663,28 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofMinutes(-1))
                     .withDescription(
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
+            operatorConfig("events.exceptions.stacktrace-lines")
+                    .intType()
+                    .defaultValue(5)
+                    .withDescription(
+                            "Maximum number of stack trace lines to include in exception-related Kubernetes event messages.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
+            operatorConfig("events.exceptions.limit-per-reconciliation")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
+            operatorConfig("ingress.manage")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.");
 }

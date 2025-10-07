@@ -21,12 +21,13 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
+import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
 import io.fabric8.kubernetes.client.Config;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ThreadPoolExecutor;
@@ -39,14 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *     ConfigurationServiceProvider) we write multiple tests as a single function, please provide
  *     ample comments.
  */
-public class FlinkOperatorTest {
-    @BeforeAll
-    public static void setAutoTryKubeConfig() {
-        System.setProperty(Config.KUBERNETES_AUTH_TRYKUBECONFIG_SYSTEM_PROPERTY, "false");
-    }
+@EnableKubeAPIServer
+class FlinkOperatorTest {
+
+    static KubernetesClient kubernetesClient;
 
     @Test
-    public void testConfigurationPassedToJOSDK() {
+    void testConfigurationPassedToJOSDK() {
         var testParallelism = 42;
         var testSelector = "flink=enabled";
         var testLeaseName = "test-lease";
@@ -64,7 +64,7 @@ public class FlinkOperatorTest {
         operatorConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME, testLeaseName);
 
-        var testOperator = new FlinkOperator(operatorConfig);
+        var testOperator = new FlinkOperator(operatorConfig, kubernetesClient);
         testOperator.registerDeploymentController();
         testOperator.registerSessionJobController();
 
@@ -81,7 +81,7 @@ public class FlinkOperatorTest {
         var labelSelectors =
                 testOperator.registeredControllers.stream()
                         .map(RegisteredController::getConfiguration)
-                        .map(ControllerConfiguration::getLabelSelector);
+                        .map(c -> c.getInformerConfig().getLabelSelector());
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
         Assertions.assertFalse(configService.stopOnInformerErrorDuringStartup());
@@ -99,7 +99,7 @@ public class FlinkOperatorTest {
     }
 
     @Test
-    public void testLeaderElectionConfig() {
+    void testLeaderElectionConfig() {
         var operatorConfig = new Configuration();
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_ENABLED, true);
 

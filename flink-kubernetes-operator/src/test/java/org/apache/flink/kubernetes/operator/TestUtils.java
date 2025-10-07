@@ -47,16 +47,15 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.mockwebserver.http.Headers;
+import io.fabric8.mockwebserver.http.RecordedRequest;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
-import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
-import okhttp3.Headers;
-import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -74,6 +73,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -97,6 +97,24 @@ public class TestUtils extends BaseTestUtils {
     public static PodList createFailedPodList(String crashLoopMessage, String reason) {
         ContainerStatus cs =
                 new ContainerStatusBuilder()
+                        .withName("c1")
+                        .withNewState()
+                        .withNewWaiting()
+                        .withReason(reason)
+                        .withMessage(crashLoopMessage)
+                        .endWaiting()
+                        .endState()
+                        .build();
+
+        Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(new PodStatusBuilder().withContainerStatuses(cs).build());
+        return new PodListBuilder().withItems(pod).build();
+    }
+
+    public static PodList createFailedInitContainerPodList(String crashLoopMessage, String reason) {
+        ContainerStatus cs =
+                new ContainerStatusBuilder()
+                        .withName("c1")
                         .withNewState()
                         .withNewWaiting()
                         .withReason(reason)
@@ -108,7 +126,8 @@ public class TestUtils extends BaseTestUtils {
         Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
         pod.setStatus(
                 new PodStatusBuilder()
-                        .withContainerStatuses(Collections.singletonList(cs))
+                        .withContainerStatuses(new ContainerStatusBuilder().withReady().build())
+                        .withInitContainerStatuses(cs)
                         .build());
         return new PodListBuilder().withItems(pod).build();
     }
@@ -117,7 +136,7 @@ public class TestUtils extends BaseTestUtils {
         String nowTs = Instant.now().toString();
         var status = new DeploymentStatus();
         status.setAvailableReplicas(ready ? 1 : 0);
-        status.setReplicas(1);
+        status.setReplicas(2);
         var availableCondition = new DeploymentCondition();
         availableCondition.setType("Available");
         availableCondition.setStatus(ready ? "True" : "False");
@@ -125,7 +144,7 @@ public class TestUtils extends BaseTestUtils {
         status.setConditions(List.of(availableCondition));
 
         DeploymentSpec spec = new DeploymentSpec();
-        spec.setReplicas(1);
+        spec.setReplicas(3);
 
         var meta = new ObjectMeta();
         meta.setCreationTimestamp(nowTs);
@@ -203,7 +222,7 @@ public class TestUtils extends BaseTestUtils {
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster(version);
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-                session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
+                session.getSpec().getFlinkConfiguration().putAllFrom(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);
@@ -478,17 +497,23 @@ public class TestUtils extends BaseTestUtils {
 
         @Override
         public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
-            return null;
+            // TODO: improve this, even if we only support FlinkDeployment as a secondary resource
+            if (aClass.getSimpleName().equals(FlinkDeployment.class.getSimpleName())) {
+                KubernetesClient client = getClient();
+                var hasMetadata =
+                        new HashSet<>(
+                                client.resources(FlinkDeployment.class)
+                                        .inAnyNamespace()
+                                        .list()
+                                        .getItems());
+                return (Set<T1>) hasMetadata;
+            } else {
+                return null;
+            }
         }
 
         @Override
         public <T1> Optional<T1> getSecondaryResource(Class<T1> aClass, String s) {
-            return Optional.empty();
-        }
-
-        @Override
-        public <R> Optional<R> getSecondaryResource(
-                Class<R> aClass, ResourceDiscriminator<R, T> resourceDiscriminator) {
             return Optional.empty();
         }
 
@@ -498,7 +523,8 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
-        public ManagedDependentResourceContext managedDependentResourceContext() {
+        public ManagedWorkflowAndDependentResourceContext
+                managedWorkflowAndDependentResourceContext() {
             return null;
         }
 
@@ -518,8 +544,18 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
+        public T getPrimaryResource() {
+            return null;
+        }
+
+        @Override
         public IndexedResourceCache<T> getPrimaryCache() {
             return null;
+        }
+
+        @Override
+        public boolean isNextReconciliationImminent() {
+            return false;
         }
     }
 }

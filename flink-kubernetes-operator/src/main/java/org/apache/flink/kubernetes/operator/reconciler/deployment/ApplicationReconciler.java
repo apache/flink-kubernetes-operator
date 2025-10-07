@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
@@ -58,6 +59,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
 /** Reconciler Flink Application deployments. */
@@ -113,9 +117,11 @@ public class ApplicationReconciler
                         || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
                 && !flinkService.isHaMetadataAvailable(deployConfig)) {
             throw new UpgradeFailureException(
-                    "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
+                    "JobManager deployment is missing and "
+                            + MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to make stateful upgrades. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
                     "UpgradeFailed");
         }
 
@@ -184,8 +190,8 @@ public class ApplicationReconciler
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
-        IngressUtils.updateIngressRules(
-                relatedResource.getMetadata(), spec, deployConfig, ctx.getKubernetesClient());
+        IngressUtils.reconcileIngress(
+                ctx, spec, deployConfig, ctx.getKubernetesClient(), eventRecorder);
     }
 
     private void setJobIdIfNecessary(
@@ -223,10 +229,12 @@ public class ApplicationReconciler
     @Override
     protected boolean cancelJob(FlinkResourceContext<FlinkDeployment> ctx, SuspendMode suspendMode)
             throws Exception {
+        var cancelTs = Instant.now();
         var result =
                 ctx.getFlinkService()
                         .cancelJob(ctx.getResource(), suspendMode, ctx.getObserveConfig());
-        result.getSavepointPath().ifPresent(location -> setUpgradeSavepointPath(ctx, location));
+        result.getSavepointPath()
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location, cancelTs));
         return result.isPending();
     }
 
@@ -266,6 +274,9 @@ public class ApplicationReconciler
 
         var deployment = ctx.getResource();
         var observeConfig = ctx.getObserveConfig();
+        var clusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(
+                        deployment.getStatus().getClusterInfo());
         boolean shouldRestartJobBecauseUnhealthy =
                 shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
@@ -286,7 +297,10 @@ public class ApplicationReconciler
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RestartUnhealthyJob,
                         EventRecorder.Component.Job,
-                        MSG_RESTART_UNHEALTHY,
+                        Optional.ofNullable(clusterHealthInfo)
+                                .map(ClusterHealthInfo::getHealthResult)
+                                .map(ClusterHealthResult::getError)
+                                .orElse(MSG_RESTART_UNHEALTHY),
                         ctx.getKubernetesClient());
                 cleanupAfterFailedJob(ctx);
             }
@@ -310,7 +324,7 @@ public class ApplicationReconciler
                     ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
             if (clusterHealthInfo != null) {
                 LOG.debug("Cluster info contains job health info");
-                if (!clusterHealthInfo.isHealthy()) {
+                if (!clusterHealthInfo.getHealthResult().isHealthy()) {
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
                         LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;

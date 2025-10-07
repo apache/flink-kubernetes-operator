@@ -53,7 +53,8 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIME
 
 
 # Test upgrade by setting legacy field
-kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job":{"state": "suspended"}}}'
+# Use native savepoints to avoid Flink 2.0/2.1 issues
+kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job":{"state": "suspended"}, "flinkConfiguration":{"kubernetes.operator.savepoint.format.type" : "NATIVE"} }}'
 wait_for_status $APPLICATION_IDENTIFIER '.status.lifecycleState' "SUSPENDED" ${TIMEOUT} || exit 1
 
 location=$(kubectl get $APPLICATION_IDENTIFIER -o yaml | yq '.status.jobStatus.upgradeSavepointPath')

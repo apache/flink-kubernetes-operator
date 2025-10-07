@@ -52,6 +52,7 @@ import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -63,6 +64,7 @@ import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
@@ -98,9 +100,14 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 
 /** Flink service mock for tests. */
 public class TestingFlinkService extends AbstractFlinkService {
@@ -111,6 +118,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                     "15.0.0",
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     "1234567 @ 1970-01-01T00:00:00+00:00");
+    private final Map<JobID, JobExceptionsInfoWithHistory> jobExceptionsMap = new HashMap<>();
     public static final String SNAPSHOT_ERROR_MESSAGE = "Failed";
 
     private int savepointCounter = 0;
@@ -129,7 +137,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean checkpointAvailable = true;
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
+    @Setter private Exception makeItFailWith;
     @Setter private boolean triggerSavepointFailure = false;
+    @Setter private Exception savepointTriggerException = null;
+    @Setter private String savepointFetchError = null;
     @Setter private boolean disposeSavepointFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
     @Setter private PodList podList = new PodList();
@@ -139,6 +150,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
     private final Map<Long, String> checkpointStats = new HashMap<>();
     @Setter private boolean throwCheckpointingDisabledError = false;
+    @Setter private Throwable jobFailedErr;
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -211,6 +223,9 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -235,9 +250,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     protected void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
             throw new UpgradeFailureException(
-                    "HA metadata not available to restore from last state. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
+                    MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to restore from last state. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
                     "RestoreFailed");
         }
     }
@@ -269,6 +285,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             @Nullable String savepoint)
             throws Exception {
 
+        if (makeItFailWith != null) {
+            throw makeItFailWith;
+        }
+
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -292,7 +312,33 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }
+
+        if (jobFailedErr != null) {
+            return Optional.of(new JobStatusMessage(jobID, "n", JobStatus.FAILED, 0));
+        }
+
         return super.getJobStatus(conf, jobID);
+    }
+
+    @Override
+    public JobExceptionsInfoWithHistory getJobExceptions(
+            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig) {
+        return jobExceptionsMap.getOrDefault(jobId, null);
+    }
+
+    @Override
+    public JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception {
+        if (jobFailedErr != null) {
+            return new JobResult.Builder()
+                    .jobId(jobID)
+                    .serializedThrowable(new SerializedThrowable(jobFailedErr))
+                    .netRuntime(1)
+                    .accumulatorResults(new HashMap<>())
+                    .applicationStatus(ApplicationStatus.FAILED)
+                    .build();
+        }
+
+        return super.requestJobResult(conf, jobID);
     }
 
     public List<Tuple3<String, JobStatusMessage, Configuration>> listJobs() {
@@ -331,6 +377,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             String savepointDirectory,
             Configuration conf)
             throws Exception {
+        if (savepointTriggerException != null) {
+            throw savepointTriggerException;
+        }
         if (triggerSavepointFailure) {
             throw new Exception(SNAPSHOT_ERROR_MESSAGE);
         }
@@ -353,6 +402,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     public SavepointFetchResult fetchSavepointInfo(
             String triggerId, String jobId, Configuration conf) {
+
+        if (savepointFetchError != null) {
+            return SavepointFetchResult.error(savepointFetchError);
+        }
 
         if (savepointTriggers.containsKey(triggerId)) {
             if (savepointTriggers.get(triggerId)) {
@@ -463,11 +516,13 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     private MultipleJobsDetails getMultipleJobsDetails() {
-        return new MultipleJobsDetails(
-                jobs.stream()
-                        .map(tuple -> tuple.f1)
-                        .map(TestingFlinkService::toJobDetails)
-                        .collect(Collectors.toList()));
+        MultipleJobsDetails multipleJobsDetails =
+                new MultipleJobsDetails(
+                        jobs.stream()
+                                .map(tuple -> tuple.f1)
+                                .map(TestingFlinkService::toJobDetails)
+                                .collect(Collectors.toList()));
+        return multipleJobsDetails;
     }
 
     private AggregatedMetricsResponseBody getSubtaskMetrics() {
@@ -580,10 +635,13 @@ public class TestingFlinkService extends AbstractFlinkService {
                 .findAny()
                 .ifPresent(
                         t -> {
-                            if (!t.f1.getJobState().isGloballyTerminalState()) {
-                                throw new RuntimeException(
-                                        "Checkpoint should not be queried if job is not in terminal state");
-                            }
+                            // TODO: check this... for example getting the SP/CP
+                            //   in RUNNING state should be valid
+                            // if (!t.f1.getJobState().isGloballyTerminalState()) {
+                            //      throw new RuntimeException(
+                            //          "Checkpoint should not be
+                            //          queried if job is not in terminal state");
+                            // }
                         });
 
         return super.getLastCheckpoint(jobId, conf);
@@ -595,8 +653,9 @@ public class TestingFlinkService extends AbstractFlinkService {
                     Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
             getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
         if (throwCheckpointingDisabledError) {
-            throw new RestClientException(
-                    "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST);
+            throw new ExecutionException(
+                    new RestClientException(
+                            "Checkpointing has not been enabled", HttpResponseStatus.BAD_REQUEST));
         }
 
         if (checkpointInfo != null) {
@@ -689,5 +748,55 @@ public class TestingFlinkService extends AbstractFlinkService {
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) {
         return metricsValues;
+    }
+
+    /**
+     * Utilities to add exception history for testing.
+     *
+     * @param jobId of Job for which exception history is mocked
+     * @param exceptionName dummy exception name
+     * @param stackTrace dummy stack trace
+     * @param timestamp dummy timestamp
+     */
+    public void addExceptionHistory(
+            JobID jobId, String exceptionName, String stackTrace, long timestamp) {
+        JobExceptionsInfoWithHistory.RootExceptionInfo exception =
+                new JobExceptionsInfoWithHistory.RootExceptionInfo(
+                        exceptionName,
+                        stackTrace,
+                        timestamp,
+                        Map.of("label-key", "label-value"),
+                        List.of() // concurrentExceptions
+                        );
+
+        JobExceptionsInfoWithHistory existing = jobExceptionsMap.get(jobId);
+        List<JobExceptionsInfoWithHistory.RootExceptionInfo> entries =
+                existing != null && existing.getExceptionHistory() != null
+                        ? new ArrayList<>(existing.getExceptionHistory().getEntries())
+                        : new ArrayList<>();
+        entries.add(exception);
+
+        JobExceptionsInfoWithHistory.JobExceptionHistory exceptionHistory =
+                new JobExceptionsInfoWithHistory.JobExceptionHistory(entries, false);
+
+        JobExceptionsInfoWithHistory newExceptionHistory =
+                new JobExceptionsInfoWithHistory(exceptionHistory);
+        jobExceptionsMap.put(jobId, newExceptionHistory);
+    }
+
+    public void setSavepointTriggerException(Exception exception) {
+        this.savepointTriggerException = exception;
+    }
+
+    public void clearSavepointTriggerException() {
+        this.savepointTriggerException = null;
+    }
+
+    public void setSavepointFetchError(String error) {
+        this.savepointFetchError = error;
+    }
+
+    public void clearSavepointFetchError() {
+        this.savepointFetchError = null;
     }
 }

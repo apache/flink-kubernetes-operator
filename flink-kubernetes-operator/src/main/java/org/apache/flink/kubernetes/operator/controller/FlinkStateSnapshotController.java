@@ -34,10 +34,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
@@ -47,7 +45,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -55,10 +53,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 @ControllerConfiguration
 public class FlinkStateSnapshotController
-        implements Reconciler<FlinkStateSnapshot>,
-                ErrorStatusHandler<FlinkStateSnapshot>,
-                EventSourceInitializer<FlinkStateSnapshot>,
-                Cleaner<FlinkStateSnapshot> {
+        implements Reconciler<FlinkStateSnapshot>, Cleaner<FlinkStateSnapshot> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkStateSnapshotController.class);
 
@@ -154,10 +149,9 @@ public class FlinkStateSnapshotController
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(
+    public List<EventSource<?, FlinkStateSnapshot>> prepareEventSources(
             EventSourceContext<FlinkStateSnapshot> context) {
-        return EventSourceInitializer.nameEventSources(
-                EventSourceUtils.getFlinkStateSnapshotInformerEventSources(context));
+        return List.of(EventSourceUtils.getFlinkStateSnapshotInformerEventSources(context));
     }
 
     /**
@@ -176,9 +170,9 @@ public class FlinkStateSnapshotController
         var statusChanged = resourceStatusChanged(ctx);
 
         if (labelsChanged && statusChanged) {
-            updateControl = UpdateControl.updateResourceAndPatchStatus(resource);
+            updateControl = UpdateControl.patchResourceAndStatus(resource);
         } else if (labelsChanged) {
-            updateControl = UpdateControl.updateResource(resource);
+            updateControl = UpdateControl.patchResource(resource);
         } else if (statusChanged) {
             updateControl = UpdateControl.patchStatus(resource);
         }

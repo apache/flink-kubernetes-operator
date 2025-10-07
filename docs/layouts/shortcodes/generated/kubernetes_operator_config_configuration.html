@@ -96,7 +96,19 @@
             <td><h5>kubernetes.operator.dynamic.namespaces.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Enables dynamic change of watched/monitored namespaces.</td>
+            <td>Enables the operator to dynamically update the list of namespaces it watches. Requires dynamic.config.enabled to be set to true.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.events.exceptions.limit-per-reconciliation</h5></td>
+            <td style="word-wrap: break-word;">10</td>
+            <td>Integer</td>
+            <td>Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.events.exceptions.stacktrace-lines</h5></td>
+            <td style="word-wrap: break-word;">5</td>
+            <td>Integer</td>
+            <td>Maximum number of stack trace lines to include in exception-related Kubernetes event messages.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.exception.field.max.length</h5></td>
@@ -157,6 +169,12 @@
             <td style="word-wrap: break-word;">8085</td>
             <td>Integer</td>
             <td>The port the health probe will use to expose the status.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.ingress.manage</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.jm-deployment-recovery.enabled</h5></td>
@@ -403,6 +421,12 @@
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.session.block-on-unmanaged-jobs</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>

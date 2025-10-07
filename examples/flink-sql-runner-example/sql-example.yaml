@@ -24,7 +24,7 @@ spec:
   image: flink-sql-runner-example:latest
   flinkVersion: v1_20
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "1"
+    taskmanager.numberOfTaskSlots: 1
   serviceAccount: flink
   jobManager:
     resource:

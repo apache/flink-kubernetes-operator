@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.metrics.Histogram;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -43,6 +44,15 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class OperatorJosdkMetricsTest {
 
     private static final ResourceID resourceId = new ResourceID("testname", "testns");
+    private static final HasMetadata resource = testResource(resourceId);
+
+    private static HasMetadata testResource(ResourceID resourceId) {
+        var flinkDeployment = new FlinkDeployment();
+        flinkDeployment.getMetadata().setName(resourceId.getName());
+        flinkDeployment.getMetadata().setNamespace(resourceId.getNamespace().orElseThrow());
+        return flinkDeployment;
+    }
+
     private static final String controllerName = FlinkDeploymentController.class.getSimpleName();
     private static final Map<String, Object> metadata =
             Map.of(Constants.RESOURCE_GVK_KEY, GroupVersionKind.gvkFor(FlinkDeployment.class));
@@ -110,20 +120,20 @@ public class OperatorJosdkMetricsTest {
 
     @Test
     public void testMetrics() {
-        operatorMetrics.failedReconciliation(resourceId, null, metadata);
+        operatorMetrics.failedReconciliation(resource, null, metadata);
         assertEquals(1, listener.size());
         assertEquals(1, getCount("Reconciliation.failed"));
-        operatorMetrics.failedReconciliation(resourceId, null, metadata);
-        operatorMetrics.failedReconciliation(resourceId, null, metadata);
+        operatorMetrics.failedReconciliation(resource, null, metadata);
+        operatorMetrics.failedReconciliation(resource, null, metadata);
         assertEquals(1, listener.size());
         assertEquals(3, getCount("Reconciliation.failed"));
 
-        operatorMetrics.reconcileCustomResource(resourceId, null, metadata);
+        operatorMetrics.reconcileCustomResource(resource, null, metadata);
         assertEquals(2, listener.size());
         assertEquals(1, getCount("Reconciliation"));
 
         operatorMetrics.reconcileCustomResource(
-                resourceId,
+                resource,
                 new RetryInfo() {
                     @Override
                     public int getAttemptCount() {
@@ -150,7 +160,7 @@ public class OperatorJosdkMetricsTest {
         assertEquals(6, listener.size());
         assertEquals(1, getCount("Reconciliation.cleanup"));
 
-        operatorMetrics.finishedReconciliation(resourceId, metadata);
+        operatorMetrics.finishedReconciliation(resource, metadata);
         assertEquals(7, listener.size());
         assertEquals(1, getCount("Reconciliation.finished"));
 
@@ -160,7 +170,8 @@ public class OperatorJosdkMetricsTest {
                 2,
                 listener.getGauge(listener.getMetricId("JOSDK", "mymap", "size")).get().getValue());
 
-        operatorMetrics.reconcileCustomResource(new ResourceID("other", "otherns"), null, metadata);
+        operatorMetrics.reconcileCustomResource(
+                testResource(new ResourceID("other", "otherns")), null, metadata);
         assertEquals(9, listener.size());
         assertEquals(
                 1,

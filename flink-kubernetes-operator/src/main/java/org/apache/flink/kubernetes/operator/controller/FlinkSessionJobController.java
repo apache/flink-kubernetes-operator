@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
+import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -39,10 +40,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
-import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
@@ -50,7 +49,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,8 +56,6 @@ import java.util.Set;
 @ControllerConfiguration()
 public class FlinkSessionJobController
         implements io.javaoperatorsdk.operator.api.reconciler.Reconciler<FlinkSessionJob>,
-                ErrorStatusHandler<FlinkSessionJob>,
-                EventSourceInitializer<FlinkSessionJob>,
                 Cleaner<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobController.class);
@@ -120,13 +116,7 @@ public class FlinkSessionJobController
             statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
             reconciler.reconcile(ctx);
         } catch (Exception e) {
-            eventRecorder.triggerEvent(
-                    flinkSessionJob,
-                    EventRecorder.Type.Warning,
-                    "SessionJobException",
-                    e.getMessage(),
-                    EventRecorder.Component.Job,
-                    josdkContext.getClient());
+            triggerErrorEvent(ctx, e);
             throw new ReconciliationException(e);
         }
         statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
@@ -166,6 +156,16 @@ public class FlinkSessionJobController
         return deleteControl;
     }
 
+    private void triggerErrorEvent(FlinkResourceContext<?> ctx, Exception e) {
+        eventRecorder.triggerEvent(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Error.name(),
+                ExceptionUtils.getExceptionMessage(e),
+                EventRecorder.Component.Job,
+                ctx.getKubernetesClient());
+    }
+
     @Override
     public ErrorStatusUpdateControl<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob sessionJob, Context<FlinkSessionJob> context, Exception e) {
@@ -174,9 +174,9 @@ public class FlinkSessionJobController
     }
 
     @Override
-    public Map<String, EventSource> prepareEventSources(
+    public List<EventSource<?, FlinkSessionJob>> prepareEventSources(
             EventSourceContext<FlinkSessionJob> context) {
-        List<EventSource> eventSources = new ArrayList<>();
+        List<EventSource<?, FlinkSessionJob>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
 
         if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
@@ -187,7 +187,7 @@ public class FlinkSessionJobController
                     "Could not initialize informer for snapshots as the CRD has not been installed!");
         }
 
-        return EventSourceInitializer.nameEventSources(eventSources.toArray(EventSource[]::new));
+        return eventSources;
     }
 
     private boolean validateSessionJob(FlinkResourceContext<FlinkSessionJob> ctx) {

@@ -63,6 +63,7 @@ public class KubernetesJobAutoScalerContextTest {
                                 },
                                 null,
                                 new FlinkConfigManager(new Configuration()),
+                                null,
                                 null));
 
         assertThat(context.getTaskManagerCpu()).isEqualTo(Optional.of(23.));

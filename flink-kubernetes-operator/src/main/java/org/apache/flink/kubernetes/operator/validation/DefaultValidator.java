@@ -65,6 +65,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
@@ -101,7 +102,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
                         .toMap();
         if (spec.getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(spec.getFlinkConfiguration());
+            effectiveConfig.putAll(spec.getFlinkConfiguration().asFlatMap());
         }
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
@@ -530,11 +531,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 sessionCluster.getSpec().getFlinkVersion())
                         .toMap();
         if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration().asFlatMap());
         }
 
         if (sessionJob.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration());
+            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration().asFlatMap());
         }
 
         return firstPresent(
@@ -622,6 +623,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                         UTILIZATION_MIN,
                         0.0d,
                         flinkConfiguration.get(UTILIZATION_TARGET)),
+                validateNumber(flinkConfiguration, OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d),
                 CalendarUtils.validateExcludedPeriods(flinkConfiguration));
     }
 

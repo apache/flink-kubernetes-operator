@@ -34,11 +34,15 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
@@ -46,6 +50,8 @@ import java.util.SortedMap;
 import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_MIN_OBSERVATIONS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALE_DOWN_INTERVAL;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE;
@@ -178,6 +184,13 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
         double scaleFactor = targetCapacity / averageTrueProcessingRate;
+        if (conf.get(OBSERVED_SCALABILITY_ENABLED)) {
+
+            double scalingCoefficient =
+                    JobVertexScaler.calculateObservedScalingCoefficient(history, conf);
+
+            scaleFactor = scaleFactor / scalingCoefficient;
+        }
         double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
         double maxScaleFactor = 1 + conf.get(MAX_SCALE_UP_FACTOR);
         if (scaleFactor < minScaleFactor) {
@@ -234,6 +247,83 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 currentParallelism,
                 newParallelism,
                 delayedScaleDown);
+    }
+
+    /**
+     * Calculates the scaling coefficient based on historical scaling data.
+     *
+     * <p>The scaling coefficient is computed using the least squares approach. If there are not
+     * enough observations, or if the computed coefficient is invalid, a default value of {@code
+     * 1.0} is returned, assuming linear scaling.
+     *
+     * @param history A {@code SortedMap} of {@code Instant} timestamps to {@code ScalingSummary}
+     * @param conf Deployment configuration.
+     * @return The computed scaling coefficient.
+     */
+    @VisibleForTesting
+    protected static double calculateObservedScalingCoefficient(
+            SortedMap<Instant, ScalingSummary> history, Configuration conf) {
+        /*
+         * The scaling coefficient is computed using the least squares approach
+         * to fit a linear model:
+         *
+         *      R_i = β * P_i * α
+         *
+         * where:
+         * - R_i = observed processing rate
+         * - P_i = parallelism
+         * - β   = baseline processing rate
+         * - α   = scaling coefficient to optimize
+         *
+         * The optimization minimizes the **sum of squared errors**:
+         *
+         *      Loss = ∑ (R_i - β * α * P_i)^2
+         *
+         * Differentiating w.r.t. α and solving for α:
+         *
+         *      α = ∑ (P_i * R_i) / (∑ (P_i^2) * β)
+         *
+         * We keep the system conservative for higher returns scenario by clamping computed α to an upper bound of 1.0.
+         */
+
+        var minObservations = conf.get(OBSERVED_SCALABILITY_MIN_OBSERVATIONS);
+
+        // not enough data to compute scaling coefficient; we assume linear scaling.
+        if (history.isEmpty() || history.size() < minObservations) {
+            return 1.0;
+        }
+
+        var baselineProcessingRate = AutoScalerUtils.computeBaselineProcessingRate(history);
+
+        if (Double.isNaN(baselineProcessingRate)) {
+            return 1.0;
+        }
+
+        List<Double> parallelismList = new ArrayList<>();
+        List<Double> processingRateList = new ArrayList<>();
+
+        for (Map.Entry<Instant, ScalingSummary> entry : history.entrySet()) {
+            ScalingSummary summary = entry.getValue();
+            double parallelism = summary.getCurrentParallelism();
+            double processingRate = summary.getMetrics().get(TRUE_PROCESSING_RATE).getAverage();
+
+            if (Double.isNaN(processingRate)) {
+                LOG.warn(
+                        "True processing rate is not available in scaling history. Cannot compute scaling coefficient.");
+                return 1.0;
+            }
+
+            parallelismList.add(parallelism);
+            processingRateList.add(processingRate);
+        }
+
+        double lowerBound = conf.get(AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN);
+
+        var coefficient =
+                AutoScalerUtils.optimizeLinearScalingCoefficient(
+                        parallelismList, processingRateList, baselineProcessingRate, 1, lowerBound);
+
+        return BigDecimal.valueOf(coefficient).setScale(2, RoundingMode.CEILING).doubleValue();
     }
 
     private ParallelismChange detectBlockScaling(

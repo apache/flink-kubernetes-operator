@@ -140,7 +140,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyFlinkConfiguration() {
         // Parse config from spec's flinkConfiguration
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
-            spec.getFlinkConfiguration().forEach(effectiveConfig::setString);
+            spec.getFlinkConfiguration().asFlatMap().forEach(effectiveConfig::setString);
         }
 
         // Adapt default rest service type from 1.15+

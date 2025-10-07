@@ -382,4 +382,40 @@ public class AutoScalerOptions {
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
                                     "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
+
+    public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
+            autoScalerConfig("observed-scalability.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(oldOperatorConfigKey("observed-scalability.enabled"))
+                    .withDescription(
+                            "Enables the use of an observed scalability coefficient when computing target parallelism. "
+                                    + "If enabled, the system will estimate the scalability coefficient based on historical scaling data "
+                                    + "instead of assuming perfect linear scaling. "
+                                    + "This helps account for real-world inefficiencies such as network overhead and coordination costs.");
+
+    public static final ConfigOption<Integer> OBSERVED_SCALABILITY_MIN_OBSERVATIONS =
+            autoScalerConfig("observed-scalability.min-observations")
+                    .intType()
+                    .defaultValue(3)
+                    .withFallbackKeys(oldOperatorConfigKey("observed-scalability.min-observations"))
+                    .withDescription(
+                            "Defines the minimum number of historical scaling observations required to estimate the scalability coefficient. "
+                                    + "If the number of available observations is below this threshold, the system falls back to assuming linear scaling. "
+                                    + "Note: To effectively use a higher minimum observation count, you need to increase "
+                                    + VERTEX_SCALING_HISTORY_COUNT.key()
+                                    + ". Avoid setting "
+                                    + VERTEX_SCALING_HISTORY_COUNT.key()
+                                    + " to a very high value, as the number of retained data points is limited by the size of the state store—"
+                                    + "particularly when using Kubernetes-based state store.");
+
+    public static final ConfigOption<Double> OBSERVED_SCALABILITY_COEFFICIENT_MIN =
+            autoScalerConfig("observed-scalability.coefficient-min")
+                    .doubleType()
+                    .defaultValue(0.5)
+                    .withFallbackKeys(oldOperatorConfigKey("observed-scalability.coefficient-min"))
+                    .withDescription(
+                            "Minimum allowed value for the observed scalability coefficient. "
+                                    + "Prevents aggressive scaling by clamping low coefficient estimates. "
+                                    + "If the estimated coefficient falls below this value, it is capped at the configured minimum.");
 }

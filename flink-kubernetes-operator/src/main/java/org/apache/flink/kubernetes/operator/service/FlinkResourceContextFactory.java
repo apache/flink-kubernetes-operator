@@ -39,9 +39,11 @@ import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -51,6 +53,18 @@ import java.util.concurrent.Executors;
 public class FlinkResourceContextFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceContextFactory.class);
+
+    /** The cache entry for the last recorded exception timestamp for a JobID. */
+    @Data
+    public static final class ExceptionCacheEntry {
+        private String jobId;
+        private Instant lastTimestamp;
+        private boolean initialized;
+    }
+
+    @VisibleForTesting
+    final Map<ResourceID, ExceptionCacheEntry> lastRecordedExceptionCache =
+            new ConcurrentHashMap<>();
 
     private final FlinkConfigManager configManager;
     private final ArtifactManager artifactManager;
@@ -93,20 +107,37 @@ public class FlinkResourceContextFactory {
                         r ->
                                 OperatorMetricUtils.createResourceMetricGroup(
                                         operatorMetricGroup, configManager, resource));
-
+        String jobId = null;
+        if (resource.getStatus() != null) {
+            if (resource.getStatus().getJobStatus() != null) {
+                jobId = resource.getStatus().getJobStatus().getJobId();
+            }
+        }
         if (resource instanceof FlinkDeployment) {
             var flinkDep = (FlinkDeployment) resource;
+            var resourceId = ResourceID.fromResource(flinkDep);
+            var flinkDepJobId = jobId;
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
-                            flinkDep, josdkContext, resMg, configManager, this::getFlinkService);
+                            flinkDep,
+                            josdkContext,
+                            resMg,
+                            configManager,
+                            this::getFlinkService,
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceId, id -> new ExceptionCacheEntry()));
         } else if (resource instanceof FlinkSessionJob) {
+            var resourceId = ResourceID.fromResource(resource);
+            var flinkSessionJobId = jobId;
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
                             (FlinkSessionJob) resource,
                             josdkContext,
                             resMg,
                             configManager,
-                            this::getFlinkService);
+                            this::getFlinkService,
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceId, id -> new ExceptionCacheEntry()));
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());
@@ -137,13 +168,16 @@ public class FlinkResourceContextFactory {
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
+        ResourceID resourceId = ResourceID.fromResource(flinkApp);
         var resourceMetricGroup =
-                resourceMetricGroups.remove(
-                        Tuple2.of(flinkApp.getClass(), ResourceID.fromResource(flinkApp)));
+                resourceMetricGroups.remove(Tuple2.of(flinkApp.getClass(), resourceId));
         if (resourceMetricGroup != null) {
             resourceMetricGroup.close();
         } else {
             LOG.warn("Unknown resource metric group for {}", flinkApp);
         }
+        // remove the resource from the cache
+        lastRecordedExceptionCache.remove(resourceId);
+        LOG.debug("Removed resource {} from last recorded exception cache", resourceId);
     }
 }

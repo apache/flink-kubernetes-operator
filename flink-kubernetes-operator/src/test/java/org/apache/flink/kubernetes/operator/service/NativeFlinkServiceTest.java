@@ -277,17 +277,17 @@ public class NativeFlinkServiceTest {
         var spec = flinkDep.getSpec();
         spec.setFlinkVersion(FlinkVersion.v1_18);
 
-        var appConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+        var appConfig = spec.getFlinkConfiguration().asConfiguration();
         appConfig.set(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Adaptive);
 
-        spec.setFlinkConfiguration(appConfig.toMap());
+        spec.setFlinkConfiguration(appConfig);
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
 
         appConfig.set(
                 PipelineOptions.PARALLELISM_OVERRIDES,
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
-        spec.setFlinkConfiguration(appConfig.toMap());
+        spec.setFlinkConfiguration(appConfig);
 
         flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
 
@@ -306,7 +306,8 @@ public class NativeFlinkServiceTest {
                                 TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
-                                ctx -> service),
+                                ctx -> service,
+                                null),
                         configManager.getDeployConfig(flinkDep.getMetadata(), flinkDep.getSpec())));
         assertEquals(
                 Map.of(
@@ -320,7 +321,7 @@ public class NativeFlinkServiceTest {
 
         // Baseline
         appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
-        spec.setFlinkConfiguration(appConfig.toMap());
+        spec.setFlinkConfiguration(appConfig);
         testScaleConditionDep(flinkDep, service, d -> {}, true);
         testScaleConditionLastSpec(flinkDep, service, d -> {}, true);
 
@@ -494,7 +495,8 @@ public class NativeFlinkServiceTest {
                                 TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
-                                c -> service),
+                                c -> service,
+                                null),
                         configManager.getDeployConfig(depCopy.getMetadata(), depCopy.getSpec())));
     }
 

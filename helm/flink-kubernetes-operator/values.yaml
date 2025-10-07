@@ -20,14 +20,15 @@
 
 # List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces.
 # When enabled RBAC is only created for said namespaces, otherwise it is done for the cluster scope.
-# watchNamespaces: ["flink"]
+watchNamespaces: []
+# - flink
 
 image:
-  repository: flink-kubernetes-operator
+  repository: ghcr.io/apache/flink-kubernetes-operator
   pullPolicy: IfNotPresent
   tag: latest
   # If image digest is set then it takes precedence and the image tag will be ignored
-  # digest: ""
+  digest: ""
 
 imagePullSecrets: []
 
@@ -72,8 +73,8 @@ operatorPod:
   #     configMapKeyRef:
   #       name: ""
   #       key: ""
-  # dnsPolicy: ""
-  # dnsConfig: {}
+  dnsPolicy: ""
+  dnsConfig: {}
   # Node labels and affinity for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
   envFrom:
@@ -102,6 +103,11 @@ operatorPod:
       env:
       # - name: ""
       #   value: ""
+  # optional init containers for operator pod
+  initContainers: []
+
+  # optional extra containers for operator pod
+  sidecarContainers: []
 
 operatorServiceAccount:
   create: true
@@ -148,9 +154,9 @@ webhook:
   #   create: true
   keystore:
     useDefaultPassword: true
-  # passwordSecretRef:
-  #   name: jks-password-secret
-  #   key: password-key
+    passwordSecretRef:
+    # name: jks-password-secret
+    # key: password-key
   serviceLabels: {}
 
 defaultConfiguration:
@@ -163,6 +169,16 @@ defaultConfiguration:
   # If set to false, loads just the overrides as in (2).
   # This option has not effect, if create is equal to false.
   append: true
+
+#  Uncomment to use the new config.yaml format, but also comment out the flink-config.yaml key.
+#  config.yaml: |+
+#    kubernetes.operator:
+#      metrics.reporter.slf4j:
+#        factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+#        interval: 5 MINUTE
+#      reconcile.interval: 15 s
+#      observer.progress-check.interval: 5 s
+
   flink-conf.yaml: |+
     # Flink Config Overrides
     kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
@@ -190,6 +206,7 @@ fullnameOverride: ""
 jvmArgs:
   webhook: ""
   operator: ""
+  logConfig: "-Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties"
 
 # Configure health probes for the operator
 operatorHealth:

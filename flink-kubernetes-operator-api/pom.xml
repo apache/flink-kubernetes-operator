@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <version>1.14-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -70,7 +70,7 @@ under the License.
         <!-- Fabric 8 -->
         <dependency>
             <groupId>io.fabric8</groupId>
-            <artifactId>crd-generator-apt</artifactId>
+            <artifactId>crd-generator-api-v2</artifactId>
             <version>${fabric8.version}</version>
             <scope>provided</scope>
         </dependency>
@@ -125,7 +125,7 @@ under the License.
             <version>${flink.version}</version>
             <scope>test</scope>
         </dependency>
-
+        
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-runtime</artifactId>
@@ -136,6 +136,33 @@ under the License.
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kube-api-test-client-inject</artifactId>
+            <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>
+            <version>${fabric8.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.squareup.okhttp3</groupId>
+                    <artifactId>okhttp</artifactId>
+                </exclusion>
+            </exclusions>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -212,6 +239,7 @@ under the License.
                                         <include>flinkdeployments.flink.apache.org-v1.yml</include>
                                         <include>flinksessionjobs.flink.apache.org-v1.yml</include>
                                         <include>flinkstatesnapshots.flink.apache.org-v1.yml</include>
+                                        <include>flinkbluegreendeployments.flink.apache.org-v1.yml</include>
                                     </includes>
                                     <filtering>false</filtering>
                                 </resource>
@@ -236,6 +264,8 @@ under the License.
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -253,6 +283,41 @@ under the License.
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>flinkbgdeployments-remove-scale-subresource</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <java classname="org.apache.flink.kubernetes.operator.api.utils.RemoveScaleSubResource"
+                                      fork="true" failonerror="true">
+                                    <classpath refid="maven.compile.classpath"/>
+                                    <arg value="${rootDir}/helm/flink-kubernetes-operator/crds/flinkbluegreendeployments.flink.apache.org-v1.yml"/>
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>statesnapshot-crd-compatibility-check</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <java classname="org.apache.flink.kubernetes.operator.api.validation.CrdCompatibilityChecker"
+                                      fork="true" failonerror="true">
+                                    <classpath refid="maven.compile.classpath"/>
+                                    <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -267,6 +332,18 @@ under the License.
                     <execution>
                         <goals>
                             <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>crd-generator-maven-plugin</artifactId>
+                <version>${fabric8.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
                         </goals>
                     </execution>
                 </executions>

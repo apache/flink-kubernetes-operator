@@ -153,10 +153,10 @@ public class FlinkResourceContextTest {
     FlinkResourceContext getContext(AbstractFlinkResource<?, ?> cr) {
         if (cr instanceof FlinkDeployment) {
             return new FlinkDeploymentContext(
-                    (FlinkDeployment) cr, josdkCtx, null, configManager, serviceFactory);
+                    (FlinkDeployment) cr, josdkCtx, null, configManager, serviceFactory, null);
         } else {
             return new FlinkSessionJobContext(
-                    (FlinkSessionJob) cr, josdkCtx, null, configManager, serviceFactory);
+                    (FlinkSessionJob) cr, josdkCtx, null, configManager, serviceFactory, null);
         }
     }
 

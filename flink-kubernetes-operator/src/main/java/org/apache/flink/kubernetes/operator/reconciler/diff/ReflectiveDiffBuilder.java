@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
@@ -50,6 +51,7 @@ import static org.apache.flink.kubernetes.operator.api.diff.DiffType.UPGRADE;
 @Experimental
 public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
 
+    public static final String FLINK_CONFIGURATION_PROPERTY_NAME = "flinkConfiguration";
     private final KubernetesDeploymentMode deploymentMode;
     private final Object before;
     private final Object after;
@@ -83,9 +85,15 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                 try {
                     var leftField = readField(field, before, true);
                     var rightField = readField(field, after, true);
+                    if (field.getName().equals(FLINK_CONFIGURATION_PROPERTY_NAME)) {
+                        leftField = ((ConfigObjectNode) leftField).asFlatMap();
+                        rightField = ((ConfigObjectNode) rightField).asFlatMap();
+                    }
 
                     if (field.isAnnotationPresent(SpecDiff.Config.class)
-                            && Map.class.isAssignableFrom(field.getType())) {
+                            && (Map.class.isAssignableFrom(field.getType())
+                                    || (field.getType().equals(ConfigObjectNode.class)
+                                            && field.getName().equals("flinkConfiguration")))) {
                         diffBuilder.append(
                                 field.getName(),
                                 configDiff(

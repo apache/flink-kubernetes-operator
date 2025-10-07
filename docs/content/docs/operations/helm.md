@@ -32,7 +32,7 @@ The operator installation is managed by a helm chart. To install with the chart 
 helm install flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
 
-To install from our Helm Chart Reporsitory run:
+To install from our Helm Chart Repository run:
 
 ```
 helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-<OPERATOR-VERSION>/
@@ -112,6 +112,8 @@ The configurable parameters of the Helm chart and which default values as detail
 | defaultConfiguration.create                    | Whether to enable default configuration to create for flink-kubernetes-operator.                                                                               | true                                                                                                                                                                                                                                                                                           |
 | defaultConfiguration.append                    | Whether to append configuration files with configs.                                                                                                            | true                                                                                                                                                                                                                                                                                           |
 | defaultConfiguration.flink-conf.yaml           | The default configuration of flink-conf.yaml.                                                                                                                  | kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconcile.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
+| defaultConfiguration.config.yaml           | The newer configuration file format for flink that will enforced in Flink 2.0. Note this was introduced in flink 1.19.                                                                                                                   | kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconcile.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
+
 | defaultConfiguration.log4j-operator.properties | The default configuration of log4j-operator.properties.                                                                                                        |                                                                                                                                                                                                                                                                                                |
 | defaultConfiguration.log4j-console.properties  | The default configuration of log4j-console.properties.                                                                                                         |                                                                                                                                                                                                                                                                                                |
 | metrics.port                                   | The metrics port on the container for default configuration.                                                                                                   |                                                                                                                                                                                                                                                                                                |
@@ -137,7 +139,7 @@ __Notice__: The pod resources should be set as your workload in different enviro
 
 In order to use the webhooks in the operator, you must install the cert-manager on the Kubernetes cluster:
 ```
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 ```
 
 The webhooks can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.

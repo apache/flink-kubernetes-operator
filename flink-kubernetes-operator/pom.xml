@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <version>1.14-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -182,6 +182,13 @@ under the License.
                     <artifactId>mockwebserver</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kube-api-test-client-inject</artifactId>
+            <version>${fabric8.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>

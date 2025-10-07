@@ -126,7 +126,8 @@ public class FlinkConfigBuilderTest {
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
         deployment
                 .getSpec()
-                .setFlinkConfiguration(
+                .getFlinkConfiguration()
+                .putAllFrom(
                         Map.of(
                                 KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE.key(),
                                 KubernetesConfigOptions.ServiceExposedType.LoadBalancer.name()));

@@ -195,6 +195,12 @@
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.session.block-on-unmanaged-jobs</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>

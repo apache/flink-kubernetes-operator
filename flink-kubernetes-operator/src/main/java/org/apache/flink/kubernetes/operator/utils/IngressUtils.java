@@ -20,7 +20,9 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -28,13 +30,15 @@ import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRuleBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressTLS;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,12 +47,17 @@ import java.lang.module.ModuleDescriptor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.utils.EventSourceUtils.LABEL_COMPONENT_INGRESS;
+
 /** Ingress utilities. */
+@Slf4j
 public class IngressUtils {
 
     private static final Pattern NAME_PTN =
@@ -61,30 +70,49 @@ public class IngressUtils {
     private static final String REST_SVC_NAME_SUFFIX = "-rest";
 
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
+    public static final String INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET =
+            "Ingress management is turned off but ingress set in spec";
+    public static final String INGRESS_MANAGEMENT = "IngressManagement";
 
-    public static void updateIngressRules(
-            ObjectMeta objectMeta,
+    public static void reconcileIngress(
+            FlinkResourceContext<?> ctx,
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
-            KubernetesClient client) {
-
-        if (spec.getIngress() != null) {
-            HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
-
-            Deployment deployment =
-                    client.apps()
-                            .deployments()
-                            .inNamespace(objectMeta.getNamespace())
-                            .withName(objectMeta.getName())
-                            .get();
-            if (deployment == null) {
-                LOG.error("Could not find deployment {}", objectMeta.getName());
-            } else {
-                setOwnerReference(deployment, Collections.singletonList(ingress));
+            KubernetesClient client,
+            EventRecorder eventRecorder) {
+        if (!ctx.getOperatorConfig().isManageIngress()) {
+            if (spec.getIngress() != null) {
+                eventRecorder.triggerEvent(
+                        ctx.getResource(),
+                        EventRecorder.Type.Warning,
+                        INGRESS_MANAGEMENT,
+                        INGRESS_MANAGEMENT_OFF_BUT_SPEC_SET,
+                        EventRecorder.Component.Operator,
+                        client);
             }
 
+            return;
+        }
+        var objectMeta = ctx.getResource().getMetadata();
+        if (spec.getIngress() != null) {
+            HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
+            setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
             LOG.info("Updating ingress rules {}", ingress);
-            client.resourceList(ingress).inNamespace(objectMeta.getNamespace()).createOrReplace();
+            client.resource(ingress)
+                    .inNamespace(objectMeta.getNamespace())
+                    .createOr(NonDeletingOperation::update);
+        } else {
+            Optional<? extends HasMetadata> ingress;
+            if (ingressInNetworkingV1(client)) {
+                ingress =
+                        ctx.getJosdkContext()
+                                .getSecondaryResource(
+                                        io.fabric8.kubernetes.api.model.networking.v1.Ingress
+                                                .class);
+            } else {
+                ingress = ctx.getJosdkContext().getSecondaryResource(Ingress.class);
+            }
+            ingress.ifPresent(i -> ctx.getKubernetesClient().resource(i).delete());
         }
     }
 
@@ -93,10 +121,15 @@ public class IngressUtils {
             FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
+        Map<String, String> labels =
+                spec.getIngress().getLabels() == null
+                        ? new HashMap<>()
+                        : new HashMap<>(spec.getIngress().getLabels());
+        labels.put(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS);
         if (ingressInNetworkingV1(client)) {
             return new IngressBuilder()
                     .withNewMetadata()
-                    .withLabels(spec.getIngress().getLabels())
+                    .withLabels(labels)
                     .withAnnotations(spec.getIngress().getAnnotations())
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
@@ -128,7 +161,7 @@ public class IngressUtils {
             return new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
                     .withNewMetadata()
                     .withAnnotations(spec.getIngress().getAnnotations())
-                    .withLabels(spec.getIngress().getLabels())
+                    .withLabels(labels)
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()

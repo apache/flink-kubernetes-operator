@@ -572,4 +572,82 @@ public class EventUtilsTest {
                         null));
         Assertions.assertNull(eventConsumed);
     }
+
+    @Test
+    public void testCreateWithAnnotations() {
+        var consumer =
+                new Consumer<Event>() {
+                    @Override
+                    public void accept(Event event) {
+                        eventConsumed = event;
+                    }
+                };
+        var flinkApp = TestUtils.buildApplicationCluster();
+        var reason = "TestReason";
+        var message = "Test message";
+        var messageKey = "testKey";
+        var annotations = Map.of("annot1", "value1", "annot2", "value2");
+        var eventName =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventRecorder.Type.Normal,
+                        reason,
+                        messageKey,
+                        EventRecorder.Component.Operator);
+
+        // First call should create the event
+        boolean created =
+                EventUtils.createWithAnnotations(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Normal,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        messageKey,
+                        annotations);
+        Assertions.assertTrue(created);
+
+        var event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+
+        Assertions.assertNotNull(event);
+        Assertions.assertEquals(reason, event.getReason());
+        Assertions.assertEquals(message, event.getMessage());
+        Assertions.assertEquals("value1", event.getMetadata().getAnnotations().get("annot1"));
+        Assertions.assertEquals("value2", event.getMetadata().getAnnotations().get("annot2"));
+        Assertions.assertEquals(eventConsumed, event);
+
+        // Second call with same key should not create new event
+        eventConsumed = null;
+        boolean createdAgain =
+                EventUtils.createWithAnnotations(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Normal,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        messageKey,
+                        annotations);
+        Assertions.assertFalse(createdAgain);
+
+        var eventUnchanged =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        // but it should increase the count
+        Assertions.assertEquals(2, eventUnchanged.getCount());
+        Assertions.assertNotNull(eventConsumed);
+    }
 }

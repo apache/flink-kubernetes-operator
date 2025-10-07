@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.health;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,7 +48,7 @@ public class ClusterHealthInfo {
     private long numCompletedCheckpointsIncreasedTimeStamp;
 
     /** Calculated field whether the cluster is healthy or not. */
-    private boolean healthy;
+    private ClusterHealthResult healthResult;
 
     public ClusterHealthInfo() {
         this(Clock.systemDefaultZone());
@@ -55,7 +56,7 @@ public class ClusterHealthInfo {
 
     public ClusterHealthInfo(Clock clock) {
         timeStamp = clock.millis();
-        healthy = true;
+        healthResult = ClusterHealthResult.healthy();
     }
 
     public static boolean isValid(ClusterHealthInfo clusterHealthInfo) {

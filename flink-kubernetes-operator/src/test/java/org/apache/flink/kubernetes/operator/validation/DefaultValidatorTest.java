@@ -150,7 +150,7 @@ public class DefaultValidatorTest {
 
         testError(
                 dep -> {
-                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getFlinkConfiguration().setAllFrom(new HashMap<>());
                     dep.getSpec()
                             .getJob()
                             .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
@@ -202,7 +202,8 @@ public class DefaultValidatorTest {
         testError(
                 dep ->
                         dep.getSpec()
-                                .setFlinkConfiguration(
+                                .getFlinkConfiguration()
+                                .setAllFrom(
                                         Collections.singletonMap(
                                                 HighAvailabilityOptions.HA_CLUSTER_ID.key(),
                                                 "my-cluster-id")),
@@ -730,7 +731,8 @@ public class DefaultValidatorTest {
                     sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
                     sessionJob
                             .getSpec()
-                            .setFlinkConfiguration(
+                            .getFlinkConfiguration()
+                            .setAllFrom(
                                     Map.of(
                                             CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
                                                     "test-savepoint-dir",
@@ -840,6 +842,21 @@ public class DefaultValidatorTest {
                                 flinkConf.put(
                                         AutoScalerOptions.EXCLUDED_PERIODS.key(), "12:00-10:00"));
         assertTrue(result.isPresent());
+    }
+
+    @Test
+    public void testAutoScalerDeploymentWithInvalidScalingCoefficientMin() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN
+                                                .key(),
+                                        "1.2"));
+        assertErrorContains(
+                result,
+                getFormattedErrorMessage(
+                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d));
     }
 
     @Test
