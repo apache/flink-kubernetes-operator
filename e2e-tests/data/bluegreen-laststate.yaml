@@ -29,6 +29,12 @@ spec:
       flinkVersion: v1_20
       flinkConfiguration:
 #        rest.port: "8081"
+        jobmanager.memory.jvm-metaspace.size: 96m
+        jobmanager.memory.jvm-overhead.min: 32m
+        taskmanager.memory.managed.size: 78m
+        taskmanager.memory.jvm-metaspace.size: 64m
+        taskmanager.memory.jvm-overhead.min: 32m
+        taskmanager.memory.network.min: 32m
         execution.checkpointing.interval: "10s"
         execution.checkpointing.storage: "filesystem"
         state.backend.incremental: "true"
@@ -39,7 +45,7 @@ spec:
       serviceAccount: flink
       jobManager:
         resource:
-          memory: 1G
+          memory: 512m
           cpu: 1
         podTemplate:
           spec:
@@ -47,9 +53,9 @@ spec:
               - name: flink-main-container
                 resources:
                   requests:
-                    ephemeral-storage: 2048Mi
+                    ephemeral-storage: 1024Mi
                   limits:
-                    ephemeral-storage: 2048Mi
+                    ephemeral-storage: 1024Mi
                 volumeMounts:
                   - mountPath: /opt/flink/volume
                     name: flink-volume
@@ -59,7 +65,7 @@ spec:
                   claimName: flink-bg-laststate
       taskManager:
         resource:
-          memory: 1G
+          memory: 512m
           cpu: 1
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar

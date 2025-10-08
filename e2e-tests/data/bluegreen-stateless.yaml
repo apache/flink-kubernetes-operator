@@ -29,15 +29,22 @@ spec:
       flinkVersion: v1_20
       flinkConfiguration:
 #        rest.port: "8081"
+#        taskmanager.memory.process.size: 768m
+        jobmanager.memory.jvm-metaspace.size: 96m
+        jobmanager.memory.jvm-overhead.min: 32m
+        taskmanager.memory.managed.size: 78m
+        taskmanager.memory.jvm-metaspace.size: 64m
+        taskmanager.memory.jvm-overhead.min: 32m
+        taskmanager.memory.network.min: 32m
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
       jobManager:
         resource:
-          memory: 1G
+          memory: 512m
           cpu: 1
       taskManager:
         resource:
-          memory: 1G
+          memory: 512m
           cpu: 1
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
