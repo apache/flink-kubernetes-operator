@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.utils.ConditionUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.kubernetes.api.model.Condition;
@@ -62,10 +61,4 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Condition of the CR . */
     private List<Condition> conditions = new ArrayList<>();
-
-    public List<Condition> getConditions() {
-        Condition condition = ConditionUtils.getCondition(this);
-        ConditionUtils.updateLastTransitionTime(conditions, condition);
-        return condition == null ? List.of() : List.of(condition);
-    }
 }
