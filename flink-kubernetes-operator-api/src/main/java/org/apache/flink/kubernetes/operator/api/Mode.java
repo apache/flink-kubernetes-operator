@@ -16,9 +16,8 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.config;
+package org.apache.flink.kubernetes.operator.api;
 
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
 /** The mode of {@link FlinkDeployment}. */
@@ -45,7 +44,7 @@ public enum Mode {
                 : getMode(lastReconciledSpec);
     }
 
-    private static Mode getMode(FlinkDeploymentSpec spec) {
+    public static Mode getMode(FlinkDeploymentSpec spec) {
         return spec.getJob() != null ? APPLICATION : SESSION;
     }
 }
