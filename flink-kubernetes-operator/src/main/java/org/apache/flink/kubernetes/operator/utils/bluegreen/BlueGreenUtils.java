@@ -346,22 +346,13 @@ public class BlueGreenUtils {
         String childDeploymentName =
                 bgMeta.getName() + "-" + blueGreenDeploymentType.toString().toLowerCase();
 
-        FlinkBlueGreenDeploymentSpec adjustedSpec =
-                adjustNameReferences(
-                        spec,
-                        bgMeta.getName(),
-                        childDeploymentName,
-                        "spec",
-                        FlinkBlueGreenDeploymentSpec.class);
-
         // The Blue/Green initialSavepointPath is only used for first-time deployments
         if (isFirstDeployment) {
             String initialSavepointPath =
-                    adjustedSpec.getTemplate().getSpec().getJob().getInitialSavepointPath();
+                    spec.getTemplate().getSpec().getJob().getInitialSavepointPath();
             if (initialSavepointPath != null && !initialSavepointPath.isEmpty()) {
                 LOG.info("Using initialSavepointPath: " + initialSavepointPath);
-                adjustedSpec
-                        .getTemplate()
+                spec.getTemplate()
                         .getSpec()
                         .getJob()
                         .setInitialSavepointPath(initialSavepointPath);
@@ -371,10 +362,10 @@ public class BlueGreenUtils {
         } else if (lastCheckpoint != null) {
             String location = lastCheckpoint.getLocation().replace("file:", "");
             LOG.info("Using Blue/Green savepoint/checkpoint: " + location);
-            adjustedSpec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
+            spec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
         }
 
-        flinkDeployment.setSpec(adjustedSpec.getTemplate().getSpec());
+        flinkDeployment.setSpec(spec.getTemplate().getSpec());
 
         // Deployment metadata
         ObjectMeta flinkDeploymentMeta = getDependentObjectMeta(context.getBgDeployment());
