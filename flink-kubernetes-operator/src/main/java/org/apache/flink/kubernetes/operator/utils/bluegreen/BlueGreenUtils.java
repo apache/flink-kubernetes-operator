@@ -352,10 +352,7 @@ public class BlueGreenUtils {
                     spec.getTemplate().getSpec().getJob().getInitialSavepointPath();
             if (initialSavepointPath != null && !initialSavepointPath.isEmpty()) {
                 LOG.info("Using initialSavepointPath: " + initialSavepointPath);
-                spec.getTemplate()
-                        .getSpec()
-                        .getJob()
-                        .setInitialSavepointPath(initialSavepointPath);
+                spec.getTemplate().getSpec().getJob().setInitialSavepointPath(initialSavepointPath);
             } else {
                 LOG.info("Clean startup with no checkpoint/savepoint restoration");
             }
