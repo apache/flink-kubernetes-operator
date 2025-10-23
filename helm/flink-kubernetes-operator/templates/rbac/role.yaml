@@ -30,7 +30,7 @@ metadata:
     {{- include "flink-operator.labels" $ | nindent 4 }}
 {{- template "flink-operator.rbacRules" $ }}
 {{- end }}
-{{- /* Give operator the ability to operate on leases in the release namespace */ -}}
+{{- /* Give operator the ability to operate on leases in the release namespace and check presence of FlinkStateSnapshot CRD */ -}}
 {{- if not (has .Release.Namespace .Values.watchNamespaces) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -53,6 +53,12 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups:
+      - flink.apache.org
+    resources:
+      - flinkstatesnapshots
+    verbs:
+      - list
 {{- end }}
 {{- end }}
 {{- end }}
