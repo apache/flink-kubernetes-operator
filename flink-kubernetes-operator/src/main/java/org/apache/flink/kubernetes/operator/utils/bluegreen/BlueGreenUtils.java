@@ -60,27 +60,6 @@ public class BlueGreenUtils {
     // ==================== Spec Operations ====================
 
     /**
-     * Adjusts name references in a spec by replacing deployment names with child deployment names.
-     *
-     * @param spec the spec to adjust
-     * @param deploymentName the original deployment name
-     * @param childDeploymentName the child deployment name to replace with
-     * @param wrapperKey the JSON wrapper key
-     * @param valueType the spec type
-     * @return adjusted spec with name references updated
-     */
-    public static <T> T adjustNameReferences(
-            T spec,
-            String deploymentName,
-            String childDeploymentName,
-            String wrapperKey,
-            Class<T> valueType) {
-        String serializedSpec = SpecUtils.writeSpecAsJSON(spec, wrapperKey);
-        String replacedSerializedSpec = serializedSpec.replace(deploymentName, childDeploymentName);
-        return SpecUtils.readSpecFromJSON(replacedSerializedSpec, wrapperKey, valueType);
-    }
-
-    /**
      * Checks if the Blue/Green deployment spec has changed compared to the last reconciled spec.
      *
      * @param context the Blue/Green transition context
