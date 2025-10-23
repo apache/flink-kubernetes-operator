@@ -41,11 +41,11 @@ spec:
       jobManager:
         resource:
           memory: 512m
-          cpu: 1
+          cpu: 0.5
       taskManager:
         resource:
           memory: 512m
-          cpu: 1
+          cpu: 0.5
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
         parallelism: 1
