@@ -320,10 +320,17 @@ public class BlueGreenUtils {
             ObjectMeta bgMeta) {
         // Deployment
         FlinkDeployment flinkDeployment = new FlinkDeployment();
-        FlinkBlueGreenDeploymentSpec spec = context.getBgDeployment().getSpec();
+        FlinkBlueGreenDeploymentSpec originalSpec = context.getBgDeployment().getSpec();
 
         String childDeploymentName =
                 bgMeta.getName() + "-" + blueGreenDeploymentType.toString().toLowerCase();
+
+        // Create a deep copy of the spec to avoid mutating the original
+        FlinkBlueGreenDeploymentSpec spec =
+                SpecUtils.readSpecFromJSON(
+                        SpecUtils.writeSpecAsJSON(originalSpec, "spec"),
+                        "spec",
+                        FlinkBlueGreenDeploymentSpec.class);
 
         // The Blue/Green initialSavepointPath is only used for first-time deployments
         if (isFirstDeployment) {
