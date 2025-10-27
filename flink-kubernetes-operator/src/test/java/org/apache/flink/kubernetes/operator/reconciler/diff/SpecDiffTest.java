@@ -22,6 +22,7 @@ import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -400,6 +401,19 @@ public class SpecDiffTest {
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
+    }
+
+    @Test
+    public void testNullFlinkConfiguration() {
+        var left = new FlinkDeploymentSpec();
+        left.setFlinkConfiguration((ConfigObjectNode) null);
+        var right = new FlinkDeploymentSpec();
+
+        // This should fail with NullPointerException because there's no null check
+        // in ReflectiveDiffBuilder when casting flinkConfiguration to ConfigObjectNode
+        var diff =
+                new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertEquals(DiffType.IGNORE, diff.getType());
     }
 
     @Value
