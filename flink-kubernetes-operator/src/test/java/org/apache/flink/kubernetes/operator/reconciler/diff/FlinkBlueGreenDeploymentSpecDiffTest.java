@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PodTemplateSpecBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -41,7 +42,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Tests for FlinkBlueGreenDeploymentSpecDiff. */
+/**
+ * Tests for FlinkBlueGreenDeploymentSpecDiff.
+ */
 public class FlinkBlueGreenDeploymentSpecDiffTest {
 
     private static final KubernetesDeploymentMode DEPLOYMENT_MODE = KubernetesDeploymentMode.NATIVE;
@@ -130,6 +133,62 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
+        assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
+    }
+
+    @Test
+    public void testIgnoreForRootPodTemplateAdditionalProps() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Set spec1 to have empty podTemplate to not cause valid diff to be detected
+        spec1.getTemplate().getSpec().setPodTemplate(new PodTemplateSpecBuilder().build());
+        spec2.getTemplate()
+                .getSpec()
+                .setPodTemplate(
+                        new PodTemplateSpecBuilder()
+                                .withAdditionalProperties(Map.of("apiVersion", "v1"))
+                                .build());
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+        assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
+    }
+
+    @Test
+    public void testIgnoreForJobManagerPodTemplateAdditionalProps() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Set spec1 to have empty podTemplate to not cause valid diff to be detected
+        spec1.getTemplate().getSpec().getJobManager().setPodTemplate(new PodTemplateSpecBuilder().build());
+        spec2.getTemplate()
+                .getSpec()
+                .getJobManager()
+                .setPodTemplate(
+                        new PodTemplateSpecBuilder()
+                                .withAdditionalProperties(Map.of("apiVersion", "v1"))
+                                .build());
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+        assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
+    }
+
+    @Test
+    public void testIgnoreForTaskManagerPodTemplateAdditionalProps() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Set spec1 to have empty podTemplate to not cause valid diff to be detected
+        spec1.getTemplate().getSpec().getTaskManager().setPodTemplate(new PodTemplateSpecBuilder().build());
+        spec2.getTemplate()
+                .getSpec()
+                .getTaskManager()
+                .setPodTemplate(
+                        new PodTemplateSpecBuilder()
+                                .withAdditionalProperties(Map.of("apiVersion", "v1"))
+                                .build());
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
         assertEquals(BlueGreenDiffType.IGNORE, diff.compare());
     }
 
