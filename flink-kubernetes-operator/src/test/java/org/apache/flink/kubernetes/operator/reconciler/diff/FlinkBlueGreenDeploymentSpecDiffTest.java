@@ -42,9 +42,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * Tests for FlinkBlueGreenDeploymentSpecDiff.
- */
+/** Tests for FlinkBlueGreenDeploymentSpecDiff. */
 public class FlinkBlueGreenDeploymentSpecDiffTest {
 
     private static final KubernetesDeploymentMode DEPLOYMENT_MODE = KubernetesDeploymentMode.NATIVE;
@@ -160,7 +158,10 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
         // Set spec1 to have empty podTemplate to not cause valid diff to be detected
-        spec1.getTemplate().getSpec().getJobManager().setPodTemplate(new PodTemplateSpecBuilder().build());
+        spec1.getTemplate()
+                .getSpec()
+                .getJobManager()
+                .setPodTemplate(new PodTemplateSpecBuilder().build());
         spec2.getTemplate()
                 .getSpec()
                 .getJobManager()
@@ -179,7 +180,10 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
         // Set spec1 to have empty podTemplate to not cause valid diff to be detected
-        spec1.getTemplate().getSpec().getTaskManager().setPodTemplate(new PodTemplateSpecBuilder().build());
+        spec1.getTemplate()
+                .getSpec()
+                .getTaskManager()
+                .setPodTemplate(new PodTemplateSpecBuilder().build());
         spec2.getTemplate()
                 .getSpec()
                 .getTaskManager()
