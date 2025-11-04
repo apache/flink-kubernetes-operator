@@ -60,27 +60,6 @@ public class BlueGreenUtils {
     // ==================== Spec Operations ====================
 
     /**
-     * Adjusts name references in a spec by replacing deployment names with child deployment names.
-     *
-     * @param spec the spec to adjust
-     * @param deploymentName the original deployment name
-     * @param childDeploymentName the child deployment name to replace with
-     * @param wrapperKey the JSON wrapper key
-     * @param valueType the spec type
-     * @return adjusted spec with name references updated
-     */
-    public static <T> T adjustNameReferences(
-            T spec,
-            String deploymentName,
-            String childDeploymentName,
-            String wrapperKey,
-            Class<T> valueType) {
-        String serializedSpec = SpecUtils.writeSpecAsJSON(spec, wrapperKey);
-        String replacedSerializedSpec = serializedSpec.replace(deploymentName, childDeploymentName);
-        return SpecUtils.readSpecFromJSON(replacedSerializedSpec, wrapperKey, valueType);
-    }
-
-    /**
      * Checks if the Blue/Green deployment spec has changed compared to the last reconciled spec.
      *
      * @param context the Blue/Green transition context
@@ -341,40 +320,35 @@ public class BlueGreenUtils {
             ObjectMeta bgMeta) {
         // Deployment
         FlinkDeployment flinkDeployment = new FlinkDeployment();
-        FlinkBlueGreenDeploymentSpec spec = context.getBgDeployment().getSpec();
+        FlinkBlueGreenDeploymentSpec originalSpec = context.getBgDeployment().getSpec();
 
         String childDeploymentName =
                 bgMeta.getName() + "-" + blueGreenDeploymentType.toString().toLowerCase();
 
-        FlinkBlueGreenDeploymentSpec adjustedSpec =
-                adjustNameReferences(
-                        spec,
-                        bgMeta.getName(),
-                        childDeploymentName,
+        // Create a deep copy of the spec to avoid mutating the original
+        FlinkBlueGreenDeploymentSpec spec =
+                SpecUtils.readSpecFromJSON(
+                        SpecUtils.writeSpecAsJSON(originalSpec, "spec"),
                         "spec",
                         FlinkBlueGreenDeploymentSpec.class);
 
         // The Blue/Green initialSavepointPath is only used for first-time deployments
         if (isFirstDeployment) {
             String initialSavepointPath =
-                    adjustedSpec.getTemplate().getSpec().getJob().getInitialSavepointPath();
+                    spec.getTemplate().getSpec().getJob().getInitialSavepointPath();
             if (initialSavepointPath != null && !initialSavepointPath.isEmpty()) {
                 LOG.info("Using initialSavepointPath: " + initialSavepointPath);
-                adjustedSpec
-                        .getTemplate()
-                        .getSpec()
-                        .getJob()
-                        .setInitialSavepointPath(initialSavepointPath);
+                spec.getTemplate().getSpec().getJob().setInitialSavepointPath(initialSavepointPath);
             } else {
                 LOG.info("Clean startup with no checkpoint/savepoint restoration");
             }
         } else if (lastCheckpoint != null) {
             String location = lastCheckpoint.getLocation().replace("file:", "");
             LOG.info("Using Blue/Green savepoint/checkpoint: " + location);
-            adjustedSpec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
+            spec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
         }
 
-        flinkDeployment.setSpec(adjustedSpec.getTemplate().getSpec());
+        flinkDeployment.setSpec(spec.getTemplate().getSpec());
 
         // Deployment metadata
         ObjectMeta flinkDeploymentMeta = getDependentObjectMeta(context.getBgDeployment());
