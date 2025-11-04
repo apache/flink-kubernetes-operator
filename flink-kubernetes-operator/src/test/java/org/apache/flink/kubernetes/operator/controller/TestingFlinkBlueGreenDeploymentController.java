@@ -56,7 +56,7 @@ public class TestingFlinkBlueGreenDeploymentController
                 new StatusRecorder<>(new MetricManager<>(), (resource, status) -> {});
 
         flinkBlueGreenDeploymentController =
-                new FlinkBlueGreenDeploymentController(contextFactory, statusRecorder);
+                new FlinkBlueGreenDeploymentController(contextFactory, configManager, statusRecorder);
     }
 
     @Override

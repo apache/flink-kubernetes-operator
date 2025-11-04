@@ -89,6 +89,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | configuration | java.util.Map<java.lang.String,java.lang.String> |  |
+| ingress | org.apache.flink.kubernetes.operator.api.spec.IngressSpec |  |
 | template | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec |  |
 
 ### FlinkDeploymentSpec

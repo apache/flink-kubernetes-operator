@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
@@ -364,6 +365,13 @@ public class BlueGreenUtils {
         }
 
         flinkDeployment.setSpec(spec.getTemplate().getSpec());
+
+        // Update Ingress template if exists to prevent path collision between Blue and Green
+        IngressSpec ingress = flinkDeployment.getSpec().getIngress();
+        if (ingress != null) {
+            ingress.setTemplate(
+                    blueGreenDeploymentType.name().toLowerCase() + "-" + ingress.getTemplate());
+        }
 
         // Deployment metadata
         ObjectMeta flinkDeploymentMeta = getDependentObjectMeta(context.getBgDeployment());
