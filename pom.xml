@@ -75,7 +75,7 @@ under the License.
         <maven-javadoc-plugin.version>3.3.2</maven-javadoc-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>5.1.3</operator.sdk.version>
+        <operator.sdk.version>5.1.4</operator.sdk.version>
         <operator.sdk.webhook-framework.version>3.0.0</operator.sdk.webhook-framework.version>
 
         <fabric8.version>7.3.1</fabric8.version>
