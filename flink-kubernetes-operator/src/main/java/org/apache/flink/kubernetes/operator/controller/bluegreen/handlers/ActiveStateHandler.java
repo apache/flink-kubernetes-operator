@@ -37,6 +37,10 @@ public class ActiveStateHandler extends AbstractBlueGreenStateHandler {
     @Override
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
         BlueGreenDeploymentType currentType = getCurrentDeploymentType();
+
+        // Reconcile ingress for the active deployment (handles spec changes)
+        deploymentService.reconcileIngressForActiveDeployment(context, currentType);
+
         return deploymentService.checkAndInitiateDeployment(context, currentType);
     }
 

@@ -257,7 +257,7 @@ public class FlinkOperator {
 
     @VisibleForTesting
     void registerBlueGreenController() {
-        var controller = new FlinkBlueGreenDeploymentController(ctxFactory);
+        var controller = new FlinkBlueGreenDeploymentController(ctxFactory, configManager);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 

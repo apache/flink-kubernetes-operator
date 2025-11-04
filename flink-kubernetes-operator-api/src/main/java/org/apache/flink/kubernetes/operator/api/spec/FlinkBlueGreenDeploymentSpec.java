@@ -25,6 +25,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import javax.annotation.Nullable;
+
 import java.util.Map;
 
 /** Spec that describes a Flink application with blue/green deployment capabilities. */
@@ -37,6 +39,8 @@ public class FlinkBlueGreenDeploymentSpec {
 
     @JsonProperty("configuration")
     private Map<String, String> configuration;
+
+    @Nullable private IngressSpec ingress;
 
     private FlinkDeploymentTemplateSpec template;
 }

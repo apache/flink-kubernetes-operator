@@ -102,6 +102,7 @@ public class BlueGreenUtilsTest {
         var bgDeploymentSpec =
                 new FlinkBlueGreenDeploymentSpec(
                         new HashMap<>(),
+                        null,
                         FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build());
 
         deployment.setSpec(bgDeploymentSpec);
