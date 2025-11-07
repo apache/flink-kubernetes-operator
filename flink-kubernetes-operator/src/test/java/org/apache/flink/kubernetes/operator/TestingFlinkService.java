@@ -71,8 +71,10 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsRespo
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.util.SerializedThrowable;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.apache.flink.util.concurrent.Executors;
 
+import org.apache.flink.shaded.netty4.io.netty.channel.nio.NioEventLoopGroup;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
@@ -177,7 +179,9 @@ public class TestingFlinkService extends AbstractFlinkService {
                 kubernetesClient,
                 null,
                 Executors.newDirectExecutorService(),
-                FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
+                FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
+                new NioEventLoopGroup(
+                        4, new ExecutorThreadFactory("flink-rest-client-netty-shared")));
     }
 
     public <T extends HasMetadata> Context<T> getContext() {

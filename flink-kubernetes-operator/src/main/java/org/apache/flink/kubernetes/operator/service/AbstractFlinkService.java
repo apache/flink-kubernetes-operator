@@ -24,6 +24,8 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.client.program.rest.retry.ExponentialWaitStrategy;
+import org.apache.flink.client.program.rest.retry.WaitStrategy;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
@@ -56,6 +58,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.highavailability.ClientHighAvailabilityServicesFactory;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
@@ -109,6 +112,7 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.Iterables;
+import org.apache.flink.shaded.netty4.io.netty.channel.EventLoopGroup;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
@@ -129,6 +133,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
@@ -178,17 +183,20 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected final ExecutorService executorService;
     protected final FlinkOperatorConfiguration operatorConfig;
     protected final ArtifactManager artifactManager;
+    private final EventLoopGroup flinkClientSharedEventLoopGroup;
     private static final String EMPTY_JAR = createEmptyJar();
 
     public AbstractFlinkService(
             KubernetesClient kubernetesClient,
             ArtifactManager artifactManager,
             ExecutorService executorService,
-            FlinkOperatorConfiguration operatorConfig) {
+            FlinkOperatorConfiguration operatorConfig,
+            EventLoopGroup flinkClientEventLoopGroup) {
         this.kubernetesClient = kubernetesClient;
         this.artifactManager = artifactManager;
         this.executorService = executorService;
         this.operatorConfig = operatorConfig;
+        this.flinkClientSharedEventLoopGroup = flinkClientEventLoopGroup;
     }
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
@@ -845,11 +853,34 @@ public abstract class AbstractFlinkService implements FlinkService {
                         operatorConfig.getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
+
         final String restServerAddress = String.format("http://%s:%s", host, port);
-        return new RestClusterClient<>(
-                operatorRestConf,
-                clusterId,
-                (c, e) -> new StandaloneClientHAServices(restServerAddress));
+        RestClient restClient =
+                new RestClientProxy(
+                        operatorRestConf,
+                        executorService,
+                        host,
+                        port,
+                        flinkClientSharedEventLoopGroup);
+
+        Constructor<?> clusterClientConstructor =
+                RestClusterClient.class.getDeclaredConstructor(
+                        Configuration.class,
+                        RestClient.class,
+                        Object.class,
+                        WaitStrategy.class,
+                        ClientHighAvailabilityServicesFactory.class);
+
+        clusterClientConstructor.setAccessible(true);
+
+        return (RestClusterClient<String>)
+                clusterClientConstructor.newInstance(
+                        operatorRestConf,
+                        restClient,
+                        clusterId,
+                        new ExponentialWaitStrategy(10L, 2000L),
+                        (ClientHighAvailabilityServicesFactory)
+                                (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
     @Override

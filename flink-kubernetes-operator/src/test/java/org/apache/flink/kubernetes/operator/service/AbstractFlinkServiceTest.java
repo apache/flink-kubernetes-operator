@@ -93,10 +93,12 @@ import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.SerializedThrowable;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.apache.flink.util.concurrent.Executors;
 import org.apache.flink.util.function.TriFunction;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.shaded.netty4.io.netty.channel.nio.NioEventLoopGroup;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
@@ -1382,7 +1384,10 @@ public class AbstractFlinkServiceTest {
                     client,
                     AbstractFlinkServiceTest.this.artifactManager,
                     AbstractFlinkServiceTest.this.executorService,
-                    AbstractFlinkServiceTest.this.operatorConfig);
+                    AbstractFlinkServiceTest.this.operatorConfig,
+                    new NioEventLoopGroup(
+                            AbstractFlinkServiceTest.this.operatorConfig.getFlinkClientIOThreads(),
+                            new ExecutorThreadFactory("flink-rest-client-netty-shared")));
             this.clusterClient = clusterClient;
             this.restClient = restClient;
         }
