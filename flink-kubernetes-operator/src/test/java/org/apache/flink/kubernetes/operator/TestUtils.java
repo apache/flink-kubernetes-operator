@@ -551,9 +551,12 @@ public class TestUtils extends BaseTestUtils {
 
         @Override
         public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
-            // TODO: improve this, even if we only support FlinkDeployment as a secondary resource
+            KubernetesClient client = getClient();
+            if (client == null) {
+                return new HashSet<>();
+            }
+
             if (aClass.getSimpleName().equals(FlinkDeployment.class.getSimpleName())) {
-                KubernetesClient client = getClient();
                 var hasMetadata =
                         new HashSet<>(
                                 client.resources(FlinkDeployment.class)
@@ -561,8 +564,12 @@ public class TestUtils extends BaseTestUtils {
                                         .list()
                                         .getItems());
                 return (Set<T1>) hasMetadata;
+            } else if (aClass.getSimpleName().equals("ConfigMap")) {
+                var hasMetadata =
+                        new HashSet<>(client.configMaps().inAnyNamespace().list().getItems());
+                return (Set<T1>) hasMetadata;
             } else {
-                return null;
+                return new HashSet<>();
             }
         }
 
