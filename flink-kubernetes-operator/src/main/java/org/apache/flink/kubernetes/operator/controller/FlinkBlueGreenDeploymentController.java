@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenStateH
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.javaoperatorsdk.operator.api.config.informer.InformerEventSourceConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -81,7 +82,7 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
             EventSourceContext<FlinkBlueGreenDeployment> context) {
         List<EventSource<?, FlinkBlueGreenDeployment>> eventSources = new ArrayList<>();
 
-        InformerEventSourceConfiguration<FlinkDeployment> config =
+        InformerEventSourceConfiguration<FlinkDeployment> flinkDeploymentConfig =
                 InformerEventSourceConfiguration.from(
                                 FlinkDeployment.class, FlinkBlueGreenDeployment.class)
                         .withSecondaryToPrimaryMapper(
@@ -90,7 +91,17 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
-        eventSources.add(new InformerEventSource<>(config, context));
+        InformerEventSourceConfiguration<ConfigMap> configMapConfig =
+                InformerEventSourceConfiguration.from(
+                                ConfigMap.class, FlinkBlueGreenDeployment.class)
+                        .withSecondaryToPrimaryMapper(
+                                Mappers.fromOwnerReferences(context.getPrimaryResourceClass()))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+
+        eventSources.add(new InformerEventSource<>(flinkDeploymentConfig, context));
+        eventSources.add(new InformerEventSource<>(configMapConfig, context));
 
         return eventSources;
     }

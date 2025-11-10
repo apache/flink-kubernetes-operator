@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -47,7 +48,9 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.updateTransitionStageFromJobStatus;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
@@ -91,6 +94,9 @@ public class BlueGreenDeploymentService {
                         lastCheckpoint,
                         isFirstDeployment,
                         bgMeta);
+
+        BlueGreenTransitionUtils.prepareTransitionMetadata(
+                context, nextBlueGreenDeploymentType, flinkDeployment, isFirstDeployment);
 
         deployCluster(context, flinkDeployment);
 
@@ -386,6 +392,7 @@ public class BlueGreenDeploymentService {
                 determineTransitionState(context, currentBlueGreenDeploymentType);
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
+            BlueGreenTransitionUtils.moveToFirstTransitionStage(context);
             return shouldWeDelete(
                     context,
                     transitionState.currentDeployment,
@@ -454,6 +461,12 @@ public class BlueGreenDeploymentService {
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState) {
 
+        if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
+            // Wait until CLEAR_TO_TEARDOWN is set by the client
+            return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                    .rescheduleAfter(getReconciliationReschedInterval(context));
+        }
+
         var deploymentStatus = context.getDeploymentStatus();
 
         if (currentDeployment == null) {
@@ -461,7 +474,7 @@ public class BlueGreenDeploymentService {
             return finalizeBlueGreenDeployment(context, nextState);
         }
 
-        long deploymentDeletionDelayMs = BlueGreenUtils.getDeploymentDeletionDelay(context);
+        long deploymentDeletionDelayMs = getDeploymentDeletionDelay(context);
         long deploymentReadyTimestamp =
                 instantStrToMillis(deploymentStatus.getDeploymentReadyTimestamp());
 
@@ -555,6 +568,7 @@ public class BlueGreenDeploymentService {
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
+        BlueGreenTransitionUtils.rollbackActiveDeploymentType(context, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
 
         var error =
@@ -624,6 +638,7 @@ public class BlueGreenDeploymentService {
         }
 
         if (jobState != null) {
+            updateTransitionStageFromJobStatus(context, jobState);
             deploymentStatus.getJobStatus().setState(jobState);
         }
 

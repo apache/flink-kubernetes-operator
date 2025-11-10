@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -61,5 +62,10 @@ public class BlueGreenContext {
         return type == BlueGreenDeploymentType.BLUE
                 ? BlueGreenDeploymentType.GREEN
                 : BlueGreenDeploymentType.BLUE;
+    }
+
+    public String getConfigMapName() {
+        ObjectMeta bgMeta = bgDeployment.getMetadata();
+        return bgMeta.getName() + "-configmap";
     }
 }
