@@ -23,14 +23,22 @@ import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.StatusDetails;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /** Utility methods for handling Kubernetes operations in Blue/Green deployments. */
 public class BlueGreenKubernetesService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BlueGreenKubernetesService.class);
 
     /**
      * Creates ObjectMeta for a dependent Kubernetes resource with proper owner references.
@@ -115,5 +123,60 @@ public class BlueGreenKubernetesService {
 
         return deletedStatus.size() == 1
                 && deletedStatus.get(0).getKind().equals("FlinkDeployment");
+    }
+
+    // ==================== ConfigMap related methods ====================
+
+    public static void updateConfigMapEntry(BlueGreenContext context, String key, String value) {
+        FlinkBlueGreenDeployment bgDeployment = context.getBgDeployment();
+        var josdkContext = context.getJosdkContext();
+        ConfigMap configMap = getConfigMap(context);
+        String namespace = bgDeployment.getMetadata().getNamespace();
+        configMap.getData().put(key, value);
+        josdkContext.getClient().configMaps().inNamespace(namespace).resource(configMap).update();
+    }
+
+    public static ConfigMap getConfigMap(BlueGreenContext context) {
+        Optional<ConfigMap> configMapOpt =
+                context.getJosdkContext().getSecondaryResources(ConfigMap.class).stream()
+                        .filter(cm -> cm.getMetadata().getName().equals(context.getConfigMapName()))
+                        .findFirst();
+
+        if (configMapOpt.isEmpty()) {
+            throw new RuntimeException(
+                    "Expected Blue/Green ConfigMap " + context.getConfigMapName() + " not found");
+        }
+
+        return configMapOpt.get();
+    }
+
+    public static void upsertConfigMap(BlueGreenContext context, Map<String, String> data) {
+        var bgDeployment = context.getBgDeployment();
+        var bgMeta = bgDeployment.getMetadata();
+        var configMap = new ConfigMapBuilder().addToData(data).build();
+        var configMapMeta = getDependentObjectMeta(bgDeployment);
+        configMapMeta.setName(context.getConfigMapName());
+
+        // Set metadata BEFORE creating the resource reference
+        configMap.setMetadata(configMapMeta);
+
+        var configMapResource =
+                context.getJosdkContext()
+                        .getClient()
+                        .configMaps()
+                        .inNamespace(bgMeta.getNamespace())
+                        .resource(configMap);
+
+        if (configMapResource.get() == null) {
+            LOG.info("Creating new Blue/Green ConfigMap for deploymentType: {}", bgMeta.getName());
+            configMapResource.create();
+        } else {
+            Map<String, String> existingData = configMapResource.get().getData();
+            LOG.warn(
+                    "Found Blue/Green ConfigMap, existing data: {}, replaced by: {}",
+                    existingData,
+                    data);
+            configMapResource.update();
+        }
     }
 }
