@@ -29,12 +29,16 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.javaoperatorsdk.operator.api.config.informer.InformerEventSourceConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,6 +102,17 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
             EventSourceContext<FlinkBlueGreenDeployment> context) {
         List<EventSource<?, FlinkBlueGreenDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getBlueGreenFlinkDeploymentInformerEventSource(context));
+
+        // Advanced (FLIP-504): also watch the gate ConfigMap as a secondary resource.
+        InformerEventSourceConfiguration<ConfigMap> configMapConfig =
+                InformerEventSourceConfiguration.from(
+                                ConfigMap.class, FlinkBlueGreenDeployment.class)
+                        .withSecondaryToPrimaryMapper(
+                                Mappers.fromOwnerReferences(context.getPrimaryResourceClass()))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+        eventSources.add(new InformerEventSource<>(configMapConfig, context));
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getBlueGreenIngressInformerEventSource(context));
         }
