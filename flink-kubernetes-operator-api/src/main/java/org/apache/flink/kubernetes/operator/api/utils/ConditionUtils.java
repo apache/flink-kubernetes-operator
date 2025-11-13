@@ -27,8 +27,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.Instant;
 import java.util.List;
 
 import static org.apache.flink.api.common.JobStatus.RUNNING;
@@ -78,7 +77,11 @@ public class ConditionUtils {
         if (condition == null) {
             return;
         }
-        Condition existingCondition = conditions.isEmpty() ? null : conditions.get(0);
+        Condition existingCondition =
+                conditions.stream()
+                        .filter(c -> c.getType().equals(condition.getType()))
+                        .findFirst()
+                        .orElse(null);
         condition.setLastTransitionTime(getLastTransitionTimeStamp(existingCondition, condition));
     }
 
@@ -87,7 +90,7 @@ public class ConditionUtils {
                 .withType(CONDITION_TYPE_RUNNING)
                 .withStatus(jobStatus == RUNNING ? "True" : "False")
                 .withReason(toCamelCase(jobStatus.name()))
-                .withMessage("Job state " + jobStatus.name())
+                .withMessage("Job status " + jobStatus.name())
                 .build();
     }
 
@@ -111,12 +114,6 @@ public class ConditionUtils {
         return reason.substring(0, 1).toUpperCase() + reason.substring(1);
     }
 
-    private static boolean isLastTransitionTimeStampUpdateRequired(
-            Condition existingCondition, Condition newCondition) {
-        return existingCondition == null
-                || !existingCondition.getStatus().equals(newCondition.getStatus());
-    }
-
     /**
      * get the last transition time for the condition , returns the current time if there is no
      * existing condition or if the condition status has changed, otherwise returns existing
@@ -124,18 +121,17 @@ public class ConditionUtils {
      *
      * @param existingCondition The current condition object, may be null.
      * @param condition The new condition object to compare against the existing one.
-     * @return A string representing the last transition time in the format
-     *     "yyyy-MM-dd'T'HH:mm:ss'Z'". Returns a new timestamp if the existing condition is null or
-     *     the status has changed, otherwise returns the last transition time of the existing
-     *     condition.
+     * @return A string representing the last transition time in ISO 8601 format with nanosecond
+     *     precision (e.g., "2025-10-30T07:35:35.189752790Z"). Returns a new timestamp if the
+     *     existing condition is null or the status has changed, otherwise returns the last
+     *     transition time of the existing condition.
      */
     private static String getLastTransitionTimeStamp(
             Condition existingCondition, Condition condition) {
         String lastTransitionTime;
         if (existingCondition == null
                 || !existingCondition.getStatus().equals(condition.getStatus())) {
-            lastTransitionTime =
-                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(new Date());
+            lastTransitionTime = Instant.now().toString();
         } else {
             lastTransitionTime = existingCondition.getLastTransitionTime();
         }
