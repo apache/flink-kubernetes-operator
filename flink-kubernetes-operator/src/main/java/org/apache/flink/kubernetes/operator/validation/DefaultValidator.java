@@ -17,10 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
-import org.apache.flink.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.autoscaler.utils.CalendarUtils;
+import org.apache.flink.autoscaler.validation.AutoscalerValidator;
 import org.apache.flink.configuration.CheckpointingOptions;
-import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -65,11 +63,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
-
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
 
@@ -88,9 +81,11 @@ public class DefaultValidator implements FlinkResourceValidator {
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
     private final FlinkConfigManager configManager;
+    private final AutoscalerValidator autoscalerValidator;
 
     public DefaultValidator(FlinkConfigManager configManager) {
         this.configManager = configManager;
+        this.autoscalerValidator = new AutoscalerValidator();
     }
 
     @Override
@@ -598,63 +593,12 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    public static Optional<String> validateAutoScalerFlinkConfiguration(
+    public Optional<String> validateAutoScalerFlinkConfiguration(
             Map<String, String> effectiveConfig) {
         if (effectiveConfig == null) {
             return Optional.empty();
         }
         Configuration flinkConfiguration = Configuration.fromMap(effectiveConfig);
-        if (!flinkConfiguration.getBoolean(AutoScalerOptions.AUTOSCALER_ENABLED)) {
-            return Optional.empty();
-        }
-        return firstPresent(
-                validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d),
-                validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
-                validateNumber(flinkConfiguration, UTILIZATION_TARGET, 0.0d, 1.0d),
-                validateNumber(
-                        flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
-                validateNumber(
-                        flinkConfiguration,
-                        UTILIZATION_MAX,
-                        flinkConfiguration.get(UTILIZATION_TARGET),
-                        1.0d),
-                validateNumber(
-                        flinkConfiguration,
-                        UTILIZATION_MIN,
-                        0.0d,
-                        flinkConfiguration.get(UTILIZATION_TARGET)),
-                validateNumber(flinkConfiguration, OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d),
-                CalendarUtils.validateExcludedPeriods(flinkConfiguration));
-    }
-
-    private static <T extends Number> Optional<String> validateNumber(
-            Configuration flinkConfiguration,
-            ConfigOption<T> autoScalerConfig,
-            Double min,
-            Double max) {
-        try {
-            var configValue = flinkConfiguration.get(autoScalerConfig);
-            if (configValue != null) {
-                double value = configValue.doubleValue();
-                if ((min != null && value < min) || (max != null && value > max)) {
-                    return Optional.of(
-                            String.format(
-                                    "The AutoScalerOption %s is invalid, it should be a value within the range [%s, %s]",
-                                    autoScalerConfig.key(),
-                                    min != null ? min.toString() : "-Infinity",
-                                    max != null ? max.toString() : "+Infinity"));
-                }
-            }
-            return Optional.empty();
-        } catch (IllegalArgumentException e) {
-            return Optional.of(
-                    String.format(
-                            "Invalid value in the autoscaler config %s", autoScalerConfig.key()));
-        }
-    }
-
-    private static <T extends Number> Optional<String> validateNumber(
-            Configuration flinkConfiguration, ConfigOption<T> autoScalerConfig, Double min) {
-        return validateNumber(flinkConfiguration, autoScalerConfig, min, null);
+        return autoscalerValidator.validateAutoscalerOptions(flinkConfiguration);
     }
 }

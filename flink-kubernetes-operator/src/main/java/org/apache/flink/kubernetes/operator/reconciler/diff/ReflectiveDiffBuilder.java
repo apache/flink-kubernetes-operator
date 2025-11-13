@@ -86,8 +86,14 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                     var leftField = readField(field, before, true);
                     var rightField = readField(field, after, true);
                     if (field.getName().equals(FLINK_CONFIGURATION_PROPERTY_NAME)) {
-                        leftField = ((ConfigObjectNode) leftField).asFlatMap();
-                        rightField = ((ConfigObjectNode) rightField).asFlatMap();
+                        leftField =
+                                leftField == null
+                                        ? null
+                                        : ((ConfigObjectNode) leftField).asFlatMap();
+                        rightField =
+                                rightField == null
+                                        ? null
+                                        : ((ConfigObjectNode) rightField).asFlatMap();
                     }
 
                     if (field.isAnnotationPresent(SpecDiff.Config.class)

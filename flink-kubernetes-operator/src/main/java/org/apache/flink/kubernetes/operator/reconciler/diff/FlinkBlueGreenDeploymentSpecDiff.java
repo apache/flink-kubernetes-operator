@@ -59,15 +59,17 @@ public class FlinkBlueGreenDeploymentSpecDiff {
         FlinkDeploymentSpec leftSpec = left.getTemplate().getSpec();
         FlinkDeploymentSpec rightSpec = right.getTemplate().getSpec();
 
+        // Used in Case 2 & 3: Delegate to ReflectiveDiffBuilder for nested spec comparison
+        // Calculate diffResult before comparison to apply in-place removal of ignored fields
+        DiffResult<FlinkDeploymentSpec> diffResult =
+                new ReflectiveDiffBuilder<>(deploymentMode, leftSpec, rightSpec).build();
+
         // Case 1: FlinkDeploymentSpecs are identical
         if (leftSpec.equals(rightSpec)) {
             return BlueGreenDiffType.IGNORE;
         }
 
-        // Case 2 & 3: Delegate to ReflectiveDiffBuilder for nested spec comparison
-        DiffResult<FlinkDeploymentSpec> diffResult =
-                new ReflectiveDiffBuilder<>(deploymentMode, leftSpec, rightSpec).build();
-
+        // Extract the diff type from ReflectiveDiffBuilder result
         DiffType diffType = diffResult.getType();
 
         // Case 2: ReflectiveDiffBuilder returns IGNORE
