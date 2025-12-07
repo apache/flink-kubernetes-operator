@@ -383,6 +383,15 @@ public class AutoScalerOptions {
                             .withDescription(
                                     "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
 
+    public static final ConfigOption<Boolean> ALL_MAXIMIZE_UTILISATION_USE_MAX_PARALLELISM =
+            autoScalerConfig("maximize-utilization.use-max-parallelism")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("maximize-utilization.use-max-parallelism"))
+                    .withDescription(
+                            "When use maximize-utilization allow use maximum parallelism for all operators.");
+
     public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
             autoScalerConfig("observed-scalability.enabled")
                     .booleanType()
