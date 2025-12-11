@@ -201,13 +201,28 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
-        // Change nested spec property - setSavepointRedeployNonce triggers TRANSITION
+        // Change nested spec property - setSavepointRedeployNonce now triggers SAVEPOINT_REDEPLOY
         spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
 
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
+        assertEquals(BlueGreenDiffType.SAVEPOINT_REDEPLOY, diff.compare());
+    }
+
+    @Test
+    public void testSavepointRedeployForNonceChangeWithJarUpdate() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Nonce change with additional jarURI change - SAVEPOINT_REDEPLOY should still be detected
+        spec2.getTemplate().getSpec().getJob().setJarURI("local:///opt/flink/examples/other.jar");
+        spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.SAVEPOINT_REDEPLOY, diff.compare());
     }
 
     @Test
@@ -281,8 +296,8 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
 
         // Change both top-level (configuration) and nested spec
-        // With new logic, only nested spec changes matter - setSavepointRedeployNonce triggers
-        // TRANSITION
+        // With new logic, only nested spec changes matter - setSavepointRedeployNonce now
+        // triggers SAVEPOINT_REDEPLOY
         Map<String, String> config = new HashMap<>();
         config.put("custom.config", "different-value");
         spec2.setConfiguration(config);
@@ -291,7 +306,39 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
         FlinkBlueGreenDeploymentSpecDiff diff =
                 new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
 
-        assertEquals(BlueGreenDiffType.TRANSITION, diff.compare());
+        assertEquals(BlueGreenDiffType.SAVEPOINT_REDEPLOY, diff.compare());
+    }
+
+    @Test
+    public void testSavepointRedeployTakesPrecedenceOverScale() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Change both nonce (SAVEPOINT_REDEPLOY) AND parallelism (SCALE)
+        // SAVEPOINT_REDEPLOY should take precedence
+        spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+        spec2.getTemplate().getSpec().getJob().setParallelism(10);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.SAVEPOINT_REDEPLOY, diff.compare());
+    }
+
+    @Test
+    public void testSavepointRedeployTakesPrecedenceOverUpgrade() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+
+        // Change both nonce (SAVEPOINT_REDEPLOY) AND Flink version (UPGRADE)
+        // SAVEPOINT_REDEPLOY should take precedence
+        spec2.getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+        spec2.getTemplate().getSpec().setFlinkVersion(FlinkVersion.v1_17);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.SAVEPOINT_REDEPLOY, diff.compare());
     }
 
     @Test

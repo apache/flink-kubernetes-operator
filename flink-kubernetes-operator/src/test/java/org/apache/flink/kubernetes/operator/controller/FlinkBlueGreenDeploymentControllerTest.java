@@ -191,6 +191,68 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifySavepointRedeployNonceTriggersTransitionWithInitialSavepointPath(
+            FlinkVersion flinkVersion) throws Exception {
+        // Start with SAVEPOINT upgrade mode so normally a savepoint would be taken
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.SAVEPOINT);
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        // Set initialSavepointPath and bump savepointRedeployNonce
+        String userSpecifiedSavepoint = "s3://bucket/my-specific-savepoint";
+        rs.deployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setInitialSavepointPath(userSpecifiedSavepoint);
+        rs.deployment.getSpec().getTemplate().getSpec().getJob().setSavepointRedeployNonce(12345L);
+        rs.deployment
+                .getSpec()
+                .getConfiguration()
+                .put(DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(ALT_DELETION_DELAY_VALUE));
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        // Reconcile - should skip savepointing and go directly to transition
+        rs = reconcile(rs.deployment);
+
+        // Verify: Should be TRANSITIONING_TO_GREEN (not SAVEPOINTING_BLUE)
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+
+        // Verify: Green deployment should use the user-specified initialSavepointPath
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(2, flinkDeployments.size());
+        assertEquals(
+                userSpecifiedSavepoint,
+                flinkDeployments.get(1).getSpec().getJob().getInitialSavepointPath());
+
+        // Complete the transition
+        simulateSuccessfulJobStart(flinkDeployments.get(1));
+        rs = reconcile(rs.deployment);
+
+        // Wait for deletion delay
+        Thread.sleep(rs.updateControl.getScheduleDelay().get());
+        reconcile(rs.deployment);
+
+        // Verify Green is now active
+        flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size());
+
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyFailureBeforeTransition(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
                 buildSessionCluster(

@@ -332,7 +332,12 @@ public class BlueGreenUtils {
                         "spec",
                         FlinkBlueGreenDeploymentSpec.class);
 
-        // The Blue/Green initialSavepointPath is only used for first-time deployments
+        // Determine which savepoint/checkpoint to restore from:
+        // 1. First-time deployments: use initialSavepointPath from spec (if set)
+        // 2. Normal transitions: use lastCheckpoint from previous deployment
+        // 3. Redeploy scenarios (lastCheckpoint is null): use initialSavepointPath from spec
+        //    - savepointRedeployNonce changed
+        //    - upgradeMode is STATELESS
         if (isFirstDeployment) {
             String initialSavepointPath =
                     spec.getTemplate().getSpec().getJob().getInitialSavepointPath();
@@ -346,6 +351,16 @@ public class BlueGreenUtils {
             String location = lastCheckpoint.getLocation().replace("file:", "");
             LOG.info("Using Blue/Green savepoint/checkpoint: " + location);
             spec.getTemplate().getSpec().getJob().setInitialSavepointPath(location);
+        } else {
+            String initialSavepointPath =
+                    spec.getTemplate().getSpec().getJob().getInitialSavepointPath();
+            if (initialSavepointPath != null && !initialSavepointPath.isEmpty()) {
+                LOG.info(
+                        "Using user-specified initialSavepointPath for redeploy: {}",
+                        initialSavepointPath);
+            } else {
+                LOG.info("Starting fresh with no savepoint restoration");
+            }
         }
 
         flinkDeployment.setSpec(spec.getTemplate().getSpec());
