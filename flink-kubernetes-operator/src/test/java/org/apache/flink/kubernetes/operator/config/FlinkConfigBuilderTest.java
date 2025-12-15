@@ -875,6 +875,38 @@ public class FlinkConfigBuilderTest {
     }
 
     @Test
+    public void testParallelismOverridesOnlyAppliedForStandaloneMode()
+            throws URISyntaxException, IOException {
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getJob().setParallelism(5);
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "vertex1:10,vertex2:20");
+
+        // Test STANDALONE mode - parallelism overrides should be used
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertEquals(20, configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+
+        // Test NATIVE mode - parallelism overrides should NOT be used, fall back to job
+        // parallelism
+        dep.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertEquals(5, configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+    }
+
+    @Test
     public void testBuildFrom() throws Exception {
         final Configuration configuration =
                 FlinkConfigBuilder.buildFrom(
