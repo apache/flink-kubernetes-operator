@@ -908,7 +908,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
-                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+                    .get(operatorConfig.getJobSubmissionTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
             throw new FlinkRuntimeException(e);
