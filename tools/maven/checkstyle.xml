@@ -230,8 +230,9 @@ This file is based on the checkstyle file of Apache Beam.
 			<message key="import.illegal" value="{0}; Use flink-shaded-netty instead."/>
 		</module>
 		<module name="IllegalImport">
-			<property name="illegalPkgs" value="com.google.common"/>
-			<message key="import.illegal" value="{0}; Use flink-shaded-guava instead."/>
+			<property name="regexp" value="true"/>
+			<property name="illegalPkgs" value="org.apache.flink.shaded.guava.*"/>
+			<message key="import.illegal" value="{0}; Use regular guava instead."/>
 		</module>
 
 		<module name="RedundantModifier">

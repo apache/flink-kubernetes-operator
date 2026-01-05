@@ -33,13 +33,12 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
-import org.apache.flink.shaded.guava31.com.google.common.cache.Cache;
-import org.apache.flink.shaded.guava31.com.google.common.cache.CacheBuilder;
-import org.apache.flink.shaded.guava31.com.google.common.cache.CacheLoader;
-import org.apache.flink.shaded.guava31.com.google.common.cache.LoadingCache;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import lombok.Builder;
 import lombok.SneakyThrows;
