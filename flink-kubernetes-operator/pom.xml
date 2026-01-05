@@ -154,6 +154,11 @@ under the License.
             <version>${log4j.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.apache.flink</groupId>

@@ -43,7 +43,7 @@ import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.Volume
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.VolumeBuilder;
 import org.apache.flink.kubernetes.utils.Constants;
 
-import org.apache.flink.shaded.guava31.com.google.common.io.Files;
+import com.google.common.io.Files;
 
 import java.io.File;
 import java.io.IOException;
