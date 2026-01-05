@@ -363,9 +363,11 @@ public class FlinkConfigBuilder {
                     * effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS);
         }
 
-        Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
-        if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
-            return maxOverrideParallelism.get();
+        if (KubernetesDeploymentMode.STANDALONE.equals(spec.getMode())) {
+            Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
+            if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
+                return maxOverrideParallelism.get();
+            }
         }
 
         return spec.getJob().getParallelism();
