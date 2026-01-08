@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.utils.ConditionUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -165,6 +166,8 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
+        flinkApp.getStatus()
+                .setConditions(ConditionUtils.createConditionFromStatus(flinkApp.getStatus()));
         LOG.debug("End of reconciliation");
         statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
