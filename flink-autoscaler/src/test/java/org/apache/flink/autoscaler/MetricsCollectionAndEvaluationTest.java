@@ -181,7 +181,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
-        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
+        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime, null);
         scalingExecutor.scaleResource(
                 context,
                 evaluation,
@@ -401,7 +401,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
 
         var evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime, null);
         assertEquals(
                 500.,
                 evaluation
@@ -661,7 +661,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         var evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime, null);
         assertEquals(
                 0,
                 evaluation
@@ -712,7 +712,8 @@ public class MetricsCollectionAndEvaluationTest {
                 .getMetricHistory()
                 .put(Instant.ofEpochSecond(1234), new CollectedMetrics(newMetrics, Map.of()));
 
-        evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+        evaluation =
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime, null);
         assertEquals(
                 3.,
                 evaluation
