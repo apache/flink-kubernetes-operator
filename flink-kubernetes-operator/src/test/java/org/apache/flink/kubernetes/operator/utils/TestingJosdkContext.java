@@ -127,4 +127,14 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
     public boolean isNextReconciliationImminent() {
         return false;
     }
+
+    @Override
+    public boolean isPrimaryResourceDeleted() {
+        return false;
+    }
+
+    @Override
+    public boolean isPrimaryResourceFinalStateUnknown() {
+        return false;
+    }
 }
