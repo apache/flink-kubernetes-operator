@@ -19,8 +19,13 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.Preconditions;
@@ -38,6 +43,7 @@ import io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressTLS;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -95,7 +101,8 @@ public class IngressUtils {
         }
         var objectMeta = ctx.getResource().getMetadata();
         if (spec.getIngress() != null) {
-            HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
+            HasMetadata ingress =
+                    getIngress(objectMeta, spec.getIngress(), effectiveConfig, client);
             setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
             LOG.info("Updating ingress rules {}", ingress);
             client.resource(ingress)
@@ -116,33 +123,84 @@ public class IngressUtils {
         }
     }
 
+    public static void reconcileBlueGreenIngress(
+            BlueGreenContext context,
+            boolean operatorManagedIngress,
+            FlinkDeployment targetFlinkDeployment,
+            Configuration effectiveConfig,
+            Context<FlinkBlueGreenDeployment> client) {
+        if (!operatorManagedIngress) {
+            LOG.info("Skipping rerouting of of Blue Green Ingress, not operator managed ingress ");
+            return;
+        }
+        FlinkBlueGreenDeploymentSpec flinkBlueGreenDeploymentSpec =
+                context.getBgDeployment().getSpec();
+        var objectMeta = context.getBgDeployment().getMetadata();
+        if (flinkBlueGreenDeploymentSpec.getIngress() != null) {
+            HasMetadata ingress =
+                    getIngress(
+                            objectMeta,
+                            flinkBlueGreenDeploymentSpec.getIngress(),
+                            effectiveConfig,
+                            client.getClient(),
+                            targetFlinkDeployment.getMetadata().getName() + REST_SVC_NAME_SUFFIX);
+            setOwnerReference(context.getBgDeployment(), Collections.singletonList(ingress));
+            client.getClient()
+                    .resource(ingress)
+                    .inNamespace(objectMeta.getNamespace())
+                    .createOr(NonDeletingOperation::update);
+        } else {
+            Optional<? extends HasMetadata> ingress;
+            if (ingressInNetworkingV1(client.getClient())) {
+                ingress =
+                        client.getSecondaryResource(
+                                io.fabric8.kubernetes.api.model.networking.v1.Ingress.class);
+            } else {
+                ingress = client.getSecondaryResource(Ingress.class);
+            }
+            ingress.ifPresent(i -> client.getClient().resource(i).delete());
+        }
+    }
+
     private static HasMetadata getIngress(
             ObjectMeta objectMeta,
-            FlinkDeploymentSpec spec,
+            IngressSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
+        return getIngress(
+                objectMeta,
+                spec,
+                effectiveConfig,
+                client,
+                objectMeta.getName() + REST_SVC_NAME_SUFFIX);
+    }
+
+    private static HasMetadata getIngress(
+            ObjectMeta objectMeta,
+            IngressSpec spec,
+            Configuration effectiveConfig,
+            KubernetesClient client,
+            String serviceName) {
         Map<String, String> labels =
-                spec.getIngress().getLabels() == null
-                        ? new HashMap<>()
-                        : new HashMap<>(spec.getIngress().getLabels());
+                spec.getLabels() == null ? new HashMap<>() : new HashMap<>(spec.getLabels());
         labels.put(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS);
         if (ingressInNetworkingV1(client)) {
             return new IngressBuilder()
                     .withNewMetadata()
                     .withLabels(labels)
-                    .withAnnotations(spec.getIngress().getAnnotations())
+                    .withAnnotations(spec.getAnnotations())
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()
                     .withNewSpec()
-                    .withIngressClassName(spec.getIngress().getClassName())
-                    .withTls(spec.getIngress().getTls())
-                    .withRules(getIngressRule(objectMeta, spec, effectiveConfig))
+                    .withIngressClassName(spec.getClassName())
+                    .withTls(spec.getTls())
+                    .withRules(getIngressRule(objectMeta, spec, effectiveConfig, serviceName))
                     .endSpec()
                     .build();
         } else {
             List<IngressTLS> ingressTLS =
-                    Optional.ofNullable(spec.getIngress().getTls())
+                    Optional.ofNullable(spec.getTls())
                             .map(
                                     list ->
                                             list.stream()
@@ -160,30 +218,31 @@ public class IngressUtils {
                             .orElse(Collections.emptyList());
             return new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
                     .withNewMetadata()
-                    .withAnnotations(spec.getIngress().getAnnotations())
+                    .withAnnotations(spec.getAnnotations())
                     .withLabels(labels)
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()
                     .withNewSpec()
-                    .withIngressClassName(spec.getIngress().getClassName())
+                    .withIngressClassName(spec.getClassName())
                     .withTls(ingressTLS)
-                    .withRules(getIngressRuleForV1beta1(objectMeta, spec, effectiveConfig))
+                    .withRules(
+                            getIngressRuleForV1beta1(
+                                    objectMeta, spec, effectiveConfig, serviceName))
                     .endSpec()
                     .build();
         }
     }
 
     private static IngressRule getIngressRule(
-            ObjectMeta objectMeta, FlinkDeploymentSpec spec, Configuration effectiveConfig) {
-        final String clusterId = objectMeta.getName();
+            ObjectMeta objectMeta,
+            IngressSpec spec,
+            Configuration effectiveConfig,
+            String serviceName) {
         final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
 
         URL ingressUrl =
-                getIngressUrl(
-                        spec.getIngress().getTemplate(),
-                        objectMeta.getName(),
-                        objectMeta.getNamespace());
+                getIngressUrl(spec.getTemplate(), objectMeta.getName(), objectMeta.getNamespace());
 
         IngressRuleBuilder ingressRuleBuilder = new IngressRuleBuilder();
         ingressRuleBuilder.withHttp(
@@ -192,7 +251,7 @@ public class IngressUtils {
                         .withPathType("ImplementationSpecific")
                         .withNewBackend()
                         .withNewService()
-                        .withName(clusterId + REST_SVC_NAME_SUFFIX)
+                        .withName(serviceName)
                         .withNewPort()
                         .withNumber(restPort)
                         .endPort()
@@ -219,16 +278,13 @@ public class IngressUtils {
     private static io.fabric8.kubernetes.api.model.networking.v1beta1.IngressRule
             getIngressRuleForV1beta1(
                     ObjectMeta objectMeta,
-                    FlinkDeploymentSpec spec,
-                    Configuration effectiveConfig) {
-        final String clusterId = objectMeta.getName();
+                    IngressSpec spec,
+                    Configuration effectiveConfig,
+                    String serviceName) {
         final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
 
         URL ingressUrl =
-                getIngressUrl(
-                        spec.getIngress().getTemplate(),
-                        objectMeta.getName(),
-                        objectMeta.getNamespace());
+                getIngressUrl(spec.getTemplate(), objectMeta.getName(), objectMeta.getNamespace());
 
         io.fabric8.kubernetes.api.model.networking.v1beta1.IngressRuleBuilder ingressRuleBuilder =
                 new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressRuleBuilder();
@@ -236,7 +292,7 @@ public class IngressUtils {
                 new io.fabric8.kubernetes.api.model.networking.v1beta1.HTTPIngressRuleValueBuilder()
                         .addNewPath()
                         .withNewBackend()
-                        .withServiceName(clusterId + REST_SVC_NAME_SUFFIX)
+                        .withServiceName(serviceName)
                         .withServicePort(new IntOrString(restPort))
                         .endBackend()
                         .endPath()
