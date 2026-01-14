@@ -191,6 +191,168 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifySuspendAndResumeInPlace(FlinkVersion flinkVersion) throws Exception {
+        var rs = setupActiveBlueDeployment(flinkVersion);
+        assertEquals(1, getFlinkDeployments().size());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Should start as ACTIVE_BLUE");
+
+        // Suspend in-place with spec change (parallelism bump)
+        var deployment = rs.deployment;
+        deployment.getSpec().getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        deployment.getSpec().getTemplate().getSpec().getJob().setParallelism(5);
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        rs = reconcile(deployment);
+        deployment = rs.deployment;
+        // Verify BG goes through TRANSITIONING_TO_BLUE state (unified patch mechanism)
+        assertEquals(
+                JobStatus.RECONCILING,
+                rs.reconciledStatus.getJobStatus().getState(),
+                "BG status should be RECONCILING after suspend initiated");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Should go through TRANSITIONING_TO_BLUE during suspend");
+
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size(), "Suspend should keep single child");
+        var child = flinkDeployments.get(0);
+        assertTrue(
+                child.getMetadata().getName().endsWith("-blue"), "Child should be blue deployment");
+        assertEquals(
+                JobState.SUSPENDED,
+                child.getSpec().getJob().getState(),
+                "Child should be suspended");
+        assertEquals(5, child.getSpec().getJob().getParallelism(), "Spec change should be applied");
+
+        // Simulate child becoming suspended (lifecycleState is computed from lastReconciledSpec)
+        simulateSuccessfulSuspend(child);
+        rs = reconcile(deployment);
+        deployment = rs.deployment;
+        assertEquals(JobStatus.SUSPENDED, rs.reconciledStatus.getJobStatus().getState());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Should finalize to ACTIVE_BLUE when suspended");
+
+        // Resume in-place with another spec change
+        deployment.getSpec().getTemplate().getSpec().getJob().setState(JobState.RUNNING);
+        deployment.getSpec().getTemplate().getSpec().getJob().setParallelism(6);
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        rs = reconcile(deployment);
+        deployment = rs.deployment;
+        // Resume also goes through TRANSITIONING_TO_BLUE (unified patch mechanism)
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_BLUE,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Should go through TRANSITIONING_TO_BLUE during resume");
+        // Persist the BG status update to kubernetes for the next reconcile
+        kubernetesClient.resource(deployment).updateStatus();
+
+        flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size(), "Resume should keep single child");
+        child = flinkDeployments.get(0);
+        assertTrue(
+                child.getMetadata().getName().endsWith("-blue"),
+                "Child should still be blue deployment");
+        assertEquals(JobState.RUNNING, child.getSpec().getJob().getState(), "Child should resume");
+        assertEquals(6, child.getSpec().getJob().getParallelism(), "Latest spec should be applied");
+
+        // Simulate child becoming running and verify BG status syncs
+        simulateSuccessfulJobStart(child);
+        rs = reconcile(deployment);
+        assertEquals(JobStatus.RUNNING, rs.reconciledStatus.getJobStatus().getState());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Should finalize to ACTIVE_BLUE after resume");
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifySuspendDuringTransitionIsBlockedUntilComplete(FlinkVersion flinkVersion)
+            throws Exception {
+        // Start with a running Blue deployment with longer abort grace period
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS); // STATELESS to skip savepointing
+        // Set longer abort grace period BEFORE deployment to avoid abort during transition test
+        blueGreenDeployment.getSpec().getConfiguration().put(ABORT_GRACE_PERIOD.key(), "60000");
+        // Use zero deletion delay to avoid timing-based flakiness during transition completion
+        blueGreenDeployment.getSpec().getConfiguration().put(DEPLOYMENT_DELETION_DELAY.key(), "0");
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        // === TRIGGER TRANSITION ===
+        rs.deployment.getSpec().getTemplate().getSpec().getJob().setParallelism(5);
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        // Reconcile - start transition to GREEN
+        rs = reconcile(rs.deployment);
+
+        // GREEN deployment should be created
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(2, flinkDeployments.size());
+
+        // === SUSPEND DURING TRANSITION ===
+        rs.deployment.getSpec().getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        // Reconcile - suspend should be BLOCKED, transition continues
+        rs = reconcile(rs.deployment);
+
+        // GREEN deployment should NOT be suspended yet
+        flinkDeployments = getFlinkDeployments();
+        var greenDeployment =
+                flinkDeployments.stream()
+                        .filter(fd -> fd.getMetadata().getName().endsWith("-green"))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals(JobState.RUNNING, greenDeployment.getSpec().getJob().getState());
+
+        // === TRANSITION COMPLETES ===
+        // Simulate GREEN becoming ready
+        simulateSuccessfulJobStart(greenDeployment);
+
+        // Reconcile to complete transition and process pending suspend
+        // (sets timestamp, deletes BLUE, finalizes to ACTIVE_GREEN, then processes suspend
+        // via TRANSITIONING_TO_GREEN)
+        for (int i = 0; i < 5; i++) {
+            rs = reconcile(rs.deployment);
+        }
+        // Persist the BG status update to kubernetes for the next reconcile
+        kubernetesClient.resource(rs.deployment).updateStatus();
+
+        // GREEN should now be suspended in spec (via patchFlinkDeployment)
+        flinkDeployments = getFlinkDeployments();
+        greenDeployment =
+                flinkDeployments.stream()
+                        .filter(fd -> fd.getMetadata().getName().endsWith("-green"))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals(JobState.SUSPENDED, greenDeployment.getSpec().getJob().getState());
+
+        // Simulate GREEN child becoming suspended (lifecycleState is computed from
+        // lastReconciledSpec)
+        simulateSuccessfulSuspend(greenDeployment);
+
+        // Reconcile - finalizeSuspendedDeployment should set BG job status to SUSPENDED
+        rs = reconcile(rs.deployment);
+        assertEquals(JobStatus.SUSPENDED, rs.reconciledStatus.getJobStatus().getState());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyFailureBeforeTransition(FlinkVersion flinkVersion) throws Exception {
         var blueGreenDeployment =
                 buildSessionCluster(
@@ -590,6 +752,76 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // Only Blue deployment should exist (Green transition never started)
         var flinkDeployments = getFlinkDeployments();
         assertEquals(1, flinkDeployments.size());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifySuspendWhenChildNotReadyPatchesWithoutFailing(FlinkVersion flinkVersion)
+            throws Exception {
+        var rs = setupActiveBlueDeployment(flinkVersion);
+
+        // Mark the active child as not ready
+        var child = getFlinkDeployments().get(0);
+        child.getStatus().getJobStatus().setState(JobStatus.RECONCILING);
+        kubernetesClient.resource(child).update();
+
+        // Suspend and bump parallelism
+        var deployment = rs.deployment;
+        deployment.getSpec().getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        deployment.getSpec().getTemplate().getSpec().getJob().setParallelism(9);
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        rs = reconcile(deployment);
+
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(1, flinkDeployments.size(), "Should not create new child");
+        child = flinkDeployments.get(0);
+        assertEquals(JobState.SUSPENDED, child.getSpec().getJob().getState());
+        assertEquals(9, child.getSpec().getJob().getParallelism(), "Spec change should apply");
+        assertNotEquals(
+                JobStatus.FAILING,
+                rs.reconciledStatus.getJobStatus().getState(),
+                "Should not mark parent failing when suspending not-ready child");
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyInitialSuspendedIsBlockedThenDeploysOnRunning(FlinkVersion flinkVersion)
+            throws Exception {
+        var bg =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        bg.getSpec().getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        kubernetesClient.resource(bg).createOrReplace();
+
+        // First reconcile initializes status to INITIALIZING_BLUE
+        var rs = reconcile(bg);
+        // Second reconcile: handler detects SUSPENDED and blocks
+        rs = reconcile(rs.deployment);
+
+        // Block child creation when initial state is SUSPENDED
+        assertEquals(0, getFlinkDeployments().size(), "No child should be created");
+        assertEquals(
+                JobStatus.SUSPENDED,
+                rs.reconciledStatus.getJobStatus().getState(),
+                "Job status should be SUSPENDED when initial deployment is blocked");
+
+        // Flip to RUNNING and reconcile again
+        bg = rs.deployment;
+        bg.getSpec().getTemplate().getSpec().getJob().setState(JobState.RUNNING);
+        kubernetesClient.resource(bg).createOrReplace();
+
+        rs = reconcile(bg);
+
+        assertEquals(1, getFlinkDeployments().size(), "Child should be created after fix");
+        assertEquals(
+                JobStatus.RECONCILING,
+                rs.reconciledStatus.getJobStatus().getState(),
+                "Job status should be RECONCILING after deployment initiated");
     }
 
     // ==================== Parameterized Test Inputs ====================
@@ -1131,6 +1363,16 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         deployment.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+        kubernetesClient.resource(deployment).update();
+    }
+
+    private void simulateSuccessfulSuspend(FlinkDeployment deployment) {
+        deployment.getStatus().getJobStatus().setState(JobStatus.FINISHED);
+        deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         kubernetesClient.resource(deployment).update();
     }
 
