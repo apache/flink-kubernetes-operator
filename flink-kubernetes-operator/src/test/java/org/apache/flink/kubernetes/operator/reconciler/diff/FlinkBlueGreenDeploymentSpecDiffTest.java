@@ -135,6 +135,30 @@ public class FlinkBlueGreenDeploymentSpecDiffTest {
     }
 
     @Test
+    public void testSuspendOnJobStateChange() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec(); // RUNNING default
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
+        spec2.getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.SUSPEND, diff.compare());
+    }
+
+    @Test
+    public void testResumeOnJobStateChange() {
+        FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
+        spec1.getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec(); // RUNNING default
+
+        FlinkBlueGreenDeploymentSpecDiff diff =
+                new FlinkBlueGreenDeploymentSpecDiff(DEPLOYMENT_MODE, spec1, spec2);
+
+        assertEquals(BlueGreenDiffType.RESUME, diff.compare());
+    }
+
+    @Test
     public void testIgnoreForRootPodTemplateAdditionalProps() {
         FlinkBlueGreenDeploymentSpec spec1 = createBasicSpec();
         FlinkBlueGreenDeploymentSpec spec2 = createBasicSpec();
