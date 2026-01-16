@@ -42,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Objects;
 
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
@@ -143,6 +144,25 @@ public class BlueGreenDeploymentService {
                         context.getDeploymentStatus().setSavepointTriggerId(null);
                         return markDeploymentFailing(context, error);
                     }
+
+                } else if (specDiff == BlueGreenDiffType.SAVEPOINT_REDEPLOY) {
+                    // Savepoint redeploy: skip taking a new savepoint, use initialSavepointPath
+                    var jobSpec =
+                            context.getBgDeployment().getSpec().getTemplate().getSpec().getJob();
+                    LOG.info(
+                            "Savepoint redeploy triggered for '{}', using initialSavepointPath: {}",
+                            context.getBgDeployment().getMetadata().getName(),
+                            Objects.toString(jobSpec.getInitialSavepointPath(), "<none>"));
+                    setLastReconciledSpec(context);
+                    try {
+                        return startSavepointRedeployTransition(
+                                context, currentBlueGreenDeploymentType);
+                    } catch (Exception e) {
+                        var error =
+                                "Could not start Savepoint Redeploy Transition. Details: "
+                                        + e.getMessage();
+                        return markDeploymentFailing(context, error);
+                    }
                 } else {
                     setLastReconciledSpec(context);
                     LOG.info(
@@ -170,6 +190,13 @@ public class BlueGreenDeploymentService {
 
     private UpdateControl<FlinkBlueGreenDeployment> patchFlinkDeployment(
             BlueGreenContext context, BlueGreenDeploymentType blueGreenDeploymentTypeToPatch) {
+        return patchFlinkDeployment(context, blueGreenDeploymentTypeToPatch, true);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> patchFlinkDeployment(
+            BlueGreenContext context,
+            BlueGreenDeploymentType blueGreenDeploymentTypeToPatch,
+            boolean carryOverSavepointInPatch) {
 
         String childDeploymentName =
                 context.getBgDeployment().getMetadata().getName()
@@ -188,7 +215,10 @@ public class BlueGreenDeploymentService {
         //  will it be used by this patching? otherwise this is unnecessary, keep lastSavepoint =
         // null.
         Savepoint lastSavepoint =
-                carryOverSavepoint(context, blueGreenDeploymentTypeToPatch, childDeploymentName);
+                carryOverSavepointInPatch
+                        ? carryOverSavepoint(
+                                context, blueGreenDeploymentTypeToPatch, childDeploymentName)
+                        : null;
 
         return initiateDeployment(
                 context,
@@ -243,6 +273,26 @@ public class BlueGreenDeploymentService {
                 transition.nextBlueGreenDeploymentType,
                 transition.nextState,
                 lastCheckpoint,
+                false);
+    }
+
+    /**
+     * Starts a transition for savepoint redeploy scenario. Unlike normal transitions, this does not
+     * take a new savepoint - it uses the initialSavepointPath specified in the spec.
+     *
+     * @param context the transition context
+     * @param currentBlueGreenDeploymentType the current deployment type
+     * @return UpdateControl for the deployment
+     */
+    private UpdateControl<FlinkBlueGreenDeployment> startSavepointRedeployTransition(
+            BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
+        DeploymentTransition transition = calculateTransition(currentBlueGreenDeploymentType);
+
+        return initiateDeployment(
+                context,
+                transition.nextBlueGreenDeploymentType,
+                transition.nextState,
+                null, // Use initialSavepointPath from spec
                 false);
     }
 
@@ -411,7 +461,10 @@ public class BlueGreenDeploymentService {
                         context.getDeploymentByType(oppositeDeploymentType)
                                 .getMetadata()
                                 .getName());
-                return patchFlinkDeployment(context, oppositeDeploymentType);
+                return patchFlinkDeployment(
+                        context,
+                        oppositeDeploymentType,
+                        diffType != BlueGreenDiffType.SAVEPOINT_REDEPLOY);
             }
         }
 
