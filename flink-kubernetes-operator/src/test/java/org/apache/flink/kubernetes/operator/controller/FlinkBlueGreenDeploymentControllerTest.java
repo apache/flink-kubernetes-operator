@@ -953,6 +953,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
                     throws Exception {
         Long minReconciliationTs = System.currentTimeMillis() - 1;
 
+        // Create the resource in the mock server before reconciling
+        kubernetesClient.resource(blueGreenDeployment).createOrReplace();
+
         // 1a. Initializing deploymentStatus with this call
         var rs = reconcile(blueGreenDeployment);
 
