@@ -24,7 +24,9 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
@@ -50,7 +52,11 @@ public class TestingFlinkBlueGreenDeploymentController
                         flinkService,
                         null);
 
-        flinkBlueGreenDeploymentController = new FlinkBlueGreenDeploymentController(contextFactory);
+        StatusRecorder<FlinkBlueGreenDeployment, FlinkBlueGreenDeploymentStatus> statusRecorder =
+                new StatusRecorder<>(new MetricManager<>(), (resource, status) -> {});
+
+        flinkBlueGreenDeploymentController =
+                new FlinkBlueGreenDeploymentController(contextFactory, statusRecorder);
     }
 
     @Override
