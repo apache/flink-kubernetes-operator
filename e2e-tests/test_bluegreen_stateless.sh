@@ -46,8 +46,40 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIME
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_BLUE ${TIMEOUT} || exit 1
 
 echo "PATCHING B/G deployment..."
-#kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"rest.port":"8082","taskmanager.numberOfTaskSlots":"2"}}}}}'
-kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"taskmanager.numberOfTaskSlots":"2"}}}}}'
+kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"rest.port":"8082","taskmanager.numberOfTaskSlots":"2"}}}}}'
+#kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"taskmanager.numberOfTaskSlots":"2"}}}}}'
+
+jm_pod_name=""
+tm_pod_name=""
+for i in $(seq 1 6); do
+  echo "====="
+  echo "LISTING PODS:"
+  kubectl get pods
+
+  if [ "$jm_pod_name" = "" ]; then
+    jm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+    echo "Set JM pod name:" $jm_pod_name
+  fi
+  echo "GETTING JM LOGS:"
+  kubectl logs $jm_pod_name -c flink-main-container
+
+  echo "--==--"
+  if [ "$tm_pod_name" = "" ]; then
+      tm_pod_name=$(kubectl get pods --selector="app=${GREEN_CLUSTER_ID},component=taskmanager" -o jsonpath='{..metadata.name}')
+      echo "Set TM pod name:" $tm_pod_name
+  fi
+  echo "GETTING TM LOGS:"
+  kubectl logs $tm_pod_name
+
+  echo "--=EVs=--"
+  kubectl describe flinkdep $GREEN_CLUSTER_ID
+#  kubectl get events --field-selector involvedObject.kind=FlinkDeployment,involvedObject.name=$GREEN_CLUSTER_ID --sort-by=.metadata.creationTimestamp
+  sleep 30
+
+  status=$(kubectl get -oyaml $GREEN_APPLICATION_IDENTIFIER | yq '.status.lifecycleState')
+  echo "==> lifecycleState after 30 secs: " $status
+done
+
 
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLUE_CLUSTER_ID}"
