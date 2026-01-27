@@ -24,6 +24,32 @@ spec:
         properties:
           spec:
             properties:
+              ingress:
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  className:
+                    type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  template:
+                    type: string
+                  tls:
+                    items:
+                      properties:
+                        hosts:
+                          items:
+                            type: string
+                          type: array
+                        secretName:
+                          type: string
+                      type: object
+                    type: array
+                type: object
               configuration:
                 additionalProperties:
                   type: "string"

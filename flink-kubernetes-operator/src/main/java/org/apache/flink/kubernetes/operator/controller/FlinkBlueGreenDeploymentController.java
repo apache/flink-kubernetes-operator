@@ -21,11 +21,13 @@ import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenStateHandlerRegistry;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
+import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 
 import io.javaoperatorsdk.operator.api.config.informer.InformerEventSourceConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -70,10 +72,13 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
     private final FlinkResourceContextFactory ctxFactory;
     private final BlueGreenStateHandlerRegistry handlerRegistry;
+    private final FlinkConfigManager flinkConfigManager;
 
-    public FlinkBlueGreenDeploymentController(FlinkResourceContextFactory ctxFactory) {
+    public FlinkBlueGreenDeploymentController(
+            FlinkResourceContextFactory ctxFactory, FlinkConfigManager flinkConfigManager) {
         this.ctxFactory = ctxFactory;
         this.handlerRegistry = new BlueGreenStateHandlerRegistry();
+        this.flinkConfigManager = flinkConfigManager;
     }
 
     @Override
@@ -92,6 +97,9 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
         eventSources.add(new InformerEventSource<>(config, context));
 
+        if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
+            eventSources.add(EventSourceUtils.getBlueGreenIngressInformerEventSource(context));
+        }
         return eventSources;
     }
 
