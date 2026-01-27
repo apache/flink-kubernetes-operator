@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import lombok.AllArgsConstructor;
@@ -60,14 +59,6 @@ public class TestingFlinkBlueGreenDeploymentController
             throws Exception {
         var cloned = ReconciliationUtils.clone(flinkBlueGreenDeployment);
         return flinkBlueGreenDeploymentController.reconcile(cloned, context);
-    }
-
-    @Override
-    public ErrorStatusUpdateControl<FlinkBlueGreenDeployment> updateErrorStatus(
-            FlinkBlueGreenDeployment flinkBlueGreenDeployment,
-            Context<FlinkBlueGreenDeployment> context,
-            Exception e) {
-        return null;
     }
 
     /** A simple DTO to handle common reconciliation results for tests. */
