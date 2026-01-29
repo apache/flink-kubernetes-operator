@@ -734,14 +734,8 @@ public class BlueGreenDeploymentService {
         context.getDeploymentStatus().setAbortTimestamp(millisToInstantStr(0));
         context.getDeploymentStatus().setSavepointTriggerId(null);
 
-        try {
-            updateBlueGreenIngress(context, nextState);
-        } catch (Exception e) {
-            var error =
-                    "Could not reconcile ingress during finalization. Details: " + e.getMessage();
-            LOG.error(error, e);
-            return markDeploymentFailing(context, error);
-        }
+        updateBlueGreenIngress(context, nextState);
+
         // Finalize status and reschedule immediately so any pending spec changes
         // (e.g., suspend requested during transition) are picked up on next reconcile
         return patchStatusUpdateControl(context, nextState, JobStatus.RUNNING, null)
@@ -770,20 +764,16 @@ public class BlueGreenDeploymentService {
             return;
         }
 
-        try {
-            IngressUtils.reconcileBlueGreenIngress(
-                    context,
-                    true,
-                    activeDeployment,
-                    flinkResourceContext.getDeployConfig(activeDeployment.getSpec()),
-                    context.getJosdkContext());
-        } catch (Exception e) {
-            LOG.error(
-                    "Failed to reconcile ingress for active deployment: {}",
-                    activeDeployment.getMetadata().getName(),
-                    e);
-            // Don't fail the entire reconciliation just because ingress reconciliation failed
-        }
+        IngressUtils.reconcileBlueGreenIngress(
+                context,
+                true,
+                activeDeployment,
+                flinkResourceContext.getDeployConfig(activeDeployment.getSpec()),
+                context.getJosdkContext());
+
+        LOG.info(
+                "Successfully reconciled ingress for active deployment: {}",
+                activeDeployment.getMetadata().getName());
     }
 
     /**
