@@ -50,7 +50,8 @@ public class TestingFlinkBlueGreenDeploymentController
                         flinkService,
                         null);
 
-        flinkBlueGreenDeploymentController = new FlinkBlueGreenDeploymentController(contextFactory);
+        flinkBlueGreenDeploymentController =
+                new FlinkBlueGreenDeploymentController(contextFactory, configManager);
     }
 
     @Override

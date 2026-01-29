@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -121,6 +122,29 @@ public class EventSourceUtils {
 
         var configuration =
                 InformerEventSourceConfiguration.from(ingressClass, FlinkDeployment.class)
+                        .withLabelSelector(labelSelector)
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+
+        return new InformerEventSource<>(configuration, context);
+    }
+
+    public static InformerEventSource<?, FlinkBlueGreenDeployment>
+            getBlueGreenIngressInformerEventSource(
+                    EventSourceContext<FlinkBlueGreenDeployment> context) {
+        final String labelSelector =
+                Map.of(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS).entrySet().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.joining(","));
+
+        var ingressClass =
+                ingressInNetworkingV1(context.getClient())
+                        ? Ingress.class
+                        : io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress.class;
+
+        var configuration =
+                InformerEventSourceConfiguration.from(ingressClass, FlinkBlueGreenDeployment.class)
                         .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
