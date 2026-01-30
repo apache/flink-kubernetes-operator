@@ -42,5 +42,5 @@ spec:
     kind: Issuer
     name: flink-operator-selfsigned-issuer
   commonName: FlinkDeployment Validator
-  secretName: webhook-server-cert
+  secretName: flink-operator-webhook-secret
 {{- end }}
