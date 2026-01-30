@@ -18,23 +18,20 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
+import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
-import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
-import org.apache.flink.kubernetes.operator.api.spec.Resource;
-import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
@@ -42,6 +39,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -61,12 +59,16 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.ACTIVE_DEPLOYMENT_TYPE;
+import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.IS_FIRST_DEPLOYMENT;
+import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.TRANSITION_STAGE;
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY;
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
+import static org.apache.flink.kubernetes.operator.controller.BlueGreenTestUtils.getTestFlinkDeploymentSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -495,8 +497,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 rs.reconciledStatus.getBlueGreenState());
         assertEquals(
                 customValue,
-                getFlinkConfigurationValue(
-                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
+                rs.deployment
+                        .getSpec()
+                        .getTemplate()
+                        .getSpec()
+                        .getFlinkConfiguration()
+                        .get(CUSTOM_CONFIG_FIELD)
+                        .asText());
 
         // Simulating the Blue deployment doesn't start correctly (status will remain the same)
         Long reschedDelayMs = 0L;
@@ -547,11 +554,6 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Initiate the redeployment
         testTransitionToGreen(rs, customValue, null);
-    }
-
-    private static String getFlinkConfigurationValue(
-            FlinkDeploymentSpec flinkDeploymentSpec, String propertyName) {
-        return flinkDeploymentSpec.getFlinkConfiguration().get(propertyName).asText();
     }
 
     @ParameterizedTest
@@ -998,9 +1000,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertEquals(1, deployments.size());
             assertEquals(
                     "100 SECONDS",
-                    getFlinkConfigurationValue(
-                            deployments.get(0).getSpec(),
-                            "kubernetes.operator.reconcile.interval"));
+                    deployments
+                            .get(0)
+                            .getSpec()
+                            .getFlinkConfiguration()
+                            .get("kubernetes.operator.reconcile.interval")
+                            .asText());
         }
     }
 
@@ -1057,9 +1062,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
             // Child spec change should be applied to FlinkDeployment
             assertEquals(
                     "100 SECONDS",
-                    getFlinkConfigurationValue(
-                            deployments.get(0).getSpec(),
-                            "kubernetes.operator.reconcile.interval"));
+                    deployments
+                            .get(0)
+                            .getSpec()
+                            .getFlinkConfiguration()
+                            .get("kubernetes.operator.reconcile.interval")
+                            .asText());
 
             // Top-level changes should be preserved in reconciled spec
             assertNotNull(result.rs.reconciledStatus.getLastReconciledSpec());
@@ -1338,8 +1346,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()));
         assertEquals(
                 customValue,
-                getFlinkConfigurationValue(
-                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
+                rs.deployment
+                        .getSpec()
+                        .getTemplate()
+                        .getSpec()
+                        .getFlinkConfiguration()
+                        .get(CUSTOM_CONFIG_FIELD)
+                        .asText());
 
         // Initiate and mark the Green deployment ready
         simulateSuccessfulJobStart(getFlinkDeployments().get(1));
@@ -1494,43 +1507,223 @@ public class FlinkBlueGreenDeploymentControllerTest {
                                 .initialSavepointPath(initialSavepointPath)
                                 .build());
 
+        bgDeploymentSpec.getTemplate().setTransitionMode(TransitionMode.BASIC);
         deployment.setSpec(bgDeploymentSpec);
         return deployment;
     }
 
-    private static FlinkBlueGreenDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
-        Map<String, String> conf = new HashMap<>();
-        conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
-        conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
-        conf.put(CheckpointingOptions.INCREMENTAL_CHECKPOINTS.key(), "true");
-        conf.put(CheckpointingOptions.MAX_RETAINED_CHECKPOINTS.key(), "10");
-        conf.put(
-                CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
-                "file:///test/test-checkpoint-dir");
+    // ==================== ADVANCED Mode Infrastructure Tests ====================
 
-        var flinkDeploymentSpec =
-                FlinkDeploymentSpec.builder()
-                        .image(IMAGE)
-                        .imagePullPolicy(IMAGE_POLICY)
-                        .serviceAccount(SERVICE_ACCOUNT)
-                        .flinkVersion(version)
-                        .flinkConfiguration(new ConfigObjectNode())
-                        .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
-                        .taskManager(
-                                new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
-                        .build();
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeConfigMapCreation(FlinkVersion flinkVersion) throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeAdvancedDeployment(deployment);
 
-        flinkDeploymentSpec.setFlinkConfiguration(conf);
+        // Verify ConfigMap is created with correct schema
+        ConfigMap configMap =
+                BlueGreenTestUtils.getConfigMapFromSecondaryResources(
+                        context, TEST_DEPLOYMENT_NAME);
+        assertNotNull(configMap);
 
-        Map<String, String> configuration = new HashMap<>();
-        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
-        configuration.put(RECONCILIATION_RESCHEDULING_INTERVAL.key(), "500");
-        configuration.put(
-                DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(DEFAULT_DELETION_DELAY_VALUE));
+        Map<String, String> data = configMap.getData();
+        assertEquals("true", data.get(IS_FIRST_DEPLOYMENT.getLabel()));
+        assertEquals("BLUE", data.get(ACTIVE_DEPLOYMENT_TYPE.getLabel()));
+        assertEquals(
+                String.valueOf(DEFAULT_DELETION_DELAY_VALUE),
+                data.get(GateContextOptions.DEPLOYMENT_DELETION_DELAY.getLabel()));
 
-        var flinkDeploymentTemplateSpec =
-                FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build();
+        // Verify ConfigMap is available as secondary resource
+        var configMaps = context.getSecondaryResources(ConfigMap.class);
+        assertEquals(1, configMaps.size());
+        assertEquals(
+                configMap.getMetadata().getName(),
+                configMaps.iterator().next().getMetadata().getName());
+    }
 
-        return new FlinkBlueGreenDeploymentSpec(configuration, flinkDeploymentTemplateSpec);
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeStageProgression(FlinkVersion flinkVersion) throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeAdvancedDeployment(deployment);
+
+        // After executeAdvancedDeployment, should be in RUNNING state
+        assertEquals(
+                TransitionStage.RUNNING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeBlocking(FlinkVersion flinkVersion) throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+
+        // Complete first deployment
+        var rs = executeAdvancedDeployment(deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+
+        // Trigger Blue->Green transition
+        simulateChangeInSpec(rs.deployment, "green-config", ALT_DELETION_DELAY_VALUE, null);
+        rs = reconcile(rs.deployment);
+
+        // Initial stage should be INITIALIZING
+        assertEquals(
+                TransitionStage.INITIALIZING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
+        rs = reconcile(rs.deployment);
+
+        // Should be in TRANSITIONING stage and blocked
+        assertEquals(
+                TransitionStage.TRANSITIONING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+
+        // Multiple reconciles should remain blocked (no-op)
+        rs = reconcile(rs.deployment);
+        assertTrue(rs.updateControl.isNoUpdate());
+
+        rs = reconcile(rs.deployment);
+        assertTrue(rs.updateControl.isNoUpdate());
+
+        // Verify GREEN deployment is created but transition is blocked
+        assertEquals(2, getFlinkDeployments().size());
+
+        // Simulate GREEN deployment becoming ready
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1)); // Green deployment
+        rs = reconcile(rs.deployment);
+
+        // Should still be blocked waiting for CLEAR_TO_TEARDOWN
+        assertEquals(
+                TransitionStage.TRANSITIONING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+        assertTrue(rs.updateControl.isNoUpdate());
+
+        // Simulate external system (gate) updating ConfigMap to CLEAR_TO_TEARDOWN
+        simulateExternalConfigMapUpdate(
+                TEST_DEPLOYMENT_NAME,
+                TRANSITION_STAGE.getLabel(),
+                TransitionStage.CLEAR_TO_TEARDOWN.toString());
+
+        // Now reconciliation should proceed with the transition
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                TransitionStage.CLEAR_TO_TEARDOWN,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+
+        // Verify transition can continue - should schedule for deletion delay
+        assertTrue(rs.updateControl.isPatchStatus());
+        assertTrue(rs.updateControl.getScheduleDelay().isPresent());
+        assertEquals(ALT_DELETION_DELAY_VALUE, rs.updateControl.getScheduleDelay().get());
+
+        // Complete the transition after deletion delay
+        Thread.sleep(ALT_DELETION_DELAY_VALUE);
+        rs = reconcile(rs.deployment);
+
+        // Verify successful transition completion
+        assertEquals(1, getFlinkDeployments().size()); // Blue deployment deleted
+        rs = reconcile(rs.deployment); // Final reconciliation
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(
+                TransitionStage.RUNNING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeJobStatusMapping(FlinkVersion flinkVersion) throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeAdvancedDeployment(deployment);
+
+        // Test JobStatus.RUNNING -> TransitionStage.RUNNING
+        assertEquals(
+                TransitionStage.RUNNING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+
+        // Test JobStatus.FAILING -> TransitionStage.FAILING
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        simulateJobFailure(getFlinkDeployments().get(0));
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                TransitionStage.FAILING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+
+        // Test JobStatus.RECONCILING -> TransitionStage.INITIALIZING
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        simulateSuccessfulJobStart(getFlinkDeployments().get(0));
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                TransitionStage.INITIALIZING,
+                BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+    }
+
+    // ==================== ADVANCED Mode Helper Methods ====================
+
+    private FlinkBlueGreenDeployment buildAdvancedSessionCluster(
+            String name,
+            String namespace,
+            FlinkVersion version,
+            String initialSavepointPath,
+            UpgradeMode upgradeMode) {
+        var deployment =
+                buildSessionCluster(name, namespace, version, initialSavepointPath, upgradeMode);
+        deployment.getSpec().getTemplate().setTransitionMode(TransitionMode.ADVANCED);
+        return deployment;
+    }
+
+    private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
+            executeAdvancedDeployment(FlinkBlueGreenDeployment deployment) throws Exception {
+        var rs = reconcile(deployment); // Initialize
+        rs = reconcile(rs.deployment); // Transition to Blue
+        simulateSuccessfulJobStart(getFlinkDeployments().get(0));
+        rs = reconcile(rs.deployment); // Complete the deployment and reach ACTIVE_BLUE
+        return rs;
+    }
+
+    private void simulateExternalConfigMapUpdate(String deploymentName, String key, String value) {
+        String configMapName =
+                deploymentName
+                        + "-configmap"; // Using actual naming convention from BlueGreenContext
+        ConfigMap configMap =
+                kubernetesClient
+                        .configMaps()
+                        .inNamespace(TEST_NAMESPACE)
+                        .withName(configMapName)
+                        .get();
+
+        configMap.getData().put(key, value);
+        kubernetesClient.configMaps().inNamespace(TEST_NAMESPACE).resource(configMap).update();
     }
 }
