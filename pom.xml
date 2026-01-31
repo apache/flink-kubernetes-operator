@@ -110,7 +110,7 @@ under the License.
 		     of entries in the form '[-]{2}add-[opens|exports]=<module>/<package>=ALL-UNNAMED'.-->
         <surefire.module.config/>
 
-        <derby.version>10.15.2.0</derby.version>
+        <derby.version>10.17.1.0</derby.version>
         <awaitility.version>4.2.2</awaitility.version>
 
         <!-- valid options can be checked at https://central.sonatype.com/search?q=kubernetes-httpclient- currently: okhttp, jdk, jetty, vertx -->
