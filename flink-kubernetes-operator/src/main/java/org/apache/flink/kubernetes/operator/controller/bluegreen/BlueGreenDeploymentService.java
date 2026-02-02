@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -733,10 +734,82 @@ public class BlueGreenDeploymentService {
         context.getDeploymentStatus().setAbortTimestamp(millisToInstantStr(0));
         context.getDeploymentStatus().setSavepointTriggerId(null);
 
+        updateBlueGreenIngress(context, nextState);
+
         // Finalize status and reschedule immediately so any pending spec changes
         // (e.g., suspend requested during transition) are picked up on next reconcile
         return patchStatusUpdateControl(context, nextState, JobStatus.RUNNING, null)
                 .rescheduleAfter(0);
+    }
+
+    /**
+     * Reconciles ingress for the active deployment in ACTIVE states. This handles ingress spec
+     * changes that occur while the deployment is stable (not transitioning).
+     *
+     * @param context the Blue/Green context
+     * @param activeDeploymentType which deployment (BLUE or GREEN) is currently active
+     */
+    public void reconcileIngressForActiveDeployment(
+            BlueGreenContext context, BlueGreenDeploymentType activeDeploymentType) {
+        FlinkDeployment activeDeployment = context.getDeploymentByType(activeDeploymentType);
+        if (activeDeployment == null) {
+            return;
+        }
+
+        var flinkResourceContext =
+                context.getCtxFactory()
+                        .getResourceContext(activeDeployment, context.getJosdkContext());
+
+        if (!flinkResourceContext.getOperatorConfig().isManageIngress()) {
+            return;
+        }
+
+        IngressUtils.reconcileBlueGreenIngress(
+                context,
+                true,
+                activeDeployment,
+                flinkResourceContext.getDeployConfig(activeDeployment.getSpec()),
+                context.getJosdkContext());
+
+        LOG.info(
+                "Successfully reconciled ingress for active deployment: {}",
+                activeDeployment.getMetadata().getName());
+    }
+
+    /**
+     * Updates the ingress for Blue/Green deployment during transitions, pointing to the newly
+     * active deployment.
+     *
+     * @param blueGreenContext the Blue/Green context
+     * @param nextState which deployment (ACTIVE_BLUE or ACTIVE_GREEN) is becoming active
+     */
+    public void updateBlueGreenIngress(
+            BlueGreenContext blueGreenContext, FlinkBlueGreenDeploymentState nextState) {
+        FlinkDeployment activeDeployment;
+        switch (nextState) {
+            case ACTIVE_BLUE:
+                activeDeployment = blueGreenContext.getBlueDeployment();
+                break;
+            case ACTIVE_GREEN:
+                activeDeployment = blueGreenContext.getGreenDeployment();
+                break;
+            default:
+                LOG.info("Skipping ingress reconciliation for non-active state: {}", nextState);
+                return;
+        }
+
+        // Create a FlinkResourceContext for the active deployment to get proper config
+        var flinkResourceContext =
+                blueGreenContext
+                        .getCtxFactory()
+                        .getResourceContext(activeDeployment, blueGreenContext.getJosdkContext());
+
+        IngressUtils.reconcileBlueGreenIngress(
+                blueGreenContext,
+                flinkResourceContext.getOperatorConfig().isManageIngress(),
+                activeDeployment,
+                flinkResourceContext.getDeployConfig(activeDeployment.getSpec()),
+                blueGreenContext.getJosdkContext());
     }
 
     // ==================== Common Utility Methods ====================

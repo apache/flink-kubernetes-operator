@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpe
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -40,9 +41,11 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -90,6 +93,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private static final int MINIMUM_ABORT_GRACE_PERIOD = 1000;
     private static final String TEST_CHECKPOINT_PATH = "/tmp/checkpoints";
     private static final String TEST_INITIAL_SAVEPOINT_PATH = "/tmp/savepoints";
+    private static final String BLUE_CLUSTER_ID = TEST_DEPLOYMENT_NAME + "-blue";
+    private static final String GREEN_CLUSTER_ID = TEST_DEPLOYMENT_NAME + "-green";
+    private static final String REST_SVC_NAME_SUFFIX = "-rest";
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private TestingFlinkService flinkService;
     private Context<FlinkBlueGreenDeployment> context;
@@ -1531,6 +1537,145 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var flinkDeploymentTemplateSpec =
                 FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build();
 
-        return new FlinkBlueGreenDeploymentSpec(configuration, flinkDeploymentTemplateSpec);
+        return new FlinkBlueGreenDeploymentSpec(configuration, null, flinkDeploymentTemplateSpec);
+    }
+
+    // ==================== Ingress Helper Methods ====================
+
+    private void assertIngressPointsToService(String expectedServiceName) {
+        if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
+            Ingress ingress = getIngressV1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE);
+            assertNotNull(ingress);
+            assertEquals(
+                    expectedServiceName,
+                    ingress.getSpec()
+                            .getRules()
+                            .get(0)
+                            .getHttp()
+                            .getPaths()
+                            .get(0)
+                            .getBackend()
+                            .getService()
+                            .getName());
+        } else {
+            io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingressV1beta1 =
+                    getIngressV1beta1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE);
+            assertNotNull(ingressV1beta1);
+            assertEquals(
+                    expectedServiceName,
+                    ingressV1beta1
+                            .getSpec()
+                            .getRules()
+                            .get(0)
+                            .getHttp()
+                            .getPaths()
+                            .get(0)
+                            .getBackend()
+                            .getServiceName());
+        }
+    }
+
+    private void assertIngressDoesNotExist() {
+        if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
+            assertNull(getIngressV1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE));
+        } else {
+            assertNull(getIngressV1beta1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE));
+        }
+    }
+
+    private Ingress getIngressV1(String name, String namespace) {
+        return kubernetesClient
+                .network()
+                .v1()
+                .ingresses()
+                .inNamespace(namespace)
+                .withName(name)
+                .get();
+    }
+
+    private io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress getIngressV1beta1(
+            String name, String namespace) {
+        return kubernetesClient
+                .network()
+                .v1beta1()
+                .ingresses()
+                .inNamespace(namespace)
+                .withName(name)
+                .get();
+    }
+
+    // ==================== Ingress Rotation Tests ====================
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyIngressSwitchesDuringTransition(FlinkVersion flinkVersion) throws Exception {
+        // Build deployment with ingress spec
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+
+        IngressSpec ingressSpec =
+                IngressSpec.builder()
+                        .template("{{name}}.{{namespace}}.example.com")
+                        .className("nginx")
+                        .annotations(Map.of("nginx.ingress.kubernetes.io/rewrite-target", "/"))
+                        .build();
+        blueGreenDeployment.getSpec().setIngress(ingressSpec);
+
+        // 1. Deploy Blue with ingress
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        // 2. Verify ingress points to Blue
+        assertIngressPointsToService(BLUE_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // 3. Trigger transition to Green
+        String customValue = UUID.randomUUID().toString();
+        simulateChangeInSpec(rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, null);
+
+        // Transition to Green
+        testTransitionToGreen(rs, customValue, null);
+
+        // 4. Verify ingress now points to Green
+        assertIngressPointsToService(GREEN_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyIngressCreatedOnlyWhenConfigured(FlinkVersion flinkVersion) throws Exception {
+        // 1. Deploy Blue without ingress spec
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        // 2. Verify no ingress created initially
+        assertIngressDoesNotExist();
+
+        // 3. Add ingress spec and trigger transition to Green
+        IngressSpec ingressSpec =
+                IngressSpec.builder()
+                        .template("{{name}}.{{namespace}}.example.com")
+                        .className("nginx")
+                        .build();
+        rs.deployment.getSpec().setIngress(ingressSpec);
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        String customValue = UUID.randomUUID().toString();
+        simulateChangeInSpec(rs.deployment, customValue, ALT_DELETION_DELAY_VALUE, null);
+
+        // Complete transition to Green (this reconciles ingress)
+        testTransitionToGreen(rs, customValue, null);
+
+        // 4. Verify ingress created and points to Green after transition completes
+        assertIngressPointsToService(GREEN_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
     }
 }
