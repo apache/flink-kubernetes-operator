@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.Objects;
 
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.clearReconciliationStatus;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
@@ -136,9 +137,15 @@ public class BlueGreenDeploymentService {
 
             // Check if child is currently suspended - if so, just patch specs without restart
             if (isChildSuspended(currentFlinkDeployment)) {
+                // Clear poisoned reconciliation status from previous failed deployment attempt.
+                // When a deployment fails and is suspended, the reconciler marks the suspended
+                // state as stable. This causes issues when we try to resume because the
+                // lastReconciledSpec still contains the suspended state, causing the deployment
+                // to immediately suspend itself again.
+                clearReconciliationStatus(currentFlinkDeployment, context);
                 setLastReconciledSpec(context);
                 LOG.info(
-                        "Spec change while suspended for '{}'",
+                        "Spec change while suspended for '{}', cleared reconciliation status",
                         currentFlinkDeployment.getMetadata().getName());
                 return patchFlinkDeployment(context, currentBlueGreenDeploymentType);
             }

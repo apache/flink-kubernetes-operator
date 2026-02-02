@@ -76,6 +76,32 @@ public class BlueGreenKubernetesService {
         updateFlinkDeployment(nextDeployment, context);
     }
 
+    /**
+     * Clears the reconciliation status of a FlinkDeployment to prevent stale state from affecting
+     * subsequent reconciliations. This is necessary when recovering from a failed deployment where
+     * the suspended state was incorrectly marked as stable.
+     *
+     * @param deployment the FlinkDeployment whose reconciliation status should be cleared
+     * @param context the Blue/Green transition context
+     */
+    public static void clearReconciliationStatus(
+            FlinkDeployment deployment, BlueGreenContext context) {
+        var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
+        reconciliationStatus.setLastReconciledSpec(null);
+        reconciliationStatus.setLastStableSpec(null);
+        updateFlinkDeploymentStatus(deployment, context);
+    }
+
+    public static void updateFlinkDeploymentStatus(
+            FlinkDeployment deployment, BlueGreenContext context) {
+        String namespace = context.getBgDeployment().getMetadata().getNamespace();
+        context.getJosdkContext()
+                .getClient()
+                .resource(deployment)
+                .inNamespace(namespace)
+                .updateStatus();
+    }
+
     public static void updateFlinkDeployment(
             FlinkDeployment nextDeployment, BlueGreenContext context) {
         String namespace = context.getBgDeployment().getMetadata().getNamespace();
