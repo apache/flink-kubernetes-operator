@@ -53,6 +53,7 @@ import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceOperations;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
@@ -513,6 +514,16 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
+        public <R> Set<R> getSecondaryResources(Class<R> aClass, boolean b) {
+            return Set.of();
+        }
+
+        @Override
+        public <R> Stream<R> getSecondaryResourcesAsStream(Class<R> aClass, boolean b) {
+            return Stream.empty();
+        }
+
+        @Override
         public <T1> Optional<T1> getSecondaryResource(Class<T1> aClass, String s) {
             return Optional.empty();
         }
@@ -536,6 +547,11 @@ public class TestUtils extends BaseTestUtils {
         @Override
         public KubernetesClient getClient() {
             throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public ResourceOperations<T> resourceOperations() {
+            return null;
         }
 
         @Override
