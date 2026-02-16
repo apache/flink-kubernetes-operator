@@ -160,10 +160,14 @@ public class SessionReconciler
 
     @Override
     public DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
-        Set<FlinkSessionJob> sessionJobs =
-                ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class);
+        var sessionJobs = ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class);
         var deployment = ctx.getResource();
-        if (!sessionJobs.isEmpty()) {
+
+        boolean blockOnSessionJobs =
+                ctx.getObserveConfig()
+                        .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS);
+
+        if (blockOnSessionJobs && !sessionJobs.isEmpty()) {
             var error =
                     String.format(
                             "The session jobs %s should be deleted first",
@@ -188,7 +192,7 @@ public class SessionReconciler
         boolean blockOnUnmanagedJobs =
                 ctx.getObserveConfig()
                         .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
-        if (blockOnUnmanagedJobs) {
+        if (blockOnSessionJobs && blockOnUnmanagedJobs) {
             Set<JobID> nonTerminalJobs = getNonTerminalJobs(ctx);
             if (!nonTerminalJobs.isEmpty()) {
                 var error =

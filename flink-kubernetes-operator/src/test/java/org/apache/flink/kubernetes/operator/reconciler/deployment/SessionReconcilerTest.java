@@ -38,6 +38,7 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -304,5 +305,82 @@ public class SessionReconcilerTest extends OperatorTestBase {
                 0,
                 nonTerminalJobsAfterRemoval.size(),
                 "Should have no non-terminal jobs when only terminated jobs exist");
+    }
+
+    @Test
+    public void testDeleteSessionWithBlockOnSessionJobsFalse() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS.key(), "false");
+
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Create some running jobs
+        JobID managedJobId1 = new JobID();
+        JobID managedJobId2 = new JobID();
+        JobID unmanagedRunningJobId = new JobID();
+
+        flinkService
+                .listJobs()
+                .add(
+                        Tuple3.of(
+                                null,
+                                new JobStatusMessage(
+                                        managedJobId1,
+                                        "managed-job-1",
+                                        JobStatus.RUNNING,
+                                        System.currentTimeMillis()),
+                                new Configuration()));
+        flinkService
+                .listJobs()
+                .add(
+                        Tuple3.of(
+                                null,
+                                new JobStatusMessage(
+                                        managedJobId2,
+                                        "managed-job-2",
+                                        JobStatus.RUNNING,
+                                        System.currentTimeMillis()),
+                                new Configuration()));
+        flinkService
+                .listJobs()
+                .add(
+                        Tuple3.of(
+                                null,
+                                new JobStatusMessage(
+                                        unmanagedRunningJobId,
+                                        "unmanaged-running-job",
+                                        JobStatus.RUNNING,
+                                        System.currentTimeMillis()),
+                                new Configuration()));
+
+        // Create FlinkSessionJob resources for the managed jobs
+        FlinkSessionJob managedSessionJob1 = TestUtils.buildSessionJob();
+        managedSessionJob1.getMetadata().setName("managed-session-job-1");
+        managedSessionJob1.getStatus().getJobStatus().setJobId(managedJobId1.toHexString());
+        kubernetesClient.resource(managedSessionJob1).createOrReplace();
+
+        FlinkSessionJob managedSessionJob2 = TestUtils.buildSessionJob();
+        managedSessionJob2.getMetadata().setName("managed-session-job-2");
+        managedSessionJob2.getStatus().getJobStatus().setJobId(managedJobId2.toHexString());
+        kubernetesClient.resource(managedSessionJob2).createOrReplace();
+
+        // Test cleanup with BLOCK_ON_SESSION_JOBS=false
+        var context = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        var resourceContext = getResourceContext(deployment, context);
+
+        var sessionReconciler = (SessionReconciler) reconciler.getReconciler();
+        DeleteControl deleteControl = sessionReconciler.cleanupInternal(resourceContext);
+
+        // Verify that deletion proceeds immediately despite running jobs
+        assertTrue(
+                deleteControl.isRemoveFinalizer(),
+                "Session should be deleted immediately when BLOCK_ON_SESSION_JOBS is false");
     }
 }
