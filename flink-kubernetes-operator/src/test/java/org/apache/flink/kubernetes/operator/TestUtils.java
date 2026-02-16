@@ -85,6 +85,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_MODE;
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_STORAGE_PATH;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -275,12 +277,7 @@ public class TestUtils extends BaseTestUtils {
                 if (!haEnabled) {
                     session.getSpec()
                             .getFlinkConfiguration()
-                            .remove(
-                                    org.apache.flink.configuration.HighAvailabilityOptions.HA_MODE
-                                            .key(),
-                                    org.apache.flink.configuration.HighAvailabilityOptions
-                                            .HA_STORAGE_PATH
-                                            .key());
+                            .remove(HA_MODE.key(), HA_STORAGE_PATH.key());
                 }
                 return (Optional<T>) Optional.of(session);
             }
