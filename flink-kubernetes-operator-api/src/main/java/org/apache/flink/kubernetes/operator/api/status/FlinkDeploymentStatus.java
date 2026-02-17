@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.kubernetes.api.model.Condition;
 import lombok.AllArgsConstructor;
@@ -61,4 +62,10 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Condition of the CR . */
     private List<Condition> conditions = new ArrayList<>();
+
+    @JsonIgnore
+    @Override
+    public boolean isJobCancellable() {
+        return super.isJobCancellable() && jobManagerDeploymentStatus.isRestApiAvailable();
+    }
 }

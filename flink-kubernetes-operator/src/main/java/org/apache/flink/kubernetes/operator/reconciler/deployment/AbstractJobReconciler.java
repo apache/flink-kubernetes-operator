@@ -277,7 +277,7 @@ public abstract class AbstractJobReconciler<
                 if (running && savepointPossible) {
                     LOG.info("Using savepoint to upgrade Flink version");
                     return JobUpgrade.savepoint(false);
-                } else if (ReconciliationUtils.isJobCancellable(resource.getStatus())) {
+                } else if (resource.getStatus().isJobCancellable()) {
                     LOG.info("Using last-state upgrade with cancellation to upgrade Flink version");
                     return JobUpgrade.lastStateUsingCancel();
                 } else {
@@ -354,7 +354,7 @@ public abstract class AbstractJobReconciler<
 
     private boolean allowLastStateCancel(FlinkResourceContext<CR> ctx) {
         var resource = ctx.getResource();
-        if (!ReconciliationUtils.isJobCancellable(resource.getStatus())) {
+        if (!resource.getStatus().isJobCancellable()) {
             return false;
         }
         if (resource instanceof FlinkSessionJob) {

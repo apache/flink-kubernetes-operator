@@ -26,5 +26,23 @@ public enum BlueGreenDiffType {
     TRANSITION,
 
     /** Changes that only affect the child FlinkDeploymentSpec. */
-    PATCH_CHILD
+    PATCH_CHILD,
+
+    /**
+     * Full redeploy from user-specified savepoint. Triggered when savepointRedeployNonce changes.
+     * Uses the initialSavepointPath from spec instead of taking a new savepoint.
+     */
+    SAVEPOINT_REDEPLOY,
+
+    /**
+     * In-place suspension. Triggered when job.state changes from RUNNING to SUSPENDED. Suspends the
+     * currently active child without creating a new deployment.
+     */
+    SUSPEND,
+
+    /**
+     * Resume from suspension. Triggered when job.state changes from SUSPENDED to RUNNING. Spins up
+     * the child with the current (potentially updated) spec.
+     */
+    RESUME
 }

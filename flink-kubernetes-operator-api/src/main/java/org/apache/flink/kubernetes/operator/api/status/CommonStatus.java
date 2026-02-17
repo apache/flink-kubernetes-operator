@@ -22,12 +22,15 @@ import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.apache.commons.lang3.StringUtils;
+
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
 
 /** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
@@ -120,5 +123,14 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         }
 
         return ResourceLifecycleState.DEPLOYED;
+    }
+
+    @JsonIgnore
+    public boolean isJobCancellable() {
+        var jobState = jobStatus.getState();
+        if (jobState == null) {
+            return false;
+        }
+        return RECONCILING != jobState && !jobState.isGloballyTerminalState();
     }
 }

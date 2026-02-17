@@ -20,9 +20,11 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.metrics.lifecycle.BlueGreenLifecycleMetrics;
 import org.apache.flink.kubernetes.operator.metrics.lifecycle.LifecycleMetrics;
 
 import io.fabric8.kubernetes.client.CustomResource;
@@ -69,6 +71,15 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
         return metricManager;
     }
 
+    public static MetricManager<FlinkBlueGreenDeployment>
+            createFlinkBlueGreenDeploymentMetricManager(
+                    Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkBlueGreenDeployment> metricManager = new MetricManager<>();
+        registerFlinkBlueGreenDeploymentMetrics(conf, metricGroup, metricManager);
+        registerBlueGreenLifecycleMetrics(conf, metricGroup, metricManager);
+        return metricManager;
+    }
+
     private static void registerFlinkDeploymentMetrics(
             Configuration conf,
             KubernetesOperatorMetricGroup metricGroup,
@@ -96,6 +107,15 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
         }
     }
 
+    private static void registerFlinkBlueGreenDeploymentMetrics(
+            Configuration conf,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkBlueGreenDeployment> metricManager) {
+        if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(new FlinkBlueGreenDeploymentMetrics(metricGroup, conf));
+        }
+    }
+
     private static <CR extends AbstractFlinkResource<?, ?>> void registerLifecycleMetrics(
             Configuration conf,
             KubernetesOperatorMetricGroup metricGroup,
@@ -103,6 +123,16 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
         if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)
                 && conf.get(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED)) {
             metricManager.register(new LifecycleMetrics<>(conf, metricGroup));
+        }
+    }
+
+    private static void registerBlueGreenLifecycleMetrics(
+            Configuration conf,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkBlueGreenDeployment> metricManager) {
+        if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)
+                && conf.get(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED)) {
+            metricManager.register(new BlueGreenLifecycleMetrics(conf, metricGroup));
         }
     }
 

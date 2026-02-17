@@ -108,9 +108,9 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
-import org.apache.flink.shaded.guava31.com.google.common.collect.Iterables;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
+import com.google.common.collect.Iterables;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -336,7 +336,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     savepointPath = savepointJobOrError(clusterClient, status, conf);
                     break;
                 case STATELESS:
-                    if (ReconciliationUtils.isJobCancellable(status)) {
+                    if (status.isJobCancellable()) {
                         try {
                             cancelJobOrError(clusterClient, status, true);
                         } catch (Exception ex) {
@@ -908,7 +908,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
-                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+                    .get(operatorConfig.getJobSubmissionTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
             throw new FlinkRuntimeException(e);

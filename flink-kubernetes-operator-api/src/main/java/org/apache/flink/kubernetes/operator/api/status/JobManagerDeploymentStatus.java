@@ -53,4 +53,8 @@ public enum JobManagerDeploymentStatus {
     public String getMessage() {
         return message;
     }
+
+    public boolean isRestApiAvailable() {
+        return this == READY;
+    }
 }

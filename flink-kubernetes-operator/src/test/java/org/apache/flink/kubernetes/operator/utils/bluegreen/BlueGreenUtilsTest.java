@@ -27,6 +27,9 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 
@@ -38,6 +41,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link BlueGreenUtils}. */
 public class BlueGreenUtilsTest {
@@ -83,6 +89,141 @@ public class BlueGreenUtilsTest {
         assertEquals(parentDeploymentName + ".jm", resultFlinkConfig.get("metrics.scope.jm"));
     }
 
+    @Test
+    public void testSavepointRequiredBasedOnUpgradeMode() {
+        // SAVEPOINT mode requires savepoint
+        FlinkBlueGreenDeployment bgDeployment =
+                buildBlueGreenDeployment("test-app", TEST_NAMESPACE);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.SAVEPOINT);
+        BlueGreenContext context = createContext(bgDeployment);
+        assertTrue(BlueGreenUtils.isSavepointRequired(context));
+
+        // LAST_STATE mode requires savepoint
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.LAST_STATE);
+        assertTrue(BlueGreenUtils.isSavepointRequired(context));
+
+        // STATELESS mode does not require savepoint
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.STATELESS);
+        assertFalse(BlueGreenUtils.isSavepointRequired(context));
+    }
+
+    @Test
+    public void testPrepareFlinkDeploymentStatelessInitialSavepointPath() {
+        // Setup: STATELESS mode with initialSavepointPath set
+        FlinkBlueGreenDeployment bgDeployment =
+                buildBlueGreenDeployment("test-app", TEST_NAMESPACE);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.STATELESS);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setInitialSavepointPath("s3://bucket/savepoint-xyz");
+
+        BlueGreenContext context = createContext(bgDeployment);
+
+        // Act: Prepare deployment with null lastCheckpoint (STATELESS transition)
+        FlinkDeployment result =
+                BlueGreenUtils.prepareFlinkDeployment(
+                        context,
+                        BlueGreenDeploymentType.GREEN,
+                        null, // No lastCheckpoint
+                        false, // Not first deployment
+                        bgDeployment.getMetadata());
+
+        // Assert: initialSavepointPath should be used for STATELESS
+        assertNotNull(result.getSpec().getJob().getInitialSavepointPath());
+    }
+
+    @Test
+    public void testNullLastCheckpointUsesInitialSavepointPath() {
+        // lastCheckpoint=null -> use initialSavepointPath from spec
+        FlinkBlueGreenDeployment bgDeployment =
+                buildBlueGreenDeployment("test-app", TEST_NAMESPACE);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.SAVEPOINT);
+        String initialPath = "s3://bucket/user-specified-savepoint";
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setInitialSavepointPath(initialPath);
+
+        BlueGreenContext context = createContext(bgDeployment);
+
+        FlinkDeployment result =
+                BlueGreenUtils.prepareFlinkDeployment(
+                        context,
+                        BlueGreenDeploymentType.GREEN,
+                        null, // null = nonce changed, no new savepoint taken
+                        false,
+                        bgDeployment.getMetadata());
+
+        assertEquals(initialPath, result.getSpec().getJob().getInitialSavepointPath());
+    }
+
+    @Test
+    public void testNormalTransitionUsesFreshSavepoint() {
+        // Normal transition → take fresh savepoint from running job → use that, not
+        // initialSavepointPath
+        FlinkBlueGreenDeployment bgDeployment =
+                buildBlueGreenDeployment("test-app", TEST_NAMESPACE);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.SAVEPOINT);
+        bgDeployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setInitialSavepointPath("s3://bucket/ignored");
+
+        BlueGreenContext context = createContext(bgDeployment);
+
+        String freshSavepoint = "s3://bucket/fresh-savepoint-from-running-job";
+        Savepoint triggered =
+                Savepoint.of(
+                        freshSavepoint, SnapshotTriggerType.UPGRADE, SavepointFormatType.CANONICAL);
+
+        FlinkDeployment result =
+                BlueGreenUtils.prepareFlinkDeployment(
+                        context,
+                        BlueGreenDeploymentType.GREEN,
+                        triggered, // Fresh savepoint provided
+                        false,
+                        bgDeployment.getMetadata());
+
+        assertEquals(freshSavepoint, result.getSpec().getJob().getInitialSavepointPath());
+    }
+
     private static FlinkBlueGreenDeployment buildBlueGreenDeployment(
             String name, String namespace) {
         var deployment = new FlinkBlueGreenDeployment();
@@ -102,6 +243,7 @@ public class BlueGreenUtilsTest {
         var bgDeploymentSpec =
                 new FlinkBlueGreenDeploymentSpec(
                         new HashMap<>(),
+                        null,
                         FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build());
 
         deployment.setSpec(bgDeploymentSpec);

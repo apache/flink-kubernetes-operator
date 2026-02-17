@@ -379,10 +379,6 @@ public class ReconciliationUtils {
         return CANCELED == status.getJobStatus().getState();
     }
 
-    public static boolean isJobCancellable(CommonStatus<?> status) {
-        return RECONCILING != status.getJobStatus().getState();
-    }
-
     public static boolean isJobCancelling(CommonStatus<?> status) {
         return status.getJobStatus() != null && CANCELLING == status.getJobStatus().getState();
     }

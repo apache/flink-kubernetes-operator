@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller.bluegreen.handlers;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
@@ -27,6 +28,7 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploy
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService.patchStatusUpdateControl;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 
@@ -40,6 +42,15 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
     @Override
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
+
+        // Block initial deployment if job.state is SUSPENDED - user must start with RUNNING
+        var jobSpec = context.getBgDeployment().getSpec().getTemplate().getSpec().getJob();
+        if (jobSpec != null && jobSpec.getState() == JobState.SUSPENDED) {
+            LOG.info(
+                    "Blocking initial deployment '{}' - job.state is SUSPENDED, waiting for RUNNING",
+                    context.getBgDeployment().getMetadata().getName());
+            return patchStatusUpdateControl(context, null, JobStatus.SUSPENDED, null);
+        }
 
         // Deploy only if this is the initial deployment (no previous spec exists)
         // or if we're recovering from a failure and the spec has changed since the last attempt

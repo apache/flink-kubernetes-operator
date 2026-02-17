@@ -51,6 +51,7 @@ import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
+import org.apache.flink.runtime.client.DuplicateJobSubmissionException;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -292,6 +293,10 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
+        if (jobs.stream().anyMatch(job -> job.f1.getJobId().equals(jobID))) {
+            throw DuplicateJobSubmissionException.of(jobID);
+        }
+
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,

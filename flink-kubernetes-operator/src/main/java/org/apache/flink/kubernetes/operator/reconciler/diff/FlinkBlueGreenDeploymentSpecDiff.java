@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
 import lombok.NonNull;
@@ -59,26 +60,59 @@ public class FlinkBlueGreenDeploymentSpecDiff {
         FlinkDeploymentSpec leftSpec = left.getTemplate().getSpec();
         FlinkDeploymentSpec rightSpec = right.getTemplate().getSpec();
 
-        // Used in Case 2 & 3: Delegate to ReflectiveDiffBuilder for nested spec comparison
+        // Check for suspend/resume state changes first - these take highest precedence
+        // for in-place suspension handling
+        JobState leftJobState = getJobState(leftSpec);
+        JobState rightJobState = getJobState(rightSpec);
+
+        if (leftJobState != rightJobState) {
+            if (rightJobState == JobState.SUSPENDED) {
+                return BlueGreenDiffType.SUSPEND;
+            } else if (leftJobState == JobState.SUSPENDED && rightJobState == JobState.RUNNING) {
+                return BlueGreenDiffType.RESUME;
+            }
+        }
+
+        // Used in Case 2, 3 & 4: Delegate to ReflectiveDiffBuilder for nested spec comparison
         // Calculate diffResult before comparison to apply in-place removal of ignored fields
         DiffResult<FlinkDeploymentSpec> diffResult =
                 new ReflectiveDiffBuilder<>(deploymentMode, leftSpec, rightSpec).build();
 
-        // Case 1: FlinkDeploymentSpecs are identical
+        // Extract the diff type from ReflectiveDiffBuilder result
+        DiffType diffType = diffResult.getType();
+
+        // Case 1: Check for savepoint redeploy first (savepointRedeployNonce changed)
+        // This takes precedence as it indicates user wants to redeploy from their
+        // initialSavepointPath
+        if (diffType == DiffType.SAVEPOINT_REDEPLOY) {
+            return BlueGreenDiffType.SAVEPOINT_REDEPLOY;
+        }
+
+        // Case 2: FlinkDeploymentSpecs are identical
         if (leftSpec.equals(rightSpec)) {
             return BlueGreenDiffType.IGNORE;
         }
 
-        // Extract the diff type from ReflectiveDiffBuilder result
-        DiffType diffType = diffResult.getType();
-
-        // Case 2: ReflectiveDiffBuilder returns IGNORE
+        // Case 3: ReflectiveDiffBuilder returns IGNORE
         if (diffType == DiffType.IGNORE) {
             return BlueGreenDiffType.PATCH_CHILD;
         } else {
-            // Case 3: ReflectiveDiffBuilder returns anything else map it to TRANSITION as well
+            // Case 4: ReflectiveDiffBuilder returns anything else map it to TRANSITION
             return BlueGreenDiffType.TRANSITION;
         }
+    }
+
+    /**
+     * Gets the job state from the spec, defaulting to RUNNING if not set.
+     *
+     * @param spec the FlinkDeploymentSpec
+     * @return the job state, or RUNNING if job or state is null
+     */
+    private JobState getJobState(FlinkDeploymentSpec spec) {
+        if (spec.getJob() == null || spec.getJob().getState() == null) {
+            return JobState.RUNNING;
+        }
+        return spec.getJob().getState();
     }
 
     /**

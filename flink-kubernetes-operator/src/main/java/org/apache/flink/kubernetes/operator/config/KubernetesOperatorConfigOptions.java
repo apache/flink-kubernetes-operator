@@ -134,6 +134,13 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_JOB_SUBMISSION_TIMEOUT =
+            operatorConfig("job.submission.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(10))
+                    .withDescription("The timeout for session job submissions.");
+
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> DEPLOYMENT_ROLLBACK_ENABLED =
             operatorConfig("deployment.rollback.enabled")
