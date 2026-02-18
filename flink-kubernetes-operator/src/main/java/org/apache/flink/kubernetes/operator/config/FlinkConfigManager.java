@@ -61,6 +61,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,6 +76,8 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 
 /** Configuration manager for the Flink operator. */
 public class FlinkConfigManager {
+
+    public static final String ENV_VAR_PREFIX = "FLINK_CONF_";
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -447,15 +450,36 @@ public class FlinkConfigManager {
 
     @VisibleForTesting
     protected static Configuration loadGlobalConfiguration(Optional<String> confOverrideDir) {
+        Configuration res;
         if (confOverrideDir.isPresent()) {
             Configuration configOverrides =
                     GlobalConfiguration.loadConfiguration(confOverrideDir.get());
             LOG.debug(
                     "Loading default configuration with overrides from {}", confOverrideDir.get());
-            return GlobalConfiguration.loadConfiguration(configOverrides);
+            res = GlobalConfiguration.loadConfiguration(configOverrides);
+        } else {
+            LOG.debug("Loading default configuration");
+            res = GlobalConfiguration.loadConfiguration();
         }
-        LOG.debug("Loading default configuration");
-        return GlobalConfiguration.loadConfiguration();
+        overriderConfigurationsFromEnvVariables(res, System::getenv);
+        return res;
+    }
+
+    @VisibleForTesting
+    static void overriderConfigurationsFromEnvVariables(
+            Configuration res, Supplier<Map<String, String>> envVariables) {
+        var envVars = envVariables.get();
+        envVars.forEach(
+                (k, v) -> {
+                    if (k.startsWith(ENV_VAR_PREFIX)) {
+                        res.setString(envVarToKey(k), v);
+                    }
+                });
+    }
+
+    @VisibleForTesting
+    static String envVarToKey(String key) {
+        return key.replace(ENV_VAR_PREFIX, "").replace("__", "-").replace("_", ".").toLowerCase();
     }
 
     private static void applyDefault(
