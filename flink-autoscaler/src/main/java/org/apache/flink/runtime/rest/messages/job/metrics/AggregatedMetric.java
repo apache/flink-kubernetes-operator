@@ -127,7 +127,7 @@ public class AggregatedMetric {
                 + "id='"
                 + id
                 + '\''
-                + ", mim='"
+                + ", min='"
                 + min
                 + '\''
                 + ", max='"
