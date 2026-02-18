@@ -27,13 +27,16 @@ import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
 import org.apache.flink.autoscaler.standalone.realizer.RescaleApiScalingRealizer;
+import org.apache.flink.autoscaler.standalone.yarn.YarnJobListFetcher;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.util.function.FunctionWithException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,15 +76,24 @@ public class StandaloneAutoscalerEntrypoint {
         var port = conf.get(FETCHER_FLINK_CLUSTER_PORT);
         var restServerAddress = String.format("http://%s:%s", host, port);
 
-        return (JobListFetcher<KEY, Context>)
-                new FlinkClusterJobListFetcher(
-                        configuration ->
-                                new RestClusterClient<>(
-                                        configuration,
-                                        "clusterId",
-                                        (c, e) ->
-                                                new StandaloneClientHAServices(restServerAddress)),
-                        conf.get(FLINK_CLIENT_TIMEOUT));
+        var fetcherType = conf.get(AutoscalerStandaloneOptions.FETCHER_TYPE);
+        FunctionWithException<Configuration, RestClusterClient<String>, Exception> clientSupplier =
+                configuration ->
+                        new RestClusterClient<>(
+                                configuration,
+                                "clusterId",
+                                (c, e) -> new StandaloneClientHAServices(restServerAddress));
+
+        switch (fetcherType) {
+            case YARN:
+                return (JobListFetcher<KEY, Context>)
+                        new YarnJobListFetcher(clientSupplier, conf.get(FLINK_CLIENT_TIMEOUT));
+            case FLINK_CLUSTER:
+            default:
+                return (JobListFetcher<KEY, Context>)
+                        new FlinkClusterJobListFetcher(
+                                clientSupplier, conf.get(FLINK_CLIENT_TIMEOUT));
+        }
     }
 
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
