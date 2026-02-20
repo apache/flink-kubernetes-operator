@@ -10685,6 +10685,23 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                type: array
               error:
                 type: string
               jobManagerDeploymentStatus:

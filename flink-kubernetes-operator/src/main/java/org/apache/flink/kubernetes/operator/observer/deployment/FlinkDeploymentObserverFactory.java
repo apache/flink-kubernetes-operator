@@ -19,8 +19,8 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.Mode;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
-import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 

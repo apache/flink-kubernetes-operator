@@ -21,20 +21,38 @@ package org.apache.flink.kubernetes.operator.api.status;
 public enum JobManagerDeploymentStatus {
 
     /** JobManager is running and ready to receive REST API calls. */
-    READY,
+    READY("JobManagerReady", "JobManager is running and ready to receive REST API calls"),
 
     /** JobManager is running but not ready yet to receive REST API calls. */
-    DEPLOYED_NOT_READY,
+    DEPLOYED_NOT_READY(
+            "DeployedNotReady",
+            "JobManager is running but not yet ready to receive REST API calls"),
 
     /** JobManager process is starting up. */
-    DEPLOYING,
+    DEPLOYING("JobManagerIsDeploying", "JobManager process is starting up"),
 
     /** JobManager deployment not found, probably not started or killed by user. */
     // TODO: currently a mix of SUSPENDED and ERROR, needs cleanup
-    MISSING,
+    MISSING("JobManagerDeploymentMissing", "JobManager deployment not found"),
 
     /** Deployment in terminal error, requires spec change for reconciliation to continue. */
-    ERROR;
+    ERROR("Error", "JobManager deployment failed");
+
+    private String reason;
+    private String message;
+
+    JobManagerDeploymentStatus(String reason, String message) {
+        this.reason = reason;
+        this.message = message;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public String getMessage() {
+        return message;
+    }
 
     public boolean isRestApiAvailable() {
         return this == READY;
