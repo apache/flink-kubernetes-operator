@@ -166,8 +166,10 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        flinkApp.getStatus()
-                .setConditions(ConditionUtils.createConditionFromStatus(flinkApp.getStatus()));
+        var conditions = ConditionUtils.createConditionFromStatus(flinkApp.getStatus());
+        LOG.debug("Setting conditions: {}", conditions);
+        flinkApp.getStatus().setConditions(conditions);
+        LOG.debug("Conditions after set: {}", flinkApp.getStatus().getConditions());
         LOG.debug("End of reconciliation");
         statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(

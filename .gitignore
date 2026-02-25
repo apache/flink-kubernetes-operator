@@ -41,3 +41,5 @@ buildNumber.properties
 
 # VSCode settings
 .vscode/
+.metals
+.bloop
