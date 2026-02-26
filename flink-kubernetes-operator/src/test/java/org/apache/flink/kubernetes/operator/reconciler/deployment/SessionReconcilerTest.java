@@ -305,4 +305,73 @@ public class SessionReconcilerTest extends OperatorTestBase {
                 nonTerminalJobsAfterRemoval.size(),
                 "Should have no non-terminal jobs when only terminated jobs exist");
     }
+
+    @Test
+    public void testUpgradeDeferredWhenSessionJobUpgrading() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        reconciler.reconcile(deployment, flinkService.getContext());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Create a session job that is in UPGRADING state
+        FlinkSessionJob upgradingJob = TestUtils.buildSessionJob();
+        upgradingJob
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(upgradingJob.getSpec(), upgradingJob);
+        upgradingJob.getStatus().getReconciliationStatus().setState(ReconciliationState.UPGRADING);
+        kubernetesClient.resource(upgradingJob).createOrReplace();
+
+        // Simulate a pending spec change on the deployment
+        deployment.getMetadata().setGeneration(2L);
+        deployment.getSpec().setRestartNonce(2L);
+
+        // Reconcile should be deferred because session job is upgrading
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        // Should still be DEPLOYED (not UPGRADING) — upgrade was deferred
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+    }
+
+    @Test
+    public void testUpgradeProceedsWhenSessionJobDeployed() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+
+        // Initial deploy
+        reconciler.reconcile(deployment, flinkService.getContext());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Create a session job that is in DEPLOYED state (not upgrading)
+        FlinkSessionJob deployedJob = TestUtils.buildSessionJob();
+        deployedJob
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployedJob.getSpec(), deployedJob);
+        deployedJob.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        kubernetesClient.resource(deployedJob).createOrReplace();
+
+        // Simulate a pending spec change on the deployment
+        deployment.getMetadata().setGeneration(2L);
+        deployment.getSpec().setRestartNonce(456L);
+
+        // Reconcile should proceed because session job is not upgrading
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        // Should be DEPLOYED with the new spec (upgrade went through)
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(
+                456L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getRestartNonce());
+    }
 }

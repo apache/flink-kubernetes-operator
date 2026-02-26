@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -43,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
@@ -186,9 +188,33 @@ public class SessionJobReconciler
                         "Session cluster deployment is in {} status, not ready for serve",
                         jobmanagerDeploymentStatus);
                 return false;
-            } else {
-                return true;
             }
+
+            // Block while FlinkDeployment is in reconciliation state
+            var reconciliationState = flinkdep.getStatus().getReconciliationStatus().getState();
+            if (reconciliationState != ReconciliationState.DEPLOYED
+                    && reconciliationState != ReconciliationState.ROLLED_BACK) {
+                LOG.info(
+                        "Session cluster deployment reconciliation state is {}, not ready for sync",
+                        reconciliationState);
+                return false;
+            }
+
+            // Block while a FlinkDeployment spec change is pending. This make sure that
+            // FlinkSessionJob updates will be
+            // applied only after all changes for this generation got applied
+            if (!Objects.equals(
+                    flinkdep.getMetadata().getGeneration(),
+                    flinkdep.getStatus().getObservedGeneration())) {
+                LOG.info(
+                        "Session cluster deployment has pending spec changes "
+                                + "(generation={}, observedGeneration={}), not ready for sync",
+                        flinkdep.getMetadata().getGeneration(),
+                        flinkdep.getStatus().getObservedGeneration());
+                return false;
+            }
+
+            return true;
         } else {
             LOG.warn("Session cluster deployment is not found");
             return false;
