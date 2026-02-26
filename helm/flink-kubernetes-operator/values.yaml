@@ -58,6 +58,9 @@ rbac:
   jobRoleBinding:
     create: true
     name: "flink-role-binding"
+  # create user-faceing roles for view/edit/admin, see https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
+  userFacingRole:
+    create: true
 
 operatorPod:
   priorityClassName: null
