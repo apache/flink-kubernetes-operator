@@ -314,7 +314,6 @@ public class SessionReconcilerTest extends OperatorTestBase {
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
 
-        // Create a session job that is in UPGRADING state
         FlinkSessionJob upgradingJob = TestUtils.buildSessionJob();
         upgradingJob
                 .getStatus()
@@ -323,7 +322,6 @@ public class SessionReconcilerTest extends OperatorTestBase {
         upgradingJob.getStatus().getReconciliationStatus().setState(ReconciliationState.UPGRADING);
         kubernetesClient.resource(upgradingJob).createOrReplace();
 
-        // Simulate a pending spec change on the deployment
         deployment.getMetadata().setGeneration(2L);
         deployment.getSpec().setRestartNonce(2L);
 
@@ -340,13 +338,11 @@ public class SessionReconcilerTest extends OperatorTestBase {
     public void testUpgradeProceedsWhenSessionJobDeployed() throws Exception {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
 
-        // Initial deploy
         reconciler.reconcile(deployment, flinkService.getContext());
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
 
-        // Create a session job that is in DEPLOYED state (not upgrading)
         FlinkSessionJob deployedJob = TestUtils.buildSessionJob();
         deployedJob
                 .getStatus()
@@ -373,5 +369,26 @@ public class SessionReconcilerTest extends OperatorTestBase {
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpec()
                         .getRestartNonce());
+    }
+
+    @Test
+    public void testDeploymentCleanupWaitsForSessionJobs() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        FlinkSessionJob job = TestUtils.buildSessionJob();
+        job.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(job.getSpec(), job);
+        job.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        kubernetesClient.resource(job).createOrReplace();
+
+        var deleteControl = reconciler.cleanup(deployment, flinkService.getContext());
+        assertFalse(deleteControl.isRemoveFinalizer());
+
+        kubernetesClient.resource(job).delete();
+
+        deleteControl = reconciler.cleanup(deployment, flinkService.getContext());
+        assertTrue(deleteControl.isRemoveFinalizer());
     }
 }

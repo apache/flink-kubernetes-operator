@@ -62,8 +62,9 @@ public class SessionJobReconciler
 
     @Override
     public boolean readyToReconcile(FlinkResourceContext<FlinkSessionJob> ctx) {
-        return sessionClusterReady(
-                        ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class))
+        var flinkDeploymentOpt = ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class);
+        return sessionClusterReady(flinkDeploymentOpt)
+                && noDeploymentChangesPending(flinkDeploymentOpt)
                 && super.readyToReconcile(ctx);
     }
 
@@ -180,44 +181,59 @@ public class SessionJobReconciler
     }
 
     public static boolean sessionClusterReady(Optional<FlinkDeployment> flinkDeploymentOpt) {
-        if (flinkDeploymentOpt.isPresent()) {
-            var flinkdep = flinkDeploymentOpt.get();
-            var jobmanagerDeploymentStatus = flinkdep.getStatus().getJobManagerDeploymentStatus();
-            if (jobmanagerDeploymentStatus != JobManagerDeploymentStatus.READY) {
-                LOG.info(
-                        "Session cluster deployment is in {} status, not ready for serve",
-                        jobmanagerDeploymentStatus);
-                return false;
-            }
-
-            // Block while FlinkDeployment is in reconciliation state
-            var reconciliationState = flinkdep.getStatus().getReconciliationStatus().getState();
-            if (reconciliationState != ReconciliationState.DEPLOYED
-                    && reconciliationState != ReconciliationState.ROLLED_BACK) {
-                LOG.info(
-                        "Session cluster deployment reconciliation state is {}, not ready for sync",
-                        reconciliationState);
-                return false;
-            }
-
-            // Block while a FlinkDeployment spec change is pending. This make sure that
-            // FlinkSessionJob updates will be
-            // applied only after all changes for this generation got applied
-            if (!Objects.equals(
-                    flinkdep.getMetadata().getGeneration(),
-                    flinkdep.getStatus().getObservedGeneration())) {
-                LOG.info(
-                        "Session cluster deployment has pending spec changes "
-                                + "(generation={}, observedGeneration={}), not ready for sync",
-                        flinkdep.getMetadata().getGeneration(),
-                        flinkdep.getStatus().getObservedGeneration());
-                return false;
-            }
-
-            return true;
-        } else {
+        if (flinkDeploymentOpt.isEmpty()) {
             LOG.warn("Session cluster deployment is not found");
             return false;
         }
+        var flinkdep = flinkDeploymentOpt.get();
+        var jobmanagerDeploymentStatus = flinkdep.getStatus().getJobManagerDeploymentStatus();
+        if (jobmanagerDeploymentStatus != JobManagerDeploymentStatus.READY) {
+            LOG.info(
+                    "Session cluster deployment is in {} status, not ready for serve",
+                    jobmanagerDeploymentStatus);
+            return false;
+        }
+
+        // Block while FlinkDeployment is in a transitional reconciliation state
+        var reconciliationState = flinkdep.getStatus().getReconciliationStatus().getState();
+        if (reconciliationState != ReconciliationState.DEPLOYED
+                && reconciliationState != ReconciliationState.ROLLED_BACK) {
+            LOG.info(
+                    "Session cluster deployment reconciliation state is {}, not ready for serve",
+                    reconciliationState);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Checks that the FlinkDeployment has no pending spec changes
+     *
+     * <p>When they differ, the deployment spec was changed but the operator hasn't acted yet. The
+     * cluster may still appear healthy (JM READY, state DEPLOYED), but it is about to be updated
+     * (e.g. deleted and recreated). Allowing a session job to start upgrading in this window would
+     * risk the savepoint being destroyed during the cluster rebuild.
+     *
+     * <p>This check is only used in {@link #readyToReconcile}, not in {@link #sessionClusterReady},
+     * so it does not block cleanup or FlinkService creation.
+     */
+    private static boolean noDeploymentChangesPending(
+            Optional<FlinkDeployment> flinkDeploymentOpt) {
+        if (flinkDeploymentOpt.isEmpty()) {
+            return false;
+        }
+        var flinkdep = flinkDeploymentOpt.get();
+        if (!Objects.equals(
+                flinkdep.getMetadata().getGeneration(),
+                flinkdep.getStatus().getObservedGeneration())) {
+            LOG.info(
+                    "Session cluster deployment has pending spec changes "
+                            + "(generation={}, observedGeneration={}), not ready for sync",
+                    flinkdep.getMetadata().getGeneration(),
+                    flinkdep.getStatus().getObservedGeneration());
+            return false;
+        }
+        return true;
     }
 }

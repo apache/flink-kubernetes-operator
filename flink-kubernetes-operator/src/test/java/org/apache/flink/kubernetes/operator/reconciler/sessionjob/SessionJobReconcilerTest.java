@@ -882,7 +882,6 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                         session.getStatus()
                                 .getReconciliationStatus()
                                 .serializeAndSetLastReconciledSpec(session.getSpec(), session);
-                        // Leave state as UPGRADING (the default)
                         return Optional.of(session);
                     }
 
@@ -994,5 +993,33 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
 
         reconciler.reconcile(sessionJob, rolledBackContext);
         assertEquals(1, flinkService.listJobs().size());
+    }
+
+    @Test
+    public void testSessionJobCleanupWorksWhenDeploymentReady() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+
+        // Deploy session job and set it to running
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(1, flinkService.listJobs().size());
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RUNNING);
+
+        // First cleanup starts cancellation — defers to wait for it
+        var deleteControl = reconciler.cleanup(sessionJob, readyContext);
+        assertFalse(deleteControl.isRemoveFinalizer());
+
+        // Job reaches cancelled state
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
+
+        // Second cleanup sees terminal state — removes finalizer
+        deleteControl = reconciler.cleanup(sessionJob, readyContext);
+        assertTrue(deleteControl.isRemoveFinalizer());
     }
 }
