@@ -72,7 +72,7 @@ jobs:
 
       - name: Set up chart-testing
         run: |
-          CT_VERSION=3.11.0
+          CT_VERSION=3.14.0
           curl -sSLo /tmp/chart-testing.tar.gz "https://github.com/helm/chart-testing/releases/download/v${CT_VERSION}/chart-testing_${CT_VERSION}_linux_amd64.tar.gz"
           mkdir -p /tmp/ct
           tar -xzf /tmp/chart-testing.tar.gz -C /tmp/ct
