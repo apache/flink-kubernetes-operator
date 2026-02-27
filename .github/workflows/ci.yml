@@ -150,10 +150,10 @@ jobs:
         http-client: [ "okhttp" ]
         java-version: [ "17"]
         flink-version:
+          - "v2_2"
           - "v2_1"
           - "v2_0"
           - "v1_20"
-          - "v1_19"
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: ${{ matrix.java-version }}
@@ -167,10 +167,10 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_2"
           - "v2_1"
           - "v2_0"
           - "v1_20"
-          - "v1_19"
         mode:
          - "native"
          - "standalone"
@@ -201,10 +201,10 @@ jobs:
     strategy:
       matrix:
         flink-version:
+          - "v2_2"
           - "v2_1"
           - "v2_0"
           - "v1_20"
-          - "v1_19"
         mode:
           - "native"
           - "standalone"
@@ -222,8 +222,6 @@ jobs:
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
-          - flink-version: v1_19
-            test: test_snapshot.sh
     uses: ./.github/workflows/e2e.yaml
     with:
       java-version: 17
