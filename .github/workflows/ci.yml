@@ -78,6 +78,7 @@ jobs:
           tar -xzf /tmp/chart-testing.tar.gz -C /tmp/ct
           sudo mv /tmp/ct/ct /usr/local/bin/ct
           sudo mv /tmp/ct/etc /etc/ct
+          pip install yamale yamllint
 
       - name: Run chart-testing (list-changed)
         id: list-changed
