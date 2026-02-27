@@ -165,6 +165,7 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
+        flinkApp.getStatus().setRunningConditionIfRequired();
         LOG.debug("End of reconciliation");
         statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
