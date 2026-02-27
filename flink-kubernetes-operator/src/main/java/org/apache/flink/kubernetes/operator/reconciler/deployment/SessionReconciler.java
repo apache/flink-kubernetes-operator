@@ -71,16 +71,12 @@ public class SessionReconciler
         if (!Objects.equals(
                 deployment.getMetadata().getGeneration(),
                 deployment.getStatus().getObservedGeneration())) {
-            boolean hasUpgradingSessionJob =
+            var deploymentName = deployment.getMetadata().getName();
+            boolean hasTransitioningSessionJob =
                     ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class).stream()
-                            .filter(
-                                    job ->
-                                            deployment
-                                                    .getMetadata()
-                                                    .getName()
-                                                    .equals(job.getSpec().getDeploymentName()))
+                            .filter(job -> deploymentName.equals(job.getSpec().getDeploymentName()))
                             .anyMatch(SessionReconciler::isSessionJobTransitioning);
-            if (hasUpgradingSessionJob) {
+            if (hasTransitioningSessionJob) {
                 LOG.info(
                         "Deferring session cluster upgrade: associated session jobs are being upgraded");
                 return false;
