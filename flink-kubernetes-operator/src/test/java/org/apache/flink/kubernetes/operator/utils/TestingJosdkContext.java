@@ -23,6 +23,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceOperations;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
@@ -35,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Stream;
 
 /**
  * JOSDK Context for unit testing.
@@ -77,6 +79,16 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
     }
 
     @Override
+    public <R> Set<R> getSecondaryResources(Class<R> aClass, boolean b) {
+        return getSecondaryResources(aClass);
+    }
+
+    @Override
+    public <R> Stream<R> getSecondaryResourcesAsStream(Class<R> aClass, boolean b) {
+        return getSecondaryResources(aClass).stream();
+    }
+
+    @Override
     public <R> Optional<R> getSecondaryResource(Class<R> expectedType, String eventSourceName) {
         var resources = getSecondaryResources(expectedType);
         if (resources.isEmpty()) {
@@ -106,6 +118,11 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
     @Override
     public KubernetesClient getClient() {
         return kubernetesClient;
+    }
+
+    @Override
+    public ResourceOperations<P> resourceOperations() {
+        return null;
     }
 
     @Override
