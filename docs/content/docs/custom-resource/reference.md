@@ -397,6 +397,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
 | taskManager | org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo | Information about the TaskManagers for the scale subresource. |
+| conditions | java.util.List<io.fabric8.kubernetes.api.model.Condition> | Condition of the CR . |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus
@@ -476,6 +477,8 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | DEPLOYING | JobManager process is starting up. |
 | MISSING | JobManager deployment not found, probably not started or killed by user. |
 | ERROR | Deployment in terminal error, requires spec change for reconciliation to continue. |
+| reason | java.lang.String |  |
+| message | java.lang.String |  |
 
 ### JobStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.JobStatus

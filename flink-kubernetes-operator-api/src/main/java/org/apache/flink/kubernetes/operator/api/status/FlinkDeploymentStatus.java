@@ -18,10 +18,13 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.api.Mode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.utils.ConditionsUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.kubernetes.api.model.Condition;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -29,7 +32,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Last observed status of the Flink deployment. */
@@ -42,6 +47,8 @@ import java.util.Map;
 @SuperBuilder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
+
+    public static final String CONDITION_TYPE_RUNNING = "Running";
 
     /** Information from running clusters. */
     private Map<String, String> clusterInfo = new HashMap<>();
@@ -57,9 +64,47 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     /** Information about the TaskManagers for the scale subresource. */
     private TaskManagerInfo taskManager;
 
+    /** Condition of the CR . */
+    private List<Condition> conditions = new ArrayList<>();
+
     @JsonIgnore
     @Override
     public boolean isJobCancellable() {
         return super.isJobCancellable() && jobManagerDeploymentStatus.isRestApiAvailable();
+    }
+
+    /**
+     * Update the conditions with a RUNNING condition if required.
+     *
+     * @return a list of Conditions that will be either empty or containing a running condition.
+     */
+    public List<Condition> setRunningConditionIfRequired() {
+        Condition conditionToAdd = null;
+
+        if (reconciliationStatus != null) {
+            FlinkDeploymentSpec deploymentSpec =
+                    reconciliationStatus.deserializeLastReconciledSpec();
+
+            if (deploymentSpec != null) {
+                switch (Mode.getMode(deploymentSpec)) {
+                    case APPLICATION:
+                        conditionToAdd =
+                                ConditionsUtils.createApplicationModeCondition(
+                                        getJobStatus().getState());
+                        break;
+                    case SESSION:
+                        conditionToAdd =
+                                ConditionsUtils.createSessionModeCondition(
+                                        jobManagerDeploymentStatus);
+                }
+                ConditionsUtils.updateLastTransitionTime(conditions, conditionToAdd);
+            }
+        }
+        List<Condition> newConditions = new ArrayList<>();
+        if (conditionToAdd != null) {
+            newConditions = new ArrayList<>(List.of(conditionToAdd));
+        }
+        setConditions(newConditions);
+        return newConditions;
     }
 }
