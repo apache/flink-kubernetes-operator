@@ -48,6 +48,7 @@ import java.util.Objects;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.ALL_MAXIMIZE_UTILISATION_USE_MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
@@ -548,6 +549,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         KeyGroupOrPartitionsAdjustMode mode =
                 context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
 
+        var allowMaximizeUtilisationUseMaxParallelism =
+                context.getConfiguration().get(ALL_MAXIMIZE_UTILISATION_USE_MAX_PARALLELISM);
+
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
         // we try to adjust the parallelism such that it divides
         // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
@@ -557,8 +561,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     // When Mode is MAXIMIZE_UTILISATION , Try to find the smallest parallelism
                     // that can satisfy the current consumption rate.
                     (mode == MAXIMIZE_UTILISATION
-                            && numKeyGroupsOrPartitions / p
-                                    < numKeyGroupsOrPartitions / newParallelism)) {
+                            && (numKeyGroupsOrPartitions / p
+                            < numKeyGroupsOrPartitions / newParallelism
+                            || (allowMaximizeUtilisationUseMaxParallelism
+                            && newParallelism == maxParallelism)))) {
                 return p;
             }
         }
