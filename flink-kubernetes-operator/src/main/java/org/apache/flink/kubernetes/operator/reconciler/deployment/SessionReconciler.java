@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -42,6 +43,7 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -64,7 +66,36 @@ public class SessionReconciler
 
     @Override
     protected boolean readyToReconcile(FlinkResourceContext<FlinkDeployment> ctx) {
+        var deployment = ctx.getResource();
+        // Only check when there is a pending spec change on the deployment itself
+        if (!Objects.equals(
+                deployment.getMetadata().getGeneration(),
+                deployment.getStatus().getObservedGeneration())) {
+            var deploymentName = deployment.getMetadata().getName();
+            boolean hasTransitioningSessionJob =
+                    ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class).stream()
+                            .filter(job -> deploymentName.equals(job.getSpec().getDeploymentName()))
+                            .anyMatch(SessionReconciler::isSessionJobTransitioning);
+            if (hasTransitioningSessionJob) {
+                LOG.info(
+                        "Deferring session cluster upgrade: associated session jobs are being upgraded");
+                return false;
+            }
+        }
         return true;
+    }
+
+    private static boolean isSessionJobTransitioning(FlinkSessionJob job) {
+        var reconStatus = job.getStatus().getReconciliationStatus();
+        // New session jobs state is UPGRADING by default before first deployment. Treating them as
+        // transitioning would deadlock: the deployment can't
+        // start because it waits for the job, and the job can't start because it waits for the
+        // cluster.
+        if (reconStatus.isBeforeFirstDeployment()) {
+            return false;
+        }
+        var state = reconStatus.getState();
+        return state == ReconciliationState.UPGRADING || state == ReconciliationState.ROLLING_BACK;
     }
 
     @Override

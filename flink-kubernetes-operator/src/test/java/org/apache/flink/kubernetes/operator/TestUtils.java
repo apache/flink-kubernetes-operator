@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -226,6 +227,12 @@ public class TestUtils extends BaseTestUtils {
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                // ReconciliationStatus defaults to UPGRADING. Ready session
+                // cluster must be in DEPLOYED state, otherwise sessionClusterReady() will
+                // reject it due to the reconciliation state check.
+                session.getStatus()
+                        .getReconciliationStatus()
+                        .setState(ReconciliationState.DEPLOYED);
                 return (Optional<T>) Optional.of(session);
             }
 
@@ -498,8 +505,11 @@ public class TestUtils extends BaseTestUtils {
         @Override
         public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
             // TODO: improve this, even if we only support FlinkDeployment as a secondary resource
+            KubernetesClient client = getClient();
+            if (client == null) {
+                return Set.of();
+            }
             if (aClass.getSimpleName().equals(FlinkDeployment.class.getSimpleName())) {
-                KubernetesClient client = getClient();
                 var hasMetadata =
                         new HashSet<>(
                                 client.resources(FlinkDeployment.class)
@@ -507,8 +517,16 @@ public class TestUtils extends BaseTestUtils {
                                         .list()
                                         .getItems());
                 return (Set<T1>) hasMetadata;
+            } else if (aClass.getSimpleName().equals(FlinkSessionJob.class.getSimpleName())) {
+                var hasMetadata =
+                        new HashSet<>(
+                                client.resources(FlinkSessionJob.class)
+                                        .inAnyNamespace()
+                                        .list()
+                                        .getItems());
+                return (Set<T1>) hasMetadata;
             } else {
-                return null;
+                return Set.of();
             }
         }
 
