@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
@@ -40,8 +41,10 @@ import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -54,6 +57,7 @@ import javax.annotation.Nullable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 
@@ -860,5 +864,162 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob.getStatus().getReconciliationStatus().getState());
         // New jobID recorded despite failure
         Assertions.assertNotEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
+    }
+
+    @Test
+    public void testSessionClusterNotReadyWhenUpgrading() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Create a context where the deployment is JM=READY but reconciliation state=UPGRADING
+        Context<HasMetadata> upgradingContext =
+                new TestUtils.TestingContext<>() {
+                    @Override
+                    public Optional<HasMetadata> getSecondaryResource(
+                            Class expectedType, String eventSourceName) {
+                        var session = TestUtils.buildSessionCluster();
+                        session.getStatus()
+                                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                        return Optional.of(session);
+                    }
+
+                    @Override
+                    public KubernetesClient getClient() {
+                        return kubernetesClient;
+                    }
+                };
+
+        reconciler.reconcile(sessionJob, upgradingContext);
+        assertEquals(0, flinkService.listJobs().size());
+    }
+
+    @Test
+    public void testSessionClusterNotReadyWhenGenerationMismatch() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Create a context where JM=READY, state=DEPLOYED, but generation != observedGeneration
+        Context<HasMetadata> mismatchContext =
+                new TestUtils.TestingContext<>() {
+                    @Override
+                    public Optional<HasMetadata> getSecondaryResource(
+                            Class expectedType, String eventSourceName) {
+                        var session = TestUtils.buildSessionCluster();
+                        session.getStatus()
+                                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .setState(ReconciliationState.DEPLOYED);
+                        // Simulate a pending spec change: bump generation
+                        session.getMetadata().setGeneration(2L);
+                        return Optional.of(session);
+                    }
+
+                    @Override
+                    public KubernetesClient getClient() {
+                        return kubernetesClient;
+                    }
+                };
+
+        reconciler.reconcile(sessionJob, mismatchContext);
+        assertEquals(0, flinkService.listJobs().size());
+    }
+
+    @Test
+    public void testSessionClusterReadyWhenRolledBack() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Create a context where JM=READY, state=ROLLED_BACK, generation matches
+        Context<HasMetadata> rolledBackContext =
+                new TestUtils.TestingContext<>() {
+                    @Override
+                    public Optional<HasMetadata> getSecondaryResource(
+                            Class expectedType, String eventSourceName) {
+                        var session = TestUtils.buildSessionCluster();
+                        session.getStatus()
+                                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                        session.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .setState(ReconciliationState.ROLLED_BACK);
+                        return Optional.of(session);
+                    }
+
+                    @Override
+                    public KubernetesClient getClient() {
+                        return kubernetesClient;
+                    }
+                };
+
+        reconciler.reconcile(sessionJob, rolledBackContext);
+        assertEquals(1, flinkService.listJobs().size());
+    }
+
+    @Test
+    public void testSessionClusterReadyWhenDeployed() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Create a context where JM=READY, state=DEPLOYED, generation matches
+        Context<HasMetadata> rolledBackContext =
+                new TestUtils.TestingContext<>() {
+                    @Override
+                    public Optional<HasMetadata> getSecondaryResource(
+                            Class expectedType, String eventSourceName) {
+                        var session = TestUtils.buildSessionCluster();
+                        session.getStatus()
+                                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                        session.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .setState(ReconciliationState.DEPLOYED);
+                        return Optional.of(session);
+                    }
+
+                    @Override
+                    public KubernetesClient getClient() {
+                        return kubernetesClient;
+                    }
+                };
+
+        reconciler.reconcile(sessionJob, rolledBackContext);
+        assertEquals(1, flinkService.listJobs().size());
+    }
+
+    @Test
+    public void testSessionJobCleanupWorksWhenDeploymentReady() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+
+        // Deploy session job and set it to running
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(1, flinkService.listJobs().size());
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RUNNING);
+
+        // First cleanup starts cancellation — defers to wait for it
+        var deleteControl = reconciler.cleanup(sessionJob, readyContext);
+        assertFalse(deleteControl.isRemoveFinalizer());
+
+        // Job reaches cancelled state
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
+
+        // Second cleanup sees terminal state — removes finalizer
+        deleteControl = reconciler.cleanup(sessionJob, readyContext);
+        assertTrue(deleteControl.isRemoveFinalizer());
     }
 }
