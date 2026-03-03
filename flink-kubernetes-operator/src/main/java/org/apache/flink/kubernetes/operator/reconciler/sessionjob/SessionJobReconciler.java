@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
@@ -35,6 +36,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -128,7 +130,12 @@ public class SessionJobReconciler
     @Override
     public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
         var status = ctx.getResource().getStatus();
-        long delay = ctx.getOperatorConfig().getProgressCheckInterval().toMillis();
+        var rescheduleDelete =
+                DeleteControl.noFinalizerRemoval()
+                        .rescheduleAfter(
+                                ctx.getOperatorConfig().getProgressCheckInterval().toMillis());
+        var jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
+
         if (status.getReconciliationStatus().isBeforeFirstDeployment()
                 || ReconciliationUtils.isJobInTerminalState(status)
                 || status.getReconciliationStatus()
@@ -136,45 +143,66 @@ public class SessionJobReconciler
                                 .getJob()
                                 .getState()
                         == JobState.SUSPENDED
-                || JobStatusObserver.JOB_NOT_FOUND_ERR.equals(status.getError())) {
+                || JobStatusObserver.JOB_NOT_FOUND_ERR.equals(status.getError())
+                || jobID == null) {
             // Job is not running, nothing to do...
             return DeleteControl.defaultDelete();
         }
 
+        var flinkDepOptional = ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class);
+        if (flinkDepOptional.isEmpty()) {
+            LOG.info("Session cluster deployment not available");
+            return DeleteControl.defaultDelete();
+        }
+
+        var flinkDep = flinkDepOptional.get();
+
+        // If the session cluster is being deleted, the job will not survive regardless,
+        // so there is no need to explicitly cancel it.
+        var sessionLifecycleState = flinkDep.getStatus().getLifecycleState();
+        if (sessionLifecycleState == ResourceLifecycleState.DELETING
+                || sessionLifecycleState == ResourceLifecycleState.DELETED) {
+            LOG.info("Session cluster is being deleted, skipping job cancellation");
+            return DeleteControl.defaultDelete();
+        }
+
+        if (!sessionClusterReady(flinkDepOptional)) {
+            // If the session cluster is not healthy and HA is not enabled, the job state
+            // will not survive a cluster restart, so we can safely delete without
+            // explicit cancellation.
+            var sessionConf = flinkDep.getSpec().getFlinkConfiguration().asConfiguration();
+            if (!FlinkUtils.isKubernetesHAActivated(sessionConf)
+                    && !FlinkUtils.isZookeeperHAActivated(sessionConf)) {
+                LOG.info(
+                        "Session cluster is not healthy and HA is not enabled, skipping job cancellation");
+                return DeleteControl.defaultDelete();
+            }
+            LOG.info("Session cluster is not healthy, waiting before attempting job cancellation");
+            return rescheduleDelete;
+        }
+
+        // Only check for pending cancellation once the cluster is ready, so that other deletion
+        // paths (cluster missing, deleting, unhealthy without HA) are not blocked.
         if (ReconciliationUtils.isJobCancelling(status)) {
             LOG.info("Waiting for pending cancellation");
-            return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
+            return rescheduleDelete;
         }
 
-        Optional<FlinkDeployment> flinkDepOptional =
-                ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class);
-
-        if (flinkDepOptional.isPresent()) {
-            String jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
-            if (jobID != null) {
-                try {
-                    var observeConfig = ctx.getObserveConfig();
-                    var suspendMode =
-                            observeConfig.getBoolean(
-                                            KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
-                                    ? SuspendMode.SAVEPOINT
-                                    : SuspendMode.STATELESS;
-                    if (cancelJob(ctx, suspendMode)) {
-                        LOG.info("Waiting for pending cancellation");
-                        return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
-                    }
-                } catch (Exception e) {
-                    LOG.error(
-                            "Failed to cancel job, will reschedule after {} milliseconds.",
-                            delay,
-                            e);
-                    return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
-                }
+        try {
+            var observeConfig = ctx.getObserveConfig();
+            var suspendMode =
+                    observeConfig.getBoolean(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                            ? SuspendMode.SAVEPOINT
+                            : SuspendMode.STATELESS;
+            if (cancelJob(ctx, suspendMode)) {
+                LOG.info("Waiting for pending cancellation");
+                return rescheduleDelete;
             }
-        } else {
-            LOG.info("Session cluster deployment not available");
+            return DeleteControl.defaultDelete();
+        } catch (Exception e) {
+            LOG.error("Failed to cancel job, rescheduling deletion.", e);
+            return rescheduleDelete;
         }
-        return DeleteControl.defaultDelete();
     }
 
     public static boolean sessionClusterReady(Optional<FlinkDeployment> flinkDeploymentOpt) {
