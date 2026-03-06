@@ -1519,7 +1519,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                                 .initialSavepointPath(initialSavepointPath)
                                 .build());
 
-        bgDeploymentSpec.getTemplate().setTransitionMode(TransitionMode.BASIC);
+        bgDeploymentSpec.setTransitionMode(TransitionMode.BASIC);
         deployment.setSpec(bgDeploymentSpec);
         return deployment;
     }
@@ -1557,7 +1557,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var flinkDeploymentTemplateSpec =
                 FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build();
 
-        return new FlinkBlueGreenDeploymentSpec(configuration, null, flinkDeploymentTemplateSpec);
+        return new FlinkBlueGreenDeploymentSpec(
+                configuration, null, TransitionMode.BASIC, flinkDeploymentTemplateSpec);
     }
 
     // ==================== Ingress Helper Methods ====================
@@ -1886,7 +1887,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
             UpgradeMode upgradeMode) {
         var deployment =
                 buildSessionCluster(name, namespace, version, initialSavepointPath, upgradeMode);
-        deployment.getSpec().getTemplate().setTransitionMode(TransitionMode.ADVANCED);
+        deployment.getSpec().setTransitionMode(TransitionMode.ADVANCED);
         return deployment;
     }
 

@@ -87,7 +87,7 @@ public class BlueGreenTestUtils {
                                 .initialSavepointPath(initialSavepointPath)
                                 .build());
 
-        bgDeploymentSpec.getTemplate().setTransitionMode(TransitionMode.ADVANCED);
+        bgDeploymentSpec.setTransitionMode(TransitionMode.ADVANCED);
         deployment.setSpec(bgDeploymentSpec);
         return deployment;
     }
@@ -162,6 +162,7 @@ public class BlueGreenTestUtils {
         var flinkDeploymentTemplateSpec =
                 FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build();
 
-        return new FlinkBlueGreenDeploymentSpec(configuration, null, flinkDeploymentTemplateSpec);
+        return new FlinkBlueGreenDeploymentSpec(
+                configuration, null, TransitionMode.BASIC, flinkDeploymentTemplateSpec);
     }
 }
