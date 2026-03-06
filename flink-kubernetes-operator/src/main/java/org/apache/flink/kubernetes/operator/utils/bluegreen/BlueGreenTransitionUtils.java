@@ -50,8 +50,7 @@ public class BlueGreenTransitionUtils {
 
     @SneakyThrows
     public static TransitionMode getTransitionMode(BlueGreenContext context) {
-        TransitionMode transitionMode =
-                context.getBgDeployment().getSpec().getTemplate().getTransitionMode();
+        TransitionMode transitionMode = context.getBgDeployment().getSpec().getTransitionMode();
 
         if (transitionMode == null) {
             throw new OperationNotSupportedException("Please specify the TransitionMode");
