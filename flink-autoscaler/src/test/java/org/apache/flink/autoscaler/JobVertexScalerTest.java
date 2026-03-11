@@ -1367,4 +1367,57 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
     }
+
+    @Test
+    public void testMaxRecommendedParallelismUsedAfterScaleDownInterval() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
+        var instant = Instant.now();
+
+        var delayedScaleDown = new DelayedScaleDown();
+
+        // t=0s: first trigger, newParallelism=50 (100*500/1000), scale down delayed.
+        vertexScaler.setClock(Clock.fixed(instant, ZoneId.systemDefault()));
+        assertParallelismChange(100, 500, 1000, ParallelismChange.noChange(), delayedScaleDown);
+        assertThat(delayedScaleDown.getDelayedVertices()).isNotEmpty();
+        var delayedInfo = delayedScaleDown.getDelayedVertices().get(vertex);
+        assertEquals(50, delayedInfo.getRecommendedParallelisms().getFirst().getParallelism());
+
+        // t=30s: newParallelism=60 (100*600/1000), replaces 50 due to monotonic decreasing
+        // property.
+        vertexScaler.setClock(
+                Clock.fixed(instant.plus(Duration.ofSeconds(30)), ZoneId.systemDefault()));
+        assertParallelismChange(100, 600, 1000, ParallelismChange.noChange(), delayedScaleDown);
+        assertThat(delayedInfo.getRecommendedParallelisms()).hasSize(1);
+        assertEquals(60, delayedInfo.getRecommendedParallelisms().getFirst().getParallelism());
+
+        // t=65s: interval expired (windowStart=5s). maxRecommendedParallelism=60 !=
+        // currentParallelism(100) -> build(60, true).
+        vertexScaler.setClock(
+                Clock.fixed(instant.plus(Duration.ofSeconds(65)), ZoneId.systemDefault()));
+        assertParallelismChange(
+                100, 600, 1000, ParallelismChange.build(60, true), delayedScaleDown);
+    }
+
+    @Test
+    public void testMaxRecommendedParallelismEqualsCurrentParallelismReturnsNoChange() {
+        // When maxRecommendedParallelism == currentParallelism after interval expires,
+        // NO_CHANGE is returned even if outsideUtilizationBound is true.
+        // Pre-inject recommendation=100 (outsideUtilizationBound=true) at t=5s (= windowStart at
+        // t=65s).
+        // At t=65s with currentParallelism=100: newParallelism=80 (100*800/1000).
+        // recordRecommendedParallelism(80): (5s,100) > 80 survives -> [(5s,100),(65s,80)].
+        // getMaxRecommendedParallelism(windowStart=5s): (5s,100) not evicted -> peekFirst=100.
+        // maxRecommendedParallelism(100) == currentParallelism(100) -> NO_CHANGE.
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
+        var instant = Instant.now();
+
+        var delayedScaleDown = new DelayedScaleDown();
+        delayedScaleDown.triggerScaleDown(vertex, instant.plus(Duration.ofSeconds(5)), 100, true);
+
+        vertexScaler.setClock(
+                Clock.fixed(instant.plus(Duration.ofSeconds(65)), ZoneId.systemDefault()));
+        assertParallelismChange(100, 800, 1000, ParallelismChange.noChange(), delayedScaleDown);
+    }
 }
