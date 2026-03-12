@@ -365,7 +365,12 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return ParallelismChange.build(newParallelism, outsideUtilizationBound);
         } else {
             return applyScaleDownInterval(
-                    delayedScaleDown, vertex, conf, newParallelism, outsideUtilizationBound);
+                    delayedScaleDown,
+                    vertex,
+                    conf,
+                    newParallelism,
+                    currentParallelism,
+                    outsideUtilizationBound);
         }
     }
 
@@ -400,6 +405,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             JobVertexID vertex,
             Configuration conf,
             int newParallelism,
+            int currentParallelism,
             boolean outsideUtilizationBound) {
         var scaleDownInterval = conf.get(SCALE_DOWN_INTERVAL);
         if (scaleDownInterval.toMillis() <= 0) {
@@ -428,9 +434,11 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             // latest parallelism when scaling down
             var maxRecommendedParallelism =
                     delayedScaleDownInfo.getMaxRecommendedParallelism(windowStartTime);
-            return ParallelismChange.build(
-                    maxRecommendedParallelism.getParallelism(),
-                    maxRecommendedParallelism.isOutsideUtilizationBound());
+            return maxRecommendedParallelism.getParallelism() == currentParallelism
+                    ? ParallelismChange.NO_CHANGE
+                    : ParallelismChange.build(
+                            maxRecommendedParallelism.getParallelism(),
+                            maxRecommendedParallelism.isOutsideUtilizationBound());
         }
     }
 
