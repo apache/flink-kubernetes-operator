@@ -49,6 +49,18 @@ public class AutoscalerStandaloneOptions {
                     .defaultValue(100)
                     .withDescription("The parallelism of autoscaler standalone control loop.");
 
+    public enum FetcherType {
+        FLINK_CLUSTER,
+        YARN
+    }
+
+    public static final ConfigOption<FetcherType> FETCHER_TYPE =
+            autoscalerStandaloneConfig("fetcher.type")
+                    .enumType(FetcherType.class)
+                    .defaultValue(FetcherType.FLINK_CLUSTER)
+                    .withDescription(
+                            "The job list fetcher type to use. Supported values: FLINK_CLUSTER, YARN.");
+
     public static final ConfigOption<String> FETCHER_FLINK_CLUSTER_HOST =
             autoscalerStandaloneConfig("fetcher.flink-cluster.host")
                     .stringType()

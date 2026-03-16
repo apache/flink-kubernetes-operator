@@ -69,7 +69,9 @@ Please click [here](../flink-autoscaler/README.md) to check out extensibility of
 `JobAutoScalerContext` of the job. It has a control loop that periodically calls 
 `JobListFetcher#fetch` to fetch the job list and scale these jobs.
 
-Currently `FlinkClusterJobListFetcher` is the only implementation of the `JobListFetcher` 
-interface, that's why `Flink Autoscaler Standalone` only supports a single Flink cluster so far.
-We will implement `YarnJobListFetcher` in the future, `Flink Autoscaler Standalone` will call 
-`YarnJobListFetcher#fetch` to fetch job list from yarn cluster periodically.
+Currently `FlinkClusterJobListFetcher` and `YarnJobListFetcher` are implementations of the 
+`JobListFetcher` interface. that's why `Flink Autoscaler Standalone` only supports a single Flink cluster so far. 
+`YarnJobListFetcher` enables fetching jobs and per-job configuration from
+Flink-on-YARN clusters using a provided `RestClusterClient`
+
+Select which one to use via `autoscaler.standalone.fetcher.type` (`FLINK_CLUSTER` or `YARN`).
