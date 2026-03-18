@@ -158,6 +158,11 @@ In general, it's not recommended to set target utilization close to 100% as perf
 
 In addition to the utilization target we can set a utilization boundary, that serves as extra buffer to avoid immediate scaling on load fluctuations.
 Setting `job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 20% deviation from the target utilization before triggering a scaling action.
+For example, with a target utilization of `0.6` and a boundary of `0.2`, scale-up is triggered when utilization exceeds `0.8` (`0.6` + `0.2`) and scale-down when it drops below `0.4` (`0.6` - `0.2`).
+
+For more fine-grained control, the `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min` options can be used to set asymmetric upper and lower utilization thresholds independently.
+When set, these options take precedence over the values derived from the boundary. When only one of them is set, the other is still derived from the boundary.
+If neither is set, the boundary is used to compute both thresholds symmetric.
 
 ### Target catch-up duration and restart time
 
