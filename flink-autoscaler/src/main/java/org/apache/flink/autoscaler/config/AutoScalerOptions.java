@@ -99,7 +99,6 @@ public class AutoScalerOptions {
                             oldOperatorConfigKey("target.utilization"))
                     .withDescription("Target vertex utilization");
 
-    @Deprecated
     public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
             autoScalerConfig("target.utilization.boundary")
                     .doubleType()
