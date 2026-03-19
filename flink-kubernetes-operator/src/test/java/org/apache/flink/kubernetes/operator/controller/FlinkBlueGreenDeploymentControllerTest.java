@@ -767,6 +767,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs = reconcile(rs.deployment);
         assertFailingWithError(rs, "Could not start Transition", error);
 
+        // lastReconciledSpec must NOT contain the failed spec change — otherwise
+        // subsequent deploys see no diff and fall into PATCH_CHILD (in-place
+        // upgrade) instead of a proper B/G transition
+        assertFalse(
+                rs.reconciledStatus.getLastReconciledSpec().contains(customValue),
+                "lastReconciledSpec should not be stamped when transition fails");
+
         // Recovery: Clear the fetch error and try again with new spec change
         flinkService.clearSavepointFetchError();
         customValue = UUID.randomUUID().toString() + "_recovery";
