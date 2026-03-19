@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -860,5 +861,176 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob.getStatus().getReconciliationStatus().getState());
         // New jobID recorded despite failure
         Assertions.assertNotEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
+    }
+
+    @Test
+    public void testCleanupWithDeletingSessionCluster() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Cleanup with session cluster in DELETING state - should proceed without cancellation
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob,
+                        TestUtils.createContextWithFlinkDeploymentInLifecycleState(
+                                ResourceLifecycleState.DELETING));
+        assertTrue(deleteControl.isRemoveFinalizer());
+        // No cancellation attempted, job still in RUNNING state
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testCleanupWithDeletedSessionCluster() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Cleanup with session cluster in DELETED state - should proceed without cancellation
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob,
+                        TestUtils.createContextWithFlinkDeploymentInLifecycleState(
+                                ResourceLifecycleState.DELETED));
+        assertTrue(deleteControl.isRemoveFinalizer());
+        // No cancellation attempted, job still in RUNNING state
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testCleanupWithUnhealthySessionClusterNoHa() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Cleanup with unhealthy session cluster and no HA - should proceed without cancellation
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob, TestUtils.createContextWithUnhealthyFlinkDeployment(false));
+        assertTrue(deleteControl.isRemoveFinalizer());
+        // No cancellation attempted, job still in RUNNING state
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testCleanupWithUnhealthySessionClusterWithHa() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Cleanup with unhealthy session cluster and HA enabled - should reschedule and wait
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob, TestUtils.createContextWithUnhealthyFlinkDeployment(true));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertEquals(10_000, deleteControl.getScheduleDelay().get());
+        // No cancellation attempted, job still in RUNNING state
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testCleanupWithPendingCancellationAndClusterNotFound() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Simulate a pending cancellation (e.g. cancel was initiated in a prior reconciliation)
+        sessionJob.getStatus().getJobStatus().setState(CANCELLING);
+
+        // Cluster is no longer available - should proceed with deletion rather than being blocked
+        var deleteControl = reconciler.cleanup(sessionJob, TestUtils.createEmptyContext());
+        assertTrue(deleteControl.isRemoveFinalizer());
+    }
+
+    @Test
+    public void testCleanupWithPendingCancellationAndDeletingCluster() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Simulate a pending cancellation
+        sessionJob.getStatus().getJobStatus().setState(CANCELLING);
+
+        // Cluster is being deleted - should proceed with deletion rather than being blocked
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob,
+                        TestUtils.createContextWithFlinkDeploymentInLifecycleState(
+                                ResourceLifecycleState.DELETING));
+        assertTrue(deleteControl.isRemoveFinalizer());
+    }
+
+    @Test
+    public void testCleanupWithPendingCancellationAndUnhealthyClusterNoHa() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Simulate a pending cancellation
+        sessionJob.getStatus().getJobStatus().setState(CANCELLING);
+
+        // Cluster is unhealthy with no HA - should proceed with deletion rather than being blocked
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob, TestUtils.createContextWithUnhealthyFlinkDeployment(false));
+        assertTrue(deleteControl.isRemoveFinalizer());
+    }
+
+    @Test
+    public void testCleanupWithPendingCancellationAndReadyCluster() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // Submit and set running
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        // Simulate a pending cancellation
+        sessionJob.getStatus().getJobStatus().setState(CANCELLING);
+
+        // Cluster is ready - should still wait for the pending cancellation to complete
+        var deleteControl =
+                reconciler.cleanup(
+                        sessionJob,
+                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertEquals(10_000, deleteControl.getScheduleDelay().get());
     }
 }
