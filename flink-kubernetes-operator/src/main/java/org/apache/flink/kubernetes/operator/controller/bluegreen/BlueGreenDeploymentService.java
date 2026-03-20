@@ -162,18 +162,10 @@ public class BlueGreenDeploymentService {
                                 .rescheduleAfter(getReconciliationReschedInterval(context));
                     }
 
+                    setLastReconciledSpec(context);
                     try {
-                        var result =
-                                startTransition(
-                                        context,
-                                        currentBlueGreenDeploymentType,
-                                        currentFlinkDeployment);
-                        // Only stamp lastReconciledSpec after the transition
-                        // succeeds. If stamped before and the transition
-                        // fails/aborts, lastReconciledSpec drifts from the
-                        // active child's actual spec
-                        setLastReconciledSpec(context);
-                        return result;
+                        return startTransition(
+                                context, currentBlueGreenDeploymentType, currentFlinkDeployment);
                     } catch (Exception e) {
                         var error = "Could not start Transition. Details: " + e.getMessage();
                         context.getDeploymentStatus().setSavepointTriggerId(null);
@@ -188,12 +180,10 @@ public class BlueGreenDeploymentService {
                             "Savepoint redeploy triggered for '{}', using initialSavepointPath: {}",
                             context.getBgDeployment().getMetadata().getName(),
                             Objects.toString(jobSpec.getInitialSavepointPath(), "<none>"));
+                    setLastReconciledSpec(context);
                     try {
-                        var result =
-                                startSavepointRedeployTransition(
-                                        context, currentBlueGreenDeploymentType);
-                        setLastReconciledSpec(context);
-                        return result;
+                        return startSavepointRedeployTransition(
+                                context, currentBlueGreenDeploymentType);
                     } catch (Exception e) {
                         var error =
                                 "Could not start Savepoint Redeploy Transition. Details: "
