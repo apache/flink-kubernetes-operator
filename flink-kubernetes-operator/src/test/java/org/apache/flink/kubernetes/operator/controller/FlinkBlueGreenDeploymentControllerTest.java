@@ -546,6 +546,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 ReconciliationState.UPGRADING,
                 flinkDeployments.get(1).getStatus().getReconciliationStatus().getState());
         assertTrue(instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()) > 0);
+        // savepointTriggerId must be cleared on abort so the next transition
+        // triggers a fresh savepoint instead of reusing a stale triggerId
+        assertNull(rs.reconciledStatus.getSavepointTriggerId());
 
         // Simulate another change in the spec to trigger a redeployment
         customValue = UUID.randomUUID().toString();
@@ -766,6 +769,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // The next reconciliation will fail in configureInitialSavepoint due to fetch error
         rs = reconcile(rs.deployment);
         assertFailingWithError(rs, "Could not start Transition", error);
+
+        // lastReconciledSpec must NOT contain the failed spec change — otherwise
+        // subsequent deploys see no diff and fall into PATCH_CHILD (in-place
+        // upgrade) instead of a proper B/G transition
+        assertFalse(
+                rs.reconciledStatus.getLastReconciledSpec().contains(customValue),
+                "lastReconciledSpec should not be stamped when transition fails");
 
         // Recovery: Clear the fetch error and try again with new spec change
         flinkService.clearSavepointFetchError();
