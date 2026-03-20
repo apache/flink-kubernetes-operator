@@ -695,6 +695,7 @@ public class BlueGreenDeploymentService {
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
         context.getDeploymentStatus().setBlueGreenState(previousState);
+        context.getDeploymentStatus().setSavepointTriggerId(null);
 
         var error =
                 String.format(
