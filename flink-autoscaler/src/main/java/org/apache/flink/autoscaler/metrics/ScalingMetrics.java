@@ -98,6 +98,15 @@ public class ScalingMetrics {
                                 .orElseGet(observedTprAvg);
                 scalingMetrics.put(ScalingMetric.OBSERVED_TPR, observedTprOpt);
             }
+        } else {
+            var inPerSec = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
+            if (inPerSec != null) {
+                scalingMetrics.put(ScalingMetric.NUM_RECORDS_IN_PER_SECOND, inPerSec.getSum());
+            }
+            var outPerSec = flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
+            if (outPerSec != null) {
+                scalingMetrics.put(ScalingMetric.NUM_RECORDS_OUT_PER_SECOND, outPerSec.getSum());
+            }
         }
     }
 

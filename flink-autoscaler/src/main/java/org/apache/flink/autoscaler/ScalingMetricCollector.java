@@ -484,6 +484,13 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     .findAny(allMetricNames)
                     .ifPresent(
                             m -> filteredMetrics.put(m, FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT));
+        } else {
+            FlinkMetric.NUM_RECORDS_IN_PER_SEC
+                    .findAny(allMetricNames)
+                    .ifPresent(m -> filteredMetrics.put(m, FlinkMetric.NUM_RECORDS_IN_PER_SEC));
+            FlinkMetric.NUM_RECORDS_OUT_PER_SEC
+                    .findAny(allMetricNames)
+                    .ifPresent(m -> filteredMetrics.put(m, FlinkMetric.NUM_RECORDS_OUT_PER_SEC));
         }
 
         for (FlinkMetric flinkMetric : requiredMetrics) {
