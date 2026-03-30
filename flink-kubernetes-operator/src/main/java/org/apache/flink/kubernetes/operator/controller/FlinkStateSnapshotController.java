@@ -89,6 +89,9 @@ public class FlinkStateSnapshotController
     @Override
     public DeleteControl cleanup(
             FlinkStateSnapshot flinkStateSnapshot, Context<FlinkStateSnapshot> josdkContext) {
+        flinkStateSnapshot.setStatus(
+                Objects.requireNonNullElseGet(
+                        flinkStateSnapshot.getStatus(), FlinkStateSnapshotStatus::new));
         var ctx = ctxFactory.getFlinkStateSnapshotContext(flinkStateSnapshot, josdkContext);
         try {
             metricManager.onRemove(flinkStateSnapshot);
@@ -113,6 +116,8 @@ public class FlinkStateSnapshotController
     @Override
     public ErrorStatusUpdateControl<FlinkStateSnapshot> updateErrorStatus(
             FlinkStateSnapshot resource, Context<FlinkStateSnapshot> context, Exception e) {
+        resource.setStatus(
+                Objects.requireNonNullElseGet(resource.getStatus(), FlinkStateSnapshotStatus::new));
         var ctx = ctxFactory.getFlinkStateSnapshotContext(resource, context);
         ReconciliationUtils.updateForReconciliationError(ctx, e);
 
