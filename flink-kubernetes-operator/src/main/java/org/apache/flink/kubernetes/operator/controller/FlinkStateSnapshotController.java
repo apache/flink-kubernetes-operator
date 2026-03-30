@@ -119,9 +119,6 @@ public class FlinkStateSnapshotController
     @Override
     public ErrorStatusUpdateControl<FlinkStateSnapshot> updateErrorStatus(
             FlinkStateSnapshot resource, Context<FlinkStateSnapshot> context, Exception e) {
-        if (resource.getStatus() == null) {
-            resource.setStatus(new FlinkStateSnapshotStatus());
-        }
         var ctx = ctxFactory.getFlinkStateSnapshotContext(resource, context);
         ReconciliationUtils.updateForReconciliationError(ctx, e);
 
