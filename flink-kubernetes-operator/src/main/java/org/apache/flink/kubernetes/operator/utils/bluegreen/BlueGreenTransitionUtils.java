@@ -23,10 +23,19 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentTyp
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
+import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.ContainerBuilder;
+import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
+import io.fabric8.kubernetes.api.model.VolumeMount;
+import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +101,34 @@ public class BlueGreenTransitionUtils {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put("bluegreen.configmap.name", context.getConfigMapName());
+
+        // Auto-inject agent config and init container when a gate strategy is declared
+        ConfigObjectNode flinkConfig = flinkDeployment.getSpec().getFlinkConfiguration();
+        if (flinkConfig.has("bluegreen.gate.strategy")) {
+            if (!flinkConfig.has("bluegreen.gate.injection.enabled")) {
+                flinkConfig.put("bluegreen.gate.injection.enabled", "true");
+            }
+
+            final String agentFlag = "-javaagent:/opt/flink/lib/bluegreen-agent.jar";
+            String existingOpts =
+                    flinkConfig.has("env.java.opts.jobmanager")
+                            ? flinkConfig.get("env.java.opts.jobmanager").asText()
+                            : "";
+            if (!existingOpts.contains(agentFlag)) {
+                flinkConfig.put(
+                        "env.java.opts.jobmanager",
+                        existingOpts.isEmpty() ? agentFlag : existingOpts + " " + agentFlag);
+            }
+
+            String operatorImage = System.getenv("OPERATOR_IMAGE");
+            if (operatorImage != null && !operatorImage.isEmpty()) {
+                injectAgentInitContainer(flinkDeployment, operatorImage);
+            } else {
+                LOG.warn(
+                        "[BlueGreen] OPERATOR_IMAGE env var not set — "
+                                + "agent JAR init-container will not be injected");
+            }
+        }
     }
 
     public static void moveToFirstTransitionStage(BlueGreenContext context) {
@@ -176,5 +213,73 @@ public class BlueGreenTransitionUtils {
     public static void updateTransitionStage(
             BlueGreenContext context, TransitionStage transitionStage) {
         updateConfigMapEntry(context, TRANSITION_STAGE.getLabel(), transitionStage.toString());
+    }
+
+    private static void injectAgentInitContainer(
+            FlinkDeployment flinkDeployment, String operatorImage) {
+        var spec = flinkDeployment.getSpec();
+
+        if (spec.getJobManager() == null) {
+            spec.setJobManager(new JobManagerSpec());
+        }
+        JobManagerSpec jmSpec = spec.getJobManager();
+
+        if (jmSpec.getPodTemplate() == null) {
+            jmSpec.setPodTemplate(new PodTemplateSpec());
+        }
+        PodTemplateSpec podTemplate = jmSpec.getPodTemplate();
+        if (podTemplate.getSpec() == null) {
+            podTemplate.setSpec(new PodSpec());
+        }
+        PodSpec podSpec = podTemplate.getSpec();
+
+        podSpec.getVolumes()
+                .add(
+                        new VolumeBuilder()
+                                .withName("bluegreen-agent")
+                                .withNewEmptyDir()
+                                .endEmptyDir()
+                                .build());
+
+        podSpec.getInitContainers()
+                .add(
+                        new ContainerBuilder()
+                                .withName("bluegreen-agent-init")
+                                .withImage(operatorImage)
+                                .withCommand(
+                                        "sh",
+                                        "-c",
+                                        "cp /opt/flink/artifacts/bluegreen-agent.jar"
+                                                + " /bluegreen-agent/bluegreen-agent.jar")
+                                .withVolumeMounts(
+                                        new VolumeMountBuilder()
+                                                .withName("bluegreen-agent")
+                                                .withMountPath("/bluegreen-agent")
+                                                .build())
+                                .build());
+
+        VolumeMount agentMount =
+                new VolumeMountBuilder()
+                        .withName("bluegreen-agent")
+                        .withMountPath("/opt/flink/lib/bluegreen-agent.jar")
+                        .withSubPath("bluegreen-agent.jar")
+                        .build();
+
+        boolean foundMain = false;
+        for (Container c : podSpec.getContainers()) {
+            if ("flink-main-container".equals(c.getName())) {
+                c.getVolumeMounts().add(agentMount);
+                foundMain = true;
+                break;
+            }
+        }
+        if (!foundMain) {
+            podSpec.getContainers()
+                    .add(
+                            new ContainerBuilder()
+                                    .withName("flink-main-container")
+                                    .withVolumeMounts(agentMount)
+                                    .build());
+        }
     }
 }
