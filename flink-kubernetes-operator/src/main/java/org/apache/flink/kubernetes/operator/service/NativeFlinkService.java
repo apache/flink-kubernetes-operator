@@ -45,8 +45,10 @@ import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
+import org.apache.flink.runtime.rest.messages.ConfigurationInfoEntry;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobResourcesRequirementsUpdateHeaders;
@@ -66,9 +68,11 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.flink.configuration.JobManagerOptions.SCHEDULER;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
 /**
@@ -240,7 +244,7 @@ public class NativeFlinkService extends AbstractFlinkService {
         }
     }
 
-    private static boolean supportsInPlaceScaling(
+    private boolean supportsInPlaceScaling(
             AbstractFlinkResource<?, ?> resource, Configuration observeConfig) {
         if (resource.getSpec().getJob() == null
                 || !observeConfig.get(
@@ -253,11 +257,43 @@ public class NativeFlinkService extends AbstractFlinkService {
             return false;
         }
 
-        if (!observeConfig
-                .get(JobManagerOptions.SCHEDULER)
-                .equals(JobManagerOptions.SchedulerType.Adaptive)) {
-            LOG.debug("In-place rescaling is only available with the adaptive scheduler");
-            return false;
+        if (!observeConfig.get(SCHEDULER).equals(JobManagerOptions.SchedulerType.Adaptive)) {
+            // fallback to the JM running configuration to check if the scheduler is adaptive
+            boolean adaptiveSupported = false;
+            try (var client = getClusterClient(observeConfig)) {
+                var jobParameters = new JobMessageParameters();
+                jobParameters.jobPathParameter.resolve(
+                        JobID.fromHexString(resource.getStatus().getJobStatus().getJobId()));
+
+                var jmConfig =
+                        client.sendRequest(
+                                        JobManagerJobConfigurationHeaders.getInstance(),
+                                        jobParameters,
+                                        EmptyRequestBody.getInstance())
+                                .get(
+                                        operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                        TimeUnit.SECONDS);
+
+                Optional<String> scheduler =
+                        jmConfig.stream()
+                                .filter(e -> SCHEDULER.key().equals(e.getKey()))
+                                .map(ConfigurationInfoEntry::getValue)
+                                .findFirst();
+
+                String value = scheduler.orElse("");
+                if (value.equals(JobManagerOptions.SchedulerType.Adaptive.toString())) {
+                    adaptiveSupported = true;
+                }
+            } catch (Exception e) {
+                LOG.debug(
+                        "Failed to query JM configuration for scheduler type, "
+                                + "assuming in-place scaling is not supported",
+                        e);
+            }
+            if (!adaptiveSupported) {
+                LOG.debug("In-place rescaling is only available with the adaptive scheduler");
+                return false;
+            }
         }
 
         var status = resource.getStatus();
