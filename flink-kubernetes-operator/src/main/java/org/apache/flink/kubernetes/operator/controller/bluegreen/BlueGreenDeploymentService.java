@@ -46,12 +46,14 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.updateTransitionStageFromJobStatus;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.validateAdvancedModeConfig;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
@@ -98,6 +100,10 @@ public class BlueGreenDeploymentService {
                         isFirstDeployment,
                         bgMeta);
 
+        Optional<String> configError = validateAdvancedModeConfig(context);
+        if (configError.isPresent()) {
+            return markDeploymentFailing(context, configError.get());
+        }
         BlueGreenTransitionUtils.prepareTransitionMetadata(
                 context, nextBlueGreenDeploymentType, flinkDeployment, isFirstDeployment);
 
@@ -151,6 +157,11 @@ public class BlueGreenDeploymentService {
 
             if (currentFlinkDeployment != null && isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
+                    Optional<String> configError = validateAdvancedModeConfig(context);
+                    if (configError.isPresent()) {
+                        return markDeploymentFailing(context, configError.get());
+                    }
+
                     boolean savepointTriggered = false;
                     try {
                         savepointTriggered = handleSavepoint(context, currentFlinkDeployment);

@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import javax.naming.OperationNotSupportedException;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.ACTIVE_DEPLOYMENT_TYPE;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.IS_FIRST_DEPLOYMENT;
@@ -193,6 +194,18 @@ public class BlueGreenTransitionUtils {
             return;
         }
 
+        // ConfigMap may not exist yet if validation failed before prepareTransitionMetadata ran
+        boolean configMapPresent =
+                context.getJosdkContext().getSecondaryResources(ConfigMap.class).stream()
+                        .anyMatch(
+                                cm ->
+                                        cm.getMetadata()
+                                                .getName()
+                                                .equals(context.getConfigMapName()));
+        if (!configMapPresent) {
+            return;
+        }
+
         TransitionStage transitionStage;
         switch (jobStatus) {
             case RUNNING:
@@ -213,6 +226,50 @@ public class BlueGreenTransitionUtils {
     public static void updateTransitionStage(
             BlueGreenContext context, TransitionStage transitionStage) {
         updateConfigMapEntry(context, TRANSITION_STAGE.getLabel(), transitionStage.toString());
+    }
+
+    /**
+     * Validates that all required gate configuration properties are present when using ADVANCED
+     * mode. Returns an error message if any required property is missing, or {@link
+     * Optional#empty()} if the configuration is valid.
+     *
+     * <p>Required properties for ADVANCED mode:
+     *
+     * <ul>
+     *   <li>{@code bluegreen.gate.strategy} — must be set to a supported value (e.g. WATERMARK)
+     *   <li>{@code bluegreen.gate.watermark.extractor-class} — required when strategy is WATERMARK
+     * </ul>
+     */
+    public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
+        if (TransitionMode.ADVANCED != getTransitionMode(context)) {
+            return Optional.empty();
+        }
+
+        ConfigObjectNode flinkConfig =
+                context.getBgDeployment().getSpec().getTemplate().getSpec().getFlinkConfiguration();
+
+        if (!flinkConfig.has("bluegreen.gate.strategy")) {
+            return Optional.of(
+                    "[BlueGreen] ADVANCED mode requires 'bluegreen.gate.strategy' to be set "
+                            + "in flinkConfiguration. Supported values: WATERMARK");
+        }
+
+        String strategy = flinkConfig.get("bluegreen.gate.strategy").asText();
+        if ("WATERMARK".equals(strategy)) {
+            if (!flinkConfig.has("bluegreen.gate.watermark.extractor-class")) {
+                return Optional.of(
+                        "[BlueGreen] Gate strategy WATERMARK requires "
+                                + "'bluegreen.gate.watermark.extractor-class' to be set "
+                                + "in flinkConfiguration.");
+            }
+        } else {
+            return Optional.of(
+                    "[BlueGreen] Unknown gate strategy: '"
+                            + strategy
+                            + "'. Supported values: WATERMARK");
+        }
+
+        return Optional.empty();
     }
 
     private static void injectAgentInitContainer(
