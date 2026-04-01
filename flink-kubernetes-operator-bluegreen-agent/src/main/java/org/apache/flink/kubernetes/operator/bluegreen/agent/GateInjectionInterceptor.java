@@ -42,6 +42,17 @@ import java.util.concurrent.Callable;
  *       mutating the graph in-place before the original execute() runs.
  * </ol>
  *
+ * <p>Failure contract:
+ *
+ * <ul>
+ *   <li>If the agent cannot read the Flink configuration (unexpected agent bug), injection is
+ *       skipped and the job continues — agent errors must never affect non-BlueGreen jobs.
+ *   <li>If {@code bluegreen.gate.injection.enabled=true} and {@code GateInjectorExecutor} is not
+ *       found, or its {@code injectGates} method is missing, the job <em>fails</em> with a clear
+ *       message. This flag is only set for BlueGreen deployments, so a missing class means the
+ *       bluegreen-client library is absent from the job JAR — a real misconfiguration.
+ * </ul>
+ *
  * <p>Classloader safety:
  *
  * <ul>
@@ -49,8 +60,6 @@ import java.util.concurrent.Callable;
  *       flink-streaming-java} — loaded by the system classloader. The user classloader delegates to
  *       the parent for those packages (no bundling), so both sides of the reflective call see the
  *       exact same {@code Class} objects. ✓
- *   <li>If {@code GateInjectorExecutor} is not found on the user classpath (e.g. a non-BlueGreen
- *       job), injection is silently skipped. ✓
  * </ul>
  */
 public class GateInjectionInterceptor {
@@ -66,60 +75,68 @@ public class GateInjectionInterceptor {
             @SuperCall Callable<Object> superCall)
             throws Exception {
 
+        // Read config from the live environment instance rather than re-loading from disk.
+        // GlobalConfiguration.loadConfiguration() reads flink-conf.yaml but misses keys
+        // injected at container start via FLINK_PROPERTIES (e.g. kubernetes.namespace) when
+        // the config volume is read-only and the entrypoint script cannot write them.
+        // Guard this read: if it fails for an unexpected reason (agent bug), skip injection
+        // rather than affecting the job.
+        Configuration config = null;
         try {
-            // Read config from the live environment instance rather than re-loading from disk.
-            // GlobalConfiguration.loadConfiguration() reads flink-conf.yaml but misses keys
-            // injected at container start via FLINK_PROPERTIES (e.g. kubernetes.namespace) when
-            // the config volume is read-only and the entrypoint script cannot write them.
-            Configuration config =
+            config =
                     (Configuration)
                             envInstance
                                     .getClass()
                                     .getMethod("getConfiguration")
                                     .invoke(envInstance);
-
-            if (config.getBoolean(GATE_INJECTION_ENABLED, false)) {
-                // The thread context classloader is the user code classloader at this
-                // point — Flink sets it before invoking user main() in Application mode.
-                ClassLoader userCL = Thread.currentThread().getContextClassLoader();
-
-                try {
-                    Class<?> injectorClass = userCL.loadClass(INJECTOR_CLASS);
-
-                    // Locate injectGates by name to avoid any cross-CL type token issues.
-                    Method injectGates = null;
-                    for (Method m : injectorClass.getMethods()) {
-                        if ("injectGates".equals(m.getName()) && m.getParameterCount() == 2) {
-                            injectGates = m;
-                            break;
-                        }
-                    }
-
-                    if (injectGates != null) {
-                        injectGates.invoke(null, streamGraph, config);
-                        System.err.println(
-                                "[BlueGreen Agent] Gate injection applied to StreamGraph");
-                    } else {
-                        System.err.println(
-                                "[BlueGreen Agent] injectGates method not found on "
-                                        + INJECTOR_CLASS);
-                    }
-
-                } catch (ClassNotFoundException e) {
-                    // Not a BlueGreen-enabled job — skip silently.
-                    System.err.println(
-                            "[BlueGreen Agent] "
-                                    + INJECTOR_CLASS
-                                    + " not on user classpath, skipping injection");
-                }
-            }
         } catch (Exception e) {
-            // Never fail the job due to agent errors — log and continue.
-            // Method.invoke wraps exceptions in InvocationTargetException whose own message is
-            // null; the real exception is in getCause().
             Throwable cause = (e.getCause() != null) ? e.getCause() : e;
             System.err.println(
-                    "[BlueGreen Agent] ERROR during gate injection, continuing: " + cause);
+                    "[BlueGreen Agent] Could not read Flink configuration, skipping gate injection: "
+                            + cause);
+        }
+
+        if (config != null && config.getBoolean(GATE_INJECTION_ENABLED, false)) {
+            // bluegreen.gate.injection.enabled is only set by the operator for BlueGreen
+            // deployments. Any failure beyond this point is a real misconfiguration — fail the
+            // job with a clear message so the operator can reflect the error in the deployment
+            // status.
+            ClassLoader userCL = Thread.currentThread().getContextClassLoader();
+
+            Class<?> injectorClass;
+            try {
+                injectorClass = userCL.loadClass(INJECTOR_CLASS);
+            } catch (ClassNotFoundException e) {
+                String msg =
+                        "[BlueGreen Agent] Gate injection is enabled but '"
+                                + INJECTOR_CLASS
+                                + "' was not found on the job classpath. "
+                                + "Ensure the bluegreen-client library is included in your job JAR.";
+                System.err.println(msg);
+                throw new RuntimeException(msg, e);
+            }
+
+            // Locate injectGates by name to avoid any cross-CL type token issues.
+            Method injectGates = null;
+            for (Method m : injectorClass.getMethods()) {
+                if ("injectGates".equals(m.getName()) && m.getParameterCount() == 2) {
+                    injectGates = m;
+                    break;
+                }
+            }
+
+            if (injectGates == null) {
+                String msg =
+                        "[BlueGreen Agent] Gate injection is enabled but 'injectGates(StreamGraph, Configuration)' "
+                                + "was not found on '"
+                                + INJECTOR_CLASS
+                                + "'. Verify the bluegreen-client version is compatible.";
+                System.err.println(msg);
+                throw new RuntimeException(msg);
+            }
+
+            injectGates.invoke(null, streamGraph, config);
+            System.err.println("[BlueGreen Agent] Gate injection applied to StreamGraph");
         }
 
         return superCall.call();
