@@ -42,17 +42,17 @@ So that the `kubectl` and `helm` commands are available on your local system.
 For docker we recommend that you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed
 and configured with at least 8GB of RAM.
 For kubernetes [minikube](https://minikube.sigs.k8s.io/docs/start/) is our choice, at the time of writing this we are
-using version v1.25.3 (end-to-end tests are using the same version). You can start a cluster with the following command:
+using version v1.28.0 (end-to-end tests are using the same version). You can start a cluster with the following command:
 
 ```bash
-minikube start --kubernetes-version=v1.25.3
+minikube start --kubernetes-version=v1.28.0
 😄  minikube v1.28.0 on Darwin 13.0.1
 ✨  Automatically selected the docker driver. Other choices: hyperkit, ssh
 📌  Using Docker Desktop driver with root privileges
 👍  Starting control plane node minikube in cluster minikube
 🚜  Pulling base image ...
 🔥  Creating docker container (CPUs=2, Memory=4000MB) ...
-🐳  Preparing Kubernetes v1.25.3 on Docker 20.10.20 ...
+🐳  Preparing Kubernetes v1.28.0 on Docker 20.10.20 ...
     ▪ Generating certificates and keys ...
     ▪ Booting up control plane ...
     ▪ Configuring RBAC rules ...
@@ -68,7 +68,7 @@ We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is opt
 
 Install the certificate manager on your Kubernetes cluster to enable adding the webhook component (only needed once per Kubernetes cluster):
 ```bash
-kubectl create -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 ```
 
 {{< hint info >}}

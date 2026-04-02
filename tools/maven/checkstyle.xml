@@ -230,8 +230,9 @@ This file is based on the checkstyle file of Apache Beam.
 			<message key="import.illegal" value="{0}; Use flink-shaded-netty instead."/>
 		</module>
 		<module name="IllegalImport">
-			<property name="illegalPkgs" value="com.google.common"/>
-			<message key="import.illegal" value="{0}; Use flink-shaded-guava instead."/>
+			<property name="regexp" value="true"/>
+			<property name="illegalPkgs" value="org.apache.flink.shaded.guava.*"/>
+			<message key="import.illegal" value="{0}; Use regular guava instead."/>
 		</module>
 
 		<module name="RedundantModifier">
@@ -276,16 +277,9 @@ This file is based on the checkstyle file of Apache Beam.
 		<!-- Checks for Javadoc comments.                     -->
 		<!-- See http://checkstyle.sf.net/config_javadoc.html -->
 		<module name="JavadocMethod">
-			<property name="scope" value="protected"/>
 			<property name="severity" value="error"/>
-			<property name="allowMissingJavadoc" value="true"/>
 			<property name="allowMissingParamTags" value="true"/>
 			<property name="allowMissingReturnTag" value="true"/>
-			<property name="allowMissingThrowsTags" value="true"/>
-			<property name="allowThrowsTagsForSubclasses" value="true"/>
-			<property name="allowUndeclaredRTE" value="true"/>
-			<!-- This check sometimes failed for with "Unable to get class information for @throws tag" for custom exceptions -->
-			<property name="suppressLoadErrors" value="true"/>
 		</module>
 
 		<!-- Check that paragraph tags are used correctly in Javadoc. -->

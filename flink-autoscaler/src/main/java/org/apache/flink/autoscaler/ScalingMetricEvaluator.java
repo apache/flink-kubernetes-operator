@@ -456,7 +456,10 @@ public class ScalingMetricEvaluator {
             return Double.NaN;
         }
 
-        return 1000 * (last - first) / Duration.between(firstTs, lastTs).toMillis();
+        long tsDiff = Duration.between(firstTs, lastTs).toMillis();
+        tsDiff = Math.max(tsDiff, 1);
+
+        return 1000 * (last - first) / tsDiff;
     }
 
     public static double getAverage(

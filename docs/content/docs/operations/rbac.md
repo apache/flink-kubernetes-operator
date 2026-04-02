@@ -85,6 +85,7 @@ For each additional namespace that runs the Flink jobs, users need to do the fol
       - apps
       resources:
       - deployments
+      - deployments/finalizers
       verbs:
       - '*'
     ---

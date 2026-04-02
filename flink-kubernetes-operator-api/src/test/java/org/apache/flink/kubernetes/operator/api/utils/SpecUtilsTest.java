@@ -30,10 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link SpecUtils}. */
-public class SpecUtilsTest {
+class SpecUtilsTest {
 
     @Test
-    public void testSpecSerializationWithVersion() throws JsonProcessingException {
+    void testSpecSerializationWithVersion() throws JsonProcessingException {
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         String serialized = SpecUtils.writeSpecWithMeta(app.getSpec(), app);
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
@@ -56,7 +56,7 @@ public class SpecUtilsTest {
     }
 
     @Test
-    public void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
+    void testSpecSerializationWithoutGeneration() throws JsonProcessingException {
         // with regards to ReconcialiationMetadata & SpecWithMeta
         FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(12L);

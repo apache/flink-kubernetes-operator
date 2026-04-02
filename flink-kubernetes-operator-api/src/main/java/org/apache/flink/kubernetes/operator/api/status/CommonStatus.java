@@ -22,12 +22,15 @@ import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.apache.commons.lang3.StringUtils;
+
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
 
 /** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
@@ -36,6 +39,12 @@ import org.apache.commons.lang3.StringUtils;
 @NoArgsConstructor
 @SuperBuilder
 public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
+
+    // Frequent error message constants for resource failure reporting
+    public static final String MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED =
+            "It is possible that the job has finished or terminally failed, or the configmaps have been deleted.";
+    public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
+    public static final String MSG_MANUAL_RESTORE_REQUIRED = "Manual restore required.";
 
     /** Last observed status of the Flink job on Application/Session cluster. */
     private JobStatus jobStatus = new JobStatus();
@@ -90,6 +99,23 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
             return ResourceLifecycleState.FAILED;
         }
 
+        // Check for unrecoverable deployments that should be marked as FAILED if the error contains
+        // the following substrings
+        if (this instanceof FlinkDeploymentStatus) {
+            FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
+            var jmDeployStatus = deploymentStatus.getJobManagerDeploymentStatus();
+
+            // ERROR/MISSING deployments are in terminal error state and should always be FAILED
+            if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
+                            || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
+                    && error != null
+                    && (error.contains(MSG_MANUAL_RESTORE_REQUIRED)
+                            || error.contains(MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED)
+                            || error.contains(MSG_HA_METADATA_NOT_AVAILABLE))) {
+                return ResourceLifecycleState.FAILED;
+            }
+        }
+
         if (reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK) {
             return ResourceLifecycleState.ROLLED_BACK;
         } else if (reconciliationStatus.isLastReconciledSpecStable()) {
@@ -97,5 +123,14 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         }
 
         return ResourceLifecycleState.DEPLOYED;
+    }
+
+    @JsonIgnore
+    public boolean isJobCancellable() {
+        var jobState = jobStatus.getState();
+        if (jobState == null) {
+            return false;
+        }
+        return RECONCILING != jobState && !jobState.isGloballyTerminalState();
     }
 }

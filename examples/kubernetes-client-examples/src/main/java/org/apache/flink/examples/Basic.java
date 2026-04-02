@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 
 import java.util.Map;
 
@@ -68,7 +69,7 @@ public class Basic {
                                 .build());
 
         try (KubernetesClient kubernetesClient = new KubernetesClientBuilder().build()) {
-            kubernetesClient.resource(flinkDeployment).createOrReplace();
+            kubernetesClient.resource(flinkDeployment).createOr(NonDeletingOperation::update);
         }
     }
 }

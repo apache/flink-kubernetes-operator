@@ -21,12 +21,12 @@ kind: FlinkDeployment
 metadata:
   name: basic-ingress
 spec:
-  image: flink:1.20
-  flinkVersion: v1_20
+  image: flink:2.2
+  flinkVersion: v2_2
   ingress:
     template: "{{name}}.{{namespace}}.flink.k8s.io"
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
+    taskmanager.numberOfTaskSlots: 2
   serviceAccount: flink
   jobManager:
     resource:

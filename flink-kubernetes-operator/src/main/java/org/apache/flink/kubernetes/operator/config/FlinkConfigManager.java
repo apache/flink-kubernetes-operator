@@ -33,13 +33,12 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
-import org.apache.flink.shaded.guava31.com.google.common.cache.Cache;
-import org.apache.flink.shaded.guava31.com.google.common.cache.CacheBuilder;
-import org.apache.flink.shaded.guava31.com.google.common.cache.CacheLoader;
-import org.apache.flink.shaded.guava31.com.google.common.cache.LoadingCache;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import lombok.Builder;
 import lombok.SneakyThrows;
@@ -356,6 +355,7 @@ public class FlinkConfigManager {
         // Observe config should include the latest operator related settings
         if (spec.getFlinkConfiguration() != null) {
             spec.getFlinkConfiguration()
+                    .asFlatMap()
                     .forEach(
                             (k, v) -> {
                                 if (k.startsWith(K8S_OP_CONF_PREFIX)
@@ -371,7 +371,7 @@ public class FlinkConfigManager {
             AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
         addOperatorConfigsFromSpec(spec, conf);
         if (spec.getFlinkConfiguration() != null) {
-            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+            var deployConfig = spec.getFlinkConfiguration().asConfiguration();
             for (ConfigOption configOption : configOptions) {
                 deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
             }
@@ -394,7 +394,7 @@ public class FlinkConfigManager {
         // merge session job specific config
         var sessionJobFlinkConfiguration = sessionJobSpec.getFlinkConfiguration();
         if (sessionJobFlinkConfiguration != null) {
-            sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
+            sessionJobFlinkConfiguration.asFlatMap().forEach(sessionJobConfig::setString);
         }
         applyJobConfig(name, sessionJobConfig, sessionJobSpec.getJob());
         return sessionJobConfig;

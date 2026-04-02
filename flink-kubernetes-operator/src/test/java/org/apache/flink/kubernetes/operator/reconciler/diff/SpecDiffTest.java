@@ -22,6 +22,7 @@ import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -83,17 +84,27 @@ public class SpecDiffTest {
         right.getJob().setAllowNonRestoredState(true);
         right.getJob().setInitialSavepointPath("local:///tmp");
         right.getJob().setSavepointTriggerNonce(123L);
-        right.getFlinkConfiguration().put(OPERATOR_RECONCILE_INTERVAL.key(), "100 SECONDS");
-        right.getFlinkConfiguration().put(SCOPE_NAMING_KUBERNETES_OPERATOR.key(), "foo.bar");
-        right.getFlinkConfiguration().put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
-        right.getFlinkConfiguration().put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
+
+        right.getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                OPERATOR_RECONCILE_INTERVAL.key(),
+                                "100 SECONDS",
+                                SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                                "foo.bar",
+                                CoreOptions.DEFAULT_PARALLELISM.key(),
+                                "100",
+                                AutoScalerOptions.METRICS_WINDOW.key(),
+                                "1234m"));
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(8, diff.getNumDiffs());
 
-        right.getFlinkConfiguration().remove(SCOPE_NAMING_KUBERNETES_OPERATOR.key());
-        right.getFlinkConfiguration().remove(AutoScalerOptions.METRICS_WINDOW.key());
+        right.getFlinkConfiguration()
+                .remove(
+                        SCOPE_NAMING_KUBERNETES_OPERATOR.key(),
+                        AutoScalerOptions.METRICS_WINDOW.key());
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
@@ -390,6 +401,19 @@ public class SpecDiffTest {
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
+    }
+
+    @Test
+    public void testNullFlinkConfiguration() {
+        var left = new FlinkDeploymentSpec();
+        left.setFlinkConfiguration((ConfigObjectNode) null);
+        var right = new FlinkDeploymentSpec();
+
+        // This should fail with NullPointerException because there's no null check
+        // in ReflectiveDiffBuilder when casting flinkConfiguration to ConfigObjectNode
+        var diff =
+                new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertEquals(DiffType.IGNORE, diff.getType());
     }
 
     @Value

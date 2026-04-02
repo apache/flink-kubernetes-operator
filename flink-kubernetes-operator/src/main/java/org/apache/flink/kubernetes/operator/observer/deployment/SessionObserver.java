@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import java.util.concurrent.TimeoutException;
 
-/** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
+/** The observer of the {@link org.apache.flink.kubernetes.operator.api.Mode#SESSION} cluster. */
 public class SessionObserver extends AbstractFlinkDeploymentObserver {
 
     public SessionObserver(EventRecorder eventRecorder) {

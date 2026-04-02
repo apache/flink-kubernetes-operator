@@ -304,7 +304,7 @@ function start_minikube_if_not_running {
         echo "Starting minikube ..."
         # Please update tbe docs when changing kubernetes version
         minikube start \
-        --kubernetes-version=v1.25.3 \
+        --kubernetes-version=v1.28.0 \
         --extra-config=kubelet.image-gc-high-threshold=99 \
         --extra-config=kubelet.image-gc-low-threshold=98 \
         --extra-config=kubelet.minimum-container-ttl-duration=120m \

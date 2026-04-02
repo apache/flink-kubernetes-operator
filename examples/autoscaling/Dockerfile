@@ -16,5 +16,5 @@
 # limitations under the License.
 ################################################################################
 
-FROM flink:1.18
+FROM flink:1.20.1-java17
 COPY ./target/autoscaling*.jar /opt/flink/usrlib/autoscaling.jar

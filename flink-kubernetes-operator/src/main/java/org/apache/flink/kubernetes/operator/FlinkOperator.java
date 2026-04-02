@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotController;
@@ -91,6 +92,11 @@ public class FlinkOperator {
     private final Configuration baseConfig;
 
     public FlinkOperator(@Nullable Configuration conf) {
+        this(conf, null);
+    }
+
+    @VisibleForTesting
+    FlinkOperator(@Nullable Configuration conf, KubernetesClient client) {
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
@@ -100,9 +106,13 @@ public class FlinkOperator {
 
         baseConfig = configManager.getDefaultConfig();
         this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig);
-        this.client =
-                KubernetesClientUtils.getKubernetesClient(
-                        configManager.getOperatorConfiguration(), this.metricGroup);
+        if (client == null) {
+            this.client =
+                    KubernetesClientUtils.getKubernetesClient(
+                            configManager.getOperatorConfiguration(), this.metricGroup);
+        } else {
+            this.client = client;
+        }
         this.operator = createOperator();
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
@@ -190,7 +200,8 @@ public class FlinkOperator {
                         observerFactory,
                         statusRecorder,
                         eventRecorder,
-                        canaryResourceManager);
+                        canaryResourceManager,
+                        configManager);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
@@ -244,6 +255,17 @@ public class FlinkOperator {
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
+    @VisibleForTesting
+    void registerBlueGreenController() {
+        var metricManager =
+                MetricManager.createFlinkBlueGreenDeploymentMetricManager(baseConfig, metricGroup);
+        var statusRecorder =
+                StatusRecorder.createForFlinkBlueGreenDeployment(client, metricManager, listeners);
+        var controller =
+                new FlinkBlueGreenDeploymentController(ctxFactory, configManager, statusRecorder);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
+    }
+
     private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
         var operatorConf = configManager.getOperatorConfiguration();
         var watchNamespaces = operatorConf.getWatchedNamespaces();
@@ -264,6 +286,7 @@ public class FlinkOperator {
         registerDeploymentController();
         registerSessionJobController();
         registerSnapshotController();
+        registerBlueGreenController();
         operator.installShutdownHook(
                 baseConfig.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT));
         operator.start();

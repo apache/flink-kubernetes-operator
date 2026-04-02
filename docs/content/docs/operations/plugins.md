@@ -127,7 +127,7 @@ That folder is added to classpath upon initialization.
 
 ## Custom Flink Resource Mutators
 
-`FlinkResourceMutator`, an interface for ,mutating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceMutator` and make sure to retain the service definition in `META-INF/services`.
+`FlinkResourceMutator`, an interface for mutating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceMutator` and make sure to retain the service definition in `META-INF/services`.
 The following steps demonstrate how to develop and use a custom mutator.
 
 1. Implement `FlinkResourceMutator` interface:

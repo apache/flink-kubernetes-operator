@@ -21,14 +21,17 @@ kind: FlinkDeployment
 metadata:
   name: basic-checkpoint-ha-example
 spec:
-  image: flink:1.20
-  flinkVersion: v1_20
+  image: flink:2.2
+  flinkVersion: v2_2
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
-    state.savepoints.dir: file:///flink-data/savepoints
-    state.checkpoints.dir: file:///flink-data/checkpoints
-    high-availability.type: kubernetes
-    high-availability.storageDir: file:///flink-data/ha
+    taskmanager.numberOfTaskSlots: 2
+    state:
+      savepoints.dir: file:///flink-data/savepoints
+      checkpoints.dir: file:///flink-data/checkpoints
+    high-availability:
+      type: kubernetes
+      storageDir: file:///flink-data/ha
+    kubernetes.operator.savepoint.format.type: NATIVE
   serviceAccount: flink
   jobManager:
     resource:

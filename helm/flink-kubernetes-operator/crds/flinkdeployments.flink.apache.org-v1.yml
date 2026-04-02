@@ -32,9 +32,7 @@ spec:
           spec:
             properties:
               flinkConfiguration:
-                additionalProperties:
-                  type: string
-                type: object
+                x-kubernetes-preserve-unknown-fields: true
               flinkVersion:
                 enum:
                 - v1_13
@@ -46,6 +44,8 @@ spec:
                 - v1_19
                 - v1_20
                 - v2_0
+                - v2_1
+                - v2_2
                 type: string
               image:
                 type: string
@@ -10737,6 +10737,23 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                type: array
               error:
                 type: string
               jobManagerDeploymentStatus:

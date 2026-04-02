@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.api.validation;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -247,6 +248,23 @@ public class CrdCompatibilityCheckerTest {
     }
 
     @Test
+    void generalizingPropertyMapToAnyType() throws Exception {
+        expectSuccess(
+                "openAPIV3Schema:\n"
+                        + "  properties:\n"
+                        + "    flinkConfiguration:\n"
+                        + "      additionalProperties:\n"
+                        + "        type: string\n"
+                        + "      type: object\n"
+                        + "  type: object",
+                "openAPIV3Schema:\n"
+                        + "  properties:\n"
+                        + "    flinkConfiguration:\n"
+                        + "      x-kubernetes-preserve-unknown-fields: true\n"
+                        + "  type: object");
+    }
+
+    @Test
     public void testCreateFlinkSessionJobIgnoreUnknownFields() throws IOException {
         FlinkSessionJob flinkSessionJobWithUnknownFields =
                 objectMapper.readValue(
@@ -269,6 +287,19 @@ public class CrdCompatibilityCheckerTest {
                 objectMapper.readValue(
                         new File("src/test/resources/test-deployment.yaml"), FlinkDeployment.class);
         assertEquals(flinkDeploymentWithUnknownFields.toString(), flinkDeployment.toString());
+    }
+
+    @Test
+    public void testCreateFlinkStateSnapshotIgnoreUnknownFields() throws IOException {
+        FlinkStateSnapshot flinkSnapshotWithUnknownFields =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-snapshot-with-unknown-fields.yaml"),
+                        FlinkStateSnapshot.class);
+        FlinkStateSnapshot flinkSnapshot =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-snapshot.yaml"),
+                        FlinkStateSnapshot.class);
+        assertEquals(flinkSnapshotWithUnknownFields.toString(), flinkSnapshot.toString());
     }
 
     @Test

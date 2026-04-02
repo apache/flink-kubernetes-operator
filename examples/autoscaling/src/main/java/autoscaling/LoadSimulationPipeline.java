@@ -27,7 +27,7 @@ import org.apache.flink.connector.datagen.source.DataGeneratorSource;
 import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
+import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.flink.util.Collector;
 
 import org.slf4j.Logger;
@@ -55,7 +55,7 @@ import java.time.temporal.ChronoUnit;
  *
  *                    A concrete example: "1;2;4\n4;2;1"
  *                      Two branches are created with three tasks each. On the first branch, the tasks have
- *                      a load of 1, 2, and 3 respectively. On the second branch, the tasks have the load reversed.
+ *                      a load of 1, 2, and 4 respectively. On the second branch, the tasks have the load reversed.
  *                      This means, that at peak Flink Autoscaling at target utilization of 0.5, the parallelisms of
  *                      the tasks will be 2, 4, 8 for branch one and vise-versa for branch two.
  * </pre>
@@ -128,7 +128,7 @@ public class LoadSimulationPipeline {
                                 .broadcast();
             }
 
-            stream.addSink(new DiscardingSink<>());
+            stream.sinkTo(new DiscardingSink<>());
         }
 
         env.execute(
@@ -164,7 +164,8 @@ public class LoadSimulationPipeline {
 
             double amplitude = getAmplitude(currentEpoch);
 
-            double loadPerSubTask = maxLoad / getRuntimeContext().getNumberOfParallelSubtasks();
+            double loadPerSubTask =
+                    maxLoad / getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks();
 
             long busyTimeMs = (long) (loadPerSubTask * samplingIntervalMs * amplitude);
             long remainingTimeMs =
@@ -172,7 +173,7 @@ public class LoadSimulationPipeline {
             long sleepTime = Math.min(busyTimeMs, remainingTimeMs);
             LOG.info(
                     "{}> epoch: {} busyTime: {} remainingTime: {} sleepTime: {} amplitude: {}",
-                    getRuntimeContext().getIndexOfThisSubtask(),
+                    getRuntimeContext().getTaskInfo().getIndexOfThisSubtask(),
                     currentEpoch,
                     busyTimeMs,
                     remainingTimeMs,

@@ -170,11 +170,15 @@ public class RollbackTest {
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         offsetReconcilerClock(deployment, Duration.ZERO);
 
-        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(),
+                                        "true",
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(),
+                                        "10s"));
 
         testController.reconcile(deployment, context);
 
@@ -356,12 +360,17 @@ public class RollbackTest {
             boolean expectTwoStepRollback)
             throws Exception {
 
-        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
-        flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
-        flinkConfiguration.put("test.deploy.config", "stable");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(),
+                                "true",
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(),
+                                "10s",
+                                "test.deploy.config",
+                                "stable"));
 
         testController.reconcile(deployment, context);
 

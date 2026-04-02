@@ -88,7 +88,7 @@ class FlinkSessionJobControllerTest {
     }
 
     @Test
-    public void testSubmitJobButException() {
+    public void testSubmitJobButException() throws Exception {
         flinkService.setDeployFailure(true);
 
         try {
@@ -97,6 +97,10 @@ class FlinkSessionJobControllerTest {
             // Ignore
         }
 
+        assertEquals(sessionJob.getStatus().getJobStatus().getState(), RECONCILING);
+        String jobId = sessionJob.getStatus().getJobStatus().getJobId();
+        assertNotNull(jobId);
+
         Assertions.assertEquals(2, testController.events().size());
         // Discard submit event
         testController.events().remove();
@@ -104,6 +108,12 @@ class FlinkSessionJobControllerTest {
         var event = testController.events().remove();
         Assertions.assertEquals(EventRecorder.Type.Warning.toString(), event.getType());
         Assertions.assertEquals("Error", event.getReason());
+
+        flinkService.setDeployFailure(false);
+        testController.reconcile(sessionJob, context);
+
+        // Make sure we reused the original failed job id
+        assertEquals(jobId, flinkService.listJobs().get(0).f1.getJobId().toHexString());
 
         testController.cleanup(sessionJob, context);
     }

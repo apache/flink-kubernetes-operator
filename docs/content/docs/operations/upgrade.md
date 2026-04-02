@@ -38,8 +38,9 @@ Please check the [related section](#upgrading-from-v1alpha1---v1beta1).
 ## Normal Upgrade Process
 
 If you are upgrading from `kubernetes-operator-1.0.0` or later, please refer to the following two steps:
-1. Upgrading the CRDs
-2. Upgrading the Helm deployment
+1. Upgrading the Java client library
+2. Upgrading the CRDs
+3. Upgrading the Helm deployment
 
 We will cover these steps in detail in the next sections.
 
@@ -150,7 +151,7 @@ Here is a reference example of upgrading a `basic-checkpoint-ha-example` deploym
     ```
 5. Restore the job:
 
-   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
+   Deploy the previously deleted job using this [FlinkDeployment](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
 
     ```
     spec:

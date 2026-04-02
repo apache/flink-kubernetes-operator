@@ -134,6 +134,13 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_JOB_SUBMISSION_TIMEOUT =
+            operatorConfig("job.submission.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(10))
+                    .withDescription("The timeout for session job submissions.");
+
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> DEPLOYMENT_ROLLBACK_ENABLED =
             operatorConfig("deployment.rollback.enabled")
@@ -404,7 +411,8 @@ public class KubernetesOperatorConfigOptions {
             operatorConfig("dynamic.namespaces.enabled")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Enables dynamic change of watched/monitored namespaces.");
+                    .withDescription(
+                            "Enables the operator to dynamically update the list of namespaces it watches. Requires dynamic.config.enabled to be set to true.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
@@ -647,6 +655,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Indicate whether the job should be drained when stopping with savepoint.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> BLOCK_ON_UNMANAGED_JOBS =
+            operatorConfig("session.block-on-unmanaged-jobs")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
             operatorConfig("cluster.resource-view.refresh-interval")
@@ -670,4 +686,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(10)
                     .withDescription(
                             "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
+            operatorConfig("ingress.manage")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.");
 }
