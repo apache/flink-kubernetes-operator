@@ -669,7 +669,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 AutoScalerEventHandler.Type.Warning,
                 SCALING_LIMITED,
                 message,
-                SCALING_LIMITED + vertex + expectedParallelism,
+                SCALING_LIMITED + vertex,
                 context.getConfiguration().get(SCALING_EVENT_INTERVAL));
     }
 
