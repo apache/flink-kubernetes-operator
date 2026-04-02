@@ -133,4 +133,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         }
         return RECONCILING != jobState && !jobState.isGloballyTerminalState();
     }
+
+    @JsonIgnore
+    public abstract boolean isJmAccessible();
 }
