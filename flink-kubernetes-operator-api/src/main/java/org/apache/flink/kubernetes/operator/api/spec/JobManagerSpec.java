@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.SchemaFrom;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,8 +37,19 @@ import lombok.NoArgsConstructor;
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class JobManagerSpec {
-    /** Resource specification for the JobManager pods. */
-    private Resource resource;
+    /**
+     * Resource specification for the JobManager pods.
+     *
+     * @deprecated Use resourceRequirements instead for proper Kubernetes ResourceRequirements
+     *     schema.
+     */
+    @Deprecated private Resource resource;
+
+    /**
+     * Resource requirements for the JobManager pods following Kubernetes ResourceRequirements
+     * schema. This field supports both requests and limits for CPU, memory, and other resources.
+     */
+    private ResourceRequirements resources;
 
     /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
     private int replicas = 1;
