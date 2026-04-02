@@ -156,16 +156,16 @@ A target of `0.6` means we are targeting 60% utilization/load for the job vertex
 
 In general, it's not recommended to set target utilization close to 100% as performance usually degrades as we reach capacity limits in most real world systems.
 
-In addition to the utilization target we can set a utilization boundary, that serves as extra buffer to avoid immediate scaling on load fluctuations.
-Setting `job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 20% deviation from the target utilization before triggering a scaling action.
-For example, with a target utilization of `0.6` and a boundary of `0.2`, scale-up is triggered when utilization exceeds `0.8` (`0.6` + `0.2`) and scale-down when it drops below `0.4` (`0.6` - `0.2`).
+To control when scaling actions are triggered, users can set upper and lower utilization thresholds using `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min`.
+These define the utilization range within which the autoscaler will not take any scaling action, providing a buffer against load fluctuations.
 
-For more fine-grained control, the `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min` options can be used to set asymmetric upper and lower utilization thresholds independently.
-When set, these options take precedence over the values derived from the boundary. When only one of them is set, the other is still derived from the boundary.
-If neither is set, the boundary is used to compute both thresholds symmetric.
+For example, with a target utilization of `0.6`, setting `job.autoscaler.utilization.max: "0.8"` and `job.autoscaler.utilization.min: "0.4"` means:
+- Scale-up is triggered when utilization exceeds `0.8`
+- Scale-down is triggered when utilization drops below `0.4`
+- No scaling action is taken while utilization remains between `0.4` and `0.8`
 
-{{< hint warning >}}
-The `job.autoscaler.target.utilization.boundary` option is **deprecated**. Users are encouraged to use `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min` instead, which provide more explicit and flexible control over the scaling thresholds. The boundary option will continue to work as a fallback when neither `max` nor `min` is set.
+{{<hint info >}}
+The default thresholds are `target + 0.3` for max and `target - 0.3` for min.
 {{< /hint >}}
 
 ### Target catch-up duration and restart time
@@ -192,7 +192,8 @@ flinkConfiguration:
     job.autoscaler.stabilization.interval: 1m
     job.autoscaler.metrics.window: 5m
     job.autoscaler.target.utilization: "0.6"
-    job.autoscaler.target.utilization.boundary: "0.2"
+    job.autoscaler.utilization.max: "0.8"
+    job.autoscaler.utilization.min: "0.4"
     job.autoscaler.restart.time: 2m
     job.autoscaler.catch-up.duration: 5m
     pipeline.max-parallelism: "720"
