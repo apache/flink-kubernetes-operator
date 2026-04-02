@@ -1521,9 +1521,15 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         .serviceAccount(SERVICE_ACCOUNT)
                         .flinkVersion(version)
                         .flinkConfiguration(new ConfigObjectNode())
-                        .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
+                        .jobManager(
+                                JobManagerSpec.builder()
+                                        .resource(new Resource(1.0, "2048m", "2G"))
+                                        .replicas(1)
+                                        .build())
                         .taskManager(
-                                new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
+                                TaskManagerSpec.builder()
+                                        .resource(new Resource(1.0, "2048m", "2G"))
+                                        .build())
                         .build();
 
         flinkDeploymentSpec.setFlinkConfiguration(conf);

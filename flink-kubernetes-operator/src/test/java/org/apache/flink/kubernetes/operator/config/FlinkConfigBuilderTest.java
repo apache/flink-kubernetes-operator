@@ -699,6 +699,29 @@ public class FlinkConfigBuilderTest {
     }
 
     @Test
+    public void testDeprecatedResourceStillWorksWhenResourcesIsNull() {
+        flinkDeployment.getSpec().getJobManager().setResources(null);
+        flinkDeployment.getSpec().getJobManager().setResource(new Resource(2.0, "4096m", "2G"));
+        flinkDeployment.getSpec().getTaskManager().setResources(null);
+        flinkDeployment.getSpec().getTaskManager().setResource(new Resource(1.5, "2048m", "2G"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("4096 mb"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(2.0), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+        assertEquals(
+                MemorySize.parse("2048 mb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(1.5), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Test
     public void testTaskManagerSpecWith512mSetting() {
         flinkDeployment.getSpec().getTaskManager().getResource().setMemory("512m");
         Configuration configuration =
