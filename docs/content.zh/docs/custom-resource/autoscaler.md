@@ -201,21 +201,6 @@ The list of options will likely grow to cover more complex scaling scenarios.
 
 For a detailed config reference check the [general configuration page]({{< ref "docs/operations/configuration#autoscaler-configuration" >}})
 
-## Extensibility of Autoscaler
-
-The Autoscaler exposes a set of interfaces for storing autoscaler state, handling autoscaling events,
-and executing scaling decisions. How these are implemented is specific to the orchestration framework
-used (e.g. Kubernetes), but the interfaces are designed to be as generic as possible. The following
-are the introduction of these generic interfaces:
-
-- **AutoScalerEventHandler** : Handling autoscaler events, such as: ScalingReport,
-  AutoscalerError, etc. `LoggingEventHandler` is the default implementation, it logs events.
-- **AutoScalerStateStore** : Storing all state during scaling. `InMemoryAutoScalerStateStore` is
-  the default implementation, it's based on the Java Heap, so the state will be discarded after
-  process restarts. We will implement persistent State Store in the future, such as : `JdbcAutoScalerStateStore`.
-- **ScalingRealizer** : Applying scaling actions.
-- **JobAutoScalerContext** : Including all details related to the current job.
-
 ## Autoscaler Standalone
 
 **Flink Autoscaler Standalone** is an implementation of **Flink Autoscaler**, it runs as a separate java
@@ -346,3 +331,32 @@ These metrics are reported under the Kubernetes Operator Resource metric group:
 ```
 [resource_prefix].Autoscaler.[jobVertexID].[ScalingMetric].Current/Average
 ```
+
+## Extensibility of Autoscaler
+
+The Autoscaler exposes a set of interfaces for storing autoscaler state, handling autoscaling events,
+and executing scaling decisions. How these are implemented is specific to the orchestration framework
+used (e.g. Kubernetes), but the interfaces are designed to be as generic as possible. The following
+are the introduction of these generic interfaces:
+
+- **`AutoScalerEventHandler`** : Handling autoscaler events, such as: ScalingReport, AutoscalerError, etc.
+    - **Kubernetes Operator** : Defaults to `KubernetesAutoScalerEventHandler`, which posts events to the Kubernetes Events API.
+    - **Autoscaler Standalone** : Defaults to `LoggingEventHandler`, which logs events.
+- **`AutoScalerStateStore`** : Storing all state during scaling.
+    - **Kubernetes Operator** : Defaults to `KubernetesAutoScalerStateStore`, which stores state in ConfigMaps.
+    - **Autoscaler Standalone** : Defaults to `InMemoryAutoScalerStateStore`, which based on the Java Heap, state will be discarded after process restarts.
+- **`ScalingRealizer`** : Applying scaling actions.
+    - **Kubernetes Operator** : Defaults to `KubernetesScalingRealizer`, which updates the `FlinkDeployment` / `FlinkSessionJob` spec.
+    - **Autoscaler Standalone** : Defaults to `RescaleApiScalingRealizer`, which uses the Rescale API to apply parallelism changes.
+- **`JobAutoScalerContext`** : Including all details related to the current job.
+    - **Kubernetes Operator** : Defaults to `KubernetesJobAutoScalerContext`, which provides access to the Flink resource, Kubernetes client, and resource context.
+    - **Autoscaler Standalone** : Uses the base `JobAutoScalerContext` directly.
+
+Users can replace any of these with custom implementations using the Flink Plugins mechanism. For details on how to develop and deploy custom autoscaler plugins, see the
+[Custom Autoscaler Components]({{< ref "docs/operations/plugins#custom-autoscaler-components" >}}) section.
+
+{{< hint warning >}}
+The operator's autoscaler is currently tightly coupled to `KubernetesJobAutoScalerContext`. Custom `JobAutoScalerContext` implementations must extend `KubernetesJobAutoScalerContext` rather than `JobAutoScalerContext` directly, as `JobAutoScalerImpl` and its components are parameterized with the Kubernetes-specific context for accessing the Flink resource, Kubernetes client, and resource context.
+
+Plugin-based extensibility for the autoscaler components is currently only available for the built-in Kubernetes Operator autoscaler, not for Autoscaler Standalone.
+{{< /hint >}}

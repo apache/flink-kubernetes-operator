@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.autoscaler.TestJobAutoScalerContext;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -24,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -32,20 +35,27 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Resource Context tests. */
 public class FlinkResourceContextTest {
+
+    @TempDir public Path temporaryFolder;
 
     private Context<HasMetadata> josdkCtx;
     private FlinkConfigManager configManager;
@@ -148,6 +158,30 @@ public class FlinkResourceContextTest {
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertEquals(2, counter.get());
+    }
+
+    @Test
+    void testDefaultJobAutoScalerContext() {
+        var ctx = getContext(TestUtils.buildApplicationCluster());
+        var autoScalerCtx = ctx.getJobAutoScalerContext();
+        assertThat(autoScalerCtx).isExactlyInstanceOf(KubernetesJobAutoScalerContext.class);
+    }
+
+    @Test
+    void testCustomJobAutoScalerContext() throws Exception {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(
+                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                    TestUtils.getTestPluginsRootDir(temporaryFolder));
+            TestUtils.setEnv(systemEnv);
+
+            var ctx = getContext(TestUtils.buildApplicationCluster());
+            assertThat(ctx.getJobAutoScalerContext()).isInstanceOf(TestJobAutoScalerContext.class);
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
     }
 
     FlinkResourceContext getContext(AbstractFlinkResource<?, ?> cr) {
