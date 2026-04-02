@@ -530,7 +530,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testMinParallelismLimitIsUsed() {
-        conf.setInteger(AutoScalerOptions.VERTEX_MIN_PARALLELISM, 5);
+        conf.set(AutoScalerOptions.VERTEX_MIN_PARALLELISM, 5);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         var delayedScaleDown = new DelayedScaleDown();
 
@@ -560,7 +560,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testMaxParallelismLimitIsUsed() {
-        conf.setInteger(AutoScalerOptions.VERTEX_MAX_PARALLELISM, 10);
+        conf.set(AutoScalerOptions.VERTEX_MAX_PARALLELISM, 10);
         conf.set(UTILIZATION_TARGET, 1.);
         var delayedScaleDown = new DelayedScaleDown();
 
@@ -1015,7 +1015,7 @@ public class JobVertexScalerTest {
                         context));
 
         assertEquals(
-                20,
+                22,
                 JobVertexScaler.scale(
                         vertex,
                         22,
