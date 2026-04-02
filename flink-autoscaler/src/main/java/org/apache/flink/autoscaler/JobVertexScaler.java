@@ -100,19 +100,21 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @Getter
     public static class ParallelismChange {
 
-        private static final ParallelismChange NO_CHANGE = new ParallelismChange(-1, false);
-
         private final int newParallelism;
+
+        private final int currentParallelism;
 
         private final boolean outsideUtilizationBound;
 
-        private ParallelismChange(int newParallelism, boolean outsideUtilizationBound) {
+        private ParallelismChange(
+                int newParallelism, int currentParallelism, boolean outsideUtilizationBound) {
             this.newParallelism = newParallelism;
+            this.currentParallelism = currentParallelism;
             this.outsideUtilizationBound = outsideUtilizationBound;
         }
 
         public boolean isNoChange() {
-            return this == NO_CHANGE;
+            return newParallelism == currentParallelism;
         }
 
         @Override
@@ -124,33 +126,48 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 return false;
             }
             ParallelismChange that = (ParallelismChange) o;
+            if (this.isNoChange() && that.isNoChange()) {
+                // When no scaling happens, outsideUtilizationBound is irrelevant.
+                return currentParallelism == that.currentParallelism;
+            }
             return newParallelism == that.newParallelism
+                    && currentParallelism == that.currentParallelism
                     && outsideUtilizationBound == that.outsideUtilizationBound;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(newParallelism, outsideUtilizationBound);
+            if (isNoChange()) {
+                // When no scaling happens, outsideUtilizationBound is irrelevant.
+                return Objects.hash(currentParallelism);
+            }
+            return Objects.hash(newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
         @Override
         public String toString() {
             return isNoChange()
-                    ? "NoParallelismChange"
+                    ? "NoParallelismChange{currentParallelism=" + currentParallelism + "}"
                     : "ParallelismChange{newParallelism="
                             + newParallelism
+                            + ", currentParallelism="
+                            + currentParallelism
                             + ", outsideUtilizationBound="
                             + outsideUtilizationBound
                             + "}";
         }
 
-        public static ParallelismChange build(int newParallelism, boolean outsideUtilizationBound) {
+        public static ParallelismChange build(
+                int newParallelism, int currentParallelism, boolean outsideUtilizationBound) {
             checkArgument(newParallelism > 0, "The parallelism should be greater than 0.");
-            return new ParallelismChange(newParallelism, outsideUtilizationBound);
+            checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
+            return new ParallelismChange(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
-        public static ParallelismChange noChange() {
-            return NO_CHANGE;
+        public static ParallelismChange noChange(int currentParallelism) {
+            checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
+            return new ParallelismChange(currentParallelism, currentParallelism, false);
         }
     }
 
@@ -169,7 +186,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         double targetCapacity =
@@ -179,7 +196,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
@@ -230,7 +247,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             // Clear delayed scale down request if the new parallelism is equal to
             // currentParallelism.
             delayedScaleDown.clearVertex(vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         // We record our expectations for this scaling operation
@@ -350,7 +367,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
             // If we don't have past scaling actions for this vertex, don't block scale up.
             if (history.isEmpty()) {
-                return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+                return ParallelismChange.build(
+                        newParallelism, currentParallelism, outsideUtilizationBound);
             }
 
             var lastSummary = history.get(history.lastKey());
@@ -359,13 +377,19 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     && detectIneffectiveScaleUp(
                             context, vertex, conf, evaluatedMetrics, lastSummary)) {
                 // Block scale up when last rescale is ineffective.
-                return ParallelismChange.noChange();
+                return ParallelismChange.noChange(currentParallelism);
             }
 
-            return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+            return ParallelismChange.build(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         } else {
             return applyScaleDownInterval(
-                    delayedScaleDown, vertex, conf, newParallelism, outsideUtilizationBound);
+                    delayedScaleDown,
+                    vertex,
+                    conf,
+                    newParallelism,
+                    currentParallelism,
+                    outsideUtilizationBound);
         }
     }
 
@@ -400,11 +424,13 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             JobVertexID vertex,
             Configuration conf,
             int newParallelism,
+            int currentParallelism,
             boolean outsideUtilizationBound) {
         var scaleDownInterval = conf.get(SCALE_DOWN_INTERVAL);
         if (scaleDownInterval.toMillis() <= 0) {
             // The scale down interval is disable, so don't block scaling.
-            return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+            return ParallelismChange.build(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
         var now = clock.instant();
@@ -422,7 +448,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         "Try to skip immediate scale down within scale-down interval for {}",
                         vertex);
             }
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         } else {
             // Using the maximum parallelism within the scale down interval window instead of the
             // latest parallelism when scaling down
@@ -430,6 +456,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     delayedScaleDownInfo.getMaxRecommendedParallelism(windowStartTime);
             return ParallelismChange.build(
                     maxRecommendedParallelism.getParallelism(),
+                    currentParallelism,
                     maxRecommendedParallelism.isOutsideUtilizationBound());
         }
     }
