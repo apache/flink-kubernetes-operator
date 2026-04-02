@@ -164,6 +164,10 @@ For more fine-grained control, the `job.autoscaler.utilization.max` and `job.aut
 When set, these options take precedence over the values derived from the boundary. When only one of them is set, the other is still derived from the boundary.
 If neither is set, the boundary is used to compute both thresholds symmetric.
 
+{{< hint warning >}}
+The `job.autoscaler.target.utilization.boundary` option is **deprecated**. Users are encouraged to use `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min` instead, which provide more explicit and flexible control over the scaling thresholds. The boundary option will continue to work as a fallback when neither `max` nor `min` is set.
+{{< /hint >}}
+
 ### Target catch-up duration and restart time
 
 When taking scaling decisions the operator need to account for the extra capacity required to catch up the backlog created during scaling operations.
