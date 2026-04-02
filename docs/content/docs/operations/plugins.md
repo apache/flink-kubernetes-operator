@@ -188,3 +188,78 @@ The following steps demonstrate how to develop and use a custom mutator.
     ```text
     2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
     ```
+
+## Custom Autoscaler Components
+
+The operator's autoscaler uses pluggable components for context, state storage, event handling, and scaling execution. By default, the operator provides Kubernetes-native implementations (`KubernetesJobAutoScalerContext`, `KubernetesAutoScalerStateStore`, `KubernetesAutoScalerEventHandler`, `KubernetesScalingRealizer`), but users can replace any of these with their custom implementations.
+
+The following interfaces can be customized:
+
+- **`AutoScalerStateStore`** : Stores all autoscaler state (scaling history, collected metrics, parallelism overrides, etc.). The default Kubernetes implementation uses ConfigMaps.
+- **`AutoScalerEventHandler`** : Handles autoscaler events such as scaling reports and errors. The default Kubernetes implementation posts events to the Kubernetes Events API.
+- **`ScalingRealizer`** : Applies scaling decisions by updating the Flink resource spec.
+- **`KubernetesJobAutoScalerContext`** : The Kubernetes-specific autoscaler context providing access to the Flink resource, Kubernetes client, and resource context. Can be extended to carry additional custom state or behaviour.
+
+{{< hint info >}}
+Custom context implementations must extend `KubernetesJobAutoScalerContext` (not `JobAutoScalerContext` directly) and provide a public no-arg constructor for SPI discovery.
+{{< /hint >}}
+
+In order to enable a custom autoscaler component you need to:
+
+1. Implement one or more of the interfaces listed above
+2. Add your implementation class to the corresponding service definition file in `META-INF/services`:
+    - `org.apache.flink.autoscaler.state.AutoScalerStateStore` for a custom state store
+    - `org.apache.flink.autoscaler.event.AutoScalerEventHandler` for a custom event handler
+    - `org.apache.flink.autoscaler.realizer.ScalingRealizer` for a custom scaling realizer
+    - `org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext` for a custom autoscaler context
+3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)
+
+For example, to provide a custom `ScalingRealizer`:
+
+1. Implement the `ScalingRealizer` interface:
+    ```java
+    package com.example.autoscaler;
+
+    import org.apache.flink.autoscaler.realizer.ScalingRealizer;
+    import org.apache.flink.autoscaler.tuning.ConfigChanges;
+    import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
+
+    import io.javaoperatorsdk.operator.processing.event.ResourceID;
+
+    import java.util.Map;
+
+    public class CustomScalingRealizer
+            implements ScalingRealizer<ResourceID, KubernetesJobAutoScalerContext> {
+
+        @Override
+        public void realizeParallelismOverrides(
+                KubernetesJobAutoScalerContext context,
+                Map<String, String> parallelismOverrides) {
+            // Custom scaling logic
+        }
+
+        @Override
+        public void realizeConfigOverrides(
+                KubernetesJobAutoScalerContext context,
+                ConfigChanges configChanges) {
+            // Custom config override logic
+        }
+    }
+    ```
+
+2. Create service definition file `org.apache.flink.autoscaler.realizer.ScalingRealizer` in `META-INF/services`:
+    ```text
+    com.example.autoscaler.CustomScalingRealizer
+    ```
+
+3. Package the JAR and add it to the plugins directory:
+    ```text
+    /opt/flink/plugins
+        ├── custom-autoscaler
+        │   ├── custom-autoscaler.jar
+        └── ...
+    ```
+
+{{< hint info >}}
+If multiple custom implementations are found for the same interface, only the first one discovered will be used. A warning will be logged indicating which implementation was selected.
+{{< /hint >}}
