@@ -704,6 +704,20 @@ public class FlinkStateSnapshotControllerTest {
         assertSnapshotMetrics(listener, TestUtils.TEST_NAMESPACE, Map.of(), Map.of());
     }
 
+    @Test
+    public void testCleanupWithNullStatus() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+
+        var savepoint = createSavepoint(deployment);
+        savepoint.setStatus(null);
+        assertDeleteControl(controller.cleanup(savepoint, context), true, null);
+
+        var checkpoint = createCheckpoint(deployment, CheckpointType.FULL, 0);
+        checkpoint.setStatus(null);
+        assertDeleteControl(controller.cleanup(checkpoint, context), true, null);
+    }
+
     private FlinkStateSnapshot createSavepoint(FlinkDeployment deployment) {
         return createSavepoint(deployment, false, 7);
     }
