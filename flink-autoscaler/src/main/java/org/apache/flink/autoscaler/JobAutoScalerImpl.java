@@ -85,9 +85,10 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @Override
     public void scale(Context ctx) throws Exception {
         var autoscalerMetrics = getOrInitAutoscalerFlinkMetrics(ctx);
+        var waiting = false;
 
         try {
-            if (!ctx.getConfiguration().getBoolean(AUTOSCALER_ENABLED)) {
+            if (!ctx.getConfiguration().get(AUTOSCALER_ENABLED)) {
                 LOG.debug("Autoscaler is disabled");
                 stateStore.clearAll(ctx);
                 stateStore.flush(ctx);
@@ -97,6 +98,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             if (ctx.getJobStatus() != JobStatus.RUNNING) {
                 LOG.debug("Autoscaler is waiting for stable, running state");
                 lastEvaluatedMetrics.remove(ctx.getJobKey());
+                waiting = true;
                 return;
             }
 
@@ -107,12 +109,16 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         } catch (Throwable e) {
             onError(ctx, autoscalerMetrics, e);
         } finally {
-            try {
-                applyParallelismOverrides(ctx);
-                applyConfigOverrides(ctx);
-            } catch (Exception e) {
-                LOG.error("Error applying overrides.", e);
-                onError(ctx, autoscalerMetrics, e);
+            // Skip applying overrides when the job is not yet in a stable running state,
+            // as they may have already been applied during the previous scaling cycle.
+            if (!waiting) {
+                try {
+                    applyParallelismOverrides(ctx);
+                    applyConfigOverrides(ctx);
+                } catch (Exception e) {
+                    LOG.error("Error applying overrides.", e);
+                    onError(ctx, autoscalerMetrics, e);
+                }
             }
         }
     }
