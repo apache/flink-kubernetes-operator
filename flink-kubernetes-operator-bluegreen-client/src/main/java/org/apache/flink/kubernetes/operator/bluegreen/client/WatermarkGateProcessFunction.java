@@ -51,12 +51,26 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
 
     public static <I> WatermarkGateProcessFunction<I> create(
             Map<String, String> flinkConfig, Function<I, Long> watermarkExtractor) {
+        requireConfigKey(flinkConfig, "bluegreen.active-deployment-type");
+        requireConfigKey(flinkConfig, "kubernetes.namespace");
+        requireConfigKey(flinkConfig, "bluegreen.configmap.name");
         return new WatermarkGateProcessFunction<I>(
                 BlueGreenDeploymentType.valueOf(
                         flinkConfig.get("bluegreen.active-deployment-type")),
                 flinkConfig.get("kubernetes.namespace"),
                 flinkConfig.get("bluegreen.configmap.name"),
                 watermarkExtractor);
+    }
+
+    private static void requireConfigKey(Map<String, String> config, String key) {
+        if (config.get(key) == null) {
+            throw new IllegalArgumentException(
+                    "WatermarkGateProcessFunction requires config key '"
+                            + key
+                            + "' to be set. If using automatic injection this is set by the"
+                            + " operator; if instantiating directly, provide it in the"
+                            + " flinkConfig map.");
+        }
     }
 
     @Override
