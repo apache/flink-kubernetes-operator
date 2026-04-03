@@ -25,7 +25,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS -Dfabric8.httpclient.impl="$HTTP_CLIENT"
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook,flink-kubernetes-operator-bluegreen-agent -DskipTests=$SKIP_TESTS -Dfabric8.httpclient.impl="$HTTP_CLIENT"
 
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
@@ -42,9 +42,12 @@ ENV OPERATOR_VERSION=1.15-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar
+ENV AGENT_JAR=flink-kubernetes-operator-bluegreen-agent-$OPERATOR_VERSION.jar
+ENV ARTIFACTS_DIR=$FLINK_HOME/artifacts
 
 ENV OPERATOR_LIB=$FLINK_HOME/operator-lib
 RUN mkdir -p $OPERATOR_LIB
+RUN mkdir -p $ARTIFACTS_DIR
 
 WORKDIR /flink-kubernetes-operator
 RUN groupadd --system --gid=9999 flink && \
@@ -60,6 +63,7 @@ COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/NOTICE 
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/licenses ./licenses
 COPY --chown=flink:flink --from=build /app/LICENSE ./LICENSE
 COPY --chown=flink:flink docker-entrypoint.sh /
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator-bluegreen-agent/target/$AGENT_JAR $ARTIFACTS_DIR/bluegreen-agent.jar
 
 ARG SKIP_OS_UPDATE=true
 
