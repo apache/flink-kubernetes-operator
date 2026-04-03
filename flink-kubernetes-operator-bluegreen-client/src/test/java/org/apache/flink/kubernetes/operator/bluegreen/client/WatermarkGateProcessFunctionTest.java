@@ -21,7 +21,6 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentTyp
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
-import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.ProcessFunctionTestHarnesses;
 
@@ -356,7 +355,6 @@ public class WatermarkGateProcessFunctionTest {
         private GateContext mockBaseContext;
 
         public boolean notifyWaitingForWatermarkCalled = false;
-        public boolean notifyClearToTeardownCalled = false;
         public boolean updateWatermarkInConfigMapCalled = false;
 
         TestWatermarkGateProcessFunction(
@@ -401,21 +399,15 @@ public class WatermarkGateProcessFunctionTest {
             logMessages.add(message);
         }
 
-        /**
-         * Override to capture the call without invoking Kubernetes or the subtask-index guard. In
-         * production, only one subtask writes to the ConfigMap; in tests, all subtask indexes are
-         * 0, so the guard would always suppress the call.
-         */
+        /** Override to capture the call without invoking Kubernetes. */
         @Override
-        protected void notifyWaitingForWatermark() throws IllegalAccessException {
+        protected void notifyWaitingForWatermark(Context ctx) {
             notifyWaitingForWatermarkCalled = true;
         }
 
-        /** Override to capture the call without invoking Kubernetes or the subtask-index guard. */
+        /** Override to capture the call without invoking Kubernetes. */
         @Override
-        protected void updateWatermarkInConfigMap(
-                ProcessFunction<TestMessage, TestMessage>.Context ctx)
-                throws IllegalAccessException {
+        protected void updateWatermarkInConfigMap(Context ctx) {
             updateWatermarkInConfigMapCalled = true;
         }
 
