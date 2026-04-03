@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
+import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
@@ -35,8 +36,6 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     private final Function<I, Long> watermarkExtractor;
 
     private WatermarkGateContext currentWatermarkGateContext;
-
-    private boolean waitingForWatermark = false;
 
     WatermarkGateProcessFunction(
             BlueGreenDeploymentType blueGreenDeploymentType,
@@ -96,7 +95,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             var currentGateStage = currentWatermarkGateContext.getBaseContext().getGateStage();
             if (currentGateStage == TransitionStage.TRANSITIONING) {
                 logInfo(" -- Waiting for WM to be set - ");
-                notifyWaitingForWatermark();
+                notifyWaitingForWatermark(ctx);
             } else {
                 logInfo("Waiting for the TRANSITIONING state, current: " + currentGateStage);
             }
@@ -110,7 +109,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         if (currentWatermarkGateContext.getWatermarkToggleValue() != null) {
             var watermarkToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
 
-            if (getWatermarkBoundary(ctx) <= watermarkToggleValue) {
+            if (getWatermarkBoundary(ctx.timerService()) <= watermarkToggleValue) {
                 if (watermarkToggleValue > watermarkExtractor.apply(value)) {
                     // Should still output the element
                     out.collect(value);
@@ -121,7 +120,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             } else {
                 // Went past the Watermark Boundary: BLOCK ELEMENT
                 logInfo(" -- Past WM Boundary -- ");
-                notifyClearToTeardown();
+                notifyClearToTeardown(ctx);
             }
         } else {
             // This ACTIVE job is transitioning to STANDBY, output elements
@@ -131,27 +130,33 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         }
     }
 
-    private long getWatermarkBoundary(ProcessFunction<I, I>.Context ctx) {
-        return ctx.timerService().currentWatermark() > 0
-                ? ctx.timerService().currentWatermark()
-                : ctx.timerService().currentProcessingTime();
+    private long getWatermarkBoundary(TimerService timerService) {
+        return timerService.currentWatermark() > 0
+                ? timerService.currentWatermark()
+                : timerService.currentProcessingTime();
     }
 
-    protected void updateWatermarkInConfigMap(ProcessFunction<I, I>.Context ctx)
-            throws IllegalAccessException {
-        var curWmCtx = currentWatermarkGateContext;
+    protected void updateWatermarkInConfigMap(Context ctx) {
+        scheduleWriteTimer(ctx);
+    }
 
-        if (getRuntimeContext().getIndexOfThisSubtask() == subtaskIndexGuide
-                && curWmCtx.getWatermarkGateStage() == WatermarkGateStage.WAITING_FOR_WATERMARK) {
+    protected void notifyWaitingForWatermark(Context ctx) {
+        scheduleWriteTimer(ctx);
+    }
+
+    @Override
+    protected boolean handleScheduledWrite(OnTimerContext ctx) throws Exception {
+        var wmCtx = currentWatermarkGateContext;
+
+        // Standby job: Active job has signalled it's waiting — compute and write the WM toggle.
+        if (wmCtx.getWatermarkGateStage() == WatermarkGateStage.WAITING_FOR_WATERMARK
+                && wmCtx.getWatermarkToggleValue() == null) {
             var nextWatermarkToggleValue =
-                    getWatermarkBoundary(ctx)
-                            + curWmCtx.getBaseContext().getDeploymentTeardownDelayMs();
-
-            // Setting the value in advance to avoid subsequent elements in this subtask from
-            // setting it
-            // while the changes get reflected in Kubernetes
+                    getWatermarkBoundary(ctx.timerService())
+                            + wmCtx.getBaseContext().getDeploymentTeardownDelayMs();
+            // Set optimistically so subsequent elements on this subtask don't reschedule
+            // before the ConfigMap informer propagates.
             currentWatermarkGateContext.setWatermarkToggleValue(nextWatermarkToggleValue);
-
             logInfo("Updating the ConfigMap Watermark value to: " + nextWatermarkToggleValue);
             updateConfigMapCustomEntries(
                     Map.of(
@@ -160,19 +165,22 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
                             WatermarkGateContext.WATERMARK_STAGE,
                                     WatermarkGateStage.WATERMARK_SET.toString()));
             logInfo("Watermark updated!");
+            return true;
         }
-    }
 
-    protected void notifyWaitingForWatermark() throws IllegalAccessException {
-        if (!waitingForWatermark
-                && getRuntimeContext().getIndexOfThisSubtask() == subtaskIndexGuide) {
+        // Active job: signal that it is waiting for the Standby job to provide the WM toggle.
+        if (wmCtx.getBaseContext().getGateStage() == TransitionStage.TRANSITIONING
+                && wmCtx.getWatermarkToggleValue() == null
+                && wmCtx.getWatermarkGateStage() != WatermarkGateStage.WAITING_FOR_WATERMARK) {
             logInfo("Setting " + WatermarkGateStage.WAITING_FOR_WATERMARK);
             updateConfigMapCustomEntries(
                     Map.of(
                             WatermarkGateContext.WATERMARK_STAGE,
                             WatermarkGateStage.WAITING_FOR_WATERMARK.toString()));
             logInfo(WatermarkGateStage.WAITING_FOR_WATERMARK + " set!");
-            waitingForWatermark = true;
+            return true;
         }
+
+        return false; // fall through to base-class CLEAR_TO_TEARDOWN handling
     }
 }

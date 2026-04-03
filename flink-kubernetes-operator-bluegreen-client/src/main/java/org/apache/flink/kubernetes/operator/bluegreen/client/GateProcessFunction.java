@@ -46,11 +46,18 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
     protected final BlueGreenDeploymentType blueGreenDeploymentType;
 
-    // TODO: make this configurable? This cannot be a constant
-    protected final int subtaskIndexGuide = 1;
+    // How long (ms) to wait after a write condition is first detected before writing to the
+    // ConfigMap. This window gives other subtasks' timers time to fire and observe the write via
+    // the informer, reducing duplicate K8s API calls.
+    private static final long WRITE_DEDUP_DELAY_MS = 500L;
+
+    // True while a processing-time write timer is pending; prevents concurrent timers per subtask.
+    private boolean timerScheduled = false;
+    // Set by notifyClearToTeardown() so that onTimer() knows to perform the teardown write even
+    // if the timer was originally scheduled for a different operation.
+    private boolean pendingClearToTeardown = false;
 
     private GateKubernetesService gateKubernetesService;
-    private Boolean clearToTeardown = false;
     protected GateContext baseContext;
     private String namespace;
     private String configMapName;
@@ -77,6 +84,16 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
         setKubernetesEnvironment();
         processConfigMap(gateKubernetesService.parseConfigMap());
+    }
+
+    /** Schedules a single processing-time write timer. No-op if a timer is already pending. */
+    protected final void scheduleWriteTimer(Context ctx) {
+        if (!timerScheduled) {
+            ctx.timerService()
+                    .registerProcessingTimeTimer(
+                            ctx.timerService().currentProcessingTime() + WRITE_DEDUP_DELAY_MS);
+            timerScheduled = true;
+        }
     }
 
     protected abstract void processElementActive(
@@ -161,15 +178,35 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         onContextUpdate(baseContext, filteredData);
     }
 
-    protected final void notifyClearToTeardown() {
-        // Notify only once
-        if (!clearToTeardown && getRuntimeContext().getIndexOfThisSubtask() == subtaskIndexGuide) {
-            logInfo("Setting " + CLEAR_TO_TEARDOWN);
-            gateKubernetesService.updateConfigMapEntries(
-                    Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
-            logInfo(CLEAR_TO_TEARDOWN + " set!");
-            this.clearToTeardown = true;
+    protected final void notifyClearToTeardown(Context ctx) {
+        pendingClearToTeardown = true;
+        scheduleWriteTimer(ctx);
+    }
+
+    @Override
+    public void onTimer(long timestamp, OnTimerContext ctx, Collector<I> out) throws Exception {
+        timerScheduled = false;
+        boolean handled = handleScheduledWrite(ctx);
+        if (!handled && pendingClearToTeardown) {
+            pendingClearToTeardown = false;
+            if (baseContext.getGateStage() != CLEAR_TO_TEARDOWN) {
+                logInfo("Writing " + CLEAR_TO_TEARDOWN + " to ConfigMap");
+                gateKubernetesService.updateConfigMapEntries(
+                        Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
+                logInfo(CLEAR_TO_TEARDOWN + " set!");
+            } else {
+                logInfo(CLEAR_TO_TEARDOWN + " already set, skipping");
+            }
         }
+    }
+
+    /**
+     * Hook for subclasses to handle watermark-specific ConfigMap writes when a timer fires. Returns
+     * {@code true} if the write was handled (base-class CLEAR_TO_TEARDOWN logic is skipped), {@code
+     * false} to fall through.
+     */
+    protected boolean handleScheduledWrite(OnTimerContext ctx) throws Exception {
+        return false;
     }
 
     protected final void updateConfigMapCustomEntries(Map<String, String> customEntries)
