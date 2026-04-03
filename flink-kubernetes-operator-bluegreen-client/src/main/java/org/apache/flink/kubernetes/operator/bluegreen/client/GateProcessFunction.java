@@ -27,6 +27,7 @@ import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +47,18 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
     protected final BlueGreenDeploymentType blueGreenDeploymentType;
 
-    // TODO: make this configurable? This cannot be a constant
-    protected final int subtaskIndexGuide = 1;
+    // How long (ms) to wait after a write condition is first detected before writing to the
+    // ConfigMap. This window gives other subtasks a chance to observe the write via the informer,
+    // reducing duplicate K8s API calls.
+    private static final long WRITE_DEDUP_DELAY_MS = 500L;
+
+    // Processing time (ms) when a pending write was first requested; -1 means no write pending.
+    private long pendingWriteSince = -1L;
+    // Set by notifyClearToTeardown() so that maybePerformPendingWrite() performs the teardown
+    // write even if the pending write was originally scheduled for a different operation.
+    private boolean pendingClearToTeardown = false;
 
     private GateKubernetesService gateKubernetesService;
-    private Boolean clearToTeardown = false;
     protected GateContext baseContext;
     private String namespace;
     private String configMapName;
@@ -79,6 +87,17 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         processConfigMap(gateKubernetesService.parseConfigMap());
     }
 
+    /**
+     * Records the current processing time as the start of a pending write window. No-op if a write
+     * is already pending. The actual write is performed by {@link #maybePerformPendingWrite} on the
+     * next element processed after the dedup delay has elapsed.
+     */
+    protected final void scheduleWriteTimer(Context ctx) {
+        if (pendingWriteSince < 0) {
+            pendingWriteSince = ctx.timerService().currentProcessingTime();
+        }
+    }
+
     protected abstract void processElementActive(
             I value, ProcessFunction<I, I>.Context ctx, Collector<I> out)
             throws IllegalAccessException;
@@ -89,7 +108,8 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
     @Override
     public void processElement(I value, ProcessFunction<I, I>.Context ctx, Collector<I> out)
-            throws IllegalAccessException {
+            throws Exception {
+        maybePerformPendingWrite(ctx);
         switch (baseContext.getOutputMode()) {
             case ACTIVE:
                 processElementActive(value, ctx, out);
@@ -101,6 +121,29 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
                 String error = "Invalid OutputMode caught";
                 logger.error(error);
                 throw new IllegalStateException(error);
+        }
+    }
+
+    private void maybePerformPendingWrite(Context ctx) throws Exception {
+        if (pendingWriteSince < 0) {
+            return;
+        }
+        long now = ctx.timerService().currentProcessingTime();
+        if (now - pendingWriteSince < WRITE_DEDUP_DELAY_MS) {
+            return;
+        }
+        pendingWriteSince = -1L;
+        boolean handled = handleScheduledWrite(ctx);
+        if (!handled && pendingClearToTeardown) {
+            pendingClearToTeardown = false;
+            if (baseContext.getGateStage() != CLEAR_TO_TEARDOWN) {
+                logInfo("Writing " + CLEAR_TO_TEARDOWN + " to ConfigMap");
+                gateKubernetesService.updateConfigMapEntries(
+                        Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
+                logInfo(CLEAR_TO_TEARDOWN + " set!");
+            } else {
+                logInfo(CLEAR_TO_TEARDOWN + " already set, skipping");
+            }
         }
     }
 
@@ -161,19 +204,22 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         onContextUpdate(baseContext, filteredData);
     }
 
-    protected final void notifyClearToTeardown() {
-        // Notify only once
-        if (!clearToTeardown && getRuntimeContext().getIndexOfThisSubtask() == subtaskIndexGuide) {
-            logInfo("Setting " + CLEAR_TO_TEARDOWN);
-            gateKubernetesService.updateConfigMapEntries(
-                    Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
-            logInfo(CLEAR_TO_TEARDOWN + " set!");
-            this.clearToTeardown = true;
-        }
+    protected final void notifyClearToTeardown(Context ctx) {
+        pendingClearToTeardown = true;
+        scheduleWriteTimer(ctx);
+    }
+
+    /**
+     * Hook for subclasses to handle watermark-specific ConfigMap writes when the dedup window
+     * elapses. Returns {@code true} if the write was handled (base-class CLEAR_TO_TEARDOWN logic is
+     * skipped), {@code false} to fall through.
+     */
+    protected boolean handleScheduledWrite(Context ctx) throws Exception {
+        return false;
     }
 
     protected final void updateConfigMapCustomEntries(Map<String, String> customEntries)
-            throws IllegalAccessException {
+            throws Exception {
         // Validating only "custom" entries/keys can be updated
         var keysToUpdate = customEntries.keySet();
         var baseContextKeys =
@@ -189,7 +235,22 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
             throw new IllegalAccessException(error);
         }
         logInfo("Updating custom entries: " + customEntries);
-        gateKubernetesService.updateConfigMapEntries(customEntries);
+        int maxRetries = 3;
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                gateKubernetesService.updateConfigMapEntries(customEntries);
+                return;
+            } catch (KubernetesClientException e) {
+                if (e.getCode() == 409 && attempt < maxRetries) {
+                    logInfo(
+                            "ConfigMap update conflict on attempt "
+                                    + (attempt + 1)
+                                    + ", retrying...");
+                } else {
+                    throw e;
+                }
+            }
+        }
     }
 
     // Temporary "utility" function for development
