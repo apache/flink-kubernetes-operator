@@ -53,8 +53,8 @@ This project bundles the following dependencies under the Apache Software Licens
 - io.fabric8:kubernetes-model-scheduling:jar:7.3.0
 - io.fabric8:kubernetes-model-storageclass:jar:7.3.0
 - io.fabric8:zjsonpatch:jar:7.3.0
-- io.javaoperatorsdk:operator-framework-core:jar:5.2.2
-- io.javaoperatorsdk:operator-framework:jar:5.2.2
+- io.javaoperatorsdk:operator-framework-core:jar:5.3.0
+- io.javaoperatorsdk:operator-framework:jar:5.3.0
 - org.apache.commons:commons-compress:jar:1.26.0
 - org.apache.commons:commons-lang3:jar:3.18.0
 - org.apache.commons:commons-math3:jar:3.6.1
