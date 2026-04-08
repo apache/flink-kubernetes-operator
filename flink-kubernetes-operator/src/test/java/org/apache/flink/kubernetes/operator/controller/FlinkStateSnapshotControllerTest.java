@@ -164,7 +164,9 @@ public class FlinkStateSnapshotControllerTest {
         for (int i = 0; i < 10; i++) {
             controller.updateErrorStatus(snapshot, context, new Exception());
             assertThat(snapshot.getStatus().getState())
-                    .as("Snapshot with backoffLimit=-1 should retry indefinitely, but failed after attempt %d", i + 1)
+                    .as(
+                            "Snapshot with backoffLimit=-1 should retry indefinitely, but failed after attempt %d",
+                            i + 1)
                     .isEqualTo(TRIGGER_PENDING);
         }
     }
