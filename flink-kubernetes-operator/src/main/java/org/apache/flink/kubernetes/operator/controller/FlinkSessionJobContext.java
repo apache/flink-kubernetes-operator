@@ -78,8 +78,10 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
     @Override
     protected Configuration createObserveConfig() {
         Configuration conf = getDeployConfig(getResource().getSpec());
-        return configManager.getSessionJobConfigWithRuntimeOverrides(
-                getResource(), getFlinkService(), conf);
+        if (conf != null) {
+            configManager.applyCachedRuntimeConfig(getResource(), conf);
+        }
+        return conf;
     }
 
     @Override

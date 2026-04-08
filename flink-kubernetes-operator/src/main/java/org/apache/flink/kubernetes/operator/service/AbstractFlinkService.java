@@ -28,6 +28,7 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.SecurityOptions;
+import org.apache.flink.configuration.StateChangelogOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
@@ -74,6 +75,7 @@ import org.apache.flink.runtime.rest.messages.JobMessageParameters;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigHeaders;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatisticDetailsHeaders;
@@ -149,7 +151,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -175,14 +176,11 @@ public abstract class AbstractFlinkService implements FlinkService {
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
     public static final String FIELD_NAME_STATE_SIZE = "state-size";
-    private static final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
-            new com.fasterxml.jackson.databind.ObjectMapper();
-
-    static {
-        objectMapper.setVisibility(
-                com.fasterxml.jackson.annotation.PropertyAccessor.FIELD,
-                com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.ANY);
-    }
+    private static final org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind
+                    .ObjectMapper
+            checkpointConfigMapper =
+                    new org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind
+                            .ObjectMapper();
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -580,7 +578,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
             throw new UpgradeFailureException(
-                    "Latest checkpoint not externally addressable, Manual restore required.",
+                    "Latest checkpoint not externally addressable, manual recovery required.",
                     "CheckpointNotFound");
         }
         return latestCheckpointOpt.map(
@@ -890,7 +888,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         try (var clusterClient = getClusterClient(conf)) {
             Map<String, String> jobConfig = new HashMap<>();
 
-            // Use JobConfigHeaders to get job configuration directly
             var jobConfigHeaders = JobConfigHeaders.getInstance();
             var parameters = new JobMessageParameters();
             parameters.jobPathParameter.resolve(jobId);
@@ -905,11 +902,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 .get(
                                         operatorConfig.getFlinkClientTimeout().toSeconds(),
                                         TimeUnit.SECONDS);
-                LOG.debug("Job Config Info: {}", configurationInfo);
-
-                // Extract configuration from the response
                 if (configurationInfo != null) {
-                    LOG.debug("Job Configuration Info: {}", configurationInfo);
                     if (configurationInfo.getExecutionConfigInfo() != null) {
                         jobConfig.put(
                                 "parallelism.default",
@@ -917,18 +910,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         configurationInfo
                                                 .getExecutionConfigInfo()
                                                 .getParallelism()));
-                        // Correct this as restart-strategy is incorect
-                        //                        if (!Objects.equals(
-                        //
-                        // configurationInfo.getExecutionConfigInfo().getRestartStrategy(),
-                        //                                "Cluster level default restart strategy"))
-                        // {
-                        //                            jobConfig.put(
-                        //                                    "restart-strategy",
-                        //                                    configurationInfo
-                        //                                            .getExecutionConfigInfo()
-                        //                                            .getRestartStrategy());
-                        //                        }
                         jobConfig.put(
                                 "pipeline.object-reuse",
                                 String.valueOf(
@@ -963,31 +944,71 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    // Constants for checkpoint configuration field mappings
-    private static final Map<String, String> CHECKPOINT_FIELD_MAPPINGS =
-            Map.of(
-                    "processingMode", "execution.checkpointing.mode",
-                    "checkpointInterval", "execution.checkpointing.interval",
-                    "checkpointTimeout", "execution.checkpointing.timeout",
-                    "minPauseBetweenCheckpoints", "execution.checkpointing.min-pause",
-                    "maxConcurrentCheckpoints",
-                            "execution.checkpointing.max-concurrent-checkpoints",
-                    "tolerableFailedCheckpoints",
-                            "execution.checkpointing.tolerable-failed-checkpoints",
-                    "unalignedCheckpoints", "execution.checkpointing.unaligned.enabled",
-                    "alignedCheckpointTimeout",
-                            "execution.checkpointing.aligned-checkpoint-timeout",
-                    "checkpointsWithFinishedTasks",
-                            "execution.checkpointing.checkpoints-after-tasks-finish",
-                    "stateChangelog", "state.changelog.enabled");
+    /**
+     * Maps REST API JSON field names from {@link CheckpointConfigInfo} to Flink {@link
+     * org.apache.flink.configuration.ConfigOption} keys. Both sides use Flink's own constants for
+     * compile-time safety.
+     */
+    private enum CheckpointConfigMapping {
+        PROCESSING_MODE(
+                CheckpointConfigInfo.FIELD_NAME_PROCESSING_MODE,
+                CheckpointingOptions.CHECKPOINTING_CONSISTENCY_MODE.key(),
+                false),
+        INTERVAL(
+                CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_INTERVAL,
+                CheckpointingOptions.CHECKPOINTING_INTERVAL.key(),
+                true),
+        TIMEOUT(
+                CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_TIMEOUT,
+                CheckpointingOptions.CHECKPOINTING_TIMEOUT.key(),
+                true),
+        MIN_PAUSE(
+                CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_MIN_PAUSE,
+                CheckpointingOptions.MIN_PAUSE_BETWEEN_CHECKPOINTS.key(),
+                true),
+        MAX_CONCURRENT(
+                CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_MAX_CONCURRENT,
+                CheckpointingOptions.MAX_CONCURRENT_CHECKPOINTS.key(),
+                false),
+        TOLERABLE_FAILURES(
+                CheckpointConfigInfo.FIELD_NAME_TOLERABLE_FAILED_CHECKPOINTS,
+                CheckpointingOptions.TOLERABLE_FAILURE_NUMBER.key(),
+                false),
+        UNALIGNED(
+                CheckpointConfigInfo.FIELD_NAME_UNALIGNED_CHECKPOINTS,
+                CheckpointingOptions.ENABLE_UNALIGNED.key(),
+                false),
+        ALIGNED_TIMEOUT(
+                CheckpointConfigInfo.FIELD_NAME_ALIGNED_CHECKPOINT_TIMEOUT,
+                CheckpointingOptions.ALIGNED_CHECKPOINT_TIMEOUT.key(),
+                true),
+        CHECKPOINTS_AFTER_TASKS_FINISH(
+                CheckpointConfigInfo.FIELD_NAME_CHECKPOINTS_AFTER_TASKS_FINISH,
+                CheckpointingOptions.ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH.key(),
+                false),
+        STATE_CHANGELOG(
+                CheckpointConfigInfo.FIELD_NAME_STATE_CHANGELOG,
+                StateChangelogOptions.ENABLE_STATE_CHANGE_LOG.key(),
+                false),
+        PERIODIC_MATERIALIZATION_INTERVAL(
+                CheckpointConfigInfo.FIELD_NAME_PERIODIC_MATERIALIZATION_INTERVAL,
+                StateChangelogOptions.PERIODIC_MATERIALIZATION_INTERVAL.key(),
+                true),
+        CHANGELOG_STORAGE(
+                CheckpointConfigInfo.FIELD_NAME_CHANGELOG_STORAGE,
+                StateChangelogOptions.STATE_CHANGE_LOG_STORAGE.key(),
+                false);
 
-    private static final Set<String> DURATION_FIELDS =
-            Set.of(
-                    "checkpointInterval",
-                    "checkpointTimeout",
-                    "minPauseBetweenCheckpoints",
-                    "alignedCheckpointTimeout",
-                    "periodicMaterializationInterval");
+        final String jsonField;
+        final String configKey;
+        final boolean isDuration;
+
+        CheckpointConfigMapping(String jsonField, String configKey, boolean isDuration) {
+            this.jsonField = jsonField;
+            this.configKey = configKey;
+            this.isDuration = isDuration;
+        }
+    }
 
     @Override
     public Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
@@ -1009,11 +1030,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         operatorConfig.getFlinkClientTimeout().toSeconds(),
                                         TimeUnit.SECONDS);
 
-                // Convert response to handle nested objects
                 Map<String, Object> rawResponse =
-                        objectMapper.convertValue(
+                        checkpointConfigMapper.convertValue(
                                 checkpointConfigInfo,
-                                new com.fasterxml.jackson.core.type.TypeReference<
+                                new org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type
+                                                .TypeReference<
                                         Map<String, Object>>() {});
 
                 LOG.debug(
@@ -1034,7 +1055,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                     }
                 }
 
-                // Fallback for pre-Flink 1.15 versions
                 return getJobConfigFromRest(clusterClient, jobId).entrySet().stream()
                         .filter(
                                 entry ->
@@ -1050,31 +1070,24 @@ public abstract class AbstractFlinkService implements FlinkService {
             Map<String, Object> rawResponse, JobID jobId) {
         Map<String, String> mappedConfig = new HashMap<>();
 
-        // Handle simple field mappings
-        CHECKPOINT_FIELD_MAPPINGS.forEach(
-                (jsonField, configKey) -> {
-                    if (rawResponse.containsKey(jsonField)) {
-                        String value = String.valueOf(rawResponse.get(jsonField));
+        for (CheckpointConfigMapping mapping : CheckpointConfigMapping.values()) {
+            if (!rawResponse.containsKey(mapping.jsonField)) {
+                continue;
+            }
+            String value = String.valueOf(rawResponse.get(mapping.jsonField));
 
-                        // Special handling for processing mode
-                        if ("processingMode".equals(jsonField)) {
-                            value = mapProcessingMode(value);
-                        }
+            if (mapping == CheckpointConfigMapping.PROCESSING_MODE) {
+                value = mapProcessingMode(value);
+            }
+            if (mapping.isDuration) {
+                value += "ms";
+            }
 
-                        // Add duration suffix for time-based fields
-                        if (DURATION_FIELDS.contains(jsonField)) {
-                            value += "ms";
-                        }
+            mappedConfig.put(mapping.configKey, value);
+        }
 
-                        mappedConfig.put(configKey, value);
-                    }
-                });
-
-        // Handle complex nested mappings
         mapExternalizedCheckpointInfo(rawResponse, mappedConfig);
-        mapStateBackend(rawResponse, mappedConfig);
-        mapCheckpointStorage(rawResponse, mappedConfig);
-        mapStateChangelog(rawResponse, mappedConfig);
+        mapStateBackendAndStorage(rawResponse, mappedConfig);
 
         LOG.debug(
                 "Mapped {} checkpoint configuration entries for job {}: {}",
@@ -1096,12 +1109,21 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private void mapExternalizedCheckpointInfo(
             Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
-        Object externalizationObj = rawResponse.get("externalizedCheckpointInfo");
+        Object externalizationObj =
+                rawResponse.get(CheckpointConfigInfo.FIELD_NAME_EXTERNALIZED_CHECKPOINT_CONFIG);
         if (externalizationObj instanceof Map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> externalization = (Map<String, Object>) externalizationObj;
-            Boolean enabled = (Boolean) externalization.get("enabled");
-            Boolean deleteOnCancellation = (Boolean) externalization.get("deleteOnCancellation");
+            Boolean enabled =
+                    (Boolean)
+                            externalization.get(
+                                    CheckpointConfigInfo.ExternalizedCheckpointInfo
+                                            .FIELD_NAME_ENABLED);
+            Boolean deleteOnCancellation =
+                    (Boolean)
+                            externalization.get(
+                                    CheckpointConfigInfo.ExternalizedCheckpointInfo
+                                            .FIELD_NAME_DELETE_ON_CANCELLATION);
 
             String retention = "NO_EXTERNALIZED_CHECKPOINTS";
             if (Boolean.TRUE.equals(enabled)) {
@@ -1111,52 +1133,36 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 : "RETAIN_ON_CANCELLATION";
             }
             mappedConfig.put(
-                    "execution.checkpointing.externalized-checkpoint-retention", retention);
+                    CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION.key(), retention);
         }
     }
 
-    private void mapStateBackend(
-            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
-        if (rawResponse.containsKey("stateBackend")) {
-            String stateBackend = String.valueOf(rawResponse.get("stateBackend"));
-            String backendType;
-            if ("EmbeddedRocksDBStateBackend".equals(stateBackend)) {
-                backendType = "rocksdb";
-            } else if ("HashMapStateBackend".equals(stateBackend)) {
-                backendType = "hashmap";
-            } else {
-                backendType = stateBackend.toLowerCase();
-            }
-            mappedConfig.put("state.backend.type", backendType);
-        }
-    }
+    private static final Map<String, String> STATE_BACKEND_NAMES =
+            Map.of(
+                    "EmbeddedRocksDBStateBackend", "rocksdb",
+                    "HashMapStateBackend", "hashmap");
 
-    private void mapCheckpointStorage(
-            Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
-        if (rawResponse.containsKey("checkpointStorage")) {
-            String checkpointStorage = String.valueOf(rawResponse.get("checkpointStorage"));
-            String storageType;
-            if ("FileSystemCheckpointStorage".equals(checkpointStorage)) {
-                storageType = "filesystem";
-            } else if ("JobManagerCheckpointStorage".equals(checkpointStorage)) {
-                storageType = "jobmanager";
-            } else {
-                storageType = checkpointStorage.toLowerCase();
-            }
-            mappedConfig.put("execution.checkpointing.storage", storageType);
-        }
-    }
+    private static final Map<String, String> CHECKPOINT_STORAGE_NAMES =
+            Map.of(
+                    "FileSystemCheckpointStorage", "filesystem",
+                    "JobManagerCheckpointStorage", "jobmanager");
 
-    private void mapStateChangelog(
+    private void mapStateBackendAndStorage(
             Map<String, Object> rawResponse, Map<String, String> mappedConfig) {
-        if (rawResponse.containsKey("periodicMaterializationInterval")) {
-            String intervalMs = String.valueOf(rawResponse.get("periodicMaterializationInterval"));
-            mappedConfig.put("state.changelog.periodic-materialize.interval", intervalMs + "ms");
-        }
-
-        if (rawResponse.containsKey("changelogStorage")) {
+        if (rawResponse.containsKey(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND)) {
+            String raw =
+                    String.valueOf(rawResponse.get(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND));
             mappedConfig.put(
-                    "state.changelog.storage", String.valueOf(rawResponse.get("changelogStorage")));
+                    CheckpointingOptions.STATE_BACKEND.key(),
+                    STATE_BACKEND_NAMES.getOrDefault(raw, raw.toLowerCase()));
+        }
+        if (rawResponse.containsKey(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE)) {
+            String raw =
+                    String.valueOf(
+                            rawResponse.get(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE));
+            mappedConfig.put(
+                    CheckpointingOptions.CHECKPOINT_STORAGE.key(),
+                    CHECKPOINT_STORAGE_NAMES.getOrDefault(raw, raw.toLowerCase()));
         }
     }
 
@@ -1169,9 +1175,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                 clusterClient
                         .sendRequest(jobConfigHeaders, parameters, EmptyRequestBody.getInstance())
                         .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
-        return objectMapper.convertValue(
-                jobConfigInfo,
-                new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+        if (jobConfigInfo != null
+                && jobConfigInfo.getExecutionConfigInfo() != null
+                && jobConfigInfo.getExecutionConfigInfo().getGlobalJobParameters() != null) {
+            return new HashMap<>(jobConfigInfo.getExecutionConfigInfo().getGlobalJobParameters());
+        }
+        return Collections.emptyMap();
     }
 
     @VisibleForTesting

@@ -766,4 +766,46 @@ public class TestingFlinkService extends AbstractFlinkService {
                 new JobExceptionsInfoWithHistory(exceptionHistory);
         jobExceptionsMap.put(jobId, newExceptionHistory);
     }
+
+    private final Map<JobID, Map<String, String>> runtimeJobConfigs = new HashMap<>();
+    private final Map<JobID, Map<String, String>> runtimeCheckpointConfigs = new HashMap<>();
+    @Setter private Exception runtimeConfigFetchException;
+
+    /**
+     * Set mock runtime job configuration for testing.
+     *
+     * @param jobId Job ID
+     * @param config Runtime configuration key-value pairs
+     */
+    public void setRuntimeJobConfig(JobID jobId, Map<String, String> config) {
+        runtimeJobConfigs.put(jobId, new HashMap<>(config));
+    }
+
+    /**
+     * Set mock runtime checkpoint configuration for testing.
+     *
+     * @param jobId Job ID
+     * @param config Runtime checkpoint configuration key-value pairs
+     */
+    public void setRuntimeCheckpointConfig(JobID jobId, Map<String, String> config) {
+        runtimeCheckpointConfigs.put(jobId, new HashMap<>(config));
+    }
+
+    @Override
+    public Map<String, String> getJobConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        if (runtimeConfigFetchException != null) {
+            throw runtimeConfigFetchException;
+        }
+        return runtimeJobConfigs.getOrDefault(jobId, new HashMap<>());
+    }
+
+    @Override
+    public Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        if (runtimeConfigFetchException != null) {
+            throw runtimeConfigFetchException;
+        }
+        return runtimeCheckpointConfigs.getOrDefault(jobId, new HashMap<>());
+    }
 }

@@ -91,6 +91,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             if (newJobStatusOpt.isPresent()) {
                 var newJobStatus = newJobStatusOpt.get();
                 updateJobStatus(ctx, newJobStatus);
+                fetchAndCacheRuntimeConfig(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
                 // see if the JM server is up, try to get the exceptions
                 if (!previousJobStatus.isGloballyTerminalState()) {
@@ -109,6 +110,85 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
         }
         return false;
+    }
+
+    /**
+     * Fetch runtime configuration from the Flink REST API and cache it in the config manager when
+     * the job is in RUNNING state and no cached config exists for the current job ID. After
+     * caching, the memoized observe config is cleared so subsequent consumers see the merged
+     * values.
+     */
+    private void fetchAndCacheRuntimeConfig(
+            FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+        if (clusterJobStatus.getJobState() != JobStatus.RUNNING) {
+            return;
+        }
+
+        var resource = ctx.getResource();
+        var jobStatus = resource.getStatus().getJobStatus();
+        String namespace = resource.getMetadata().getNamespace();
+        String name = resource.getMetadata().getName();
+        String jobId = jobStatus.getJobId();
+
+        if (jobId == null) {
+            return;
+        }
+
+        var configManager = ctx.getConfigManager();
+
+        if (configManager.getRuntimeConfig(namespace, name, jobId).isPresent()) {
+            LOG.debug("Runtime configuration already cached for job {}", jobId);
+            return;
+        }
+
+        LOG.debug("Fetching runtime configuration for job {}", jobId);
+        var conf = ctx.getObserveConfig();
+        var flinkService = ctx.getFlinkService();
+        var jobIdObj = JobID.fromHexString(jobId);
+        Map<String, String> runtimeConfig = new HashMap<>();
+        boolean fetchFailed = false;
+
+        try {
+            Map<String, String> jobConfig = flinkService.getJobConfiguration(conf, jobIdObj);
+            if (jobConfig != null) {
+                runtimeConfig.putAll(jobConfig);
+                LOG.debug(
+                        "Fetched {} job configuration entries for job {}", jobConfig.size(), jobId);
+            }
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.warn("Failed to fetch job configuration for job {}: {}", jobId, e.getMessage());
+            LOG.debug("Job configuration fetch exception details", e);
+        }
+
+        try {
+            Map<String, String> checkpointConfig =
+                    flinkService.getJobCheckpointConfiguration(conf, jobIdObj);
+            if (checkpointConfig != null) {
+                runtimeConfig.putAll(checkpointConfig);
+                LOG.debug(
+                        "Fetched {} checkpoint configuration entries for job {}",
+                        checkpointConfig.size(),
+                        jobId);
+            }
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.warn(
+                    "Failed to fetch checkpoint configuration for job {}: {}",
+                    jobId,
+                    e.getMessage());
+            LOG.debug("Checkpoint configuration fetch exception details", e);
+        }
+
+        if (runtimeConfig.isEmpty() && fetchFailed) {
+            LOG.warn(
+                    "All runtime config REST fetches failed for job {}, will retry next cycle",
+                    jobId);
+            return;
+        }
+
+        configManager.putRuntimeConfig(namespace, name, jobId, runtimeConfig);
+        ctx.clearObserveConfig();
     }
 
     /**
