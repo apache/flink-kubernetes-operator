@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import io.fabric8.kubernetes.api.model.Namespaced;
 import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
@@ -37,8 +36,7 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version(CrdConstants.API_VERSION)
 @ShortNames({"flinkdep"})
 public class FlinkDeployment
-        extends AbstractFlinkResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
-        implements Namespaced {
+        extends AbstractFlinkResource<FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
     @VisibleForTesting
     @Override

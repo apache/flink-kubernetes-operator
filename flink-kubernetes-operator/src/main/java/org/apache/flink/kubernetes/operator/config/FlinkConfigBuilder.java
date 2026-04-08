@@ -140,7 +140,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyFlinkConfiguration() {
         // Parse config from spec's flinkConfiguration
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
-            spec.getFlinkConfiguration().forEach(effectiveConfig::setString);
+            spec.getFlinkConfiguration().asFlatMap().forEach(effectiveConfig::setString);
         }
 
         // Adapt default rest service type from 1.15+
@@ -363,9 +363,11 @@ public class FlinkConfigBuilder {
                     * effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS);
         }
 
-        Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
-        if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
-            return maxOverrideParallelism.get();
+        if (KubernetesDeploymentMode.STANDALONE.equals(spec.getMode())) {
+            Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
+            if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
+                return maxOverrideParallelism.get();
+            }
         }
 
         return spec.getJob().getParallelism();

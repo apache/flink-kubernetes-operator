@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
@@ -52,6 +53,9 @@ import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecyc
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.STABLE;
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.SUSPENDED;
 import static org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState.UPGRADING;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -336,5 +340,54 @@ public class ResourceLifecycleMetricsTest {
                                             new Configuration()))));
         }
         return histos;
+    }
+
+    @Test
+    public void testUnrecoverableDeploymentLifecycleState() {
+        var application = TestUtils.buildApplicationCluster();
+
+        // Setup the deployment to simulate it has been deployed (so isBeforeFirstDeployment =
+        // false)
+        ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
+        application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        application
+                .getStatus()
+                .setError(
+                        "\"JobManager deployment is missing and  "
+                                + MSG_HA_METADATA_NOT_AVAILABLE
+                                + " to make stateful upgrades. "
+                                + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                                + MSG_MANUAL_RESTORE_REQUIRED);
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "ERROR deployment with `configmaps have been deleted` error should always be FAILED (terminal error state)");
+
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        application
+                .getStatus()
+                .setError(
+                        MSG_HA_METADATA_NOT_AVAILABLE
+                                + " to restore from last state. "
+                                + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED);
+        assertEquals(
+                FAILED,
+                application.getStatus().getLifecycleState(),
+                "MISSING deployment with error should be FAILED");
+
+        application.getStatus().setError(null);
+        application.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        // Reset to DEPLOYED state (not stable yet) to simulate ongoing deployment
+        application.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        application
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastStableSpec(null); // Mark as not stable
+        assertEquals(
+                DEPLOYED,
+                application.getStatus().getLifecycleState(),
+                "MISSING deployment before stability should not be FAILED yet (still deploying)");
     }
 }

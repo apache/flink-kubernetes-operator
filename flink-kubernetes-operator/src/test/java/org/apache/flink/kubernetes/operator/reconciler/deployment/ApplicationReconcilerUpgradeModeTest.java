@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -71,6 +72,7 @@ import static org.apache.flink.api.common.JobStatus.RESTARTING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -243,7 +245,6 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                             .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
                     reconciler.reconcile(deployment, context);
                 });
-
         flinkService.clear();
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(200L);
@@ -254,6 +255,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 .getJobStatus()
                 .setState(org.apache.flink.api.common.JobStatus.FINISHED);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -267,7 +269,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testUpgradeUsesLatestSnapshot(boolean useLegacyFields) throws Exception {
+    void testUpgradeUsesLatestSnapshot(boolean useLegacyFields) throws Exception {
         var savepointPath = "finished_sp";
         var deployment = buildApplicationCluster(FlinkVersion.v1_19, UpgradeMode.SAVEPOINT);
 
@@ -500,6 +502,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     @ValueSource(booleans = {true, false})
     public void testLastStateMaxCheckpointAge(boolean cancellable) throws Exception {
         var deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -642,6 +645,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         jobStatus.setJobId(new JobID().toString());
 
         // Running state, savepoint if possible
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         jobStatus.setState(RUNNING);
         var ctx = getResourceContext(deployment);
         var deployConf = ctx.getDeployConfig(deployment.getSpec());
@@ -653,6 +657,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 jobReconciler.getJobUpgrade(ctx, deployConf));
 
         // Not running (but cancellable)
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         jobStatus.setState(RESTARTING);
         assertEquals(
                 AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
@@ -666,17 +671,26 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     }
 
     private static Stream<Arguments> testLastStateCancelParams() {
-        return Stream.of(
-                Arguments.of(UpgradeMode.LAST_STATE, true),
-                Arguments.of(UpgradeMode.LAST_STATE, false),
-                Arguments.of(UpgradeMode.SAVEPOINT, true),
-                Arguments.of(UpgradeMode.SAVEPOINT, false));
+        var out = new ArrayList<Arguments>();
+        for (var upgradeMode : List.of(UpgradeMode.SAVEPOINT, UpgradeMode.LAST_STATE)) {
+            for (boolean allowFallback : List.of(true, false)) {
+                for (var jmStatus : JobManagerDeploymentStatus.values()) {
+                    out.add(Arguments.of(upgradeMode, allowFallback, jmStatus));
+                }
+            }
+        }
+        return out.stream();
     }
 
     @ParameterizedTest
     @MethodSource("testLastStateCancelParams")
-    public void testLastStateNoHaMeta(UpgradeMode upgradeMode, boolean allowFallback)
+    public void testLastStateNoHaMeta(
+            UpgradeMode upgradeMode, boolean allowFallback, JobManagerDeploymentStatus jmStatus)
             throws Exception {
+        if (upgradeMode == UpgradeMode.LAST_STATE && !allowFallback) {
+            // This cannot happen
+            return;
+        }
         var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
         var deployment = TestUtils.buildApplicationCluster();
         deployment
@@ -688,6 +702,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                                 .key(),
                         Boolean.toString(allowFallback));
         deployment.getSpec().getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());
+
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -700,6 +715,8 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
         // Set job status to running
         var jobStatus = deployment.getStatus().getJobStatus();
+        deployment.getStatus().setJobManagerDeploymentStatus(jmStatus);
+
         long now = System.currentTimeMillis();
 
         jobStatus.setStartTime(Long.toString(now));
@@ -710,15 +727,21 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         var ctx = getResourceContext(deployment);
         var deployConf = ctx.getDeployConfig(deployment.getSpec());
 
-        if (upgradeMode == UpgradeMode.LAST_STATE) {
-            assertEquals(
-                    AbstractJobReconciler.JobUpgrade.lastStateUsingCancel(),
-                    jobReconciler.getJobUpgrade(ctx, deployConf));
+        if (List.of(JobManagerDeploymentStatus.ERROR, JobManagerDeploymentStatus.MISSING)
+                .contains(jmStatus)) {
+            assertThatThrownBy(() -> jobReconciler.getJobUpgrade(ctx, deployConf))
+                    .isInstanceOf(UpgradeFailureException.class)
+                    .hasMessageContaining(
+                            "JobManager deployment is missing and HA metadata is not available");
         } else {
+            boolean immediatelyCancellable =
+                    (upgradeMode == UpgradeMode.LAST_STATE || allowFallback)
+                            && jmStatus == JobManagerDeploymentStatus.READY;
             assertEquals(
-                    allowFallback
+                    immediatelyCancellable
                             ? AbstractJobReconciler.JobUpgrade.lastStateUsingCancel()
-                            : AbstractJobReconciler.JobUpgrade.pendingUpgrade(),
+                            : new AbstractJobReconciler.JobUpgrade(
+                                    null, null, false, allowFallback, true),
                     jobReconciler.getJobUpgrade(ctx, deployConf));
         }
     }
@@ -743,7 +766,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // Delete cluster and keep HA metadata
-        var conf = Configuration.fromMap(deployment.getSpec().getFlinkConfiguration());
+        var conf = deployment.getSpec().getFlinkConfiguration().asConfiguration();
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), conf, false);
         flinkService.setHaDataAvailable(true);
@@ -924,7 +947,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
             FlinkVersion flinkVersion, UpgradeMode upgradeMode) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
         deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
-        Map<String, String> conf = deployment.getSpec().getFlinkConfiguration();
+        Map<String, String> conf = deployment.getSpec().getFlinkConfiguration().asFlatMap();
 
         switch (upgradeMode) {
             case STATELESS:
@@ -946,7 +969,8 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
             default:
                 throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
         }
-
+        deployment.getSpec().setFlinkConfiguration(new ConfigObjectNode());
+        deployment.getSpec().getFlinkConfiguration().putAllFrom(conf);
         return deployment;
     }
 

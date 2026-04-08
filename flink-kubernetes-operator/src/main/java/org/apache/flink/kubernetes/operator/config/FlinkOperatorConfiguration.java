@@ -79,6 +79,8 @@ public class FlinkOperatorConfiguration {
     Duration slowRequestThreshold;
     int reportedExceptionEventsMaxCount;
     int reportedExceptionEventsMaxStackTraceLength;
+    boolean manageIngress;
+    Duration jobSubmissionTimeout;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -203,6 +205,12 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES);
 
+        boolean manageIngress =
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_MANAGE_INGRESS);
+
+        Duration jobSubmissionTimeout =
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_SUBMISSION_TIMEOUT);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -234,7 +242,9 @@ public class FlinkOperatorConfiguration {
                 snapshotResourcesEnabled,
                 slowRequestThreshold,
                 reportedExceptionEventsMaxCount,
-                reportedExceptionEventsMaxStackTraceLength);
+                reportedExceptionEventsMaxStackTraceLength,
+                manageIngress,
+                jobSubmissionTimeout);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {

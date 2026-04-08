@@ -75,7 +75,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
     public void testStartSession() throws Exception {
         var count = new AtomicInteger(0);
         flinkService =
-                new TestingFlinkService() {
+                new TestingFlinkService(kubernetesClient) {
                     @Override
                     public void submitSessionCluster(Configuration conf) throws Exception {
                         super.submitSessionCluster(conf);
@@ -157,11 +157,12 @@ public class SessionReconcilerTest extends OperatorTestBase {
                 .put(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key(), "true");
 
         assertEquals(
-                "true",
+                true,
                 deployment
                         .getSpec()
                         .getFlinkConfiguration()
-                        .get(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key()));
+                        .get(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key())
+                        .asBoolean());
 
         reconciler.reconcile(deployment, flinkService.getContext());
 

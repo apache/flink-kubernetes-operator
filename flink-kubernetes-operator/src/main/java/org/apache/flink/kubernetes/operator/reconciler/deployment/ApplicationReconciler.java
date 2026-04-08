@@ -59,6 +59,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
 /** Reconciler Flink Application deployments. */
@@ -85,12 +88,13 @@ public class ApplicationReconciler
         var status = deployment.getStatus();
         var availableUpgradeMode = super.getJobUpgrade(ctx, deployConfig);
 
-        if (availableUpgradeMode.isAvailable() || !availableUpgradeMode.isAllowFallback()) {
+        if (availableUpgradeMode.isAvailable()) {
             return availableUpgradeMode;
         }
         var flinkService = ctx.getFlinkService();
 
-        if (HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+        if (availableUpgradeMode.isAllowFallback()
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
                 && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
                 && flinkService.isHaMetadataAvailable(deployConfig)) {
             LOG.info(
@@ -114,13 +118,15 @@ public class ApplicationReconciler
                         || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
                 && !flinkService.isHaMetadataAvailable(deployConfig)) {
             throw new UpgradeFailureException(
-                    "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
+                    "JobManager deployment is missing and "
+                            + MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to make stateful upgrades. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
                     "UpgradeFailed");
         }
 
-        return JobUpgrade.unavailable();
+        return availableUpgradeMode;
     }
 
     private void deleteJmThatNeverStarted(
@@ -185,8 +191,8 @@ public class ApplicationReconciler
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
-        IngressUtils.updateIngressRules(
-                relatedResource.getMetadata(), spec, deployConfig, ctx.getKubernetesClient());
+        IngressUtils.reconcileIngress(
+                ctx, spec, deployConfig, ctx.getKubernetesClient(), eventRecorder);
     }
 
     private void setJobIdIfNecessary(

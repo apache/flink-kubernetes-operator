@@ -21,7 +21,7 @@ package autoscaling;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 
 /** Autoscaling Example. */
 public class AutoscalingExample {
@@ -43,13 +43,7 @@ public class AutoscalingExample {
                                         return end;
                                     }
                                 });
-        stream.addSink(
-                new SinkFunction<Long>() {
-                    @Override
-                    public void invoke(Long value, Context context) throws Exception {
-                        // Do nothing
-                    }
-                });
+        stream.sinkTo(new DiscardingSink<>());
         env.execute("Autoscaling Example");
     }
 }

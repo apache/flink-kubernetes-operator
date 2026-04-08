@@ -27,7 +27,7 @@ import org.apache.flink.connector.datagen.source.DataGeneratorSource;
 import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
+import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.flink.util.Collector;
 
 import org.slf4j.Logger;
@@ -128,7 +128,7 @@ public class LoadSimulationPipeline {
                                 .broadcast();
             }
 
-            stream.addSink(new DiscardingSink<>());
+            stream.sinkTo(new DiscardingSink<>());
         }
 
         env.execute(
@@ -164,7 +164,8 @@ public class LoadSimulationPipeline {
 
             double amplitude = getAmplitude(currentEpoch);
 
-            double loadPerSubTask = maxLoad / getRuntimeContext().getNumberOfParallelSubtasks();
+            double loadPerSubTask =
+                    maxLoad / getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks();
 
             long busyTimeMs = (long) (loadPerSubTask * samplingIntervalMs * amplitude);
             long remainingTimeMs =
@@ -172,7 +173,7 @@ public class LoadSimulationPipeline {
             long sleepTime = Math.min(busyTimeMs, remainingTimeMs);
             LOG.info(
                     "{}> epoch: {} busyTime: {} remainingTime: {} sleepTime: {} amplitude: {}",
-                    getRuntimeContext().getIndexOfThisSubtask(),
+                    getRuntimeContext().getTaskInfo().getIndexOfThisSubtask(),
                     currentEpoch,
                     busyTimeMs,
                     remainingTimeMs,

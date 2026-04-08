@@ -121,7 +121,7 @@ public class DeploymentRecoveryTest {
                             .getStatus()
                             .getError()
                             .contains(
-                                    "JobManager deployment is missing and HA data is not available to make stateful upgrades."));
+                                    "JobManager deployment is missing and HA metadata is not available"));
         } else {
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);

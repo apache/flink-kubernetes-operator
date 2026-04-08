@@ -78,17 +78,24 @@ public class FlinkConfigManagerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
 
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "reconciled");
-        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "reconciled");
-        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        reconciliationStatus.markReconciledSpecAsStable();
-
-        deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "latest");
-        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "latest");
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
-                .put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
+                .putAllFrom(Map.of(testConf.key(), "reconciled", opTestConf.key(), "reconciled"));
+        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        reconciliationStatus.markReconciledSpecAsStable();
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                testConf.key(),
+                                "latest",
+                                opTestConf.key(),
+                                "latest",
+                                AutoScalerOptions.METRICS_WINDOW.key(),
+                                "1234m"));
 
         assertEquals(
                 "latest",

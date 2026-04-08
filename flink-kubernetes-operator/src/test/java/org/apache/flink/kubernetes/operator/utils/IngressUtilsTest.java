@@ -23,11 +23,15 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressTLS;
+import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.apache.commons.lang3.StringUtils;
@@ -35,9 +39,12 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_MANAGE_INGRESS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,20 +52,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test class for {@link IngressUtils}. */
 @EnableKubernetesMockClient(crud = true)
-public class IngressUtilsTest {
+class IngressUtilsTest {
 
     KubernetesClient client;
 
+    TestingJosdkContext testingJosdkContext;
+
+    private FlinkResourceContext<?> createResourceContext(FlinkDeployment appCluster) {
+        testingJosdkContext = new TestingJosdkContext<>(client);
+        return new FlinkDeploymentContext(
+                appCluster,
+                testingJosdkContext,
+                null,
+                new FlinkConfigManager(Configuration.fromMap(new HashMap<>())),
+                null,
+                null);
+    }
+
+    private FlinkResourceContext<?> createResourceContext(
+            FlinkDeployment appCluster, FlinkConfigManager configManager) {
+        testingJosdkContext = new TestingJosdkContext<>(client);
+        return new FlinkDeploymentContext(
+                appCluster, testingJosdkContext, null, configManager, null, null);
+    }
+
     @Test
-    public void testIngress() {
+    void testIngress() {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         Configuration config =
                 new FlinkConfigManager(new Configuration())
                         .getDeployConfig(appCluster.getMetadata(), appCluster.getSpec());
 
         // no ingress when ingressDomain is empty
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             assertNull(
                     client.network()
@@ -81,8 +108,8 @@ public class IngressUtilsTest {
         IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
         builder.template("{{name}}.{{namespace}}.example.com");
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         Ingress ingress = null;
         io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingressV1beta1 = null;
         if (IngressUtils.ingressInNetworkingV1(client)) {
@@ -130,8 +157,8 @@ public class IngressUtilsTest {
         builder.className("nginx");
         builder.annotations(Map.of("nginx.ingress.kubernetes.io/rewrite-target", "/$2"));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -187,8 +214,8 @@ public class IngressUtilsTest {
         builder.template("example.com/{{namespace}}/{{name}}(/|$)(.*)");
         builder.className("nginx");
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -271,8 +298,8 @@ public class IngressUtilsTest {
         builder.template("{{name}}.{{namespace}}.example.com");
         builder.tls(new ArrayList<>());
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         Ingress ingress = null;
         io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingressV1beta1 = null;
         if (IngressUtils.ingressInNetworkingV1(client)) {
@@ -308,8 +335,8 @@ public class IngressUtilsTest {
         ingressTlsSpecSecretOnly.setSecretName("secret");
         builder.tls(List.of(ingressTlsSpecSecretOnly));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -346,8 +373,8 @@ public class IngressUtilsTest {
         ingressTlsSpecHostsOnly.setHosts(List.of("example.com"));
         builder.tls(List.of(ingressTlsSpecHostsOnly));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -384,8 +411,8 @@ public class IngressUtilsTest {
                 new IngressTLS(List.of("example.com"), "secret");
         builder.tls(List.of(ingressTlsSpecSingleTLSWithHost));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -426,8 +453,8 @@ public class IngressUtilsTest {
                 new IngressTLS(List.of("example.com", "example2.com"), "secret");
         builder.tls(List.of(ingressTlsSpecSingleTLSWithHosts));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -473,8 +500,8 @@ public class IngressUtilsTest {
         builder.tls(
                 List.of(ingressTlsSpecMultipleTLSWithHosts1, ingressTlsSpecMultipleTLSWithHosts2));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(
-                appCluster.getMetadata(), appCluster.getSpec(), config, client);
+        IngressUtils.reconcileIngress(
+                createResourceContext(appCluster), appCluster.getSpec(), config, client, null);
         if (IngressUtils.ingressInNetworkingV1(client)) {
             ingress =
                     client.network()
@@ -518,5 +545,68 @@ public class IngressUtilsTest {
             assertEquals("example3.com", tlsV1beta1.get(1).getHosts().get(0));
             assertEquals("example4.com", tlsV1beta1.get(1).getHosts().get(1));
         }
+    }
+
+    @Test
+    void testDeletesIngress() {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().setIngress(null);
+        io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingress =
+                new IngressBuilder()
+                        .withNewMetadata()
+                        .withName(appCluster.getMetadata().getName())
+                        .withNamespace(appCluster.getMetadata().getNamespace())
+                        .endMetadata()
+                        .build();
+        client.network().v1beta1().ingresses().resource(ingress).create();
+        var context = createResourceContext(appCluster);
+        testingJosdkContext.setSecondaryResources(
+                Map.of(
+                        io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress.class,
+                        List.of(ingress)));
+
+        IngressUtils.reconcileIngress(context, appCluster.getSpec(), null, client, null);
+
+        var ingressV1beta1 =
+                client.network()
+                        .v1beta1()
+                        .ingresses()
+                        .inNamespace(appCluster.getMetadata().getNamespace())
+                        .withName(appCluster.getMetadata().getName())
+                        .get();
+        assertThat(ingressV1beta1).isNull();
+    }
+
+    @Test
+    void skipIngressReconciliationIfFeatureFlagOff() {
+        List<Event> events = new ArrayList<>();
+        EventRecorder eventRecorder =
+                new EventRecorder((a, event) -> events.add(event), (a, b) -> {});
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        FlinkConfigManager manager =
+                new FlinkConfigManager(
+                        Configuration.fromMap(Map.of(OPERATOR_MANAGE_INGRESS.key(), "false")));
+        var context = createResourceContext(appCluster, manager);
+        context.getOperatorConfig();
+        Configuration config =
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(appCluster.getMetadata(), appCluster.getSpec());
+
+        IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
+        builder.template("{{name}}.{{namespace}}.example.com");
+        builder.tls(new ArrayList<>());
+        appCluster.getSpec().setIngress(builder.build());
+
+        IngressUtils.reconcileIngress(context, appCluster.getSpec(), config, client, eventRecorder);
+
+        var ingressV1beta1 =
+                client.network()
+                        .v1beta1()
+                        .ingresses()
+                        .inNamespace(appCluster.getMetadata().getNamespace())
+                        .withName(appCluster.getMetadata().getName())
+                        .get();
+        assertThat(ingressV1beta1).isNull();
+        assertThat(events).hasSize(1);
     }
 }

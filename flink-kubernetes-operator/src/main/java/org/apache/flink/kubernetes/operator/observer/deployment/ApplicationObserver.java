@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
-/** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
+/** The observer of {@link org.apache.flink.kubernetes.operator.api.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
     private final SnapshotObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;

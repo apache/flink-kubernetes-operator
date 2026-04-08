@@ -17,8 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
-import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableSet;
-
+import com.google.common.collect.ImmutableSet;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 

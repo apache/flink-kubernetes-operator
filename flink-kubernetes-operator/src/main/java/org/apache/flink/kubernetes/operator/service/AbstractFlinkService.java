@@ -114,9 +114,9 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
-import org.apache.flink.shaded.guava31.com.google.common.collect.Iterables;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
+import com.google.common.collect.Iterables;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -161,6 +161,9 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.util.ExceptionUtils.findThrowable;
@@ -344,7 +347,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     savepointPath = savepointJobOrError(clusterClient, status, conf);
                     break;
                 case STATELESS:
-                    if (ReconciliationUtils.isJobCancellable(status)) {
+                    if (status.isJobCancellable()) {
                         try {
                             cancelJobOrError(clusterClient, status, true);
                         } catch (Exception ex) {
@@ -578,7 +581,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .getExternalPointer()
                         .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
             throw new UpgradeFailureException(
-                    "Latest checkpoint not externally addressable, manual recovery required.",
+                    "Latest checkpoint not externally addressable, " + MSG_MANUAL_RESTORE_REQUIRED,
                     "CheckpointNotFound");
         }
         return latestCheckpointOpt.map(
@@ -1218,7 +1221,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
-                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+                    .get(operatorConfig.getJobSubmissionTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
             throw new FlinkRuntimeException(e);
@@ -1335,8 +1338,9 @@ public abstract class AbstractFlinkService implements FlinkService {
     private void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
             throw new UpgradeFailureException(
-                    "HA metadata not available to restore from last state. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. ",
+                    MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to restore from last state."
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED,
                     "RestoreFailed");
         }
     }

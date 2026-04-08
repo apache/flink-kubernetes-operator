@@ -69,6 +69,12 @@
             <td>The port the health probe will use to expose the status.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.ingress.manage</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.label.selector</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>String</td>

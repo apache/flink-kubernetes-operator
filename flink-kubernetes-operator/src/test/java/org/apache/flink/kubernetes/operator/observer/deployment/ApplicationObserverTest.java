@@ -55,7 +55,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -716,10 +715,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
         deployment
                 .getSpec()
-                .setFlinkConfiguration(
-                        Map.of(
-                                OPERATOR_SAVEPOINT_FORMAT_TYPE.key(),
-                                org.apache.flink.core.execution.SavepointFormatType.NATIVE.name()));
+                .getFlinkConfiguration()
+                .put(
+                        OPERATOR_SAVEPOINT_FORMAT_TYPE.key(),
+                        org.apache.flink.core.execution.SavepointFormatType.NATIVE.name());
         conf = configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.triggerSavepointLegacy(
                 deployment.getStatus().getJobStatus().getJobId(),

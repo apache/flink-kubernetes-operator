@@ -248,6 +248,23 @@ public class CrdCompatibilityCheckerTest {
     }
 
     @Test
+    void generalizingPropertyMapToAnyType() throws Exception {
+        expectSuccess(
+                "openAPIV3Schema:\n"
+                        + "  properties:\n"
+                        + "    flinkConfiguration:\n"
+                        + "      additionalProperties:\n"
+                        + "        type: string\n"
+                        + "      type: object\n"
+                        + "  type: object",
+                "openAPIV3Schema:\n"
+                        + "  properties:\n"
+                        + "    flinkConfiguration:\n"
+                        + "      x-kubernetes-preserve-unknown-fields: true\n"
+                        + "  type: object");
+    }
+
+    @Test
     public void testCreateFlinkSessionJobIgnoreUnknownFields() throws IOException {
         FlinkSessionJob flinkSessionJobWithUnknownFields =
                 objectMapper.readValue(

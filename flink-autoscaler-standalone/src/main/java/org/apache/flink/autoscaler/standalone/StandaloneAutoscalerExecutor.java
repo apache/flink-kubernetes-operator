@@ -21,12 +21,12 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.validation.AutoscalerValidator;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
-import org.apache.flink.shaded.guava31.com.google.common.util.concurrent.ThreadFactoryBuilder;
-
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
 
@@ -68,6 +70,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     private final ScheduledExecutorService scheduledExecutorService;
     private final ExecutorService scalingThreadPool;
     private final UnmodifiableConfiguration baseConf;
+    private final AutoscalerValidator autoscalerValidator;
 
     /**
      * Maintain a set of job keys that during scaling, it should be accessed at {@link
@@ -103,6 +106,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
                         parallelism, new ExecutorThreadFactory("autoscaler-standalone-scaling"));
         this.scalingJobKeys = new HashSet<>();
         this.baseConf = new UnmodifiableConfiguration(conf);
+        this.autoscalerValidator = new AutoscalerValidator();
     }
 
     public void start() {
@@ -188,7 +192,19 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     protected void scalingSingleJob(Context jobContext) {
         try {
             MDC.put("job.key", jobContext.getJobKey().toString());
-            autoScaler.scale(jobContext);
+            Optional<String> validationError =
+                    autoscalerValidator.validateAutoscalerOptions(jobContext.getConfiguration());
+            if (validationError.isPresent()) {
+                eventHandler.handleEvent(
+                        jobContext,
+                        AutoScalerEventHandler.Type.Warning,
+                        "AutoScaler Options Validation",
+                        validationError.get(),
+                        null,
+                        baseConf.get(SCALING_EVENT_INTERVAL));
+            } else {
+                autoScaler.scale(jobContext);
+            }
         } catch (Throwable e) {
             LOG.error("Error while scaling job", e);
             eventHandler.handleException(jobContext, AUTOSCALER_ERROR, e);

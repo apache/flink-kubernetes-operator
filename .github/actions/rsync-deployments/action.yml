@@ -1,0 +1,51 @@
+# This implementation took inspiration from https://github.com/Burnett01/rsync-deployments/blob/7.1.0/action.yml
+name: Rsync Deploy (local)
+description: Upload a folder to a single remote destination via rsync over SSH.
+inputs:
+  switches:
+    description: rsync switches
+    required: false
+    default: "--archive --compress"
+  path:
+    description: Local source directory
+    required: true
+  remote_path:
+    description: Remote destination directory
+    required: true
+  remote_host:
+    description: SSH host
+    required: true
+  remote_port:
+    description: SSH port
+    required: false
+    default: "22"
+  remote_user:
+    description: SSH username
+    required: true
+  remote_key:
+    description: SSH private key (OpenSSH/PEM)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: rsync via ssh-agent
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Start agent and load the key
+        eval "$(ssh-agent -s)"
+        ssh-add - <<< "${{ inputs.remote_key }}"
+
+        # SSH command with host key checking disabled (matches your reference impl)
+        RSH="ssh -o StrictHostKeyChecking=no -p ${{ inputs.remote_port }}"
+
+        # Resolve paths and DSN
+        LOCAL_PATH="$GITHUB_WORKSPACE/${{ inputs.path }}"
+        DSN="${{ inputs.remote_user }}@${{ inputs.remote_host }}"
+
+        # Deploy
+        sh -c "rsync ${{ inputs.switches }} -e '$RSH' $LOCAL_PATH $DSN:${{ inputs.remote_path }}"
+
+        # Cleanup identities from the agent
+        ssh-add -D || true

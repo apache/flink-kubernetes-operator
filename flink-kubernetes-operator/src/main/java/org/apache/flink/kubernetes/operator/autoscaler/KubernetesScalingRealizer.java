@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.autoscaler.tuning.MemoryTuning;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -45,7 +44,6 @@ public class KubernetesScalingRealizer
     @Override
     public void realizeParallelismOverrides(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
-
         context.getResource()
                 .getSpec()
                 .getFlinkConfiguration()
@@ -63,15 +61,15 @@ public class KubernetesScalingRealizer
         }
         FlinkDeployment flinkDeployment = ((FlinkDeployment) context.getResource());
         // Apply config overrides
-        Map<String, String> flinkConf = flinkDeployment.getSpec().getFlinkConfiguration();
-        for (String keyToRemove : configChanges.getRemovals()) {
-            flinkConf.remove(keyToRemove);
-        }
-        flinkConf.putAll(configChanges.getOverrides());
+
+        flinkDeployment.getSpec().getFlinkConfiguration().remove(configChanges.getRemovals());
+        flinkDeployment.getSpec().getFlinkConfiguration().putAllFrom(configChanges.getOverrides());
 
         // Update total memory in spec
         var totalMemoryOverride =
-                MemoryTuning.getTotalMemory(Configuration.fromMap(flinkConf), context);
+                MemoryTuning.getTotalMemory(
+                        flinkDeployment.getSpec().getFlinkConfiguration().asConfiguration(),
+                        context);
         if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
             return;

@@ -35,8 +35,7 @@ import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsAggregationParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter;
 
-import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
-
+import com.google.common.collect.ImmutableMap;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
