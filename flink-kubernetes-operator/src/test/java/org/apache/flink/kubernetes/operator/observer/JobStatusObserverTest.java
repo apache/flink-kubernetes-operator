@@ -769,4 +769,287 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 .serializeAndSetLastReconciledSpec(job.getSpec(), job);
         return job;
     }
+
+    @Test
+    public void testRuntimeConfigFetchAndCache() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        // Configure the mock service to return runtime config
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.setRuntimeJobConfig(
+                jobId,
+                Map.of("parallelism.default", "8", "execution.checkpointing.interval", "60000"));
+        flinkService.setRuntimeCheckpointConfig(
+                jobId, Map.of("execution.checkpointing.mode", "EXACTLY_ONCE"));
+
+        // Verify runtime config is not cached before observation
+        assertFalse(
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId())
+                        .isPresent());
+
+        // Observe the job - this should fetch and cache runtime config
+        observer.observe(ctx);
+
+        // Verify runtime config is now cached
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(cachedConfig.isPresent());
+        assertEquals("8", cachedConfig.get().get("parallelism.default"));
+        assertEquals("60000", cachedConfig.get().get("execution.checkpointing.interval"));
+        assertEquals("EXACTLY_ONCE", cachedConfig.get().get("execution.checkpointing.mode"));
+    }
+
+    @Test
+    public void testRuntimeConfigNotFetchedWhenNotRunning() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.CREATED);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        // Don't submit the job to the cluster -- observe() won't find a matching job,
+        // so fetchAndCacheRuntimeConfig should never be called.
+        observer.observe(ctx);
+
+        // Verify runtime config is not cached
+        assertFalse(
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId())
+                        .isPresent());
+    }
+
+    @Test
+    public void testRuntimeConfigNotFetchedWhenAlreadyCached() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Pre-populate the cache
+        ctx.getConfigManager()
+                .putRuntimeConfig(
+                        deployment.getMetadata().getNamespace(),
+                        deployment.getMetadata().getName(),
+                        jobStatus.getJobId(),
+                        Map.of("pre-cached", "value"));
+
+        // Configure mock to return different values
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "999"));
+
+        // Observe the job
+        observer.observe(ctx);
+
+        // Verify the cached config is unchanged (not refetched)
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(cachedConfig.isPresent());
+        assertEquals("value", cachedConfig.get().get("pre-cached"));
+        assertFalse(cachedConfig.get().containsKey("parallelism.default"));
+    }
+
+    @Test
+    public void testObserveConfigIncludesRuntimeOverrides() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        // Set user configuration
+        deployment.getSpec().getFlinkConfiguration().put("parallelism.default", "2");
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Configure runtime config that overrides user config
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "10"));
+
+        // Observe the job - this caches runtime config
+        observer.observe(ctx);
+
+        // Get observe config - should include runtime overrides
+        var observeConfig = ctx.getObserveConfig();
+        assertEquals("10", observeConfig.getString("parallelism.default", null));
+    }
+
+    @Test
+    public void testSessionJobRuntimeConfigFetchAndCache() throws Exception {
+        var sessionJob = initSessionJob();
+        var status = sessionJob.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(
+                        sessionJob,
+                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitJobToSessionCluster(
+                sessionJob.getMetadata(),
+                sessionJob.getSpec(),
+                jobId,
+                ctx.getDeployConfig(sessionJob.getSpec()),
+                null);
+
+        // Configure the mock service to return runtime config
+        flinkService.setRuntimeJobConfig(
+                jobId, Map.of("parallelism.default", "4", "restart-strategy", "fixed-delay"));
+        flinkService.setRuntimeCheckpointConfig(
+                jobId, Map.of("execution.checkpointing.interval", "30000"));
+
+        // Observe the job - this should fetch and cache runtime config
+        observer.observe(ctx);
+
+        // Verify runtime config is cached
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                sessionJob.getMetadata().getNamespace(),
+                                sessionJob.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(cachedConfig.isPresent());
+        assertEquals("4", cachedConfig.get().get("parallelism.default"));
+        assertEquals("fixed-delay", cachedConfig.get().get("restart-strategy"));
+        assertEquals("30000", cachedConfig.get().get("execution.checkpointing.interval"));
+    }
+
+    @Test
+    public void testRuntimeConfigFetchFailureDoesNotBreakObservation() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Configure mock to throw exception when fetching runtime config
+        flinkService.setRuntimeConfigFetchException(new Exception("REST API unavailable"));
+
+        // Observe should not fail even if runtime config fetch fails
+        boolean result = observer.observe(ctx);
+        assertTrue(result);
+
+        // When both fetches fail, nothing should be cached so we retry next cycle
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertFalse(cachedConfig.isPresent());
+
+        // Clear the exception and observe again -- should now fetch and cache successfully
+        flinkService.setRuntimeConfigFetchException(null);
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "4"));
+        flinkService.setRuntimeCheckpointConfig(
+                jobId, Map.of("execution.checkpointing.interval", "5000"));
+
+        observer.observe(ctx);
+
+        var retriedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(retriedConfig.isPresent());
+        assertEquals("4", retriedConfig.get().get("parallelism.default"));
+        assertEquals("5000", retriedConfig.get().get("execution.checkpointing.interval"));
+    }
+
+    @Test
+    public void testPartialFetchFailureCachesSuccessfulPortion() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // Only set job config (no checkpoint config) -- checkpoint fetch will return empty map
+        // but won't throw, so this tests the case where one succeeds with data
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "6"));
+
+        observer.observe(ctx);
+
+        // Should be cached since at least one fetch returned data
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(cachedConfig.isPresent());
+        assertEquals("6", cachedConfig.get().get("parallelism.default"));
+    }
+
+    @Test
+    public void testCachedRuntimeConfigIsImmutable() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "4"));
+
+        observer.observe(ctx);
+
+        var cachedConfig =
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId());
+        assertTrue(cachedConfig.isPresent());
+
+        // Attempting to mutate the cached map should throw
+        var configMap = cachedConfig.get();
+        org.junit.jupiter.api.Assertions.assertThrows(
+                UnsupportedOperationException.class, () -> configMap.put("new.key", "value"));
+    }
 }
