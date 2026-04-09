@@ -26,6 +26,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.SchemaFrom;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.model.annotation.SpecReplicas;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -40,8 +41,18 @@ import lombok.NoArgsConstructor;
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TaskManagerSpec implements Diffable<TaskManagerSpec> {
-    /** Resource specification for the TaskManager pods. */
-    private Resource resource;
+    /**
+     * Resource specification for the TaskManager pods.
+     *
+     * @deprecated Use resources instead for proper Kubernetes ResourceRequirements schema.
+     */
+    @Deprecated private Resource resource;
+
+    /**
+     * Resource requirements for the TaskManager pods following Kubernetes ResourceRequirements
+     * schema. This field supports both requests and limits for CPU, memory, and other resources.
+     */
+    private ResourceRequirements resources;
 
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
     @SpecDiff(value = DiffType.SCALE, mode = KubernetesDeploymentMode.STANDALONE)

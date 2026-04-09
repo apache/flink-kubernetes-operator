@@ -51,6 +51,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +64,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -559,6 +563,162 @@ public class FlinkConfigBuilderTest {
         assertEquals(
                 MemorySize.parse("2147483648 b"),
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2_GiResourceRequirementsSetting() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        ResourceRequirements resourceRequirements =
+                new ResourceRequirementsBuilder().withRequests(requests).build();
+        flinkDeployment.getSpec().getTaskManager().setResources(resourceRequirements);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testApplyJobManagerSpecWithResourceRequirements() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("4Gi"));
+        requests.put("cpu", new Quantity("2"));
+        ResourceRequirements rr = new ResourceRequirementsBuilder().withRequests(requests).build();
+        flinkDeployment.getSpec().getJobManager().setResources(rr);
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("4294967296 b"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(2.0), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+    }
+
+    @Test
+    public void testApplyTaskManagerSpecWithCpuResourceRequirements() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        requests.put("cpu", new Quantity("500m"));
+        ResourceRequirements rr = new ResourceRequirementsBuilder().withRequests(requests).build();
+        flinkDeployment.getSpec().getTaskManager().setResources(rr);
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                Double.valueOf(0.5), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Test
+    public void testResourceRequirementsCpuLimitFactor() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        requests.put("cpu", new Quantity("1"));
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("cpu", new Quantity("2"));
+        ResourceRequirements rr =
+                new ResourceRequirementsBuilder().withRequests(requests).withLimits(limits).build();
+        flinkDeployment.getSpec().getJobManager().setResources(rr);
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+        assertEquals(
+                Double.valueOf(2.0),
+                configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR));
+    }
+
+    @Test
+    public void testResourceRequirementsMemoryLimitFactor() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        requests.put("cpu", new Quantity("1"));
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("memory", new Quantity("4Gi"));
+        ResourceRequirements rr =
+                new ResourceRequirementsBuilder().withRequests(requests).withLimits(limits).build();
+        flinkDeployment.getSpec().getTaskManager().setResources(rr);
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                Double.valueOf(2.0),
+                configuration.get(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR));
+    }
+
+    @Test
+    public void testResourceRequirementsTakesPrecedenceOverResource() {
+        flinkDeployment.getSpec().getJobManager().setResource(new Resource(1.0, "1024m", null));
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("4Gi"));
+        requests.put("cpu", new Quantity("2"));
+        flinkDeployment
+                .getSpec()
+                .getJobManager()
+                .setResources(new ResourceRequirementsBuilder().withRequests(requests).build());
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("4294967296 b"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(2.0), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+    }
+
+    @Test
+    public void testApplyResourceRequirementsToPodTemplate() {
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        requests.put("cpu", new Quantity("1"));
+        requests.put("ephemeral-storage", new Quantity("10Gi"));
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("memory", new Quantity("4Gi"));
+        limits.put("cpu", new Quantity("2"));
+        ResourceRequirements rr =
+                new ResourceRequirementsBuilder().withRequests(requests).withLimits(limits).build();
+        var pod = FlinkConfigBuilder.applyResourceRequirementsToPodTemplate(null, rr);
+        var container = pod.getSpec().getContainers().get(0);
+        assertEquals(Constants.MAIN_CONTAINER_NAME, container.getName());
+        assertEquals(new Quantity("2Gi"), container.getResources().getRequests().get("memory"));
+        assertEquals(new Quantity("4Gi"), container.getResources().getLimits().get("memory"));
+        assertEquals(
+                new Quantity("10Gi"),
+                container.getResources().getRequests().get("ephemeral-storage"));
+    }
+
+    @Test
+    public void testDeprecatedResourceStillWorksWhenResourcesIsNull() {
+        flinkDeployment.getSpec().getJobManager().setResources(null);
+        flinkDeployment.getSpec().getJobManager().setResource(new Resource(2.0, "4096m", "2G"));
+        flinkDeployment.getSpec().getTaskManager().setResources(null);
+        flinkDeployment.getSpec().getTaskManager().setResource(new Resource(1.5, "2048m", "2G"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("4096 mb"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(2.0), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+        assertEquals(
+                MemorySize.parse("2048 mb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(1.5), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
     }
 
     @Test
