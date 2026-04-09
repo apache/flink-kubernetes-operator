@@ -129,19 +129,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         String namespace = resource.getMetadata().getNamespace();
         String name = resource.getMetadata().getName();
         String jobId = jobStatus.getJobId();
-
-        if (jobId == null) {
-            return;
-        }
-
         var configManager = ctx.getConfigManager();
 
         if (configManager.getRuntimeConfig(namespace, name, jobId).isPresent()) {
-            LOG.debug("Runtime configuration already cached for job {}", jobId);
+            LOG.debug("Runtime configuration already cached");
             return;
         }
 
-        LOG.debug("Fetching runtime configuration for job {}", jobId);
+        LOG.debug("Fetching runtime configuration");
         var conf = ctx.getObserveConfig();
         var flinkService = ctx.getFlinkService();
         var jobIdObj = JobID.fromHexString(jobId);
@@ -152,13 +147,11 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             Map<String, String> jobConfig = flinkService.getJobConfiguration(conf, jobIdObj);
             if (jobConfig != null) {
                 runtimeConfig.putAll(jobConfig);
-                LOG.debug(
-                        "Fetched {} job configuration entries for job {}", jobConfig.size(), jobId);
+                LOG.debug("Fetched {} job configuration entries", jobConfig.size());
             }
         } catch (Exception e) {
             fetchFailed = true;
-            LOG.warn("Failed to fetch job configuration for job {}: {}", jobId, e.getMessage());
-            LOG.debug("Job configuration fetch exception details", e);
+            LOG.warn("Failed to fetch job configuration", e);
         }
 
         try {
@@ -166,24 +159,15 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     flinkService.getJobCheckpointConfiguration(conf, jobIdObj);
             if (checkpointConfig != null) {
                 runtimeConfig.putAll(checkpointConfig);
-                LOG.debug(
-                        "Fetched {} checkpoint configuration entries for job {}",
-                        checkpointConfig.size(),
-                        jobId);
+                LOG.debug("Fetched {} checkpoint configuration entries", checkpointConfig.size());
             }
         } catch (Exception e) {
             fetchFailed = true;
-            LOG.warn(
-                    "Failed to fetch checkpoint configuration for job {}: {}",
-                    jobId,
-                    e.getMessage());
-            LOG.debug("Checkpoint configuration fetch exception details", e);
+            LOG.warn("Failed to fetch checkpoint configuration", e);
         }
 
         if (runtimeConfig.isEmpty() && fetchFailed) {
-            LOG.warn(
-                    "All runtime config REST fetches failed for job {}, will retry next cycle",
-                    jobId);
+            LOG.warn("All runtime config REST fetches failed, will retry next cycle");
             return;
         }
 

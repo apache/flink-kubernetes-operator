@@ -161,12 +161,6 @@ public class FlinkConfigManager {
                 cacheTimeout.toMillis(),
                 TimeUnit.MILLISECONDS);
 
-        executorService.scheduleWithFixedDelay(
-                runtimeConfigCache::cleanUp,
-                cacheTimeout.toMillis(),
-                cacheTimeout.toMillis(),
-                TimeUnit.MILLISECONDS);
-
         if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
             scheduleConfigWatcher(executorService);
         }
@@ -396,8 +390,7 @@ public class FlinkConfigManager {
                         .jobId(jobId)
                         .build();
         runtimeConfigCache.put(cacheKey, Collections.unmodifiableMap(config));
-        LOG.debug(
-                "Cached runtime configuration for job {} (resource {}/{})", jobId, namespace, name);
+        LOG.debug("Cached runtime configuration with {} entries", config.size());
     }
 
     /**
@@ -432,7 +425,7 @@ public class FlinkConfigManager {
                 .keySet()
                 .removeIf(
                         key -> namespace.equals(key.getNamespace()) && name.equals(key.getName()));
-        LOG.debug("Invalidated runtime configuration cache for resource {}/{}", namespace, name);
+        LOG.debug("Invalidated runtime configuration cache");
     }
 
     /**
@@ -454,9 +447,8 @@ public class FlinkConfigManager {
                 .ifPresent(
                         config -> {
                             LOG.debug(
-                                    "Applying {} cached runtime configuration overrides for job {}",
-                                    config.size(),
-                                    jobStatus.getJobId());
+                                    "Applying {} cached runtime configuration overrides",
+                                    config.size());
                             config.forEach(conf::setString);
                         });
     }

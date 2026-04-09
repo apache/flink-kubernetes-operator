@@ -50,6 +50,7 @@ import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkRuntimeConfigurationUtils;
 import org.apache.flink.runtime.checkpoint.CheckpointStatsStatus;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
@@ -59,12 +60,14 @@ import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
 import org.apache.flink.runtime.rest.messages.MessageParameters;
 import org.apache.flink.runtime.rest.messages.RequestBody;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
@@ -131,8 +134,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -1361,6 +1366,100 @@ public class AbstractFlinkServiceTest {
         var jsonParser = RestMapperUtils.getStrictObjectMapper().treeAsTokens(jsonNode);
         return RestMapperUtils.getFlexibleObjectMapper()
                 .readValue(jsonParser, JobExceptionsInfoWithHistory.class);
+    }
+
+    @Test
+    void testAllCheckpointConfigInfoFieldNamesCoveredByMapping() throws Exception {
+        Set<String> declaredFieldNames = new HashSet<>();
+        for (java.lang.reflect.Field f : CheckpointConfigInfo.class.getDeclaredFields()) {
+            if (f.getName().startsWith("FIELD_NAME_")
+                    && f.getType() == String.class
+                    && java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                declaredFieldNames.add((String) f.get(null));
+            }
+        }
+        assertFalse(declaredFieldNames.isEmpty(), "Should discover FIELD_NAME_* constants");
+
+        Set<String> mapped = new HashSet<>();
+        for (FlinkRuntimeConfigurationUtils.CheckpointConfigMapping m :
+                FlinkRuntimeConfigurationUtils.CheckpointConfigMapping.values()) {
+            mapped.add(m.getJsonField());
+        }
+        mapped.add(CheckpointConfigInfo.FIELD_NAME_EXTERNALIZED_CHECKPOINT_CONFIG);
+        mapped.add(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND);
+        mapped.add(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE);
+
+        Set<String> unmapped = new HashSet<>(declaredFieldNames);
+        unmapped.removeAll(mapped);
+        assertTrue(
+                unmapped.isEmpty(),
+                "CheckpointConfigInfo FIELD_NAME constants not covered by "
+                        + "CheckpointConfigMapping or explicit handlers: "
+                        + unmapped
+                        + ". Add a mapping for each new field or explicitly exclude it.");
+    }
+
+    @Test
+    void testAllExecutionConfigInfoFieldNamesCoveredByMapping() throws Exception {
+        Set<String> declaredFieldNames = new HashSet<>();
+        for (java.lang.reflect.Field f :
+                JobConfigInfo.ExecutionConfigInfo.class.getDeclaredFields()) {
+            if (f.getName().startsWith("FIELD_NAME_")
+                    && f.getType() == String.class
+                    && java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                declaredFieldNames.add(f.getName());
+            }
+        }
+        assertFalse(declaredFieldNames.isEmpty(), "Should discover FIELD_NAME_* constants");
+
+        // Fields mapped by FlinkRuntimeConfigurationUtils.mapJobConfiguration
+        Set<String> mapped =
+                new HashSet<>(
+                        Set.of(
+                                "FIELD_NAME_PARALLELISM",
+                                "FIELD_NAME_OBJECT_REUSE_MODE",
+                                "FIELD_NAME_GLOBAL_JOB_PARAMETERS"));
+
+        // Fields deliberately excluded: informational only, not runtime config overrides
+        Set<String> excluded = Set.of("FIELD_NAME_EXECUTION_MODE", "FIELD_NAME_RESTART_STRATEGY");
+        mapped.addAll(excluded);
+
+        Set<String> unmapped = new HashSet<>(declaredFieldNames);
+        unmapped.removeAll(mapped);
+        assertTrue(
+                unmapped.isEmpty(),
+                "ExecutionConfigInfo FIELD_NAME constants not covered by "
+                        + "mapJobConfiguration or explicitly excluded: "
+                        + unmapped
+                        + ". Add a mapping in FlinkRuntimeConfigurationUtils.mapJobConfiguration "
+                        + "or add to the excluded set in this test.");
+    }
+
+    @Test
+    void testMapJobConfigurationMapsAllExpectedFields() {
+        JobConfigInfo.ExecutionConfigInfo execInfo =
+                new JobConfigInfo.ExecutionConfigInfo(
+                        "PIPELINED", "fixedDelay", 4, true, Map.of("user.param", "value1"));
+        JobConfigInfo configInfo = new JobConfigInfo(new JobID(), "test-job", execInfo);
+
+        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo);
+
+        assertEquals("4", result.get("parallelism.default"));
+        assertEquals("true", result.get("pipeline.object-reuse"));
+        assertEquals("value1", result.get("user.param"));
+        assertTrue(
+                result.size() >= 3,
+                "Should map at least parallelism, object-reuse, and user params");
+    }
+
+    @Test
+    void testMapJobConfigurationHandlesNullGracefully() {
+        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(null);
+        assertTrue(result.isEmpty(), "Null input should return empty map");
+
+        JobConfigInfo noExecInfo = new JobConfigInfo(new JobID(), "test-job", null);
+        result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(noExecInfo);
+        assertTrue(result.isEmpty(), "Null ExecutionConfigInfo should return empty map");
     }
 
     class TestingService extends AbstractFlinkService {
