@@ -144,23 +144,21 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         boolean fetchFailed = false;
 
         try {
-            Map<String, String> jobConfig = flinkService.getJobConfiguration(conf, jobIdObj);
-            if (jobConfig != null) {
-                runtimeConfig.putAll(jobConfig);
-                LOG.debug("Fetched {} job configuration entries", jobConfig.size());
-            }
+            runtimeConfig.putAll(flinkService.getJobManagerConfiguration(conf, jobIdObj));
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.warn("Failed to fetch JobManager configuration", e);
+        }
+
+        try {
+            runtimeConfig.putAll(flinkService.getJobConfiguration(conf, jobIdObj));
         } catch (Exception e) {
             fetchFailed = true;
             LOG.warn("Failed to fetch job configuration", e);
         }
 
         try {
-            Map<String, String> checkpointConfig =
-                    flinkService.getJobCheckpointConfiguration(conf, jobIdObj);
-            if (checkpointConfig != null) {
-                runtimeConfig.putAll(checkpointConfig);
-                LOG.debug("Fetched {} checkpoint configuration entries", checkpointConfig.size());
-            }
+            runtimeConfig.putAll(flinkService.getJobCheckpointConfiguration(conf, jobIdObj));
         } catch (Exception e) {
             fetchFailed = true;
             LOG.warn("Failed to fetch checkpoint configuration", e);

@@ -29,6 +29,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Utility class for mapping Flink REST API responses (execution config, checkpoint config) into
@@ -125,6 +128,16 @@ public class FlinkRuntimeConfigurationUtils {
                     "FileSystemCheckpointStorage", "filesystem",
                     "JobManagerCheckpointStorage", "jobmanager");
 
+    /** All config keys that {@link #mapCheckpointConfiguration} can produce. */
+    public static final Set<String> CHECKPOINT_CONFIG_KEYS =
+            Stream.concat(
+                            Stream.of(CheckpointConfigMapping.values()).map(m -> m.configKey),
+                            Stream.of(
+                                    CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION.key(),
+                                    CheckpointingOptions.STATE_BACKEND.key(),
+                                    CheckpointingOptions.CHECKPOINT_STORAGE.key()))
+                    .collect(Collectors.toUnmodifiableSet());
+
     private FlinkRuntimeConfigurationUtils() {}
 
     /**
@@ -171,7 +184,7 @@ public class FlinkRuntimeConfigurationUtils {
             String value = String.valueOf(rawResponse.get(mapping.jsonField));
 
             if (mapping == CheckpointConfigMapping.PROCESSING_MODE) {
-                value = mapProcessingMode(value);
+                value = value.toUpperCase();
             }
             if (mapping.isDuration) {
                 value += "ms";
@@ -188,16 +201,6 @@ public class FlinkRuntimeConfigurationUtils {
                 mappedConfig.size(),
                 mappedConfig);
         return mappedConfig;
-    }
-
-    private static String mapProcessingMode(String mode) {
-        if ("exactly_once".equals(mode)) {
-            return "EXACTLY_ONCE";
-        } else if ("at_least_once".equals(mode)) {
-            return "AT_LEAST_ONCE";
-        } else {
-            return mode.toUpperCase();
-        }
     }
 
     private static void mapExternalizedCheckpointInfo(

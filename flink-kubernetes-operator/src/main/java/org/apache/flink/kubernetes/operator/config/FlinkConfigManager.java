@@ -372,6 +372,10 @@ public class FlinkConfigManager {
         return conf;
     }
 
+    private RuntimeConfigCacheKey cacheKey(String namespace, String name, String jobId) {
+        return RuntimeConfigCacheKey.builder().namespace(namespace).name(name).jobId(jobId).build();
+    }
+
     /**
      * Store runtime configuration overrides in the cache. Called by observers after fetching
      * configuration from the Flink REST API.
@@ -383,13 +387,8 @@ public class FlinkConfigManager {
      */
     public void putRuntimeConfig(
             String namespace, String name, String jobId, Map<String, String> config) {
-        RuntimeConfigCacheKey cacheKey =
-                RuntimeConfigCacheKey.builder()
-                        .namespace(namespace)
-                        .name(name)
-                        .jobId(jobId)
-                        .build();
-        runtimeConfigCache.put(cacheKey, Collections.unmodifiableMap(config));
+        runtimeConfigCache.put(
+                cacheKey(namespace, name, jobId), Collections.unmodifiableMap(config));
         LOG.debug("Cached runtime configuration with {} entries", config.size());
     }
 
@@ -403,13 +402,8 @@ public class FlinkConfigManager {
      */
     public Optional<Map<String, String>> getRuntimeConfig(
             String namespace, String name, String jobId) {
-        RuntimeConfigCacheKey cacheKey =
-                RuntimeConfigCacheKey.builder()
-                        .namespace(namespace)
-                        .name(name)
-                        .jobId(jobId)
-                        .build();
-        return Optional.ofNullable(runtimeConfigCache.getIfPresent(cacheKey));
+        return Optional.ofNullable(
+                runtimeConfigCache.getIfPresent(cacheKey(namespace, name, jobId)));
     }
 
     /**

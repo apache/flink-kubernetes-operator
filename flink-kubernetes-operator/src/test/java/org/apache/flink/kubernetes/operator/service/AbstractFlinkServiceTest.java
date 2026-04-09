@@ -59,6 +59,8 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
+import org.apache.flink.runtime.rest.messages.ConfigurationInfo;
+import org.apache.flink.runtime.rest.messages.ConfigurationInfoEntry;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
@@ -74,6 +76,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessag
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricCollectionResponseBody;
@@ -1370,96 +1373,126 @@ public class AbstractFlinkServiceTest {
 
     @Test
     void testAllCheckpointConfigInfoFieldNamesCoveredByMapping() throws Exception {
-        Set<String> declaredFieldNames = new HashSet<>();
-        for (java.lang.reflect.Field f : CheckpointConfigInfo.class.getDeclaredFields()) {
-            if (f.getName().startsWith("FIELD_NAME_")
-                    && f.getType() == String.class
-                    && java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
-                declaredFieldNames.add((String) f.get(null));
-            }
-        }
-        assertFalse(declaredFieldNames.isEmpty(), "Should discover FIELD_NAME_* constants");
+        Set<String> declared = discoverFieldNameConstants(CheckpointConfigInfo.class);
+        assertFalse(declared.isEmpty(), "Should discover FIELD_NAME_* constants");
 
-        Set<String> mapped = new HashSet<>();
+        Set<String> handled = new HashSet<>();
         for (FlinkRuntimeConfigurationUtils.CheckpointConfigMapping m :
                 FlinkRuntimeConfigurationUtils.CheckpointConfigMapping.values()) {
-            mapped.add(m.getJsonField());
+            handled.add(m.getJsonField());
         }
-        mapped.add(CheckpointConfigInfo.FIELD_NAME_EXTERNALIZED_CHECKPOINT_CONFIG);
-        mapped.add(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND);
-        mapped.add(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE);
+        handled.add(CheckpointConfigInfo.FIELD_NAME_EXTERNALIZED_CHECKPOINT_CONFIG);
+        handled.add(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND);
+        handled.add(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE);
 
-        Set<String> unmapped = new HashSet<>(declaredFieldNames);
-        unmapped.removeAll(mapped);
+        declared.removeAll(handled);
         assertTrue(
-                unmapped.isEmpty(),
+                declared.isEmpty(),
                 "CheckpointConfigInfo FIELD_NAME constants not covered by "
                         + "CheckpointConfigMapping or explicit handlers: "
-                        + unmapped
-                        + ". Add a mapping for each new field or explicitly exclude it.");
+                        + declared);
     }
 
     @Test
     void testAllExecutionConfigInfoFieldNamesCoveredByMapping() throws Exception {
-        Set<String> declaredFieldNames = new HashSet<>();
-        for (java.lang.reflect.Field f :
-                JobConfigInfo.ExecutionConfigInfo.class.getDeclaredFields()) {
-            if (f.getName().startsWith("FIELD_NAME_")
-                    && f.getType() == String.class
-                    && java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
-                declaredFieldNames.add(f.getName());
-            }
-        }
-        assertFalse(declaredFieldNames.isEmpty(), "Should discover FIELD_NAME_* constants");
+        Set<String> declared = discoverFieldNameConstants(JobConfigInfo.ExecutionConfigInfo.class);
+        assertFalse(declared.isEmpty(), "Should discover FIELD_NAME_* constants");
 
-        // Fields mapped by FlinkRuntimeConfigurationUtils.mapJobConfiguration
-        Set<String> mapped =
+        Set<String> handled =
                 new HashSet<>(
                         Set.of(
-                                "FIELD_NAME_PARALLELISM",
-                                "FIELD_NAME_OBJECT_REUSE_MODE",
-                                "FIELD_NAME_GLOBAL_JOB_PARAMETERS"));
+                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_PARALLELISM,
+                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_OBJECT_REUSE_MODE,
+                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_GLOBAL_JOB_PARAMETERS,
+                                // Informational only, not runtime config overrides
+                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_EXECUTION_MODE,
+                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_RESTART_STRATEGY));
 
-        // Fields deliberately excluded: informational only, not runtime config overrides
-        Set<String> excluded = Set.of("FIELD_NAME_EXECUTION_MODE", "FIELD_NAME_RESTART_STRATEGY");
-        mapped.addAll(excluded);
-
-        Set<String> unmapped = new HashSet<>(declaredFieldNames);
-        unmapped.removeAll(mapped);
+        declared.removeAll(handled);
         assertTrue(
-                unmapped.isEmpty(),
-                "ExecutionConfigInfo FIELD_NAME constants not covered by "
-                        + "mapJobConfiguration or explicitly excluded: "
-                        + unmapped
-                        + ". Add a mapping in FlinkRuntimeConfigurationUtils.mapJobConfiguration "
-                        + "or add to the excluded set in this test.");
+                declared.isEmpty(),
+                "ExecutionConfigInfo FIELD_NAME constants not covered: "
+                        + declared
+                        + ". Add mapping or exclude explicitly.");
     }
 
     @Test
     void testMapJobConfigurationMapsAllExpectedFields() {
-        JobConfigInfo.ExecutionConfigInfo execInfo =
-                new JobConfigInfo.ExecutionConfigInfo(
-                        "PIPELINED", "fixedDelay", 4, true, Map.of("user.param", "value1"));
-        JobConfigInfo configInfo = new JobConfigInfo(new JobID(), "test-job", execInfo);
+        JobConfigInfo configInfo =
+                new JobConfigInfo(
+                        new JobID(),
+                        "test-job",
+                        new JobConfigInfo.ExecutionConfigInfo(
+                                "PIPELINED",
+                                "fixedDelay",
+                                4,
+                                true,
+                                Map.of("user.param", "value1")));
 
         Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo);
 
         assertEquals("4", result.get("parallelism.default"));
         assertEquals("true", result.get("pipeline.object-reuse"));
         assertEquals("value1", result.get("user.param"));
-        assertTrue(
-                result.size() >= 3,
-                "Should map at least parallelism, object-reuse, and user params");
+        assertEquals(3, result.size());
     }
 
     @Test
     void testMapJobConfigurationHandlesNullGracefully() {
-        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(null);
-        assertTrue(result.isEmpty(), "Null input should return empty map");
+        assertTrue(FlinkRuntimeConfigurationUtils.mapJobConfiguration(null).isEmpty());
+        assertTrue(
+                FlinkRuntimeConfigurationUtils.mapJobConfiguration(
+                                new JobConfigInfo(new JobID(), "test-job", null))
+                        .isEmpty());
+    }
 
-        JobConfigInfo noExecInfo = new JobConfigInfo(new JobID(), "test-job", null);
-        result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(noExecInfo);
-        assertTrue(result.isEmpty(), "Null ExecutionConfigInfo should return empty map");
+    @Test
+    void testGetJobManagerConfiguration() throws Exception {
+        var jmConfig = new ConfigurationInfo();
+        jmConfig.add(new ConfigurationInfoEntry("jobmanager.scheduler", "Adaptive"));
+        jmConfig.add(new ConfigurationInfoEntry("state.savepoints.dir", "/s3/savepoints"));
+        jmConfig.add(new ConfigurationInfoEntry("high-availability", "ZOOKEEPER"));
+
+        var service =
+                getTestingService(
+                        (headers, params, body) -> {
+                            if (headers instanceof JobManagerJobConfigurationHeaders) {
+                                return CompletableFuture.completedFuture((ResponseBody) jmConfig);
+                            }
+                            return CompletableFuture.failedFuture(
+                                    new UnsupportedOperationException());
+                        });
+
+        var result = service.getJobManagerConfiguration(configuration, JobID.generate());
+        assertEquals(3, result.size());
+        assertEquals("Adaptive", result.get("jobmanager.scheduler"));
+        assertEquals("/s3/savepoints", result.get("state.savepoints.dir"));
+        assertEquals("ZOOKEEPER", result.get("high-availability"));
+    }
+
+    @Test
+    void testGetJobManagerConfigurationReturnsEmptyOnFailure() throws Exception {
+        var service =
+                getTestingService(
+                        (headers, params, body) ->
+                                CompletableFuture.failedFuture(
+                                        new RuntimeException("connection refused")));
+
+        var result = service.getJobManagerConfiguration(configuration, JobID.generate());
+        assertTrue(result.isEmpty());
+    }
+
+    /** Discovers all {@code FIELD_NAME_*} string constants on a class via reflection. */
+    private static Set<String> discoverFieldNameConstants(Class<?> clazz) throws Exception {
+        Set<String> names = new HashSet<>();
+        for (java.lang.reflect.Field f : clazz.getDeclaredFields()) {
+            if (f.getName().startsWith("FIELD_NAME_")
+                    && f.getType() == String.class
+                    && java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                names.add((String) f.get(null));
+            }
+        }
+        return names;
     }
 
     class TestingService extends AbstractFlinkService {
