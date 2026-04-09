@@ -43,7 +43,11 @@ import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
+import org.apache.flink.runtime.rest.messages.ConfigurationInfo;
+import org.apache.flink.runtime.rest.messages.ConfigurationInfoEntry;
+import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
 import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
 import org.apache.flink.util.concurrent.Executors;
@@ -254,6 +258,23 @@ public class NativeFlinkServiceTest {
 
         var current = new AtomicReference<Map<JobVertexID, JobVertexResourceRequirements>>();
         var updated = new AtomicReference<Map<JobVertexID, JobVertexResourceRequirements>>();
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+
+        // Default JM config fallback: return Default scheduler (no adaptive)
+        var jmConfigResponse = new ConfigurationInfo();
+        jmConfigResponse.add(
+                new ConfigurationInfoEntry(
+                        JobManagerOptions.SCHEDULER.key(),
+                        JobManagerOptions.SchedulerType.Default.toString()));
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.completedFuture(jmConfigResponse);
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
         var service =
                 new NativeFlinkService(
                         client, null, executorService, operatorConfig, eventRecorder) {
@@ -270,6 +291,11 @@ public class NativeFlinkServiceTest {
                             AbstractFlinkResource<?, ?> resource,
                             Map<JobVertexID, JobVertexResourceRequirements> newReqs) {
                         updated.set(newReqs);
+                    }
+
+                    @Override
+                    public RestClusterClient<String> getClusterClient(Configuration config) {
+                        return testingClusterClient;
                     }
                 };
 
@@ -476,6 +502,131 @@ public class NativeFlinkServiceTest {
 
         // Test error handling
         current.set(null);
+        testScaleConditionDep(flinkDep, service, d -> {}, false);
+    }
+
+    @Test
+    public void testScalingWithJmConfigFallback() throws Exception {
+        var v1 = new JobVertexID();
+
+        var current = new AtomicReference<Map<JobVertexID, JobVertexResourceRequirements>>();
+        current.set(
+                Map.of(
+                        v1,
+                        new JobVertexResourceRequirements(
+                                new JobVertexResourceRequirements.Parallelism(1, 1))));
+        var updated = new AtomicReference<Map<JobVertexID, JobVertexResourceRequirements>>();
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+
+        var service =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder) {
+                    @Override
+                    protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
+                            RestClusterClient<String> client,
+                            AbstractFlinkResource<?, ?> resource) {
+                        return current.get();
+                    }
+
+                    @Override
+                    protected void updateVertexResources(
+                            RestClusterClient<String> client,
+                            AbstractFlinkResource<?, ?> resource,
+                            Map<JobVertexID, JobVertexResourceRequirements> newReqs) {
+                        updated.set(newReqs);
+                    }
+
+                    @Override
+                    public RestClusterClient<String> getClusterClient(Configuration config) {
+                        return testingClusterClient;
+                    }
+                };
+
+        // Build deployment WITHOUT adaptive scheduler in K8s spec (uses Default)
+        var flinkDep = TestUtils.buildApplicationCluster();
+        var spec = flinkDep.getSpec();
+        spec.setFlinkVersion(FlinkVersion.v1_18);
+
+        var appConfig = spec.getFlinkConfiguration().asConfiguration();
+        appConfig.set(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Default);
+        appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
+        spec.setFlinkConfiguration(appConfig);
+
+        var reconStatus = flinkDep.getStatus().getReconciliationStatus();
+        reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
+        flinkDep.getStatus().getJobStatus().setState(JobStatus.RUNNING);
+        flinkDep.getStatus().getJobStatus().setJobId(new JobID().toHexString());
+
+        // --- Case 1: JM REST returns Adaptive scheduler → in-place scaling should succeed ---
+        var adaptiveConfig = new ConfigurationInfo();
+        adaptiveConfig.add(
+                new ConfigurationInfoEntry(
+                        JobManagerOptions.SCHEDULER.key(),
+                        JobManagerOptions.SchedulerType.Adaptive.toString()));
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.completedFuture(adaptiveConfig);
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
+        testScaleConditionDep(flinkDep, service, d -> {}, true);
+
+        // --- Case 2: JM REST returns Default scheduler → in-place scaling should fail ---
+        var defaultConfig = new ConfigurationInfo();
+        defaultConfig.add(
+                new ConfigurationInfoEntry(
+                        JobManagerOptions.SCHEDULER.key(),
+                        JobManagerOptions.SchedulerType.Default.toString()));
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.completedFuture(defaultConfig);
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
+        testScaleConditionDep(flinkDep, service, d -> {}, false);
+
+        // --- Case 3: JM REST throws exception → in-place scaling should fail ---
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.failedFuture(
+                                new RuntimeException("Connection refused"));
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
+        testScaleConditionDep(flinkDep, service, d -> {}, false);
+
+        // --- Case 4: JM REST returns Adaptive but job is in terminal state → should NOT scale ---
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.completedFuture(adaptiveConfig);
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
+        testScaleConditionDep(
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState(JobStatus.FAILED),
+                false);
+
+        // --- Case 5: JM REST returns empty config (no scheduler key) → should NOT scale ---
+        var emptyConfig = new ConfigurationInfo();
+        testingClusterClient.setRequestProcessor(
+                (h, p, r) -> {
+                    if (h instanceof JobManagerJobConfigurationHeaders) {
+                        return CompletableFuture.completedFuture(emptyConfig);
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
         testScaleConditionDep(flinkDep, service, d -> {}, false);
     }
 
