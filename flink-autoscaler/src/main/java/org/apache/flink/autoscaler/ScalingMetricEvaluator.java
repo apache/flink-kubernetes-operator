@@ -109,7 +109,11 @@ public class ScalingMetricEvaluator {
                         vertex -> {
                             double lag = lastMetrics.get(vertex).getOrDefault(LAG, 0.0);
                             double inputRateAvg =
-                                    getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+                                    getAverageWithRateFallback(
+                                            ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                                            ScalingMetric.NUM_RECORDS_IN,
+                                            vertex,
+                                            metricsHistory);
                             if (Double.isNaN(inputRateAvg)) {
                                 return false;
                             }
@@ -139,7 +143,12 @@ public class ScalingMetricEvaluator {
 
         var vertexInfo = topology.get(vertex);
 
-        double inputRateAvg = getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+        double inputRateAvg =
+                getAverageWithRateFallback(
+                        ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                        ScalingMetric.NUM_RECORDS_IN,
+                        vertex,
+                        metricsHistory);
 
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         computeTargetDataRate(
@@ -331,7 +340,7 @@ public class ScalingMetricEvaluator {
         if (topology.isSource(vertex)) {
             double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
 
-            double lagRate = getRate(LAG, vertex, metricsHistory);
+            double lagRate = getAverageRate(LAG, vertex, metricsHistory);
             double ingestionDataRate = Math.max(0, inputRate + lagRate);
             if (Double.isNaN(ingestionDataRate)) {
                 throw new RuntimeException(
@@ -494,6 +503,49 @@ public class ScalingMetricEvaluator {
         return n < minElements ? Double.NaN : sum / n;
     }
 
+    public static double getAverageRate(
+            ScalingMetric metric,
+            @Nullable JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+
+        double sumRates = 0;
+        int n = 0;
+        Instant prevTs = null;
+        double prevValue = Double.NaN;
+
+        for (var entry : metricsHistory.entrySet()) {
+            double value =
+                    entry.getValue()
+                            .getVertexMetrics()
+                            .get(jobVertexId)
+                            .getOrDefault(metric, Double.NaN);
+            if (Double.isNaN(value)) {
+                continue;
+            }
+            if (!Double.isNaN(prevValue)) {
+                long tsDiff = Duration.between(prevTs, entry.getKey()).toMillis();
+                if (tsDiff > 0) {
+                    sumRates += 1000.0 * (value - prevValue) / tsDiff;
+                    n++;
+                }
+            }
+            prevValue = value;
+            prevTs = entry.getKey();
+        }
+        return n == 0 ? Double.NaN : sumRates / n;
+    }
+
+    public static double getAverageWithRateFallback(
+            ScalingMetric metric,
+            ScalingMetric fallbackMetric,
+            @Nullable JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        double average = getAverage(metric, jobVertexId, metricsHistory);
+        return Double.isInfinite(average) || Double.isNaN(average)
+                ? getRate(fallbackMetric, jobVertexId, metricsHistory)
+                : average;
+    }
+
     /**
      * Compute the In/Out ratio between the (from, to) vertices. The rate estimates the number of
      * output records produced to the downstream vertex for every input received for the upstream
@@ -513,7 +565,12 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             SortedMap<Instant, CollectedMetrics> metricsHistory) {
 
-        double inputRate = getRate(ScalingMetric.NUM_RECORDS_IN, from, metricsHistory);
+        double inputRate =
+                getAverageWithRateFallback(
+                        ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                        ScalingMetric.NUM_RECORDS_IN,
+                        from,
+                        metricsHistory);
 
         double outputRatio = 0;
         // If the input rate is zero, we also need to flatten the output rate.
@@ -552,7 +609,11 @@ public class ScalingMetricEvaluator {
         if (toVertexInputs.size() == 1) {
             LOG.debug(
                     "Computing edge ({}, {}) data rate for single input downstream task", from, to);
-            return getRate(ScalingMetric.NUM_RECORDS_IN, to, metricsHistory);
+            return getAverageWithRateFallback(
+                    ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                    ScalingMetric.NUM_RECORDS_IN,
+                    to,
+                    metricsHistory);
         }
 
         // Case 2: Downstream vertex has only inputs from upstream vertices which don't have other
@@ -565,7 +626,11 @@ public class ScalingMetricEvaluator {
             }
             if (topology.get(input).getOutputs().size() == 1) {
                 inputRateFromOtherVertices +=
-                        getRate(ScalingMetric.NUM_RECORDS_OUT, input, metricsHistory);
+                        getAverageWithRateFallback(
+                                ScalingMetric.NUM_RECORDS_OUT_PER_SECOND,
+                                ScalingMetric.NUM_RECORDS_OUT,
+                                input,
+                                metricsHistory);
             } else {
                 // Output vertex has multiple outputs, cannot use this information...
                 inputRateFromOtherVertices = Double.NaN;
@@ -577,8 +642,13 @@ public class ScalingMetricEvaluator {
                     "Computing edge ({}, {}) data rate by subtracting upstream input rates",
                     from,
                     to);
-            return getRate(ScalingMetric.NUM_RECORDS_IN, to, metricsHistory)
-                    - inputRateFromOtherVertices;
+            double inputRateAvg =
+                    getAverageWithRateFallback(
+                            ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                            ScalingMetric.NUM_RECORDS_IN,
+                            to,
+                            metricsHistory);
+            return inputRateAvg - inputRateFromOtherVertices;
         }
 
         // Case 3: We fall back simply to num records out, this is the least reliable
@@ -586,6 +656,10 @@ public class ScalingMetricEvaluator {
                 "Computing edge ({}, {}) data rate by falling back to from num records out",
                 from,
                 to);
-        return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
+        return getAverageWithRateFallback(
+                ScalingMetric.NUM_RECORDS_OUT_PER_SECOND,
+                ScalingMetric.NUM_RECORDS_OUT,
+                from,
+                metricsHistory);
     }
 }
