@@ -42,6 +42,8 @@ import javax.annotation.Nullable;
 
 import java.util.function.Function;
 
+import static org.apache.flink.kubernetes.operator.utils.AutoscalerUtils.discoverOrDefault;
+
 /** Context for reconciling a Flink resource. */
 @RequiredArgsConstructor
 public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?>> {
@@ -77,13 +79,17 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
 
         JobStatus jobStatus = status.getJobStatus().getState();
 
-        return new KubernetesJobAutoScalerContext(
-                jobId == null ? null : JobID.fromHexString(jobId),
-                jobStatus,
-                conf,
-                getResourceMetricGroup(),
-                () -> getFlinkService().getClusterClient(conf),
-                this);
+        return discoverOrDefault(
+                configManager.getDefaultConfig(),
+                KubernetesJobAutoScalerContext.class,
+                () ->
+                        new KubernetesJobAutoScalerContext(
+                                jobId == null ? null : JobID.fromHexString(jobId),
+                                jobStatus,
+                                conf,
+                                getResourceMetricGroup(),
+                                () -> getFlinkService().getClusterClient(conf),
+                                this));
     }
 
     /**
