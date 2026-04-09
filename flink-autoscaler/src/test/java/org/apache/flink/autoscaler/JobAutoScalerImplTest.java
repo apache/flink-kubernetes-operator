@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
@@ -293,6 +294,11 @@ public class JobAutoScalerImplTest {
         autoscaler.scale(context);
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
+        // Test job not running
+        var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        autoscaler.scale(notRunningContext);
+        assertParallelismOverrides(null);
+
         // Make sure cleanup removes everything
         assertTrue(stateStore.hasDataFor(context));
         autoscaler.cleanup(context);
@@ -384,7 +390,7 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testAutoscalerDisabled() throws Exception {
-        context.getConfiguration().setBoolean(AUTOSCALER_ENABLED, false);
+        context.getConfiguration().set(AUTOSCALER_ENABLED, false);
         context.getConfiguration().set(VERTEX_SCALING_HISTORY_AGE, Duration.ofMillis(200));
 
         var scalingHistory = new TreeMap<Instant, ScalingSummary>();
