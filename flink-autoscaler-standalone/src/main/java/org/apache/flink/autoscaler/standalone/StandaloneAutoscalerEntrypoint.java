@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
+import org.apache.flink.autoscaler.ScalingDecisionFilter;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
@@ -37,6 +38,10 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.ServiceLoader;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
@@ -88,13 +93,32 @@ public class StandaloneAutoscalerEntrypoint {
             JobAutoScaler<KEY, Context> createJobAutoscaler(
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
+
+        Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters =
+                discoverScalingDecisionFilters();
+
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore),
+                new ScalingExecutor<>(eventHandler, stateStore, null, scalingDecisionFilters),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingDecisionFilter<KEY, Context>> discoverScalingDecisionFilters() {
+        var filters = new ArrayList<ScalingDecisionFilter<KEY, Context>>();
+        ServiceLoader.load(ScalingDecisionFilter.class)
+                .forEach(
+                        filter -> {
+                            LOG.info(
+                                    "Discovered ScalingDecisionFilter via ServiceLoader: {}",
+                                    filter.getClass().getName());
+                            filters.add((ScalingDecisionFilter) filter);
+                        });
+        return filters;
     }
 
     @VisibleForTesting

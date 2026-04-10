@@ -44,11 +44,16 @@ import javax.annotation.Nullable;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
@@ -76,21 +81,47 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
     private final ResourceCheck resourceCheck;
+    private final Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore) {
-        this(autoScalerEventHandler, autoScalerStateStore, null);
+        this(autoScalerEventHandler, autoScalerStateStore, null, Collections.emptyList());
     }
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck) {
+        this(autoScalerEventHandler, autoScalerStateStore, resourceCheck, Collections.emptyList());
+    }
+
+    public ScalingExecutor(
+            AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
+            AutoScalerStateStore<KEY, Context> autoScalerStateStore,
+            @Nullable ResourceCheck resourceCheck,
+            Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
+        this.scalingDecisionFilters = sortByPriority(scalingDecisionFilters);
+    }
+
+    private static <K, C extends JobAutoScalerContext<K>>
+            Collection<ScalingDecisionFilter<K, C>> sortByPriority(
+                    Collection<ScalingDecisionFilter<K, C>> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return Collections.emptyList();
+        }
+        var sorted = new ArrayList<>(filters);
+        sorted.sort(Comparator.comparingInt(ScalingDecisionFilter::priority));
+        LOG.info(
+                "ScalingDecisionFilters registered (ordered by priority): {}",
+                sorted.stream()
+                        .map(f -> f.getClass().getName() + "(priority=" + f.priority() + ")")
+                        .collect(Collectors.joining(", ")));
+        return Collections.unmodifiableList(sorted);
     }
 
     public boolean scaleResource(
@@ -142,6 +173,18 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 context)) {
             return false;
         }
+
+        var filteredSummaries =
+                applyScalingDecisionFilters(
+                        context,
+                        memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
+                        evaluatedMetrics,
+                        jobTopology,
+                        scalingSummaries);
+        if (filteredSummaries.isEmpty()) {
+            return false;
+        }
+        scalingSummaries = filteredSummaries.get();
 
         addToScalingHistoryAndStore(
                 autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
@@ -457,6 +500,37 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
 
         return !scaleEnabled || isExcluded;
+    }
+
+    // Apply pluggable scaling decision filters (SPI extension point).
+    // Each filter may modify or veto the scaling summaries.
+    private Optional<Map<JobVertexID, ScalingSummary>> applyScalingDecisionFilters(
+            Context context,
+            Configuration conf,
+            EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        for (ScalingDecisionFilter<KEY, Context> filter : scalingDecisionFilters) {
+            Optional<Map<JobVertexID, ScalingSummary>> filtered =
+                    filter.filterScalingDecisions(
+                            context, conf, evaluatedMetrics, jobTopology, scalingSummaries);
+            if (filtered.isEmpty()) {
+                LOG.info(
+                        "Scaling vetoed by ScalingDecisionFilter: {}", filter.getClass().getName());
+                return Optional.empty();
+            }
+            scalingSummaries = filtered.get();
+            if (scalingSummaries.isEmpty()) {
+                LOG.info(
+                        "ScalingDecisionFilter {} returned empty summaries, skipping scaling.",
+                        filter.getClass().getName());
+                return Optional.empty();
+            }
+            LOG.info(
+                    "Scaling decision approved with the following summaries: {}",
+                    scalingSummaries.values());
+        }
+        return Optional.of(scalingSummaries);
     }
 
     @VisibleForTesting
