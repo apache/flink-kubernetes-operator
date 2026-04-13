@@ -25,6 +25,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
@@ -37,6 +38,10 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.ServiceLoader;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
@@ -88,13 +93,32 @@ public class StandaloneAutoscalerEntrypoint {
             JobAutoScaler<KEY, Context> createJobAutoscaler(
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
+
+        Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins =
+                discoverScalingExecutorPlugins();
+
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore),
+                new ScalingExecutor<>(eventHandler, stateStore, null, scalingExecutorPlugins),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingExecutorPlugin<KEY, Context>> discoverScalingExecutorPlugins() {
+        var plugins = new ArrayList<ScalingExecutorPlugin<KEY, Context>>();
+        ServiceLoader.load(ScalingExecutorPlugin.class)
+                .forEach(
+                        plugin -> {
+                            LOG.info(
+                                    "Discovered ScalingExecutorPlugin via ServiceLoader: {}",
+                                    plugin.getClass().getName());
+                            plugins.add((ScalingExecutorPlugin) plugin);
+                        });
+        return plugins;
     }
 
     @VisibleForTesting

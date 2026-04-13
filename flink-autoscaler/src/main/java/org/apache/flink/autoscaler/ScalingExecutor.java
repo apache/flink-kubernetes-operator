@@ -44,11 +44,15 @@ import javax.annotation.Nullable;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
@@ -76,21 +80,47 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
     private final ResourceCheck resourceCheck;
+    private final Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore) {
-        this(autoScalerEventHandler, autoScalerStateStore, null);
+        this(autoScalerEventHandler, autoScalerStateStore, null, Collections.emptyList());
     }
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck) {
+        this(autoScalerEventHandler, autoScalerStateStore, resourceCheck, Collections.emptyList());
+    }
+
+    public ScalingExecutor(
+            AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
+            AutoScalerStateStore<KEY, Context> autoScalerStateStore,
+            @Nullable ResourceCheck resourceCheck,
+            Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
+        this.scalingExecutorPlugins = sortByPriority(scalingExecutorPlugins);
+    }
+
+    private static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingExecutorPlugin<KEY, Context>> sortByPriority(
+                    Collection<ScalingExecutorPlugin<KEY, Context>> plugins) {
+        if (plugins == null || plugins.isEmpty()) {
+            return Collections.emptyList();
+        }
+        var sorted = new ArrayList<>(plugins);
+        sorted.sort(Comparator.comparingInt(ScalingExecutorPlugin::priority));
+        LOG.info(
+                "ScalingExecutorPlugins registered (ordered by priority): {}",
+                sorted.stream()
+                        .map(p -> p.getClass().getName() + "(priority=" + p.priority() + ")")
+                        .collect(Collectors.joining(", ")));
+        return Collections.unmodifiableList(sorted);
     }
 
     public boolean scaleResource(
@@ -140,6 +170,17 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 evaluatedMetrics,
                 scalingSummaries,
                 context)) {
+            return false;
+        }
+
+        scalingSummaries =
+                applyScalingExecutorPlugins(
+                        context,
+                        memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
+                        evaluatedMetrics,
+                        jobTopology,
+                        scalingSummaries);
+        if (scalingSummaries == null || scalingSummaries.isEmpty()) {
             return false;
         }
 
@@ -457,6 +498,30 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
 
         return !scaleEnabled || isExcluded;
+    }
+
+    // Apply pluggable scaling executor plugins (SPI extension point).
+    // Each plugin may modify or veto the scaling summaries.
+    private Map<JobVertexID, ScalingSummary> applyScalingExecutorPlugins(
+            Context context,
+            Configuration conf,
+            EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        var pluginContext =
+                new ScalingExecutorPlugin.Context<>(context, conf, evaluatedMetrics, jobTopology);
+        for (ScalingExecutorPlugin<KEY, Context> plugin : scalingExecutorPlugins) {
+            scalingSummaries = plugin.apply(pluginContext, scalingSummaries);
+            if (scalingSummaries == null || scalingSummaries.isEmpty()) {
+                LOG.info(
+                        "Scaling vetoed by ScalingExecutorPlugin: {}", plugin.getClass().getName());
+                return null;
+            }
+            LOG.info(
+                    "Scaling decision approved with the following summaries: {}",
+                    scalingSummaries.values());
+        }
+        return scalingSummaries;
     }
 
     @VisibleForTesting

@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
@@ -36,6 +35,7 @@ import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -46,6 +46,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -555,16 +557,9 @@ public class ScalingExecutorTest {
                 new ScalingExecutor<>(
                         eventCollector,
                         stateStore,
-                        new ResourceCheck() {
-                            @Override
-                            public boolean trySchedule(
-                                    int currentInstances,
-                                    int newInstances,
-                                    double cpuPerInstance,
-                                    MemorySize memoryPerInstance) {
-                                return false;
-                            }
-                        });
+                        (currentInstances, newInstances, cpuPerInstance, memoryPerInstance) ->
+                                false,
+                        Collections.emptyList());
 
         // Scaling blocked due to unavailable resources
         assertFalse(
@@ -1065,5 +1060,322 @@ public class ScalingExecutorTest {
                         Collectors.toMap(
                                 e -> JobVertexID.fromHexString(e.getKey()),
                                 e -> Integer.valueOf(e.getValue())));
+    }
+
+    @Nested
+    class ScalingExecutorPluginTest {
+
+        private JobVertexID source;
+        private JobVertexID sink;
+        private JobTopology jobTopology;
+        private EvaluatedMetrics metrics;
+
+        @BeforeEach
+        void setupFilter() {
+            source = new JobVertexID();
+            sink = new JobVertexID();
+            jobTopology =
+                    new JobTopology(
+                            new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                            new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
+            metrics =
+                    new EvaluatedMetrics(
+                            Map.of(source, evaluated(10, 110, 100), sink, evaluated(10, 110, 100)),
+                            dummyGlobalMetrics);
+        }
+
+        @Test
+        void testFilterApprovesScaling() throws Exception {
+            // A filter that approves scaling (passes through unchanged).
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
+                    (ctx, summaries) -> summaries;
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(approveFilter));
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterVetoesScaling() throws Exception {
+            // A filter that vetoes scaling.
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(vetoFilter));
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterModifiesSummaries() throws Exception {
+            // A filter that removes one vertex from scaling summaries.
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> modifyFilter =
+                    (ctx, summaries) -> {
+                        // Keep only the first entry
+                        var firstEntry = summaries.entrySet().iterator().next();
+                        return Map.of(firstEntry.getKey(), firstEntry.getValue());
+                    };
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(modifyFilter));
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Despite 2 vertices needing scaling, only 1 should be in overrides
+            // because the filter removed one
+            var overrides = stateStore.getParallelismOverrides(context);
+            assertFalse(overrides.isEmpty());
+        }
+
+        @Test
+        void testFilterReturnsEmptyMapVetoesScaling() throws Exception {
+            // A filter that returns empty map (no vertices left to scale).
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> emptyMapFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(
+                            eventCollector, stateStore, null, List.of(emptyMapFilter));
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testMultipleFiltersChained() throws Exception {
+            // First filter: approves scaling
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
+                    (ctx, summaries) -> summaries;
+
+            // Second filter: vetoes scaling
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilters =
+                    new ScalingExecutor<>(
+                            eventCollector, stateStore, null, List.of(approveFilter, vetoFilter));
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testMultipleFiltersAllApprove() throws Exception {
+            // Both filters approve
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter1 =
+                    (ctx, summaries) -> summaries;
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter2 =
+                    (ctx, summaries) -> summaries;
+
+            var executorWithFilters =
+                    new ScalingExecutor<>(
+                            eventCollector, stateStore, null, List.of(filter1, filter2));
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testNoFiltersScalesNormally() throws Exception {
+            // Empty filter collection (default behavior)
+            var executorNoFilters =
+                    new ScalingExecutor<>(
+                            eventCollector, stateStore, null, Collections.emptyList());
+
+            var now = Instant.now();
+            assertTrue(
+                    executorNoFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterReceivesCorrectContext() throws Exception {
+            // A filter that asserts it receives the expected context parameters
+            var receivedContextHolder =
+                    new Object() {
+                        ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                pluginContext;
+                        Map<JobVertexID, ScalingSummary> summaries;
+                    };
+
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> captureFilter =
+                    (ctx, summaries) -> {
+                        receivedContextHolder.pluginContext = ctx;
+                        receivedContextHolder.summaries = summaries;
+                        return summaries;
+                    };
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(captureFilter));
+
+            var now = Instant.now();
+            executorWithFilter.scaleResource(
+                    context,
+                    metrics,
+                    new HashMap<>(),
+                    new ScalingTracking(),
+                    now,
+                    jobTopology,
+                    new DelayedScaleDown());
+
+            assertThat(receivedContextHolder.pluginContext).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getAutoScalerContext())
+                    .isSameAs(context);
+            assertThat(receivedContextHolder.pluginContext.getConfiguration()).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getEvaluatedMetrics()).isSameAs(metrics);
+            assertThat(receivedContextHolder.pluginContext.getJobTopology()).isSameAs(jobTopology);
+            assertThat(receivedContextHolder.summaries).isNotEmpty();
+            // Both vertices should be in the summaries since both are above target
+            assertThat(receivedContextHolder.summaries).containsKey(source);
+            assertThat(receivedContextHolder.summaries).containsKey(sink);
+        }
+
+        @Test
+        void testFilterPriorityOrdering() throws Exception {
+            // Track execution order
+            var executionOrder = new ArrayList<String>();
+
+            // High priority filter (priority = -10, should execute first)
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> highPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public int priority() {
+                            return -10;
+                        }
+
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("high");
+                            return summaries;
+                        }
+                    };
+
+            // Default priority filter (priority = 0, should execute second)
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> defaultPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("default");
+                            return summaries;
+                        }
+                    };
+
+            // Low priority filter (priority = 10, should execute last)
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> lowPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public int priority() {
+                            return 10;
+                        }
+
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("low");
+                            return summaries;
+                        }
+                    };
+
+            // Pass them in reverse order to prove sorting works
+            var executorWithFilters =
+                    new ScalingExecutor<>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            List.of(lowPriorityFilter, defaultPriorityFilter, highPriorityFilter));
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Verify they executed in priority order: high (-10), default (0), low (10)
+            assertThat(executionOrder).containsExactly("high", "default", "low");
+        }
     }
 }
