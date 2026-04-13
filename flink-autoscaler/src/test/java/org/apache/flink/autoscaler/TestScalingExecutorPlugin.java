@@ -37,7 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * A test {@link ScalingDecisionFilter} implementation that demonstrates a CPU-aware, source-aligned
+ * A test {@link ScalingExecutorPlugin} implementation that demonstrates a CPU-aware, source-aligned
  * scaling strategy:
  *
  * <ol>
@@ -47,14 +47,14 @@ import java.util.Optional;
  *   <li>If the source vertex's parallelism did not increase, veto the scaling entirely.
  * </ol>
  *
- * <p>This filter is intended for testing and demonstration purposes. In production, deploy it as a
- * plugin JAR with a {@code META-INF/services/org.apache.flink.autoscaler.ScalingDecisionFilter}
+ * <p>This plugin is intended for testing and demonstration purposes. In production, deploy it as a
+ * plugin JAR with a {@code META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin}
  * file.
  */
-public class TestScalingDecisionFilter<KEY, Context extends JobAutoScalerContext<KEY>>
-        implements ScalingDecisionFilter<KEY, Context> {
+public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext<KEY>>
+        implements ScalingExecutorPlugin<KEY, Context> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(TestScalingDecisionFilter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TestScalingExecutorPlugin.class);
 
     /** The Flink TM metric name for JVM process CPU usage (0.0 to 1.0). */
     private static final String TM_CPU_LOAD_METRIC = "Status.JVM.CPU.Load";
@@ -64,11 +64,11 @@ public class TestScalingDecisionFilter<KEY, Context extends JobAutoScalerContext
 
     private final double cpuThreshold;
 
-    public TestScalingDecisionFilter() {
+    public TestScalingExecutorPlugin() {
         this(DEFAULT_CPU_THRESHOLD);
     }
 
-    public TestScalingDecisionFilter(double cpuThreshold) {
+    public TestScalingExecutorPlugin(double cpuThreshold) {
         this.cpuThreshold = cpuThreshold;
     }
 

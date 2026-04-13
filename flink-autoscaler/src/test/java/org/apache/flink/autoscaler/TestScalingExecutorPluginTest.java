@@ -51,8 +51,8 @@ import java.util.concurrent.CompletableFuture;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Tests for {@link TestScalingDecisionFilter}. */
-class TestScalingDecisionFilterTest {
+/** Tests for {@link TestScalingExecutorPlugin}. */
+class TestScalingExecutorPluginTest {
 
     private Configuration conf;
     private JobVertexID source;
@@ -73,12 +73,12 @@ class TestScalingDecisionFilterTest {
     @Test
     void testCpuThresholdBoundary() {
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.9);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.9);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -88,12 +88,12 @@ class TestScalingDecisionFilterTest {
     void testDefaultThreshold() {
         // Uses default threshold (0.8), CPU 0.7 -> below
         var context = createContextWithCpuLoad(0.7);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>();
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>();
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isEmpty();
@@ -103,12 +103,12 @@ class TestScalingDecisionFilterTest {
     void testVetoWhenRestClientFails() {
         // REST client that throws an exception
         var context = createContextWithFailingRestClient();
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.5);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // Should veto as safety measure when REST query fails
@@ -119,12 +119,12 @@ class TestScalingDecisionFilterTest {
     void testVetoWhenAvgCpuBelowThreshold() {
         // CPU 0.5 < threshold 0.8
         var context = createContextWithCpuLoad(0.5);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.8);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.8);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isEmpty();
@@ -134,12 +134,12 @@ class TestScalingDecisionFilterTest {
     void testAllowWhenAvgCpuAboveThreshold() {
         // CPU 0.9 > threshold 0.8; source scales up
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.8);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.8);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -152,12 +152,12 @@ class TestScalingDecisionFilterTest {
     void testVetoWhenSourceNotScalingUp() {
         // CPU is high but source scales DOWN (20 -> 10)
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.5);
 
         var summaries = createSummaries(source, 20, 10, sink, 10, 20);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // Source didn't increase -> veto
@@ -168,13 +168,13 @@ class TestScalingDecisionFilterTest {
     void testVetoWhenSourceNotInSummaries() {
         // CPU is high but source is not in summaries
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.5);
 
         var summaries = new HashMap<JobVertexID, ScalingSummary>();
         summaries.put(sink, new ScalingSummary(10, 20, createVertexMetrics()));
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // No source in summaries -> veto
@@ -185,12 +185,12 @@ class TestScalingDecisionFilterTest {
     void testAlignSinkToSourceParallelism() {
         // Source: 10 -> 30, Sink: 10 -> 15 (autoscaler computed differently)
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.5);
 
         var summaries = createSummaries(source, 10, 30, sink, 10, 15);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -204,12 +204,12 @@ class TestScalingDecisionFilterTest {
     void testSkipVertexAlreadyAtSourceParallelism() {
         // Source: 10 -> 20, Sink: current=20, computed new=25
         var context = createContextWithCpuLoad(0.9);
-        var filter = new TestScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>>(0.5);
 
         var summaries = createSummaries(source, 10, 20, sink, 20, 25);
 
         var result =
-                filter.filterScalingDecisions(
+                plugin.filterScalingDecisions(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();

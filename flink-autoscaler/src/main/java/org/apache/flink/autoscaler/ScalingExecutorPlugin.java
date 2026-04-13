@@ -26,34 +26,34 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * A pluggable filter that allows users to intercept, modify, or reject computed scaling decisions
+ * A pluggable plugin that allows users to intercept, modify, or reject computed scaling decisions
  * before they are applied. Implementations are invoked in the {@link ScalingExecutor} after scaling
  * summaries have been computed and the blocked check has passed, but before the actual application
  * of parallelism overrides.
  *
- * <p>Multiple filter implementations can be chained. Each filter receives the (possibly modified)
- * output of the previous filter. If any filter returns an empty {@link Optional}, the scaling
+ * <p>Multiple plugin implementations can be chained. Each plugin receives the (possibly modified)
+ * output of the previous plugin. If any plugin returns an empty {@link Optional}, the scaling
  * operation is vetoed entirely.
  *
  * <p>This is complementary to FLIP-514 (Custom Evaluator plugin for Flink Autoscaler) and provides
  * extensibility at the scaling decision execution layer.
  *
  * <p>Implementations are discovered via Java's {@link java.util.ServiceLoader} mechanism. To
- * register a custom filter, add the fully qualified class name of the implementation to {@code
- * META-INF/services/org.apache.flink.autoscaler.ScalingDecisionFilter}.
+ * register a custom plugin, add the fully qualified class name of the implementation to {@code
+ * META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin}.
  *
  * @param <KEY> The job key.
  * @param <Context> Instance of {@link JobAutoScalerContext}.
  */
-public interface ScalingDecisionFilter<KEY, Context extends JobAutoScalerContext<KEY>> {
+public interface ScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     /**
-     * Returns the priority of this filter in the chain. Filters with lower priority values are
-     * executed first. The default priority is 0. Filters with equal priority have no guaranteed
+     * Returns the priority of this plugin in the chain. Plugins with lower priority values are
+     * executed first. The default priority is 0. Plugins with equal priority have no guaranteed
      * relative ordering.
      *
-     * <p>Example usage: a resource-gating filter (priority -100) should run before a
-     * parallelism-alignment filter (priority 0), which should run before a cost-cap filter
+     * <p>Example usage: a resource-gating plugin (priority -100) should run before a
+     * parallelism-alignment plugin (priority 0), which should run before a cost-cap plugin
      * (priority 100).
      *
      * @return the priority value; lower values execute first.

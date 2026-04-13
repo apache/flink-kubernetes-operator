@@ -81,7 +81,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
     private final ResourceCheck resourceCheck;
-    private final Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters;
+    private final Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
@@ -100,26 +100,26 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck,
-            Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters) {
+            Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
-        this.scalingDecisionFilters = sortByPriority(scalingDecisionFilters);
+        this.scalingExecutorPlugins = sortByPriority(scalingExecutorPlugins);
     }
 
     private static <K, C extends JobAutoScalerContext<K>>
-            Collection<ScalingDecisionFilter<K, C>> sortByPriority(
-                    Collection<ScalingDecisionFilter<K, C>> filters) {
-        if (filters == null || filters.isEmpty()) {
+            Collection<ScalingExecutorPlugin<K, C>> sortByPriority(
+                    Collection<ScalingExecutorPlugin<K, C>> plugins) {
+        if (plugins == null || plugins.isEmpty()) {
             return Collections.emptyList();
         }
-        var sorted = new ArrayList<>(filters);
-        sorted.sort(Comparator.comparingInt(ScalingDecisionFilter::priority));
+        var sorted = new ArrayList<>(plugins);
+        sorted.sort(Comparator.comparingInt(ScalingExecutorPlugin::priority));
         LOG.info(
-                "ScalingDecisionFilters registered (ordered by priority): {}",
+                "ScalingExecutorPlugins registered (ordered by priority): {}",
                 sorted.stream()
-                        .map(f -> f.getClass().getName() + "(priority=" + f.priority() + ")")
+                        .map(p -> p.getClass().getName() + "(priority=" + p.priority() + ")")
                         .collect(Collectors.joining(", ")));
         return Collections.unmodifiableList(sorted);
     }
@@ -175,7 +175,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var filteredSummaries =
-                applyScalingDecisionFilters(
+                applyScalingExecutorPlugins(
                         context,
                         memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
                         evaluatedMetrics,
@@ -502,28 +502,28 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         return !scaleEnabled || isExcluded;
     }
 
-    // Apply pluggable scaling decision filters (SPI extension point).
-    // Each filter may modify or veto the scaling summaries.
-    private Optional<Map<JobVertexID, ScalingSummary>> applyScalingDecisionFilters(
+    // Apply pluggable scaling executor plugins (SPI extension point).
+    // Each plugin may modify or veto the scaling summaries.
+    private Optional<Map<JobVertexID, ScalingSummary>> applyScalingExecutorPlugins(
             Context context,
             Configuration conf,
             EvaluatedMetrics evaluatedMetrics,
             JobTopology jobTopology,
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
-        for (ScalingDecisionFilter<KEY, Context> filter : scalingDecisionFilters) {
+        for (ScalingExecutorPlugin<KEY, Context> plugin : scalingExecutorPlugins) {
             Optional<Map<JobVertexID, ScalingSummary>> filtered =
-                    filter.filterScalingDecisions(
+                    plugin.filterScalingDecisions(
                             context, conf, evaluatedMetrics, jobTopology, scalingSummaries);
             if (filtered.isEmpty()) {
                 LOG.info(
-                        "Scaling vetoed by ScalingDecisionFilter: {}", filter.getClass().getName());
+                        "Scaling vetoed by ScalingExecutorPlugin: {}", plugin.getClass().getName());
                 return Optional.empty();
             }
             scalingSummaries = filtered.get();
             if (scalingSummaries.isEmpty()) {
                 LOG.info(
-                        "ScalingDecisionFilter {} returned empty summaries, skipping scaling.",
-                        filter.getClass().getName());
+                        "ScalingExecutorPlugin {} returned empty summaries, skipping scaling.",
+                        plugin.getClass().getName());
                 return Optional.empty();
             }
             LOG.info(

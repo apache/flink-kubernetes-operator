@@ -24,8 +24,8 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
-import org.apache.flink.autoscaler.ScalingDecisionFilter;
 import org.apache.flink.autoscaler.ScalingExecutor;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
@@ -94,13 +94,13 @@ public class StandaloneAutoscalerEntrypoint {
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
 
-        Collection<ScalingDecisionFilter<KEY, Context>> scalingDecisionFilters =
-                discoverScalingDecisionFilters();
+        Collection<ScalingExecutorPlugin<KEY, Context>> scalingExecutorPlugins =
+                discoverScalingExecutorPlugins();
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore, null, scalingDecisionFilters),
+                new ScalingExecutor<>(eventHandler, stateStore, null, scalingExecutorPlugins),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);
@@ -108,17 +108,17 @@ public class StandaloneAutoscalerEntrypoint {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
-            Collection<ScalingDecisionFilter<KEY, Context>> discoverScalingDecisionFilters() {
-        var filters = new ArrayList<ScalingDecisionFilter<KEY, Context>>();
-        ServiceLoader.load(ScalingDecisionFilter.class)
+            Collection<ScalingExecutorPlugin<KEY, Context>> discoverScalingExecutorPlugins() {
+        var plugins = new ArrayList<ScalingExecutorPlugin<KEY, Context>>();
+        ServiceLoader.load(ScalingExecutorPlugin.class)
                 .forEach(
-                        filter -> {
+                        plugin -> {
                             LOG.info(
-                                    "Discovered ScalingDecisionFilter via ServiceLoader: {}",
-                                    filter.getClass().getName());
-                            filters.add((ScalingDecisionFilter) filter);
+                                    "Discovered ScalingExecutorPlugin via ServiceLoader: {}",
+                                    plugin.getClass().getName());
+                            plugins.add((ScalingExecutorPlugin) plugin);
                         });
-        return filters;
+        return plugins;
     }
 
     @VisibleForTesting

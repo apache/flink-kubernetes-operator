@@ -1,6 +1,6 @@
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.autoscaler.ScalingDecisionFilter;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginUtils;
@@ -17,23 +17,23 @@ public class AutoscalerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerUtils.class);
 
     @SuppressWarnings({"unchecked"})
-    public static Collection<ScalingDecisionFilter<ResourceID, KubernetesJobAutoScalerContext>>
-    discoverScalingDecisionFilters(Configuration conf) {
-        var filters =
-                new ArrayList<ScalingDecisionFilter<ResourceID, KubernetesJobAutoScalerContext>>();
+    public static Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
+            discoverScalingExecutorPlugins(Configuration conf) {
+        var plugins =
+                new ArrayList<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>();
         PluginUtils.createPluginManagerFromRootFolder(conf)
-                .load(ScalingDecisionFilter.class)
+                .load(ScalingExecutorPlugin.class)
                 .forEachRemaining(
-                        filter -> {
+                        plugin -> {
                             LOG.info(
-                                    "Discovered ScalingDecisionFilter from plugin directory[{}]: {}.",
+                                    "Discovered ScalingExecutorPlugin from plugin directory[{}]: {}.",
                                     System.getenv()
                                             .getOrDefault(
                                                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                                                     ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
-                                    filter.getClass().getName());
-                            filters.add(filter);
+                                    plugin.getClass().getName());
+                            plugins.add(plugin);
                         });
-        return filters;
+        return plugins;
     }
 }

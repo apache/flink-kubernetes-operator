@@ -1063,7 +1063,7 @@ public class ScalingExecutorTest {
     }
 
     @Nested
-    class ScalingDecisionFilterTest {
+    class ScalingExecutorPluginTest {
 
         private JobVertexID source;
         private JobVertexID sink;
@@ -1087,7 +1087,7 @@ public class ScalingExecutorTest {
         @Test
         void testFilterApprovesScaling() throws Exception {
             // A filter that approves scaling (passes through unchanged).
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> approveFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
 
             var executorWithFilter =
@@ -1110,7 +1110,7 @@ public class ScalingExecutorTest {
         @Test
         void testFilterVetoesScaling() throws Exception {
             // A filter that vetoes scaling.
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.empty();
 
             var executorWithFilter =
@@ -1133,7 +1133,7 @@ public class ScalingExecutorTest {
         @Test
         void testFilterModifiesSummaries() throws Exception {
             // A filter that removes one vertex from scaling summaries.
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> modifyFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> modifyFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> {
                         // Keep only the first entry
                         var firstEntry = summaries.entrySet().iterator().next();
@@ -1163,7 +1163,7 @@ public class ScalingExecutorTest {
         @Test
         void testFilterReturnsEmptyMapVetoesScaling() throws Exception {
             // A filter that returns empty map (no vertices left to scale).
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> emptyMapFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> emptyMapFilter =
                     (ctx, conf, evalMetrics, topology, summaries) ->
                             Optional.of(Collections.emptyMap());
 
@@ -1188,11 +1188,11 @@ public class ScalingExecutorTest {
         @Test
         void testMultipleFiltersChained() throws Exception {
             // First filter: approves scaling
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> approveFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
 
             // Second filter: vetoes scaling
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.empty();
 
             var executorWithFilters =
@@ -1216,9 +1216,9 @@ public class ScalingExecutorTest {
         @Test
         void testMultipleFiltersAllApprove() throws Exception {
             // Both filters approve
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> filter1 =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter1 =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> filter2 =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter2 =
                     (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
 
             var executorWithFilters =
@@ -1272,7 +1272,7 @@ public class ScalingExecutorTest {
                         Map<JobVertexID, ScalingSummary> summaries;
                     };
 
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> captureFilter =
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> captureFilter =
                     (ctx, conf, evalMetrics, topology, summaries) -> {
                         receivedContextHolder.ctx = ctx;
                         receivedContextHolder.conf = conf;
@@ -1311,8 +1311,8 @@ public class ScalingExecutorTest {
             var executionOrder = new ArrayList<String>();
 
             // High priority filter (priority = -10, should execute first)
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> highPriorityFilter =
-                    new ScalingDecisionFilter<>() {
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> highPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
                         @Override
                         public int priority() {
                             return -10;
@@ -1331,8 +1331,8 @@ public class ScalingExecutorTest {
                     };
 
             // Default priority filter (priority = 0, should execute second)
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> defaultPriorityFilter =
-                    new ScalingDecisionFilter<>() {
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> defaultPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
                         @Override
                         public Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
                                 JobAutoScalerContext<JobID> ctx,
@@ -1346,8 +1346,8 @@ public class ScalingExecutorTest {
                     };
 
             // Low priority filter (priority = 10, should execute last)
-            ScalingDecisionFilter<JobID, JobAutoScalerContext<JobID>> lowPriorityFilter =
-                    new ScalingDecisionFilter<>() {
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> lowPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
                         @Override
                         public int priority() {
                             return 10;

@@ -31,7 +31,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
-import static org.apache.flink.kubernetes.operator.utils.AutoscalerUtils.discoverScalingDecisionFilters;
+import static org.apache.flink.kubernetes.operator.utils.AutoscalerUtils.discoverScalingExecutorPlugins;
 
 /** The factory of {@link JobAutoScaler}. */
 public class AutoscalerFactory {
@@ -45,13 +45,13 @@ public class AutoscalerFactory {
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
 
-        var scalingDecisionFilters = discoverScalingDecisionFilters(conf);
+        var scalingExecutorPlugins = discoverScalingExecutorPlugins(conf);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
                 new ScalingExecutor<>(
-                        eventHandler, stateStore, clusterResourceManager, scalingDecisionFilters),
+                        eventHandler, stateStore, clusterResourceManager, scalingExecutorPlugins),
                 eventHandler,
                 new KubernetesScalingRealizer(),
                 stateStore);
