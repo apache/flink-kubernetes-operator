@@ -1319,7 +1319,7 @@ public class ScalingExecutorTest {
                         }
 
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
+                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
                                 JobAutoScalerContext<JobID> ctx,
                                 Configuration conf,
                                 EvaluatedMetrics evalMetrics,
@@ -1334,7 +1334,7 @@ public class ScalingExecutorTest {
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> defaultPriorityFilter =
                     new ScalingExecutorPlugin<>() {
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
+                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
                                 JobAutoScalerContext<JobID> ctx,
                                 Configuration conf,
                                 EvaluatedMetrics evalMetrics,
@@ -1354,7 +1354,7 @@ public class ScalingExecutorTest {
                         }
 
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
+                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
                                 JobAutoScalerContext<JobID> ctx,
                                 Configuration conf,
                                 EvaluatedMetrics evalMetrics,

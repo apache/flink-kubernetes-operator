@@ -73,7 +73,7 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
+    public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
             Context context,
             Configuration conf,
             EvaluatedMetrics evaluatedMetrics,

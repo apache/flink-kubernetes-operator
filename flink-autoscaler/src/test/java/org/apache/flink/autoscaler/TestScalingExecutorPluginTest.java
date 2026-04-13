@@ -78,7 +78,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -93,7 +93,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isEmpty();
@@ -108,7 +108,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // Should veto as safety measure when REST query fails
@@ -124,7 +124,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isEmpty();
@@ -139,7 +139,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -157,7 +157,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 20, 10, sink, 10, 20);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // Source didn't increase -> veto
@@ -174,7 +174,7 @@ class TestScalingExecutorPluginTest {
         summaries.put(sink, new ScalingSummary(10, 20, createVertexMetrics()));
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         // No source in summaries -> veto
@@ -190,7 +190,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 30, sink, 10, 15);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();
@@ -209,7 +209,7 @@ class TestScalingExecutorPluginTest {
         var summaries = createSummaries(source, 10, 20, sink, 20, 25);
 
         var result =
-                plugin.filterScalingDecisions(
+                plugin.filterScalingSummaries(
                         context, conf, createMetrics(), jobTopology, summaries);
 
         assertThat(result).isPresent();

@@ -512,7 +512,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
         for (ScalingExecutorPlugin<KEY, Context> plugin : scalingExecutorPlugins) {
             Optional<Map<JobVertexID, ScalingSummary>> filtered =
-                    plugin.filterScalingDecisions(
+                    plugin.filterScalingSummaries(
                             context, conf, evaluatedMetrics, jobTopology, scalingSummaries);
             if (filtered.isEmpty()) {
                 LOG.info(

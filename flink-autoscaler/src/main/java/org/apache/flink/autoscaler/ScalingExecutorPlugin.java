@@ -82,7 +82,7 @@ public interface ScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
      * @return An {@link Optional} containing the (possibly modified) scaling summaries to apply, or
      *     an empty {@link Optional} to veto the scaling.
      */
-    Optional<Map<JobVertexID, ScalingSummary>> filterScalingDecisions(
+    Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
             Context context,
             Configuration conf,
             EvaluatedMetrics evaluatedMetrics,
