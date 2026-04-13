@@ -70,6 +70,12 @@ class TestScalingExecutorPluginTest {
                         new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
     }
 
+    private ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>> createPluginContext(
+            JobAutoScalerContext<JobID> autoScalerContext) {
+        return new ScalingExecutorPlugin.Context<>(
+                autoScalerContext, conf, createMetrics(), jobTopology);
+    }
+
     @Test
     void testCpuThresholdBoundary() {
         var context = createContextWithCpuLoad(0.9);
@@ -77,11 +83,9 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
-        assertThat(result).isPresent();
+        assertThat(result).isNotEmpty();
     }
 
     @Test
@@ -92,9 +96,7 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
         assertThat(result).isEmpty();
     }
@@ -107,9 +109,7 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
         // Should veto as safety measure when REST query fails
         assertThat(result).isEmpty();
@@ -123,9 +123,7 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
         assertThat(result).isEmpty();
     }
@@ -138,14 +136,12 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
-        assertThat(result).isPresent();
+        assertThat(result).isNotEmpty();
         // Sink should be aligned to source's new parallelism (20)
-        assertThat(result.get().get(source).getNewParallelism()).isEqualTo(20);
-        assertThat(result.get().get(sink).getNewParallelism()).isEqualTo(20);
+        assertThat(result.get(source).getNewParallelism()).isEqualTo(20);
+        assertThat(result.get(sink).getNewParallelism()).isEqualTo(20);
     }
 
     @Test
@@ -156,9 +152,7 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 20, 10, sink, 10, 20);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
         // Source didn't increase -> veto
         assertThat(result).isEmpty();
@@ -173,9 +167,7 @@ class TestScalingExecutorPluginTest {
         var summaries = new HashMap<JobVertexID, ScalingSummary>();
         summaries.put(sink, new ScalingSummary(10, 20, createVertexMetrics()));
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
         // No source in summaries -> veto
         assertThat(result).isEmpty();
@@ -189,15 +181,13 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 30, sink, 10, 15);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
-        assertThat(result).isPresent();
-        assertThat(result.get()).hasSize(2);
-        assertThat(result.get().get(source).getNewParallelism()).isEqualTo(30);
+        assertThat(result).isNotEmpty();
+        assertThat(result).hasSize(2);
+        assertThat(result.get(source).getNewParallelism()).isEqualTo(30);
         // Sink aligned to source's new parallelism
-        assertThat(result.get().get(sink).getNewParallelism()).isEqualTo(30);
+        assertThat(result.get(sink).getNewParallelism()).isEqualTo(30);
     }
 
     @Test
@@ -208,14 +198,12 @@ class TestScalingExecutorPluginTest {
 
         var summaries = createSummaries(source, 10, 20, sink, 20, 25);
 
-        var result =
-                plugin.filterScalingSummaries(
-                        context, conf, createMetrics(), jobTopology, summaries);
+        var result = plugin.apply(createPluginContext(context), summaries);
 
-        assertThat(result).isPresent();
+        assertThat(result).isNotEmpty();
         // Sink's current parallelism (20) == source's new parallelism (20) -> sink skipped
-        assertThat(result.get()).hasSize(1);
-        assertThat(result.get()).containsKey(source);
+        assertThat(result).hasSize(1);
+        assertThat(result).containsKey(source);
     }
 
     /**

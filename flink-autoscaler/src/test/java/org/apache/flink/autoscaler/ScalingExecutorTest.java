@@ -1088,7 +1088,7 @@ public class ScalingExecutorTest {
         void testFilterApprovesScaling() throws Exception {
             // A filter that approves scaling (passes through unchanged).
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
+                    (ctx, summaries) -> summaries;
 
             var executorWithFilter =
                     new ScalingExecutor<>(eventCollector, stateStore, null, List.of(approveFilter));
@@ -1111,7 +1111,7 @@ public class ScalingExecutorTest {
         void testFilterVetoesScaling() throws Exception {
             // A filter that vetoes scaling.
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.empty();
+                    (ctx, summaries) -> Collections.emptyMap();
 
             var executorWithFilter =
                     new ScalingExecutor<>(eventCollector, stateStore, null, List.of(vetoFilter));
@@ -1134,10 +1134,10 @@ public class ScalingExecutorTest {
         void testFilterModifiesSummaries() throws Exception {
             // A filter that removes one vertex from scaling summaries.
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> modifyFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> {
+                    (ctx, summaries) -> {
                         // Keep only the first entry
                         var firstEntry = summaries.entrySet().iterator().next();
-                        return Optional.of(Map.of(firstEntry.getKey(), firstEntry.getValue()));
+                        return Map.of(firstEntry.getKey(), firstEntry.getValue());
                     };
 
             var executorWithFilter =
@@ -1164,8 +1164,7 @@ public class ScalingExecutorTest {
         void testFilterReturnsEmptyMapVetoesScaling() throws Exception {
             // A filter that returns empty map (no vertices left to scale).
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> emptyMapFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) ->
-                            Optional.of(Collections.emptyMap());
+                    (ctx, summaries) -> Collections.emptyMap();
 
             var executorWithFilter =
                     new ScalingExecutor<>(
@@ -1189,11 +1188,11 @@ public class ScalingExecutorTest {
         void testMultipleFiltersChained() throws Exception {
             // First filter: approves scaling
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
+                    (ctx, summaries) -> summaries;
 
             // Second filter: vetoes scaling
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.empty();
+                    (ctx, summaries) -> Collections.emptyMap();
 
             var executorWithFilters =
                     new ScalingExecutor<>(
@@ -1217,9 +1216,9 @@ public class ScalingExecutorTest {
         void testMultipleFiltersAllApprove() throws Exception {
             // Both filters approve
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter1 =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
+                    (ctx, summaries) -> summaries;
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> filter2 =
-                    (ctx, conf, evalMetrics, topology, summaries) -> Optional.of(summaries);
+                    (ctx, summaries) -> summaries;
 
             var executorWithFilters =
                     new ScalingExecutor<>(
@@ -1265,21 +1264,16 @@ public class ScalingExecutorTest {
             // A filter that asserts it receives the expected context parameters
             var receivedContextHolder =
                     new Object() {
-                        JobAutoScalerContext<JobID> ctx;
-                        Configuration conf;
-                        EvaluatedMetrics evalMetrics;
-                        JobTopology topology;
+                        ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                pluginContext;
                         Map<JobVertexID, ScalingSummary> summaries;
                     };
 
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> captureFilter =
-                    (ctx, conf, evalMetrics, topology, summaries) -> {
-                        receivedContextHolder.ctx = ctx;
-                        receivedContextHolder.conf = conf;
-                        receivedContextHolder.evalMetrics = evalMetrics;
-                        receivedContextHolder.topology = topology;
+                    (ctx, summaries) -> {
+                        receivedContextHolder.pluginContext = ctx;
                         receivedContextHolder.summaries = summaries;
-                        return Optional.of(summaries);
+                        return summaries;
                     };
 
             var executorWithFilter =
@@ -1295,10 +1289,12 @@ public class ScalingExecutorTest {
                     jobTopology,
                     new DelayedScaleDown());
 
-            assertThat(receivedContextHolder.ctx).isSameAs(context);
-            assertThat(receivedContextHolder.conf).isNotNull();
-            assertThat(receivedContextHolder.evalMetrics).isSameAs(metrics);
-            assertThat(receivedContextHolder.topology).isSameAs(jobTopology);
+            assertThat(receivedContextHolder.pluginContext).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getAutoScalerContext())
+                    .isSameAs(context);
+            assertThat(receivedContextHolder.pluginContext.getConfiguration()).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getEvaluatedMetrics()).isSameAs(metrics);
+            assertThat(receivedContextHolder.pluginContext.getJobTopology()).isSameAs(jobTopology);
             assertThat(receivedContextHolder.summaries).isNotEmpty();
             // Both vertices should be in the summaries since both are above target
             assertThat(receivedContextHolder.summaries).containsKey(source);
@@ -1319,14 +1315,12 @@ public class ScalingExecutorTest {
                         }
 
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
-                                JobAutoScalerContext<JobID> ctx,
-                                Configuration conf,
-                                EvaluatedMetrics evalMetrics,
-                                JobTopology topology,
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
                                 Map<JobVertexID, ScalingSummary> summaries) {
                             executionOrder.add("high");
-                            return Optional.of(summaries);
+                            return summaries;
                         }
                     };
 
@@ -1334,14 +1328,12 @@ public class ScalingExecutorTest {
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> defaultPriorityFilter =
                     new ScalingExecutorPlugin<>() {
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
-                                JobAutoScalerContext<JobID> ctx,
-                                Configuration conf,
-                                EvaluatedMetrics evalMetrics,
-                                JobTopology topology,
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
                                 Map<JobVertexID, ScalingSummary> summaries) {
                             executionOrder.add("default");
-                            return Optional.of(summaries);
+                            return summaries;
                         }
                     };
 
@@ -1354,14 +1346,12 @@ public class ScalingExecutorTest {
                         }
 
                         @Override
-                        public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
-                                JobAutoScalerContext<JobID> ctx,
-                                Configuration conf,
-                                EvaluatedMetrics evalMetrics,
-                                JobTopology topology,
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>>
+                                        ctx,
                                 Map<JobVertexID, ScalingSummary> summaries) {
                             executionOrder.add("low");
-                            return Optional.of(summaries);
+                            return summaries;
                         }
                     };
 

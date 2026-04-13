@@ -17,9 +17,6 @@
 
 package org.apache.flink.autoscaler;
 
-import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
-import org.apache.flink.autoscaler.topology.JobTopology;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregateTaskManagerMetricsParameters;
@@ -31,10 +28,10 @@ import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * A test {@link ScalingExecutorPlugin} implementation that demonstrates a CPU-aware, source-aligned
@@ -73,23 +70,20 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public Optional<Map<JobVertexID, ScalingSummary>> filterScalingSummaries(
-            Context context,
-            Configuration conf,
-            EvaluatedMetrics evaluatedMetrics,
-            JobTopology jobTopology,
+    public Map<JobVertexID, ScalingSummary> apply(
+            ScalingExecutorPlugin.Context<KEY, Context> context,
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
 
         // Step 1: Query the avg JVM CPU load across all TaskManagers via REST API.
         double avgCpuLoad;
         try {
-            avgCpuLoad = queryAverageTmCpuLoad(context);
+            avgCpuLoad = queryAverageTmCpuLoad(context.getAutoScalerContext());
         } catch (Exception e) {
             LOG.warn(
                     "Failed to query TaskManager CPU load via REST API. Vetoing scaling as a"
                             + " safety measure.",
                     e);
-            return Optional.empty();
+            return Collections.emptyMap();
         }
 
         if (avgCpuLoad < cpuThreshold) {
@@ -97,7 +91,7 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
                     "Average TM CPU load ({}) is below threshold ({}). Vetoing scaling.",
                     avgCpuLoad,
                     cpuThreshold);
-            return Optional.empty();
+            return Collections.emptyMap();
         }
         LOG.info(
                 "Average TM CPU load ({}) is above threshold ({}). Proceeding with scaling.",
@@ -108,7 +102,7 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
         JobVertexID sourceVertex = null;
         ScalingSummary sourceSummary = null;
         for (Map.Entry<JobVertexID, ScalingSummary> entry : scalingSummaries.entrySet()) {
-            if (jobTopology.isSource(entry.getKey())) {
+            if (context.getJobTopology().isSource(entry.getKey())) {
                 sourceVertex = entry.getKey();
                 sourceSummary = entry.getValue();
                 break;
@@ -118,7 +112,7 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
         // Step 3: If source is not in scaling summaries or didn't scale up, veto.
         if (sourceSummary == null) {
             LOG.info("No source vertex found in scaling summaries. Vetoing scaling.");
-            return Optional.empty();
+            return Collections.emptyMap();
         }
         if (!sourceSummary.isScaledUp()) {
             LOG.info(
@@ -127,7 +121,7 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
                     sourceVertex,
                     sourceSummary.getCurrentParallelism(),
                     sourceSummary.getNewParallelism());
-            return Optional.empty();
+            return Collections.emptyMap();
         }
         int sourceNewParallelism = sourceSummary.getNewParallelism();
         LOG.info(
@@ -170,10 +164,10 @@ public class TestScalingExecutorPlugin<KEY, Context extends JobAutoScalerContext
 
         if (alignedSummaries.isEmpty()) {
             LOG.info("No vertices require scaling after alignment. Vetoing scaling.");
-            return Optional.empty();
+            return Collections.emptyMap();
         }
 
-        return Optional.of(alignedSummaries);
+        return alignedSummaries;
     }
 
     /**

@@ -50,7 +50,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -174,17 +173,16 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        var filteredSummaries =
+        scalingSummaries =
                 applyScalingExecutorPlugins(
                         context,
                         memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
                         evaluatedMetrics,
                         jobTopology,
                         scalingSummaries);
-        if (filteredSummaries.isEmpty()) {
+        if (scalingSummaries == null || scalingSummaries.isEmpty()) {
             return false;
         }
-        scalingSummaries = filteredSummaries.get();
 
         addToScalingHistoryAndStore(
                 autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
@@ -504,33 +502,26 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     // Apply pluggable scaling executor plugins (SPI extension point).
     // Each plugin may modify or veto the scaling summaries.
-    private Optional<Map<JobVertexID, ScalingSummary>> applyScalingExecutorPlugins(
+    private Map<JobVertexID, ScalingSummary> applyScalingExecutorPlugins(
             Context context,
             Configuration conf,
             EvaluatedMetrics evaluatedMetrics,
             JobTopology jobTopology,
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        var pluginContext =
+                new ScalingExecutorPlugin.Context<>(context, conf, evaluatedMetrics, jobTopology);
         for (ScalingExecutorPlugin<KEY, Context> plugin : scalingExecutorPlugins) {
-            Optional<Map<JobVertexID, ScalingSummary>> filtered =
-                    plugin.filterScalingSummaries(
-                            context, conf, evaluatedMetrics, jobTopology, scalingSummaries);
-            if (filtered.isEmpty()) {
+            scalingSummaries = plugin.apply(pluginContext, scalingSummaries);
+            if (scalingSummaries == null || scalingSummaries.isEmpty()) {
                 LOG.info(
                         "Scaling vetoed by ScalingExecutorPlugin: {}", plugin.getClass().getName());
-                return Optional.empty();
-            }
-            scalingSummaries = filtered.get();
-            if (scalingSummaries.isEmpty()) {
-                LOG.info(
-                        "ScalingExecutorPlugin {} returned empty summaries, skipping scaling.",
-                        plugin.getClass().getName());
-                return Optional.empty();
+                return null;
             }
             LOG.info(
                     "Scaling decision approved with the following summaries: {}",
                     scalingSummaries.values());
         }
-        return Optional.of(scalingSummaries);
+        return scalingSummaries;
     }
 
     @VisibleForTesting
