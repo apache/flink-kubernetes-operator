@@ -107,9 +107,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         this.scalingExecutorPlugins = sortByPriority(scalingExecutorPlugins);
     }
 
-    private static <K, C extends JobAutoScalerContext<K>>
-            Collection<ScalingExecutorPlugin<K, C>> sortByPriority(
-                    Collection<ScalingExecutorPlugin<K, C>> plugins) {
+    private static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingExecutorPlugin<KEY, Context>> sortByPriority(
+                    Collection<ScalingExecutorPlugin<KEY, Context>> plugins) {
         if (plugins == null || plugins.isEmpty()) {
             return Collections.emptyList();
         }
