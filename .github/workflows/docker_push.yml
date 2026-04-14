@@ -91,15 +91,15 @@ jobs:
           # semver (docker/metadata-action requires vX.Y.Z or X.Y.Z format), so
           # the original action produced no semver tags either.
 
-          cat > "${BAKE_FILE}" <<EOF
-          target "docker-metadata-action" {
-            tags = [$(IFS=,; echo "${TAGS[*]}")]
-            labels = {
-              "org.opencontainers.image.source" = "https://github.com/${GITHUB_REPOSITORY}"
-              "org.opencontainers.image.revision" = "${GITHUB_SHA}"
-            }
-          }
-          EOF
+          cat > "${BAKE_FILE}" <<-EOF
+	          target "docker-metadata-action" {
+	            tags = [$(IFS=,; echo "${TAGS[*]}")]
+	            labels = {
+	              "org.opencontainers.image.source" = "https://github.com/${GITHUB_REPOSITORY}"
+	              "org.opencontainers.image.revision" = "${GITHUB_SHA}"
+	            }
+	          }
+	          EOF
 
           echo "bake-file=${BAKE_FILE}" >> "${GITHUB_OUTPUT}"
 
