@@ -376,12 +376,28 @@ public class AutoScalerOptions {
                     autoScalerConfig("scaling.key-group.partitions.adjust.mode")
                             .enumType(JobVertexScaler.KeyGroupOrPartitionsAdjustMode.class)
                             .defaultValue(
-                                    JobVertexScaler.KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
+                                    JobVertexScaler.KeyGroupOrPartitionsAdjustMode
+                                            .ADAPTIVE_UPWARD_SPREAD)
                             .withFallbackKeys(
                                     oldOperatorConfigKey(
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
                                     "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
+
+    public static final ConfigOption<JobVertexScaler.KeyGroupOrPartitionsAdjustFallback>
+            SCALING_KEY_GROUP_PARTITIONS_ADJUST_FALLBACK =
+                    autoScalerConfig("scaling.key-group.partitions.adjust.mode.fallback")
+                            .enumType(JobVertexScaler.KeyGroupOrPartitionsAdjustFallback.class)
+                            .defaultValue(
+                                    JobVertexScaler.KeyGroupOrPartitionsAdjustFallback.DEFAULT)
+                            .withFallbackKeys(
+                                    oldOperatorConfigKey(
+                                            "scaling.key-group.partitions.adjust.mode.fallback"))
+                            .withDescription(
+                                    "Fallback strategy when the primary alignment mode cannot "
+                                            + "find an aligned parallelism value. When set to DEFAULT, "
+                                            + "only ADAPTIVE_UPWARD_SPREAD has a built-in fallback "
+                                            + "(MAXIMIZE_UTILISATION). All other modes block scaling.");
 
     public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
             autoScalerConfig("observed-scalability.enabled")
