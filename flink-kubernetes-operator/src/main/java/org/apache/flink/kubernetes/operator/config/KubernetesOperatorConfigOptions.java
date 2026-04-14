@@ -657,11 +657,20 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> BLOCK_ON_UNMANAGED_JOBS =
-            operatorConfig("session.block-on-unmanaged-jobs")
+            operatorConfig("session.deletion.block-on-unmanaged-jobs")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDeprecatedKeys(operatorConfigKey("session.block-on-unmanaged-jobs"))
+                    .withDescription(
+                            "Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> BLOCK_ON_SESSION_JOBS =
+            operatorConfig("session.deletion.block-on-session-jobs")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
-                            "Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.");
+                            "Block FlinkDeployment deletion if managed jobs are running in the session cluster.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
