@@ -368,10 +368,14 @@ public class SnapshotObserver<
         var lastSavepoint = savepointHistory.get(savepointHistory.size() - 1);
 
         while (savepointHistory.size() > maxCount) {
-            // remove oldest entries
-            var sp = savepointHistory.remove(0);
-            if (savepointCleanupEnabled) {
-                disposeSavepointQuietly(ctx, sp.getLocation());
+            // Remove oldest entry only after successful dispose to avoid orphaning files.
+            // Break on failure — entries are ordered oldest-first so we cannot skip this one
+            // and remove a newer entry instead, as that would leave the oldest orphaned.
+            var sp = savepointHistory.get(0);
+            if (!savepointCleanupEnabled || disposeSavepointQuietly(ctx, sp.getLocation())) {
+                savepointHistory.remove(0);
+            } else {
+                break;
             }
         }
 
@@ -382,21 +386,27 @@ public class SnapshotObserver<
                 continue;
             }
             if (sp.getTimeStamp() < maxTms) {
-                it.remove();
-                if (savepointCleanupEnabled) {
-                    disposeSavepointQuietly(ctx, sp.getLocation());
+                // Remove entry only after successful dispose to avoid orphaning files.
+                // Each entry is independent here so we continue on failure rather than breaking.
+                if (!savepointCleanupEnabled || disposeSavepointQuietly(ctx, sp.getLocation())) {
+                    it.remove();
                 }
             }
         }
     }
 
-    private void disposeSavepointQuietly(FlinkResourceContext<CR> ctx, String path) {
+    private boolean disposeSavepointQuietly(FlinkResourceContext<CR> ctx, String path) {
         try {
             LOG.info("Disposing savepoint {}", path);
             ctx.getFlinkService().disposeSavepoint(path, ctx.getObserveConfig());
+            return true;
         } catch (Exception e) {
             // savepoint dispose error should not affect the deployment
-            LOG.error("Exception while disposing savepoint {}", path, e);
+            LOG.error(
+                    "Exception while disposing savepoint {}, will retry on next reconcile",
+                    path,
+                    e);
+            return false;
         }
     }
 
