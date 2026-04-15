@@ -120,19 +120,19 @@ public class OperatorJosdkMetricsTest {
 
     @Test
     public void testMetrics() {
-        operatorMetrics.failedReconciliation(resource, null, metadata);
+        operatorMetrics.reconciliationFailed(resource, null, null, metadata);
         assertEquals(1, listener.size());
         assertEquals(1, getCount("Reconciliation.failed"));
-        operatorMetrics.failedReconciliation(resource, null, metadata);
-        operatorMetrics.failedReconciliation(resource, null, metadata);
+        operatorMetrics.reconciliationFailed(resource, null, null, metadata);
+        operatorMetrics.reconciliationFailed(resource, null, null, metadata);
         assertEquals(1, listener.size());
         assertEquals(3, getCount("Reconciliation.failed"));
 
-        operatorMetrics.reconcileCustomResource(resource, null, metadata);
+        operatorMetrics.reconciliationSubmitted(resource, null, metadata);
         assertEquals(2, listener.size());
         assertEquals(1, getCount("Reconciliation"));
 
-        operatorMetrics.reconcileCustomResource(
+        operatorMetrics.reconciliationSubmitted(
                 resource,
                 new RetryInfo() {
                     @Override
@@ -150,29 +150,23 @@ public class OperatorJosdkMetricsTest {
         assertEquals(2, getCount("Reconciliation"));
         assertEquals(1, getCount("Reconciliation.retries"));
 
-        operatorMetrics.receivedEvent(
+        operatorMetrics.eventReceived(
                 new ResourceEvent(ResourceAction.ADDED, resourceId, null), metadata);
         assertEquals(5, listener.size());
         assertEquals(1, getCount("Resource.Event"));
         assertEquals(1, getCount("Resource.Event.ADDED"));
 
-        operatorMetrics.cleanupDoneFor(resourceId, metadata);
+        operatorMetrics.cleanupDone(resourceId, metadata);
         assertEquals(6, listener.size());
         assertEquals(1, getCount("Reconciliation.cleanup"));
 
-        operatorMetrics.finishedReconciliation(resource, metadata);
+        operatorMetrics.reconciliationFinished(resource, null, metadata);
         assertEquals(7, listener.size());
         assertEquals(1, getCount("Reconciliation.finished"));
 
-        operatorMetrics.monitorSizeOf(Map.of("a", "b", "c", "d"), "mymap");
-        assertEquals(8, listener.size());
-        assertEquals(
-                2,
-                listener.getGauge(listener.getMetricId("JOSDK", "mymap", "size")).get().getValue());
-
-        operatorMetrics.reconcileCustomResource(
+        operatorMetrics.reconciliationSubmitted(
                 testResource(new ResourceID("other", "otherns")), null, metadata);
-        assertEquals(9, listener.size());
+        assertEquals(8, listener.size());
         assertEquals(
                 1,
                 listener.getCounter(
