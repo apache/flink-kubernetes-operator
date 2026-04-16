@@ -115,8 +115,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     /**
      * Fetch runtime configuration from the Flink REST API and cache it in the config manager when
      * the job is in RUNNING state and no cached config exists for the current job ID. After
-     * caching, the memoized observe config is cleared so subsequent consumers see the merged
-     * values.
+     * caching, the runtime values are applied directly to the already-memoized observe config so
+     * subsequent consumers see the merged values without a full config regeneration.
      */
     private void fetchAndCacheRuntimeConfig(
             FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
@@ -126,9 +126,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        String namespace = resource.getMetadata().getNamespace();
-        String name = resource.getMetadata().getName();
-        String jobId = jobStatus.getJobId();
+        var namespace = resource.getMetadata().getNamespace();
+        var name = resource.getMetadata().getName();
+        var jobId = jobStatus.getJobId();
         var configManager = ctx.getConfigManager();
 
         if (configManager.getRuntimeConfig(namespace, name, jobId).isPresent()) {
@@ -137,40 +137,19 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         }
 
         LOG.debug("Fetching runtime configuration");
-        var conf = ctx.getObserveConfig();
-        var flinkService = ctx.getFlinkService();
-        var jobIdObj = JobID.fromHexString(jobId);
-        Map<String, String> runtimeConfig = new HashMap<>();
-        boolean fetchFailed = false;
-
         try {
-            runtimeConfig.putAll(flinkService.getJobManagerConfiguration(conf, jobIdObj));
+            var runtimeConfig =
+                    ctx.getFlinkService()
+                            .getRuntimeConfiguration(
+                                    ctx.getObserveConfig(), JobID.fromHexString(jobId));
+            configManager.putRuntimeConfig(namespace, name, jobId, runtimeConfig);
+            var currentObserveConfig = ctx.getObserveConfig();
+            if (currentObserveConfig != null) {
+                runtimeConfig.forEach(currentObserveConfig::setString);
+            }
         } catch (Exception e) {
-            fetchFailed = true;
-            LOG.warn("Failed to fetch JobManager configuration", e);
+            LOG.warn("Failed to fetch runtime configuration, will retry next cycle", e);
         }
-
-        try {
-            runtimeConfig.putAll(flinkService.getJobConfiguration(conf, jobIdObj));
-        } catch (Exception e) {
-            fetchFailed = true;
-            LOG.warn("Failed to fetch job configuration", e);
-        }
-
-        try {
-            runtimeConfig.putAll(flinkService.getJobCheckpointConfiguration(conf, jobIdObj));
-        } catch (Exception e) {
-            fetchFailed = true;
-            LOG.warn("Failed to fetch checkpoint configuration", e);
-        }
-
-        if (runtimeConfig.isEmpty() && fetchFailed) {
-            LOG.warn("All runtime config REST fetches failed, will retry next cycle");
-            return;
-        }
-
-        configManager.putRuntimeConfig(namespace, name, jobId, runtimeConfig);
-        ctx.clearObserveConfig();
     }
 
     /**

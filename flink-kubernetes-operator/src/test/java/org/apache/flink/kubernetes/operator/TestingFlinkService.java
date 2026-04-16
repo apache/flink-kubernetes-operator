@@ -807,30 +807,16 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Map<String, String> getJobManagerConfiguration(Configuration conf, JobID jobId)
+    public Map<String, String> getRuntimeConfiguration(Configuration conf, JobID jobId)
             throws Exception {
         if (runtimeConfigFetchException != null) {
             throw runtimeConfigFetchException;
         }
-        return runtimeJmConfigs.getOrDefault(jobId, new HashMap<>());
-    }
-
-    @Override
-    public Map<String, String> getJobConfiguration(Configuration conf, JobID jobId)
-            throws Exception {
-        if (runtimeConfigFetchException != null) {
-            throw runtimeConfigFetchException;
-        }
-        return runtimeJobConfigs.getOrDefault(jobId, new HashMap<>());
-    }
-
-    @Override
-    public Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
-            throws Exception {
-        if (runtimeConfigFetchException != null) {
-            throw runtimeConfigFetchException;
-        }
-        return runtimeCheckpointConfigs.getOrDefault(jobId, new HashMap<>());
+        Map<String, String> merged = new HashMap<>();
+        merged.putAll(runtimeJmConfigs.getOrDefault(jobId, new HashMap<>()));
+        merged.putAll(runtimeJobConfigs.getOrDefault(jobId, new HashMap<>()));
+        merged.putAll(runtimeCheckpointConfigs.getOrDefault(jobId, new HashMap<>()));
+        return merged;
     }
 
     public void setSavepointTriggerException(Exception exception) {

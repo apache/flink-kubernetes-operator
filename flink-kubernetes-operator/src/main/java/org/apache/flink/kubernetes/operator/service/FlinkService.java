@@ -133,16 +133,11 @@ public interface FlinkService {
             AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
             throws Exception;
 
-    /** Fetches the full JM configuration for a job from the Flink REST API. */
-    Map<String, String> getJobManagerConfiguration(Configuration conf, JobID jobId)
-            throws Exception;
-
-    /** Fetches job execution configuration (parallelism, object-reuse, global params). */
-    Map<String, String> getJobConfiguration(Configuration conf, JobID jobId) throws Exception;
-
-    /** Fetches checkpoint configuration with actual runtime values. */
-    Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
-            throws Exception;
+    /**
+     * Fetches the merged runtime configuration for a running job by querying the JM config, job
+     * execution config, and checkpoint config REST endpoints. Later layers override earlier ones.
+     */
+    Map<String, String> getRuntimeConfiguration(Configuration conf, JobID jobId) throws Exception;
 
     /** Result of a cancel operation. */
     @AllArgsConstructor

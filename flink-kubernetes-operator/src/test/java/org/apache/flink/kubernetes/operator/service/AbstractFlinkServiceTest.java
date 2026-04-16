@@ -1447,7 +1447,7 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
-    void testGetJobManagerConfiguration() throws Exception {
+    void testGetRuntimeConfigurationIncludesJmConfig() throws Exception {
         var jmConfig = new ConfigurationInfo();
         jmConfig.add(new ConfigurationInfoEntry("jobmanager.scheduler", "Adaptive"));
         jmConfig.add(new ConfigurationInfoEntry("state.savepoints.dir", "/s3/savepoints"));
@@ -1463,23 +1463,23 @@ public class AbstractFlinkServiceTest {
                                     new UnsupportedOperationException());
                         });
 
-        var result = service.getJobManagerConfiguration(configuration, JobID.generate());
-        assertEquals(3, result.size());
+        var result = service.getRuntimeConfiguration(configuration, JobID.generate());
         assertEquals("Adaptive", result.get("jobmanager.scheduler"));
         assertEquals("/s3/savepoints", result.get("state.savepoints.dir"));
         assertEquals("ZOOKEEPER", result.get("high-availability"));
     }
 
     @Test
-    void testGetJobManagerConfigurationReturnsEmptyOnFailure() throws Exception {
+    void testGetRuntimeConfigurationThrowsWhenAllFetchesFail() throws Exception {
         var service =
                 getTestingService(
                         (headers, params, body) ->
                                 CompletableFuture.failedFuture(
                                         new RuntimeException("connection refused")));
 
-        var result = service.getJobManagerConfiguration(configuration, JobID.generate());
-        assertTrue(result.isEmpty());
+        assertThrows(
+                RuntimeException.class,
+                () -> service.getRuntimeConfiguration(configuration, JobID.generate()));
     }
 
     /** Discovers all {@code FIELD_NAME_*} string constants on a class via reflection. */
