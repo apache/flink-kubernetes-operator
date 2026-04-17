@@ -38,8 +38,9 @@ Please check the [related section](#upgrading-from-v1alpha1---v1beta1).
 ## Normal Upgrade Process
 
 If you are upgrading from `kubernetes-operator-1.0.0` or later, please refer to the following two steps:
-1. Upgrading the CRDs
-2. Upgrading the Helm deployment
+1. Upgrading the Java client library
+2. Upgrading the CRDs
+3. Upgrading the Helm deployment
 
 We will cover these steps in detail in the next sections.
 
@@ -51,16 +52,18 @@ backwards-compatible with the previous minor version of the operator.
 
 ### 2. Upgrading the CRD
 
-The first step of the upgrade process is upgrading the CRDs for `FlinkDeployment` and `FlinkSessionJob` resources.
+The first step of the upgrade process is upgrading the CRDs for `FlinkDeployment`, `FlinkSessionJob` and `FlinkStateSnapshot` resources.
 This step must be completed manually and is not part of the helm installation logic.
 
 ```sh
 kubectl replace -f helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml
 kubectl replace -f helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml
+kubectl replace -f helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml
 ```
 
 {{< hint danger >}}
 Please note that we are using the `replace` command here which ensures that running deployments are unaffected.
+If the CRD does not exist yet, you will get an error and you should try `kubectl apply` instead.
 {{< /hint >}}
 
 ### 3. Upgrading the Helm deployment
@@ -148,7 +151,7 @@ Here is a reference example of upgrading a `basic-checkpoint-ha-example` deploym
     ```
 5. Restore the job:
 
-   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
+   Deploy the previously deleted job using this [FlinkDeployment](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
 
     ```
     spec:
