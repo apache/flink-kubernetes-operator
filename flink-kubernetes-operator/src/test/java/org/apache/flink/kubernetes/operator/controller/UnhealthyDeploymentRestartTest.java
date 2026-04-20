@@ -32,10 +32,12 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 
+import static org.apache.flink.api.common.JobStatus.FAILED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
@@ -155,5 +157,83 @@ public class UnhealthyDeploymentRestartTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
+    public void verifyTerminallyFailedJobNotRestartedByHealthCheck(
+            FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
+        appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        // Start a healthy deployment
+        flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "0");
+        flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "1");
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+
+        // Mark job as terminally FAILED
+        flinkService.markApplicationJobFailedWithError(
+                flinkService.listJobs().get(0).f1.getJobId(), "Terminal failure");
+
+        // Age the checkpoint health data to simulate an unhealthy evaluation
+        // (no checkpoint progress within the window), which would normally trigger a restart
+        ClusterHealthInfo clusterHealthInfo =
+                getLastValidClusterHealthInfo(appCluster.getStatus().getClusterInfo());
+        clusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
+                clusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp() - 1200000);
+        setLastValidClusterHealthInfo(appCluster.getStatus().getClusterInfo(), clusterHealthInfo);
+        testController.getStatusRecorder().patchAndCacheStatus(appCluster, kubernetesClient);
+
+        // Reconcile - FAILED terminal job must NOT be restarted via the health-check codepath.
+        // The health-based restart path requires HA metadata which a terminated job does not have,
+        // and restarting a terminal job is controlled exclusively by OPERATOR_JOB_RESTART_FAILED.
+        testController.reconcile(appCluster, context);
+
+        assertEquals(FAILED, appCluster.getStatus().getJobStatus().getState());
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    /**
+     * For stateful (LAST_STATE / SAVEPOINT) upgrade modes, a health-based restart must NOT be
+     * triggered when HA metadata is absent. Without HA metadata the restart would immediately fail
+     * with an UpgradeFailureException, so the check must be skipped entirely.
+     */
+    @ParameterizedTest
+    @EnumSource(
+            value = UpgradeMode.class,
+            names = {"LAST_STATE", "SAVEPOINT"})
+    public void verifyUnhealthyRestartSkippedWhenHaMetadataAbsent(UpgradeMode upgradeMode)
+            throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        // Start a healthy deployment (HA metadata available by default)
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+
+        // Simulate unhealthy cluster (restart count exceeds threshold) while HA metadata is absent
+        flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "100");
+        flinkService.setHaDataAvailable(false);
+
+        testController.reconcile(appCluster, context);
+
+        // Health-based restart must NOT be triggered when HA metadata is absent
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
     }
 }

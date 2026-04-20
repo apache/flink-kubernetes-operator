@@ -279,7 +279,7 @@ public class ApplicationReconciler
                 ClusterHealthEvaluator.getLastValidClusterHealthInfo(
                         deployment.getStatus().getClusterInfo());
         boolean shouldRestartJobBecauseUnhealthy =
-                shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
+                shouldRestartJobBecauseUnhealthy(ctx, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
         if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
             if (shouldRecoverDeployment) {
@@ -316,7 +316,15 @@ public class ApplicationReconciler
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(
-            FlinkDeployment deployment, Configuration observeConfig) {
+            FlinkResourceContext<FlinkDeployment> ctx, Configuration observeConfig) {
+        var deployment = ctx.getResource();
+        // Terminal jobs (FAILED, FINISHED, CANCELED) must not be restarted via the cluster health
+        // check. Restarting a FAILED job is controlled exclusively by OPERATOR_JOB_RESTART_FAILED;
+        // a terminal job also has no HA metadata, so a health-based restart would always fail.
+        if (ReconciliationUtils.isJobInTerminalState(deployment.getStatus())) {
+            return false;
+        }
+
         boolean restartNeeded = false;
 
         if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
@@ -329,13 +337,13 @@ public class ApplicationReconciler
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
                         LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
-                    } else if (HighAvailabilityMode.isHighAvailabilityModeActivated(
-                            observeConfig)) {
-                        LOG.debug("HA is enabled, recovering unhealthy jobmanager deployment");
+                    } else if (ctx.getFlinkService().isHaMetadataAvailable(observeConfig)) {
+                        LOG.debug(
+                                "HA metadata available, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
                     } else {
                         LOG.warn(
-                                "Could not recover unhealthy jobmanager deployment without HA enabled");
+                                "Could not recover unhealthy jobmanager deployment, HA metadata not available");
                     }
 
                     if (restartNeeded) {
