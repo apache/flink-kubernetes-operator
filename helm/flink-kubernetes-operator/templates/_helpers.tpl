@@ -77,3 +77,15 @@ Create the path of the operator image to use
 {{- .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}
 {{- end }}
 {{- end }}
+
+{{/*
+Determine the JVM log configuration flag based on the selected logging framework.
+Supported values for .Values.logging.framework: "log4j2" (default), "logback".
+*/}}
+{{- define "flink-operator.logConfig" -}}
+{{- if eq .Values.logging.framework "logback" -}}
+-Dlogback.configurationFile=/opt/flink/conf/logback-operator.xml
+{{- else -}}
+-Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+{{- end -}}
+{{- end }}

@@ -43,6 +43,16 @@ maybe_enable_jemalloc() {
 
 maybe_enable_jemalloc
 
+# Select the logging framework JARs to put on the classpath.
+# Supported values: "log4j2" (default), "logback".
+OPERATOR_LOG=${FLINK_HOME:-/opt/flink}/log
+LOGGING_FRAMEWORK="${LOGGING_FRAMEWORK:-log4j2}"
+if [ "$LOGGING_FRAMEWORK" = "logback" ]; then
+    LOG_CLASSPATH="$OPERATOR_LOG/logback/*"
+else
+    LOG_CLASSPATH="$OPERATOR_LOG/log4j/*"
+fi
+
 if [ "$1" = "help" ]; then
     printf "Usage: $(basename "$0") (operator|webhook)\n"
     printf "    Or $(basename "$0") help\n\n"
@@ -50,12 +60,12 @@ if [ "$1" = "help" ]; then
 elif [ "$1" = "operator" ]; then
     echo "Starting Operator"
 
-    exec java -cp "./$KUBERNETES_STANDALONE_JAR:./$OPERATOR_JAR:$OPERATOR_LIB/*" $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.FlinkOperator
+    exec java -cp "./$KUBERNETES_STANDALONE_JAR:./$OPERATOR_JAR:$LOG_CLASSPATH:$OPERATOR_LIB/*" $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.FlinkOperator
 elif [ "$1" = "webhook" ]; then
     echo "Starting Webhook"
 
     # Adds the operator shaded jar on the classpath when the webhook starts
-    exec java -cp "./$KUBERNETES_STANDALONE_JAR:./$OPERATOR_JAR:./$WEBHOOK_JAR:$OPERATOR_LIB/*" $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.admission.FlinkOperatorWebhook
+    exec java -cp "./$KUBERNETES_STANDALONE_JAR:./$OPERATOR_JAR:./$WEBHOOK_JAR:$LOG_CLASSPATH:$OPERATOR_LIB/*" $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.admission.FlinkOperatorWebhook
 fi
 
 args=("${args[@]}")

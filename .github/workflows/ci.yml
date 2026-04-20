@@ -235,3 +235,25 @@ jobs:
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       mode: ${{ matrix.mode }}
+  e2e_logging:
+    name: Logging framework tests
+    needs: e2e_smoke_test
+    strategy:
+      matrix:
+        flink-version:
+          - "v2_2"
+          - "v2_1"
+          - "v2_0"
+          - "v1_20"
+        mode:
+          - "native"
+          - "standalone"
+        test:
+          - test_log4j2_logging.sh
+          - test_logback_logging.sh
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: 17
+      flink-version: ${{ matrix.flink-version }}
+      test: ${{ matrix.test }}
+      mode: ${{ matrix.mode }}

@@ -36,3 +36,35 @@ tests:
           kind: ConfigMap
           name: flink-operator-config
           namespace: flink-operator
+
+  - it: Should include logback-operator.xml key in configmap
+    set:
+      defaultConfiguration:
+        create: true
+    asserts:
+      - isNotNull:
+          path: data["logback-operator.xml"]
+
+  - it: Should include logback-console.xml key in configmap
+    set:
+      defaultConfiguration:
+        create: true
+    asserts:
+      - isNotNull:
+          path: data["logback-console.xml"]
+
+  - it: Should include log4j-operator.properties key in configmap
+    set:
+      defaultConfiguration:
+        create: true
+    asserts:
+      - isNotNull:
+          path: data["log4j-operator.properties"]
+
+  - it: Should include log4j-console.properties key in configmap
+    set:
+      defaultConfiguration:
+        create: true
+    asserts:
+      - isNotNull:
+          path: data["log4j-console.properties"]

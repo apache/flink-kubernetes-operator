@@ -78,6 +78,9 @@ jobs:
           if [[ "${{ inputs.test }}" == "test_dynamic_config.sh" ]]; then          
            sed -i "s/flink-conf.yaml: |+/config.yaml: |+/" helm/flink-kubernetes-operator/values.yaml
           fi
+          if [[ "${{ inputs.test }}" == "test_logback_logging.sh" ]]; then
+           sed -i 's/framework: "log4j2"/framework: "logback"/' helm/flink-kubernetes-operator/values.yaml
+          fi
           helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ steps.namespace-creator.outputs.EXTRA_HELM_INSTALL_ARGS }} 
           kubectl wait --for=condition=Available --timeout=120s -n ${{ inputs.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ inputs.namespace }}
