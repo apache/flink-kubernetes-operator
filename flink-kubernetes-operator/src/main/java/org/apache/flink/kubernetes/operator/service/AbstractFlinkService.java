@@ -890,21 +890,21 @@ public abstract class AbstractFlinkService implements FlinkService {
             runtimeConfig.putAll(getJobManagerConfiguration(conf, jobId));
         } catch (Exception e) {
             fetchFailed = true;
-            LOG.warn("Failed to fetch JobManager configuration", e);
+            LOG.error("Failed to fetch JobManager configuration", e);
         }
 
         try {
             runtimeConfig.putAll(getJobConfiguration(conf, jobId));
         } catch (Exception e) {
             fetchFailed = true;
-            LOG.warn("Failed to fetch job configuration", e);
+            LOG.error("Failed to fetch job configuration", e);
         }
 
         try {
             runtimeConfig.putAll(getJobCheckpointConfiguration(conf, jobId));
         } catch (Exception e) {
             fetchFailed = true;
-            LOG.warn("Failed to fetch checkpoint configuration", e);
+            LOG.error("Failed to fetch checkpoint configuration", e);
         }
 
         if (runtimeConfig.isEmpty() && fetchFailed) {

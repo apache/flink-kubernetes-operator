@@ -105,15 +105,6 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     }
 
     /**
-     * Clear the memoized observe config so it will be regenerated on next access. This must be
-     * called after the observer updates the runtime configuration cache so that subsequent
-     * consumers (other observers, reconciler) see the merged configuration.
-     */
-    public void clearObserveConfig() {
-        this.observeConfig = null;
-    }
-
-    /**
      * @return The config manager for this context.
      */
     public FlinkConfigManager getConfigManager() {

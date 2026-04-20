@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.StateChangelogOptions;
 import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigInfo;
@@ -29,9 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Utility class for mapping Flink REST API responses (execution config, checkpoint config) into
@@ -127,16 +125,6 @@ public class FlinkRuntimeConfigurationUtils {
             Map.of(
                     "FileSystemCheckpointStorage", "filesystem",
                     "JobManagerCheckpointStorage", "jobmanager");
-
-    /** All config keys that {@link #mapCheckpointConfiguration} can produce. */
-    public static final Set<String> CHECKPOINT_CONFIG_KEYS =
-            Stream.concat(
-                            Stream.of(CheckpointConfigMapping.values()).map(m -> m.configKey),
-                            Stream.of(
-                                    CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION.key(),
-                                    CheckpointingOptions.STATE_BACKEND.key(),
-                                    CheckpointingOptions.CHECKPOINT_STORAGE.key()))
-                    .collect(Collectors.toUnmodifiableSet());
 
     private FlinkRuntimeConfigurationUtils() {}
 
@@ -239,7 +227,7 @@ public class FlinkRuntimeConfigurationUtils {
             String raw =
                     String.valueOf(rawResponse.get(CheckpointConfigInfo.FIELD_NAME_STATE_BACKEND));
             mappedConfig.put(
-                    CheckpointingOptions.STATE_BACKEND.key(),
+                    StateBackendOptions.STATE_BACKEND.key(),
                     STATE_BACKEND_NAMES.getOrDefault(raw, raw.toLowerCase()));
         }
         if (rawResponse.containsKey(CheckpointConfigInfo.FIELD_NAME_CHECKPOINT_STORAGE)) {
