@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
@@ -47,7 +49,8 @@ public class AutoscalerFactoryTest {
                         new EventRecorder(
                                 new FlinkResourceEventCollector(),
                                 new FlinkStateSnapshotEventCollector()),
-                        new ClusterResourceManager(Duration.ZERO, kubernetesClient));
+                        new ClusterResourceManager(Duration.ZERO, kubernetesClient),
+                        new FlinkConfigManager(new Configuration()));
         Assertions.assertTrue(autoScaler instanceof JobAutoScalerImpl);
     }
 }

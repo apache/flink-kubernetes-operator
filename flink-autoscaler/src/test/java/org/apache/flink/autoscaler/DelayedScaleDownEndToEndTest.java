@@ -122,7 +122,8 @@ public class DelayedScaleDownEndToEndTest {
                         new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         // initially the last evaluated metrics are empty
         assertThat(autoscaler.lastEvaluatedMetrics.get(context.getJobKey())).isNull();

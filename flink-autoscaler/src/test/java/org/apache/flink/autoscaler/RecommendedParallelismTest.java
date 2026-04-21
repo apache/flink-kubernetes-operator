@@ -37,6 +37,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.Map;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -98,7 +99,8 @@ public class RecommendedParallelismTest {
                         new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         new TestingScalingRealizer<>(),
-                        stateStore);
+                        stateStore,
+                        Collections.emptyMap());
 
         // Reset custom window size to default
         metricsCollector.setTestMetricWindowSize(null);

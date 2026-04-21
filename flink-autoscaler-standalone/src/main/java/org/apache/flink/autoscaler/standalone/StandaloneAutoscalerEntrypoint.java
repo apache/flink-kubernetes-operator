@@ -94,7 +94,8 @@ public class StandaloneAutoscalerEntrypoint {
                 new ScalingExecutor<>(eventHandler, stateStore),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
-                stateStore);
+                stateStore,
+                null);
     }
 
     @VisibleForTesting
