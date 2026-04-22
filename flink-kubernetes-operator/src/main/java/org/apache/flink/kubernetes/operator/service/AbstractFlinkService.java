@@ -730,7 +730,10 @@ public abstract class AbstractFlinkService implements FlinkService {
 
             var stats = response.get();
             if (stats == null) {
-                throw new IllegalStateException("Checkpoint ID %d for job %s does not exist!");
+                throw new IllegalStateException(
+                        String.format(
+                                "Checkpoint ID %d for job %s does not exist!",
+                                checkpointId, jobId));
             } else if (stats instanceof CheckpointStatistics.CompletedCheckpointStatistics) {
                 return CheckpointStatsResult.completed(
                         ((CheckpointStatistics.CompletedCheckpointStatistics) stats)
