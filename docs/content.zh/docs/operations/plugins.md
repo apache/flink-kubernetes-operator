@@ -186,4 +186,96 @@ The following steps demonstrate how to develop and use a custom mutator.
     2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
     ```
 
-## Flink Autoscaler Custom Evaluator
+## Custom Flink Autoscaler Evaluator
+
+`FlinkAutoscalerEvaluator` is a pluggable component that allows users to provide custom scaling-metric evaluation logic on top of the metrics evaluated internally by the autoscaler. Custom evaluators are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+
+For each evaluation cycle, the autoscaler invokes the custom evaluator selected via the `job.autoscaler.metrics.custom-evaluator.name` configuration option once per job vertex. The metrics returned by the custom evaluator are merged on top of the internally evaluated metrics, allowing users to override or augment specific `ScalingMetric` values (e.g. `TARGET_DATA_RATE`, `TRUE_PROCESSING_RATE`, `CATCH_UP_DATA_RATE`).
+
+The following steps demonstrate how to develop and use a custom evaluator.
+
+1. Implement the `FlinkAutoscalerEvaluator` interface:
+    ```java
+    package org.apache.flink.autoscaler.custom;
+
+    import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+    import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
+    import org.apache.flink.autoscaler.metrics.ScalingMetric;
+    import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+    import java.util.HashMap;
+    import java.util.Map;
+
+    /** Custom evaluator implementation of {@link FlinkAutoscalerEvaluator}. */
+    public class CustomEvaluator implements FlinkAutoscalerEvaluator {
+
+        @Override
+        public String getName() {
+            return "custom-evaluator";
+        }
+
+        @Override
+        public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
+                JobVertexID vertex,
+                Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+                Context context) {
+            Map<ScalingMetric, EvaluatedScalingMetric> overrides = new HashMap<>();
+            // Example: override the target data rate for source vertices based
+            // on a value read from the evaluator-specific configuration.
+            double target = context.getCustomEvaluatorConf().getDouble("target-data-rate", 0.0);
+            if (target > 0 && context.getTopology().isSource(vertex)) {
+                overrides.put(
+                        ScalingMetric.TARGET_DATA_RATE,
+                        EvaluatedScalingMetric.avg(target));
+            }
+            return overrides;
+        }
+    }
+    ```
+
+   The `Context` object exposes an un-modifiable view of the job configuration, the metrics history, previously evaluated vertex metrics (evaluation happens topologically), the job topology, backlog status, max restart time, and the evaluator-specific configuration.
+
+2. Create the service definition file `org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator` in `META-INF/services` with the fully-qualified class name of your implementation:
+    ```text
+    org.apache.flink.autoscaler.custom.CustomEvaluator
+    ```
+
+3. Use the Maven tool to package the project and generate the custom evaluator JAR.
+
+4. Select the custom evaluator via configuration. The evaluator whose `getName()` matches the configured name will be invoked; any `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are surfaced to the evaluator via `Context#getCustomEvaluatorConf()` (with the `job.autoscaler.metrics.custom-evaluator.<name>.` prefix stripped):
+    ```yaml
+    job.autoscaler.metrics.custom-evaluator.name: custom-evaluator
+    job.autoscaler.metrics.custom-evaluator.custom-evaluator.target-data-rate: 100000.0
+    ```
+   {{< hint warning >}}
+   **Only one custom evaluator per pipeline is supported**. The `job.autoscaler.metrics.custom-evaluator.name` is a single-valued option and the autoscaler resolves and invokes exactly one evaluator per evaluation cycle. Registering multiple implementations via `META-INF/services` is fine as they form a registry that different jobs can select from by name, but a single job cannot chain or compose more than one evaluator.
+   {{< /hint >}}
+
+5. Deploy the evaluator.
+
+    - **Operator deployment** – create a Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to a custom evaluator plugin directory under `/opt/flink/plugins` (the value of the `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart). The structure of the custom evaluator directory under `/opt/flink/plugins` is as follows:
+        ```text
+        /opt/flink/plugins
+            ├── custom-evaluator
+            │   ├── custom-evaluator.jar
+            └── ...
+        ```
+
+        With the custom evaluator directory location, the Dockerfile is defined as follows:
+        ```shell script
+        FROM apache/flink-kubernetes-operator
+        ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+        ENV CUSTOM_EVALUATOR_DIR=custom-evaluator
+        RUN mkdir $FLINK_PLUGINS_DIR/$CUSTOM_EVALUATOR_DIR
+        COPY custom-evaluator.jar $FLINK_PLUGINS_DIR/$CUSTOM_EVALUATOR_DIR/
+        ```
+
+        Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
+        ```text
+        o.a.f.k.o.a.AutoscalerUtils [INFO ] Discovered custom evaluator from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.custom.CustomEvaluator.
+        ```
+
+    - **Standalone autoscaler** – simply place the custom evaluator JAR on the classpath of the `flink-autoscaler-standalone` process. It will be picked up automatically via Java's `ServiceLoader` and discovery will be logged:
+        ```text
+        o.a.f.a.s.AutoscalerUtils [INFO ] Discovered custom evaluator via ServiceLoader: org.apache.flink.autoscaler.custom.CustomEvaluator (name=custom-evaluator).
+        ```

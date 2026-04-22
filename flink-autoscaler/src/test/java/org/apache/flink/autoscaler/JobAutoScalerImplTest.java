@@ -35,7 +35,6 @@ import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.ConfigOptions;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.Gauge;
@@ -469,7 +468,6 @@ public class JobAutoScalerImplTest {
     @Test
     void testGetCustomEvaluatorIfRequired() {
         FlinkAutoscalerEvaluator testCustomEvaluator = new TestCustomEvaluator();
-        testCustomEvaluator.configure(new Configuration());
         var testCustomEvaluators = Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
 
         var autoscalerWithCustomEvaluator =

@@ -79,9 +79,7 @@ public class ScalingMetricEvaluator {
             Configuration conf,
             CollectedMetricHistory collectedMetrics,
             Duration restartTime,
-            @Nullable
-                    Tuple2<FlinkAutoscalerEvaluator, Configuration>
-                            customEvaluatorWithConfig) {
+            @Nullable Tuple2<FlinkAutoscalerEvaluator, Configuration> customEvaluatorWithConfig) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();

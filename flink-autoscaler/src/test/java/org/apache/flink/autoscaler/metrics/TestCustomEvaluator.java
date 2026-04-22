@@ -25,8 +25,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A test implementation of the {@link FlinkAutoscalerEvaluator} interface that provides
- * custom scaling metric evaluations for job vertices in a Flink job.
+ * A test implementation of the {@link FlinkAutoscalerEvaluator} interface that provides custom
+ * scaling metric evaluations for job vertices in a Flink job.
  */
 public class TestCustomEvaluator implements FlinkAutoscalerEvaluator {
     @Override

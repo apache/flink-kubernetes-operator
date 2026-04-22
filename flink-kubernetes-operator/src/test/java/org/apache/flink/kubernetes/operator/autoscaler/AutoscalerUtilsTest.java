@@ -21,7 +21,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.utils.AutoscalerUtils;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,9 +51,7 @@ public class AutoscalerUtilsTest {
 
             // Discover evaluators
             var discoveredEvaluators =
-                    AutoscalerUtils.discoverCustomEvaluators(
-                                    new FlinkConfigManager(new Configuration()))
-                            .keySet();
+                    AutoscalerUtils.discoverCustomEvaluators(new Configuration()).keySet();
             // Expected evaluators
             var expectedEvaluators = new HashSet<>(List.of("test-custom-evaluator"));
 

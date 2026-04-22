@@ -22,10 +22,11 @@ import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
+import org.apache.flink.kubernetes.operator.utils.AutoscalerUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -38,11 +39,11 @@ public class AutoscalerFactory {
             KubernetesClient client,
             EventRecorder eventRecorder,
             ClusterResourceManager clusterResourceManager,
-            FlinkConfigManager configManager) {
+            Configuration conf) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
-        var customEvaluators = AutoscalerUtils.discoverCustomEvaluators(configManager);
+        var customEvaluators = AutoscalerUtils.discoverCustomEvaluators(conf);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),

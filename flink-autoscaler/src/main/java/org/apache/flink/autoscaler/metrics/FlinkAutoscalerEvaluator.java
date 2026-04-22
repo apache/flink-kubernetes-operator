@@ -20,10 +20,7 @@ package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-
-import lombok.Getter;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -31,11 +28,11 @@ import java.util.Map;
 import java.util.SortedMap;
 
 /**
- * Interface for custom evaluators that allow tailored scaling metric evaluations. Implementations of
- * this interface can provide custom logic to evaluate vertex metrics and merge them with internally
- * evaluated metrics.
+ * Interface for custom evaluators that allow tailored scaling metric evaluations. Implementations
+ * of this interface can provide custom logic to evaluate vertex metrics and merge them with
+ * internally evaluated metrics.
  */
-public interface FlinkAutoscalerEvaluator extends Plugin {
+public interface FlinkAutoscalerEvaluator {
 
     /**
      * Returns the name of the custom evaluator.
@@ -67,21 +64,14 @@ public interface FlinkAutoscalerEvaluator extends Plugin {
     /**
      * Context providing relevant job and metric information to assist in custom metric evaluation.
      */
-    @Getter
     class Context {
         private final Configuration jobConf;
-
         private final SortedMap<Instant, CollectedMetrics> metricsHistory;
-
         private final Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>
                 evaluatedVertexMetrics;
-
         private final JobTopology topology;
-
         private final boolean processingBacklog;
-
         private final Duration restartTime;
-
         private final Configuration customEvaluatorConf;
 
         /**
@@ -113,6 +103,35 @@ public interface FlinkAutoscalerEvaluator extends Plugin {
             this.processingBacklog = processingBacklog;
             this.restartTime = restartTime;
             this.customEvaluatorConf = customEvaluatorConf;
+        }
+
+        public Configuration getJobConf() {
+            return jobConf;
+        }
+
+        public SortedMap<Instant, CollectedMetrics> getMetricsHistory() {
+            return metricsHistory;
+        }
+
+        public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>
+                getEvaluatedVertexMetrics() {
+            return evaluatedVertexMetrics;
+        }
+
+        public JobTopology getTopology() {
+            return topology;
+        }
+
+        public boolean isProcessingBacklog() {
+            return processingBacklog;
+        }
+
+        public Duration getRestartTime() {
+            return restartTime;
+        }
+
+        public Configuration getCustomEvaluatorConf() {
+            return customEvaluatorConf;
         }
     }
 }

@@ -31,7 +31,6 @@ import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -167,7 +166,6 @@ public class AutoScalerCustomEvaluatorTest {
 
     private Map<String, FlinkAutoscalerEvaluator> createTestCustomEvaluator() {
         var testCustomEvaluator = new TestCustomEvaluator();
-        testCustomEvaluator.configure(new Configuration());
         return Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
     }
 }

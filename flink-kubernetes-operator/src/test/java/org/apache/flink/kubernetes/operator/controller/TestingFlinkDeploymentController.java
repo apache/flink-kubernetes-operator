@@ -63,20 +63,20 @@ import java.util.function.BiConsumer;
 public class TestingFlinkDeploymentController
         implements Reconciler<FlinkDeployment>, Cleaner<FlinkDeployment> {
 
-    @Getter private ReconcilerFactory reconcilerFactory;
-    private FlinkDeploymentController flinkDeploymentController;
-    @Getter private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
-    private FlinkResourceEventCollector flinkResourceEventCollector =
+    @Getter private final ReconcilerFactory reconcilerFactory;
+    private final FlinkDeploymentController flinkDeploymentController;
+    @Getter private final StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
+    private final FlinkResourceEventCollector flinkResourceEventCollector =
             new FlinkResourceEventCollector();
 
     private EventRecorder eventRecorder;
 
-    @Getter private TestingFlinkResourceContextFactory contextFactory;
+    @Getter private final TestingFlinkResourceContextFactory contextFactory;
+    @Getter private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
+    @Getter private final CanaryResourceManager<FlinkDeployment> canaryResourceManager;
 
-    @Getter private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
-    @Getter private CanaryResourceManager<FlinkDeployment> canaryResourceManager;
-
-    private Map<ResourceID, Tuple2<FlinkDeploymentSpec, Long>> currentGenerations = new HashMap<>();
+    private final Map<ResourceID, Tuple2<FlinkDeploymentSpec, Long>> currentGenerations =
+            new HashMap<>();
 
     public TestingFlinkDeploymentController(
             FlinkConfigManager configManager, TestingFlinkService flinkService) {
@@ -101,7 +101,7 @@ public class TestingFlinkDeploymentController
                                 eventRecorder,
                                 new ClusterResourceManager(
                                         Duration.ZERO, flinkService.getKubernetesClient()),
-                                configManager));
+                                new Configuration()));
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(
