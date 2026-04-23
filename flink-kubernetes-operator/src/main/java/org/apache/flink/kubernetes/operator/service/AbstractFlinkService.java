@@ -345,9 +345,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                     }
                     break;
                 case CANCEL:
-                    cancelJobOrError(clusterClient, status, false);
-                    // This is async we need to return
-                    return CancelResult.pending();
+                    if (cancelJobOrError(clusterClient, status, false)) {
+                        // This is async we need to return
+                        return CancelResult.pending();
+                    }
+                    break;
             }
         }
         if (suspendMode.deleteCluster() || deleteCluster) {
@@ -370,9 +372,12 @@ public abstract class AbstractFlinkService implements FlinkService {
             switch (suspendMode) {
                 case STATELESS:
                 case CANCEL:
-                    cancelJobOrError(clusterClient, status, suspendMode == SuspendMode.STATELESS);
-                    // This is async we need to return and re-observe
-                    return CancelResult.pending();
+                    if (cancelJobOrError(
+                            clusterClient, status, suspendMode == SuspendMode.STATELESS)) {
+                        // This is async we need to return and re-observe
+                        return CancelResult.pending();
+                    }
+                    break;
                 case SAVEPOINT:
                     savepointPath = savepointJobOrError(clusterClient, status, conf);
                     break;
@@ -383,14 +388,14 @@ public abstract class AbstractFlinkService implements FlinkService {
         return CancelResult.completed(savepointPath);
     }
 
-    public void cancelJobOrError(
+    public boolean cancelJobOrError(
             RestClusterClient<String> clusterClient,
             CommonStatus<?> status,
             boolean ignoreMissing) {
         var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
         if (ReconciliationUtils.isJobCancelling(status)) {
             LOG.info("Job already cancelling");
-            return;
+            return true;
         }
         LOG.info("Cancelling job");
         try {
@@ -402,6 +407,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             if (isJobMissing(e)) {
                 if (ignoreMissing) {
                     LOG.info("Job already missing");
+                    return false;
                 } else {
                     throw new UpgradeFailureException(
                             "Cannot find job when trying to cancel",
@@ -410,6 +416,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 }
             } else if (isJobTerminated(e)) {
                 LOG.info("Job already terminated");
+                return false;
             } else {
                 LOG.warn("Error while cancelling job", e);
                 throw new UpgradeFailureException(
@@ -417,6 +424,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         status.getJobStatus().setState(JobStatus.CANCELLING);
+        return true;
     }
 
     public String savepointJobOrError(
@@ -487,9 +495,16 @@ public abstract class AbstractFlinkService implements FlinkService {
             return true;
         }
 
-        return findThrowable(e, RestClientException.class)
+        if (findThrowable(e, RestClientException.class)
                 .map(RestClientException::getHttpResponseStatus)
                 .map(respCode -> HttpResponseStatus.CONFLICT == respCode)
+                .orElse(false)) {
+            return true;
+        }
+
+        return Optional.ofNullable(ExceptionUtils.getExceptionMessage(e))
+                .map(String::toLowerCase)
+                .map(msg -> msg.contains("already reached another terminal state"))
                 .orElse(false);
     }
 
@@ -1048,6 +1063,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    @Override
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
