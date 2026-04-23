@@ -66,9 +66,10 @@ public class FlinkMutator implements Mutator<HasMetadata> {
         return resource;
     }
 
-    private FlinkSessionJob mutateSessionJob(HasMetadata resource) {
+    private HasMetadata mutateSessionJob(HasMetadata resource) {
         try {
             var sessionJob = mapper.convertValue(resource, FlinkSessionJob.class);
+            var originalSessionJob = mapper.valueToTree(sessionJob);
             var namespace = sessionJob.getMetadata().getNamespace();
             var deploymentName = sessionJob.getSpec().getDeploymentName();
             var key = Cache.namespaceKeyFunc(namespace, deploymentName);
@@ -78,18 +79,30 @@ public class FlinkMutator implements Mutator<HasMetadata> {
             for (FlinkResourceMutator mutator : mutators) {
                 sessionJob = mutator.mutateSessionJob(sessionJob, Optional.ofNullable(deployment));
             }
-
+            // Return the original resource if no mutation was applied to avoid
+            // the serialization round-trip producing a different object, which causes
+            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
+            if (originalSessionJob.equals(mapper.valueToTree(sessionJob))) {
+                return resource;
+            }
             return sessionJob;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    private FlinkDeployment mutateDeployment(HasMetadata resource) {
+    private HasMetadata mutateDeployment(HasMetadata resource) {
         try {
             var flinkDeployment = mapper.convertValue(resource, FlinkDeployment.class);
+            var originalFlinkDeployment = mapper.valueToTree(flinkDeployment);
             for (FlinkResourceMutator mutator : mutators) {
                 flinkDeployment = mutator.mutateDeployment(flinkDeployment);
+            }
+            // Return the original resource if no mutation was applied to avoid
+            // the serialization round-trip producing a different object, which causes
+            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
+            if (originalFlinkDeployment.equals(mapper.valueToTree(flinkDeployment))) {
+                return resource;
             }
             return flinkDeployment;
         } catch (Exception e) {
@@ -97,11 +110,18 @@ public class FlinkMutator implements Mutator<HasMetadata> {
         }
     }
 
-    private FlinkStateSnapshot mutateStateSnapshot(HasMetadata resource) {
+    private HasMetadata mutateStateSnapshot(HasMetadata resource) {
         try {
             var snapshot = mapper.convertValue(resource, FlinkStateSnapshot.class);
+            var originalSnapshot = mapper.valueToTree(snapshot);
             for (var mutator : mutators) {
                 snapshot = mutator.mutateStateSnapshot(snapshot);
+            }
+            // Return the original resource if no mutation was applied to avoid
+            // the serialization round-trip producing a different object, which causes
+            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
+            if (originalSnapshot.equals(mapper.valueToTree(snapshot))) {
+                return resource;
             }
             return snapshot;
         } catch (Exception e) {

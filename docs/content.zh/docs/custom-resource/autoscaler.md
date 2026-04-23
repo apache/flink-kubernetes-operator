@@ -156,8 +156,17 @@ A target of `0.6` means we are targeting 60% utilization/load for the job vertex
 
 In general, it's not recommended to set target utilization close to 100% as performance usually degrades as we reach capacity limits in most real world systems.
 
-In addition to the utilization target we can set a utilization boundary, that serves as extra buffer to avoid immediate scaling on load fluctuations.
-Setting `job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 20% deviation from the target utilization before triggering a scaling action.
+To control when scaling actions are triggered, users can set upper and lower utilization thresholds using `job.autoscaler.utilization.max` and `job.autoscaler.utilization.min`.
+These define the utilization range within which the autoscaler will not take any scaling action, providing a buffer against load fluctuations.
+
+For example, with a target utilization of `0.6`, setting `job.autoscaler.utilization.max: "0.8"` and `job.autoscaler.utilization.min: "0.4"` means:
+- Scale-up is triggered when utilization exceeds `0.8`
+- Scale-down is triggered when utilization drops below `0.4`
+- No scaling action is taken while utilization remains between `0.4` and `0.8`
+
+{{<hint info >}}
+The default thresholds are `target + 0.3` for max and `target - 0.3` for min.
+{{< /hint >}}
 
 ### Target catch-up duration and restart time
 
@@ -183,7 +192,8 @@ flinkConfiguration:
     job.autoscaler.stabilization.interval: 1m
     job.autoscaler.metrics.window: 5m
     job.autoscaler.target.utilization: "0.6"
-    job.autoscaler.target.utilization.boundary: "0.2"
+    job.autoscaler.utilization.max: "0.8"
+    job.autoscaler.utilization.min: "0.4"
     job.autoscaler.restart.time: 2m
     job.autoscaler.catch-up.duration: 5m
     pipeline.max-parallelism: "720"

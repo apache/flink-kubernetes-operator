@@ -100,19 +100,21 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @Getter
     public static class ParallelismChange {
 
-        private static final ParallelismChange NO_CHANGE = new ParallelismChange(-1, false);
-
         private final int newParallelism;
+
+        private final int currentParallelism;
 
         private final boolean outsideUtilizationBound;
 
-        private ParallelismChange(int newParallelism, boolean outsideUtilizationBound) {
+        private ParallelismChange(
+                int newParallelism, int currentParallelism, boolean outsideUtilizationBound) {
             this.newParallelism = newParallelism;
+            this.currentParallelism = currentParallelism;
             this.outsideUtilizationBound = outsideUtilizationBound;
         }
 
         public boolean isNoChange() {
-            return this == NO_CHANGE;
+            return newParallelism == currentParallelism;
         }
 
         @Override
@@ -124,33 +126,48 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 return false;
             }
             ParallelismChange that = (ParallelismChange) o;
+            if (this.isNoChange() && that.isNoChange()) {
+                // When no scaling happens, outsideUtilizationBound is irrelevant.
+                return currentParallelism == that.currentParallelism;
+            }
             return newParallelism == that.newParallelism
+                    && currentParallelism == that.currentParallelism
                     && outsideUtilizationBound == that.outsideUtilizationBound;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(newParallelism, outsideUtilizationBound);
+            if (isNoChange()) {
+                // When no scaling happens, outsideUtilizationBound is irrelevant.
+                return Objects.hash(currentParallelism);
+            }
+            return Objects.hash(newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
         @Override
         public String toString() {
             return isNoChange()
-                    ? "NoParallelismChange"
+                    ? "NoParallelismChange{currentParallelism=" + currentParallelism + "}"
                     : "ParallelismChange{newParallelism="
                             + newParallelism
+                            + ", currentParallelism="
+                            + currentParallelism
                             + ", outsideUtilizationBound="
                             + outsideUtilizationBound
                             + "}";
         }
 
-        public static ParallelismChange build(int newParallelism, boolean outsideUtilizationBound) {
+        public static ParallelismChange build(
+                int newParallelism, int currentParallelism, boolean outsideUtilizationBound) {
             checkArgument(newParallelism > 0, "The parallelism should be greater than 0.");
-            return new ParallelismChange(newParallelism, outsideUtilizationBound);
+            checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
+            return new ParallelismChange(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
-        public static ParallelismChange noChange() {
-            return NO_CHANGE;
+        public static ParallelismChange noChange(int currentParallelism) {
+            checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
+            return new ParallelismChange(currentParallelism, currentParallelism, false);
         }
     }
 
@@ -169,7 +186,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         double targetCapacity =
@@ -179,7 +196,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
@@ -221,8 +238,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         (int) evaluatedMetrics.get(NUM_SOURCE_PARTITIONS).getCurrent(),
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
-                        Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
-                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)),
+                        Math.min(currentParallelism, conf.get(VERTEX_MIN_PARALLELISM)),
+                        Math.max(currentParallelism, conf.get(VERTEX_MAX_PARALLELISM)),
                         autoScalerEventHandler,
                         context);
 
@@ -230,7 +247,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             // Clear delayed scale down request if the new parallelism is equal to
             // currentParallelism.
             delayedScaleDown.clearVertex(vertex);
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         }
 
         // We record our expectations for this scaling operation
@@ -350,7 +367,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
             // If we don't have past scaling actions for this vertex, don't block scale up.
             if (history.isEmpty()) {
-                return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+                return ParallelismChange.build(
+                        newParallelism, currentParallelism, outsideUtilizationBound);
             }
 
             var lastSummary = history.get(history.lastKey());
@@ -359,13 +377,19 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     && detectIneffectiveScaleUp(
                             context, vertex, conf, evaluatedMetrics, lastSummary)) {
                 // Block scale up when last rescale is ineffective.
-                return ParallelismChange.noChange();
+                return ParallelismChange.noChange(currentParallelism);
             }
 
-            return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+            return ParallelismChange.build(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         } else {
             return applyScaleDownInterval(
-                    delayedScaleDown, vertex, conf, newParallelism, outsideUtilizationBound);
+                    delayedScaleDown,
+                    vertex,
+                    conf,
+                    newParallelism,
+                    currentParallelism,
+                    outsideUtilizationBound);
         }
     }
 
@@ -400,11 +424,13 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             JobVertexID vertex,
             Configuration conf,
             int newParallelism,
+            int currentParallelism,
             boolean outsideUtilizationBound) {
         var scaleDownInterval = conf.get(SCALE_DOWN_INTERVAL);
         if (scaleDownInterval.toMillis() <= 0) {
             // The scale down interval is disable, so don't block scaling.
-            return ParallelismChange.build(newParallelism, outsideUtilizationBound);
+            return ParallelismChange.build(
+                    newParallelism, currentParallelism, outsideUtilizationBound);
         }
 
         var now = clock.instant();
@@ -422,7 +448,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         "Try to skip immediate scale down within scale-down interval for {}",
                         vertex);
             }
-            return ParallelismChange.noChange();
+            return ParallelismChange.noChange(currentParallelism);
         } else {
             // Using the maximum parallelism within the scale down interval window instead of the
             // latest parallelism when scaling down
@@ -430,6 +456,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     delayedScaleDownInfo.getMaxRecommendedParallelism(windowStartTime);
             return ParallelismChange.build(
                     maxRecommendedParallelism.getParallelism(),
+                    currentParallelism,
                     maxRecommendedParallelism.isOutsideUtilizationBound());
         }
     }
@@ -483,16 +510,28 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     /**
-     * Computing the newParallelism. In general, newParallelism = currentParallelism * scaleFactor.
-     * But we limit newParallelism between parallelismLowerLimit and min(parallelismUpperLimit,
-     * maxParallelism).
+     * Computes the new parallelism for a vertex. In general, {@code newParallelism =
+     * currentParallelism * scaleFactor}, clamped to {@code [parallelismLowerLimit,
+     * min(parallelismUpperLimit, maxParallelism)]}.
      *
-     * <p>Also, in order to ensure the data is evenly spread across subtasks, we try to adjust the
-     * parallelism for source and keyed vertex such that it divides the maxParallelism without a
-     * remainder.
+     * <p>For source vertices (with known partition counts) and keyed vertices (with HASH inputs),
+     * the parallelism is further adjusted to align with the number of key groups or source
+     * partitions, according to the configured {@link KeyGroupOrPartitionsAdjustMode}.
      *
-     * <p>This method also attempts to adjust the parallelism to ensure it aligns well with the
-     * number of source partitions if a vertex has a known source partition count.
+     * <p>The alignment uses a two-phase algorithm:
+     *
+     * <ol>
+     *   <li><b>Phase 1 (upward search):</b> searches from the computed {@code newParallelism}
+     *       upward for divisor-aligned values. For scale-down, the search is capped at {@code
+     *       currentParallelism} to prevent the alignment from crossing into the scale-up direction.
+     *       If the nearest divisor is {@code currentParallelism} itself, it is returned
+     *       (effectively blocking the scale-down).
+     *   <li><b>Phase 2 (downward fallback):</b> if Phase 1 finds no match, searches downward from
+     *       {@code newParallelism} for the boundary where per-subtask load increases. A
+     *       direction-safety guard ensures the result never inverts the intended scaling direction
+     *       (scale-up results stay above {@code currentParallelism}, scale-down results stay
+     *       below).
+     * </ol>
      */
     @VisibleForTesting
     protected static <KEY, Context extends JobAutoScalerContext<KEY>> int scale(
@@ -548,10 +587,23 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         KeyGroupOrPartitionsAdjustMode mode =
                 context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
 
-        // When the shuffle type of vertex inputs contains keyBy or vertex is a source,
-        // we try to adjust the parallelism such that it divides
-        // the numKeyGroupsOrPartitions without a remainder => data is evenly spread across subtasks
-        for (int p = newParallelism; p <= upperBoundForAlignment; p++) {
+        if (newParallelism == currentParallelism) {
+            return newParallelism;
+        }
+
+        boolean isScaleUp = newParallelism > currentParallelism;
+
+        // Phase 1: Upward search from newParallelism for divisor or approximate match.
+        // For scale-down, cap search at currentParallelism to prevent the alignment
+        // from crossing into the scale-up direction (direction-safety fix).
+        // Returning currentParallelism itself is allowed — it effectively blocks the
+        // scale-down since no aligned value was found strictly below it.
+        int phase1UpperBound =
+                isScaleUp
+                        ? upperBoundForAlignment
+                        : Math.min(currentParallelism, upperBoundForAlignment);
+
+        for (int p = newParallelism; p <= phase1UpperBound; p++) {
             if (numKeyGroupsOrPartitions % p == 0
                     ||
                     // When Mode is MAXIMIZE_UTILISATION , Try to find the smallest parallelism
@@ -575,14 +627,67 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 break;
             }
         }
-
         p = Math.max(p, parallelismLowerLimit);
+
+        // Direction-safety guard: prevent the alignment from inverting the scaling direction.
+        if ((isScaleUp && p <= currentParallelism) || (!isScaleUp && p >= currentParallelism)) {
+            LOG.warn(
+                    "Scaling of {} blocked: alignment could not find a value that preserves the "
+                            + "{} direction from current parallelism {} with mode {}. "
+                            + "Keeping current parallelism.",
+                    vertex,
+                    isScaleUp ? "scale-up" : "scale-down",
+                    currentParallelism,
+                    mode);
+            emitScalingLimitedEvent(
+                    vertex,
+                    newParallelism,
+                    currentParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBound,
+                    parallelismLowerLimit,
+                    eventHandler,
+                    context);
+            return currentParallelism;
+        }
+
+        if (p != newParallelism) {
+            emitScalingLimitedEvent(
+                    vertex,
+                    newParallelism,
+                    p,
+                    numKeyGroupsOrPartitions,
+                    upperBound,
+                    parallelismLowerLimit,
+                    eventHandler,
+                    context);
+        }
+        return p;
+    }
+
+    /**
+     * Emits a {@link #SCALING_LIMITED} warning event when the alignment logic had to deviate from
+     * the computed target parallelism, or when no aligned parallelism could be found and the
+     * scaling operation was blocked.
+     *
+     * @param expectedParallelism the originally computed target parallelism
+     * @param actualParallelism the parallelism that will actually be applied
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> void emitScalingLimitedEvent(
+            JobVertexID vertex,
+            int expectedParallelism,
+            int actualParallelism,
+            int numKeyGroupsOrPartitions,
+            int upperBound,
+            int parallelismLowerLimit,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
         var message =
                 String.format(
                         SCALE_LIMITED_MESSAGE_FORMAT,
                         vertex,
-                        newParallelism,
-                        p,
+                        expectedParallelism,
+                        actualParallelism,
                         numKeyGroupsOrPartitions,
                         upperBound,
                         parallelismLowerLimit);
@@ -591,9 +696,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 AutoScalerEventHandler.Type.Warning,
                 SCALING_LIMITED,
                 message,
-                SCALING_LIMITED + vertex + newParallelism,
+                SCALING_LIMITED + vertex,
                 context.getConfiguration().get(SCALING_EVENT_INTERVAL));
-        return p;
     }
 
     @VisibleForTesting

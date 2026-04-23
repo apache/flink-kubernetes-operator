@@ -313,6 +313,57 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         assertEquals(savepointPath, flinkService.listJobs().get(0).f0);
     }
 
+    @Test
+    public void testTerminalJobWithHaMetaAvailable() throws Exception {
+        // Bootstrap a running deployment with LAST_STATE upgrade mode (HA config is required)
+        var deployment = buildApplicationCluster(FlinkVersion.v1_19, UpgradeMode.LAST_STATE);
+
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        // Simulate: job reached a terminal state while JM is still READY and HA metadata is
+        // available (e.g. job manager cannot delete HA metadata promptly, such as under memory or
+        // cpu pressure)
+        flinkService.clear();
+        flinkService.setHaDataAvailable(true);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FINISHED);
+
+        // Happy path: a valid savepoint path is recorded in status
+        // Expectation: redeploy from that recorded savepoint
+        final String recordedSavepointPath = "ha_recorded_savepoint";
+        deployment.getStatus().getJobStatus().setUpgradeSavepointPath(recordedSavepointPath);
+        deployment.getSpec().setRestartNonce(100L);
+
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(1, flinkService.getRunningCount());
+        assertEquals(recordedSavepointPath, flinkService.listJobs().get(0).f0);
+
+        // Error path: only the LAST_STATE dummy marker is in the status, meaning the job was
+        // previously upgraded via HA last-state without recording an actual savepoint path.
+        // When the job is now terminal with JM accessible, there is nothing to restore from.
+        flinkService.clear();
+        deployment.getSpec().setRestartNonce(200L);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FINISHED);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setUpgradeSavepointPath(ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH);
+
+        assertThatThrownBy(() -> reconciler.reconcile(deployment, context))
+                .isInstanceOf(UpgradeFailureException.class)
+                .hasMessageContaining("Job is in terminal state but last checkpoint is unknown");
+    }
+
     private FlinkDeployment cloneDeploymentWithUpgradeMode(
             FlinkDeployment deployment, UpgradeMode upgradeMode) {
         FlinkDeployment result = ReconciliationUtils.clone(deployment);

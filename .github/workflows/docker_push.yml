@@ -29,6 +29,7 @@ on:
     branches:
       - main
       - 'release-*'
+
 jobs:
   build_image:
     runs-on: ubuntu-latest
@@ -40,38 +41,80 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
-          platforms: all
+        # Replaces docker/setup-qemu-action.
+        # Keep this because docker-bake.hcl builds both amd64 and arm64.
+        run: |
+          docker run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v3
+        # Replaces docker/setup-buildx-action.
+        # Create a named builder and bootstrap it so bake can use multi-platform builds.
+        run: |
+          docker buildx create --name builder --use || docker buildx use builder
+          docker buildx inspect --bootstrap
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        # Replaces docker/login-action.
+        # PRs do not push images, so skip login there.
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,prefix=,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+        # Replaces docker/metadata-action.
+        #
+        # The original workflow only consumed meta.outputs.bake-file.
+        # We keep the same contract by generating a small temporary bake file
+        # that augments the `docker-metadata-action` target defined in docker-bake.hcl.
+        #
+        # This preserves the existing `docker buildx bake -f ... -f ... bake-platform`
+        # flow with a minimal diff.
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BAKE_FILE="$(mktemp)"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          TAGS=()
+          TAGS+=("\"${IMAGE}:${SHORT_SHA}\"")
+
+          # Match the original raw tag on the main branch.
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            TAGS+=("\"${IMAGE}:main\"")
+          fi
+
+          # Note: the original type=semver patterns are omitted here.
+          # The workflow triggers on 'release-*-rc*' tags, which are not valid
+          # semver (docker/metadata-action requires vX.Y.Z or X.Y.Z format), so
+          # the original action produced no semver tags either.
+
+          cat > "${BAKE_FILE}" <<EOF
+          target "docker-metadata-action" {
+            tags = [$(IFS=,; echo "${TAGS[*]}")]
+            labels = {
+              "org.opencontainers.image.source" = "https://github.com/${GITHUB_REPOSITORY}"
+              "org.opencontainers.image.revision" = "${GITHUB_SHA}"
+            }
+          }
+          EOF
+
+          echo "bake-file=${BAKE_FILE}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push Docker images (supported platforms)
-        uses: docker/bake-action@v5
-        with:
-          files: |
-            .github/workflows/docker-bake.hcl
-            ${{ steps.meta.outputs.bake-file }}
-          targets: bake-platform
-          push: ${{ github.event_name != 'pull_request' }}
+        # Replaces docker/bake-action while preserving the same inputs:
+        # - the checked-in docker-bake.hcl
+        # - the generated metadata bake file from the previous step
+        run: |
+          set -euo pipefail
+          CMD=(docker buildx bake
+            -f .github/workflows/docker-bake.hcl
+            -f "${{ steps.meta.outputs.bake-file }}"
+            bake-platform
+          )
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            CMD+=(--push)
+          fi
+          "${CMD[@]}"

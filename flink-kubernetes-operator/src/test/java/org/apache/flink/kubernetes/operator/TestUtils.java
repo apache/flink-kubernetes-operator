@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -84,6 +85,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_MODE;
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_STORAGE_PATH;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -243,6 +246,39 @@ public class TestUtils extends BaseTestUtils {
                 var session = buildSessionCluster();
                 session.getStatus()
                         .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata>
+            Context<T> createContextWithFlinkDeploymentInLifecycleState(
+                    ResourceLifecycleState lifecycleState) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus().setLifecycleState(lifecycleState);
+                session.getStatus()
+                        .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithUnhealthyFlinkDeployment(
+            boolean haEnabled) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus()
+                        .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                if (!haEnabled) {
+                    session.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(HA_MODE.key(), HA_STORAGE_PATH.key());
+                }
                 return (Optional<T>) Optional.of(session);
             }
         };

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -704,6 +705,49 @@ class FlinkSessionJobControllerTest {
         flinkService.clear();
         flinkService.setFlinkJobNotFound(true);
         deleteControl = testController.cleanup(sessionJob, context);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(
+                ResourceLifecycleState.DELETED,
+                testController
+                        .getStatusUpdateCounter()
+                        .currentResource
+                        .getStatus()
+                        .getLifecycleState());
+        assertEquals(ResourceLifecycleState.DELETED, sessionJob.getStatus().getLifecycleState());
+    }
+
+    @Test
+    public void testCleanupTerminalStateJobWithUnavailableSessionCluster() throws Exception {
+        // Submit job with ready session cluster
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(1, flinkService.listJobs().size());
+
+        // Simulate job reaching terminal state (CANCELLED) in the Flink cluster
+        var jobs = flinkService.listJobs();
+        var job = jobs.get(0);
+        var cancelledStatus =
+                new JobStatusMessage(
+                        job.f1.getJobId(),
+                        job.f1.getJobName(),
+                        org.apache.flink.api.common.JobStatus.CANCELED,
+                        job.f1.getStartTime());
+        jobs.set(0, Tuple3.of(job.f0, cancelledStatus, job.f2));
+
+        // Manually update sessionJob status to reflect terminal state
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.CANCELED);
+
+        // Now simulate session cluster becoming unavailable by using empty context
+        Context<FlinkSessionJob> emptyContext =
+                TestUtils.createEmptyContextWithClient(kubernetesClient);
+
+        // Cleanup should still succeed and remove finalizer even without session cluster
+        var deleteControl = testController.cleanup(sessionJob, emptyContext);
         assertTrue(deleteControl.isRemoveFinalizer());
         assertEquals(
                 ResourceLifecycleState.DELETED,

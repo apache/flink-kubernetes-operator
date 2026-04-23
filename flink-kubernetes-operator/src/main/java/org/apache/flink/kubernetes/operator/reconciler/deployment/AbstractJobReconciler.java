@@ -216,16 +216,13 @@ public abstract class AbstractJobReconciler<
         var resource = ctx.getResource();
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
-        boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
 
         if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
-            return JobUpgrade.stateless(terminal);
+            return JobUpgrade.stateless(ReconciliationUtils.isJobInTerminalState(status));
         }
 
-        var flinkService = ctx.getFlinkService();
-        if (ReconciliationUtils.isJobCancelled(status)
-                || (terminal && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig()))) {
+        if (useStatusSavepoint(ctx, status)) {
 
             if (!SnapshotUtils.lastSavepointKnown(status)) {
                 throw new UpgradeFailureException(
@@ -301,6 +298,38 @@ public abstract class AbstractJobReconciler<
         }
 
         return JobUpgrade.unavailable();
+    }
+
+    /**
+     * Core logic to determine whether the savepoint recorded in the status is safe to use for
+     * upgrades: no other savepoint/checkpoint may be in progress and what's there is the latest.
+     */
+    @VisibleForTesting
+    static boolean useStatusSavepoint(FlinkResourceContext<?> ctx, CommonStatus<?> status) {
+
+        // Only terminal job state is fixed/guaranteed
+        if (!ReconciliationUtils.isJobInTerminalState(status)) {
+            return false;
+        }
+
+        // Observed to be fully canceled with state information
+        if (ReconciliationUtils.isJobCancelled(status)) {
+            return true;
+        }
+
+        var service = ctx.getFlinkService();
+        var conf = ctx.getObserveConfig();
+
+        // At this point our job is in terminal state (failed or stopped). Normally the jobmanager
+        // removes any HA state that would affect failover/restarts but this is not fully guaranteed
+        // (the JM may be slow due to CPU or memory pressure).
+        // We accept the recorded savepoint in cases where the HA metadata doesn't exist (it was a
+        // clean job shutdown) or the JM is still accessible which guarantees that the observer
+        // updated the savepoint information.
+        // This still guards against cases where the job + JM fails after restart in a way that the
+        // operator cannot access the new state (in that case HA metadata would be available and JM
+        // inaccessible)
+        return !service.isHaMetadataAvailable(conf) || status.isJmAccessible();
     }
 
     @VisibleForTesting
