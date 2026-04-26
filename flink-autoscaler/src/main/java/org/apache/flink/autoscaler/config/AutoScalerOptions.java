@@ -243,6 +243,35 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Minimum nr of observations used when estimating / switching to observed true processing rate.");
 
+    public static final ConfigOption<Boolean> OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED =
+            autoScalerConfig("observed-true-processing-rate.non-source.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    "observed-true-processing-rate.non-source.enabled"))
+                    .withDescription(
+                            "Whether to also compute the observed (backpressure-derived) true processing rate "
+                                    + "for non-source vertices. When enabled, OBSERVED_TPR is populated for any vertex "
+                                    + "whose engagement (busy + backpressured time) crosses the configured threshold, "
+                                    + "mirroring the source-side behavior gated on lag. Default off for backward compatibility.");
+
+    public static final ConfigOption<Double>
+            OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENGAGEMENT_THRESHOLD =
+                    autoScalerConfig(
+                                    "observed-true-processing-rate.non-source.engagement-threshold")
+                            .doubleType()
+                            .defaultValue(0.95)
+                            .withFallbackKeys(
+                                    oldOperatorConfigKey(
+                                            "observed-true-processing-rate.non-source.engagement-threshold"))
+                            .withDescription(
+                                    "Engagement threshold (between 0 and 1) for triggering observed true processing rate "
+                                            + "computation on non-source vertices. Computed as (busyTimeMsPerSecond + "
+                                            + "backPressuredTimeMsPerSecond) / 1000. The vertex is considered fully engaged "
+                                            + "(and therefore not input-starved) when this value crosses the threshold, "
+                                            + "which is the non-source analogue of the source 'has lag' condition.");
+
     public static final ConfigOption<Boolean> SCALING_EFFECTIVENESS_DETECTION_ENABLED =
             autoScalerConfig("scaling.effectiveness.detection.enabled")
                     .booleanType()

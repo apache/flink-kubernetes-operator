@@ -98,6 +98,12 @@ public class ScalingMetrics {
                                 .orElseGet(observedTprAvg);
                 scalingMetrics.put(ScalingMetric.OBSERVED_TPR, observedTprOpt);
             }
+        } else if (conf.get(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED)) {
+            var nonSourceObservedTpr =
+                    getNonSourceObservedTpr(flinkMetrics, conf).orElseGet(observedTprAvg);
+            if (!Double.isNaN(nonSourceObservedTpr)) {
+                scalingMetrics.put(ScalingMetric.OBSERVED_TPR, nonSourceObservedTpr);
+            }
         }
     }
 
@@ -128,6 +134,58 @@ public class ScalingMetrics {
                         numRecordsInPerSecond,
                         flinkMetrics.get(FlinkMetric.BACKPRESSURE_TIME_PER_SEC).getAvg());
 
+        return Double.isNaN(observedTpr) ? Optional.empty() : Optional.of(observedTpr);
+    }
+
+    /**
+     * Compute the observed (backpressure-derived) true processing rate for a non-source vertex.
+     *
+     * <p>Triggered only when the vertex is "fully engaged" — i.e. spending nearly all its time
+     * either busy or backpressured. This is the per-vertex analogue of the source-side "has lag"
+     * gate in {@link #getObservedTpr}: a fully engaged vertex is not input-starved by upstream, so
+     * its observed input rate represents its true capacity (modulo backpressure).
+     *
+     * <p>Returns {@link Optional#empty()} when the required metrics are unavailable, the vertex is
+     * not engaged enough, or the formula degenerates (e.g. {@code backpressure >= 1000ms/s}). In
+     * those cases the caller falls back to the historical observed TPR average (if any).
+     */
+    private static Optional<Double> getNonSourceObservedTpr(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics, Configuration conf) {
+
+        var bpMetric = flinkMetrics.get(FlinkMetric.BACKPRESSURE_TIME_PER_SEC);
+        var rateMetric = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
+        var busyMetric = flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC);
+        if (bpMetric == null || rateMetric == null || busyMetric == null) {
+            return Optional.empty();
+        }
+
+        double busyMsPerSec = busyMetric.getAvg();
+        double bpMsPerSec = bpMetric.getAvg();
+        if (!Double.isFinite(busyMsPerSec) || !Double.isFinite(bpMsPerSec)) {
+            return Optional.empty();
+        }
+        // Engagement = fraction of time the vertex is either doing work or blocked downstream.
+        // High engagement means the vertex is not waiting for input -> rate reflects capacity.
+        double engagement = (Math.max(0, busyMsPerSec) + Math.max(0, bpMsPerSec)) / 1000.;
+        double engagementThreshold =
+                conf.get(
+                        AutoScalerOptions
+                                .OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENGAGEMENT_THRESHOLD);
+        if (engagement < engagementThreshold) {
+            return Optional.empty();
+        }
+
+        double numRecordsInPerSecond = rateMetric.getSum();
+        if (Double.isNaN(numRecordsInPerSecond)) {
+            return Optional.empty();
+        }
+        // Mirror source-side semantics: zero input rate while engaged signals no work to do,
+        // allow scale down.
+        if (numRecordsInPerSecond == 0) {
+            return Optional.of(Double.POSITIVE_INFINITY);
+        }
+
+        double observedTpr = computeObservedTprWithBackpressure(numRecordsInPerSecond, bpMsPerSec);
         return Double.isNaN(observedTpr) ? Optional.empty() : Optional.of(observedTpr);
     }
 
