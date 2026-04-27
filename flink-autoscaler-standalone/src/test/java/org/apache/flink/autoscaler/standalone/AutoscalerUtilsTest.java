@@ -22,7 +22,7 @@ import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
+import java.util.Collection;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,13 +31,13 @@ class AutoscalerUtilsTest {
 
     @Test
     void testDiscoverCustomEvaluators() {
-        Map<String, FlinkAutoscalerEvaluator> evaluators =
+        Collection<FlinkAutoscalerEvaluator> evaluators =
                 AutoscalerUtils.discoverCustomEvaluators();
 
         assertThat(evaluators)
                 .as(
                         "Expected to discover the TestCustomEvaluator registered under META-INF/services")
-                .containsOnlyKeys("test-custom-evaluator");
-        assertThat(evaluators.get("test-custom-evaluator")).isInstanceOf(TestCustomEvaluator.class);
+                .hasSize(1)
+                .hasOnlyElementsOfType(TestCustomEvaluator.class);
     }
 }

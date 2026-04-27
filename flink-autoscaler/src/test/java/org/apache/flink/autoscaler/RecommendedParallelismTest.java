@@ -100,7 +100,7 @@ public class RecommendedParallelismTest {
                         eventCollector,
                         new TestingScalingRealizer<>(),
                         stateStore,
-                        Collections.emptyMap());
+                        Collections.emptyList());
 
         // Reset custom window size to default
         metricsCollector.setTestMetricWindowSize(null);

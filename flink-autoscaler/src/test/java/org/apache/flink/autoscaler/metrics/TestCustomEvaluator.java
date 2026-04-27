@@ -29,10 +29,6 @@ import java.util.Map;
  * scaling metric evaluations for job vertices in a Flink job.
  */
 public class TestCustomEvaluator implements FlinkAutoscalerEvaluator {
-    @Override
-    public String getName() {
-        return "test-custom-evaluator";
-    }
 
     @Override
     public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(

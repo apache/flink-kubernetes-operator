@@ -22,8 +22,9 @@ import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.ServiceLoader;
 
 /** Autoscaler related utility methods for the standalone autoscaler. */
@@ -37,31 +38,17 @@ public class AutoscalerUtils {
      * META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator} on the
      * classpath.
      *
-     * @return A map of discovered custom evaluators keyed by the name returned by {@link
-     *     FlinkAutoscalerEvaluator#getName()}. If two implementations report the same name, the
-     *     later one overwrites the earlier one and a warning is logged.
+     * @return The list of discovered custom evaluators.
      */
-    public static Map<String, FlinkAutoscalerEvaluator> discoverCustomEvaluators() {
-        Map<String, FlinkAutoscalerEvaluator> customEvaluators = new HashMap<>();
+    public static Collection<FlinkAutoscalerEvaluator> discoverCustomEvaluators() {
+        List<FlinkAutoscalerEvaluator> customEvaluators = new ArrayList<>();
         ServiceLoader.load(FlinkAutoscalerEvaluator.class)
                 .forEach(
                         customEvaluator -> {
-                            String customEvaluatorName = customEvaluator.getName();
                             LOG.info(
-                                    "Discovered custom evaluator via ServiceLoader: {} (name={}).",
-                                    customEvaluator.getClass().getName(),
-                                    customEvaluatorName);
-                            if (customEvaluators.containsKey(customEvaluatorName)) {
-                                LOG.warn(
-                                        "Duplicate custom evaluator name [{}] detected. Overwriting existing [{}] with [{}].",
-                                        customEvaluatorName,
-                                        customEvaluators
-                                                .get(customEvaluatorName)
-                                                .getClass()
-                                                .getName(),
-                                        customEvaluator.getClass().getName());
-                            }
-                            customEvaluators.put(customEvaluatorName, customEvaluator);
+                                    "Discovered custom evaluator via ServiceLoader: {}.",
+                                    customEvaluator.getClass().getName());
+                            customEvaluators.add(customEvaluator);
                         });
         return customEvaluators;
     }

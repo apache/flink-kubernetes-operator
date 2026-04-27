@@ -26,47 +26,35 @@ import org.apache.flink.core.plugin.PluginUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 /** Autoscaler related utility methods for Operator. */
 public class AutoscalerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerUtils.class);
 
     /**
-     * discovers custom evaluator's for autoscaler.
+     * Discovers custom evaluator's for autoscaler.
      *
      * @param conf Base FlinkConfigManager configuration
-     * @return A map of discovered custom evaluators, where the key is the evaluator name provided
-     *     by {@link FlinkAutoscalerEvaluator#getName()}) and the value is the corresponding
-     *     instance.
+     * @return The list of discovered custom evaluators.
      */
-    public static Map<String, FlinkAutoscalerEvaluator> discoverCustomEvaluators(
+    public static Collection<FlinkAutoscalerEvaluator> discoverCustomEvaluators(
             Configuration conf) {
-        Map<String, FlinkAutoscalerEvaluator> customEvaluators = new HashMap<>();
+        List<FlinkAutoscalerEvaluator> customEvaluators = new ArrayList<>();
         PluginUtils.createPluginManagerFromRootFolder(conf)
                 .load(FlinkAutoscalerEvaluator.class)
                 .forEachRemaining(
                         customEvaluator -> {
-                            String customEvaluatorName = customEvaluator.getName();
                             LOG.info(
                                     "Discovered custom evaluator for autoscaler from plugin directory[{}]: {}.",
                                     System.getenv()
                                             .getOrDefault(
                                                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                                                     ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
-                                    customEvaluatorName);
-                            if (customEvaluators.containsKey(customEvaluatorName)) {
-                                LOG.warn(
-                                        "Duplicate custom evaluator name [{}] detected. Overwriting existing [{}] with [{}].",
-                                        customEvaluatorName,
-                                        customEvaluators
-                                                .get(customEvaluatorName)
-                                                .getClass()
-                                                .getName(),
-                                        customEvaluator.getClass().getName());
-                            }
-                            customEvaluators.put(customEvaluatorName, customEvaluator);
+                                    customEvaluator.getClass().getName());
+                            customEvaluators.add(customEvaluator);
                         });
         return customEvaluators;
     }

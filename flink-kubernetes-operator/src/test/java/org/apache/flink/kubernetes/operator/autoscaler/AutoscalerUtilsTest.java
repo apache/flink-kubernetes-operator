@@ -18,6 +18,8 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
+import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -28,12 +30,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Unit tests for {@link AutoscalerUtils}. */
 public class AutoscalerUtilsTest {
@@ -49,13 +50,12 @@ public class AutoscalerUtilsTest {
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
 
-            // Discover evaluators
-            var discoveredEvaluators =
-                    AutoscalerUtils.discoverCustomEvaluators(new Configuration()).keySet();
-            // Expected evaluators
-            var expectedEvaluators = new HashSet<>(List.of("test-custom-evaluator"));
+            Collection<FlinkAutoscalerEvaluator> discoveredEvaluators =
+                    AutoscalerUtils.discoverCustomEvaluators(new Configuration());
 
-            assertEquals(expectedEvaluators, discoveredEvaluators);
+            assertThat(discoveredEvaluators)
+                    .hasSize(1)
+                    .hasOnlyElementsOfType(TestCustomEvaluator.class);
         } finally {
             TestUtils.setEnv(originalEnv);
         }

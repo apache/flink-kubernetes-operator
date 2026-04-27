@@ -35,13 +35,6 @@ import java.util.SortedMap;
 public interface FlinkAutoscalerEvaluator {
 
     /**
-     * Returns the name of the custom evaluator.
-     *
-     * @return The name of the custom evaluator.
-     */
-    String getName();
-
-    /**
      * Evaluates scaling metrics for a given job vertex based on the internally evaluated metrics
      * and context.
      *

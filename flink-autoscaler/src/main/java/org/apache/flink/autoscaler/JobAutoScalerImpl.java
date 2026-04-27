@@ -37,13 +37,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATOR_NAME;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATORS;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
@@ -63,7 +65,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final ScalingRealizer<KEY, Context> scalingRealizer;
     private final AutoScalerStateStore<KEY, Context> stateStore;
-    private final Map<String, FlinkAutoscalerEvaluator> customEvaluators;
+    private final Collection<FlinkAutoscalerEvaluator> customEvaluators;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -80,7 +82,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             AutoScalerEventHandler<KEY, Context> eventHandler,
             ScalingRealizer<KEY, Context> scalingRealizer,
             AutoScalerStateStore<KEY, Context> stateStore,
-            Map<String, FlinkAutoscalerEvaluator> customEvaluators) {
+            Collection<FlinkAutoscalerEvaluator> customEvaluators) {
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
@@ -278,16 +280,51 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @VisibleForTesting
     protected Tuple2<FlinkAutoscalerEvaluator, Configuration> getCustomEvaluatorIfRequired(
             Configuration conf) {
-        return Optional.ofNullable(conf.get(CUSTOM_EVALUATOR_NAME))
-                .map(
-                        name -> {
-                            FlinkAutoscalerEvaluator evaluator = customEvaluators.get(name);
-                            return evaluator != null
-                                    ? new Tuple2<>(
-                                            evaluator,
-                                            AutoScalerOptions.forCustomEvaluator(conf, name))
-                                    : null;
-                        })
-                .orElse(null);
+        List<String> instances = conf.get(CUSTOM_EVALUATORS);
+        if (instances == null || instances.isEmpty()) {
+            return null;
+        }
+        if (instances.size() > 1) {
+            LOG.warn(
+                    "Only a single custom evaluator is currently supported, but {} were configured via '{}': {}. "
+                            + "Falling back to the first entry ('{}'); the remaining entries will be ignored. "
+                            + "Multi-instance support (with a priority/ordering contract) will be added as a follow-up.",
+                    instances.size(),
+                    CUSTOM_EVALUATORS.key(),
+                    instances,
+                    instances.get(0));
+        }
+        String instance = instances.get(0);
+        String classKey = AutoScalerOptions.customEvaluatorClassKey(instance);
+        String configuredClassName =
+                conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
+        if (configuredClassName == null || configuredClassName.isBlank()) {
+            LOG.warn(
+                    "Custom evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
+                            + "No custom evaluator will be applied.",
+                    instance,
+                    CUSTOM_EVALUATORS.key(),
+                    classKey);
+            return null;
+        }
+        FlinkAutoscalerEvaluator match = null;
+        for (FlinkAutoscalerEvaluator evaluator : customEvaluators) {
+            if (evaluator.getClass().getName().equals(configuredClassName)) {
+                match = evaluator;
+                break;
+            }
+        }
+        if (match == null) {
+            LOG.warn(
+                    "No registered custom evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
+                    configuredClassName,
+                    instance,
+                    classKey,
+                    customEvaluators.stream()
+                            .map(e -> e.getClass().getName())
+                            .collect(Collectors.toList()));
+            return null;
+        }
+        return new Tuple2<>(match, AutoScalerOptions.customEvaluatorConfiguration(conf, instance));
     }
 }

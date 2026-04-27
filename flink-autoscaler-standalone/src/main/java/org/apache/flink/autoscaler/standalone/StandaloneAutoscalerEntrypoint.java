@@ -39,7 +39,7 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.util.Collection;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
@@ -91,7 +91,7 @@ public class StandaloneAutoscalerEntrypoint {
             JobAutoScaler<KEY, Context> createJobAutoscaler(
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
-        Map<String, FlinkAutoscalerEvaluator> customEvaluators =
+        Collection<FlinkAutoscalerEvaluator> customEvaluators =
                 AutoscalerUtils.discoverCustomEvaluators();
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),

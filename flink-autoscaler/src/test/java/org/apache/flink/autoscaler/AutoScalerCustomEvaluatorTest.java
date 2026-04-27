@@ -31,6 +31,8 @@ import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -40,10 +42,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Unit test for testing the integration of custom evaluators with the Flink job autoscaler. */
@@ -99,7 +104,13 @@ public class AutoScalerCustomEvaluatorTest {
         defaultConf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
         defaultConf.set(AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD, Duration.ofSeconds(1));
 
-        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATOR_NAME, testCustomEvaluatorName);
+        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.customEvaluatorClassKey(testCustomEvaluatorName))
+                        .stringType()
+                        .noDefaultValue(),
+                TestCustomEvaluator.class.getName());
 
         autoscaler =
                 new JobAutoScalerImpl<>(
@@ -152,6 +163,95 @@ public class AutoScalerCustomEvaluatorTest {
         assertFlinkMetricsCount(1, 0);
     }
 
+    @Test
+    void testForCustomEvaluatorStripsCanonicalPrefix() {
+        Configuration conf = new Configuration();
+        conf.setString(
+                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                        + "my-evaluator.target-data-rate",
+                "12345.0");
+        // Unrelated keys must not leak into the per-evaluator view.
+        conf.setString(
+                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                        + "other-evaluator.foo",
+                "bar");
+        conf.setString("unrelated.key", "should-not-leak");
+
+        Configuration scoped = AutoScalerOptions.customEvaluatorConfiguration(conf, "my-evaluator");
+        assertThat(scoped.toMap())
+                .containsExactlyInAnyOrderEntriesOf(Map.of("target-data-rate", "12345.0"));
+    }
+
+    @Test
+    void testForCustomEvaluatorHonorsLegacyFallbackPrefix() {
+        Configuration conf = new Configuration();
+        // Only the legacy 'kubernetes.operator.' prefix is set, both for a free-form parameter
+        // and for the per-instance class FQN.
+        conf.setString(
+                AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
+                        + AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                        + "my-evaluator.target-data-rate",
+                "999.0");
+        conf.setString(
+                AutoScalerOptions.customEvaluatorClassFallbackKey("my-evaluator"),
+                "org.example.LegacyEvaluator");
+
+        Configuration scoped = AutoScalerOptions.customEvaluatorConfiguration(conf, "my-evaluator");
+        assertThat(scoped.toMap())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                "target-data-rate", "999.0",
+                                "class", "org.example.LegacyEvaluator"));
+
+        // The class option must resolve via withFallbackKeys() against the legacy prefix.
+        assertThat(conf.get(AutoScalerOptions.customEvaluatorClassOption("my-evaluator")))
+                .isEqualTo("org.example.LegacyEvaluator");
+    }
+
+    @Test
+    void testForCustomEvaluatorCanonicalPrefixWinsOverLegacyOnOverlap() {
+        Configuration conf = new Configuration();
+        // Both prefixes set for the same free-form option and for the class FQN -> canonical
+        // takes precedence in both cases.
+        conf.setString(
+                AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
+                        + AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                        + "my-evaluator.target-data-rate",
+                "from-legacy");
+        conf.setString(
+                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                        + "my-evaluator.target-data-rate",
+                "from-canonical");
+        conf.setString(
+                AutoScalerOptions.customEvaluatorClassFallbackKey("my-evaluator"),
+                "org.example.LegacyEvaluator");
+        conf.setString(
+                AutoScalerOptions.customEvaluatorClassKey("my-evaluator"),
+                "org.example.CanonicalEvaluator");
+
+        Configuration scoped = AutoScalerOptions.customEvaluatorConfiguration(conf, "my-evaluator");
+        assertThat(scoped.toMap().get("target-data-rate")).isEqualTo("from-canonical");
+        assertThat(scoped.toMap().get("class")).isEqualTo("org.example.CanonicalEvaluator");
+
+        // The class option must prefer the canonical key over the legacy fallback on overlap.
+        assertThat(conf.get(AutoScalerOptions.customEvaluatorClassOption("my-evaluator")))
+                .isEqualTo("org.example.CanonicalEvaluator");
+    }
+
+    @Test
+    void testForCustomEvaluatorReturnsEmptyConfigWhenNothingMatches() {
+        Configuration conf = new Configuration();
+        conf.setString("unrelated.key", "value");
+
+        Configuration scoped = AutoScalerOptions.customEvaluatorConfiguration(conf, "my-evaluator");
+        assertThat(scoped.toMap()).isEmpty();
+    }
+
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         autoscaler.setClock(clock);
@@ -164,8 +264,7 @@ public class AutoScalerCustomEvaluatorTest {
         assertEquals(balancedCount, autoscalerFlinkMetrics.getNumBalancedCount());
     }
 
-    private Map<String, FlinkAutoscalerEvaluator> createTestCustomEvaluator() {
-        var testCustomEvaluator = new TestCustomEvaluator();
-        return Map.of(testCustomEvaluator.getName(), testCustomEvaluator);
+    private Collection<FlinkAutoscalerEvaluator> createTestCustomEvaluator() {
+        return List.of(new TestCustomEvaluator());
     }
 }
