@@ -131,33 +131,30 @@ That folder is added to classpath upon initialization.
 The following steps demonstrate how to develop and use a custom mutator.
 
 1. Implement `FlinkResourceMutator` interface:
-    ```java
-    package org.apache.flink.mutator;
+   ```java
+   package org.apache.flink.mutator;
 
    import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
    import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
    import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
-
+   
    import java.util.Optional;
-
+   
    /** Custom Flink Mutator. */
    public class CustomFlinkMutator implements FlinkResourceMutator {
-
-    @Override
-    public FlinkDeployment mutateDeployment(FlinkDeployment deployment) {
-
+   
+      @Override
+      public FlinkDeployment mutateDeployment(FlinkDeployment deployment) {
         return deployment;
-    }
-
-    @Override
-    public FlinkSessionJob mutateSessionJob(
+      }
+   
+      @Override
+      public FlinkSessionJob mutateSessionJob(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
-
         return sessionJob;
-    }
-}
-
-    ```
+      }
+   }
+   ```
 
 2. Create service definition file `org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator` in `META-INF/services`.   With custom `FlinkResourceMutator` implementation, the service definition describes as follows:
     ```text
