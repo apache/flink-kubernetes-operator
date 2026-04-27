@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -45,6 +46,8 @@ import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -58,26 +61,38 @@ public class FlinkOperatorWebhook {
 
     private static FileSystemWatchService fileSystemWatchService;
 
-    public static void main(String[] args) throws Exception {
-        EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
-        var informerManager = new InformerManager(new KubernetesClientBuilder().build());
-        var configManager =
-                new FlinkConfigManager(
-                        informerManager::setNamespaces,
-                        KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
+    @VisibleForTesting final Set<FlinkResourceValidator> validators;
+    @VisibleForTesting final Set<FlinkResourceMutator> mutators;
+    @VisibleForTesting final AdmissionHandler admissionHandler;
+
+    @VisibleForTesting
+    FlinkOperatorWebhook(
+            @Nullable InformerManager informerManager, @Nullable FlinkConfigManager configManager) {
+        if (informerManager == null) {
+            informerManager = new InformerManager(new KubernetesClientBuilder().build());
+        }
+        if (configManager == null) {
+            configManager =
+                    new FlinkConfigManager(
+                            informerManager::setNamespaces,
+                            KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
+        }
+
         var operatorConfig = configManager.getOperatorConfiguration();
         if (!operatorConfig.isDynamicNamespacesEnabled()) {
             informerManager.setNamespaces(operatorConfig.getWatchedNamespaces());
         }
-        Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
-        Set<FlinkResourceMutator> mutators = MutatorUtils.discoverMutators(configManager);
 
-        AdmissionHandler endpoint =
+        this.validators = ValidatorUtils.discoverValidators(configManager);
+        this.mutators = MutatorUtils.discoverMutators(configManager);
+        this.admissionHandler =
                 new AdmissionHandler(
                         new FlinkValidator(validators, informerManager),
                         new FlinkMutator(mutators, informerManager));
+    }
 
-        ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
+    public void run() throws Exception {
+        ChannelInitializer<SocketChannel> initializer = createChannelInitializer(admissionHandler);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -103,12 +118,18 @@ public class FlinkOperatorWebhook {
         }
     }
 
+    public static void main(String[] args) throws Exception {
+        EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
+        new FlinkOperatorWebhook(null, null).run();
+    }
+
     private static int getPort() {
         String portString = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_SERVER_PORT);
         return Integer.parseInt(portString);
     }
 
-    private static ChannelInitializer<SocketChannel> createChannelInitializer(
+    @VisibleForTesting
+    static ChannelInitializer<SocketChannel> createChannelInitializer(
             AdmissionHandler admissionHandler) throws Exception {
         SslContext sslContext = createSslContext();
 
@@ -150,7 +171,7 @@ public class FlinkOperatorWebhook {
         stopFileSystemWatchService();
         final String realKeystoreFileName =
                 Path.of(keystorePathOpt.get()).toRealPath().getFileName().toString();
-        LOG.info("Keystore path is resolved to real filename: " + realKeystoreFileName);
+        LOG.info("Keystore path is resolved to real filename: {}", realKeystoreFileName);
         fileSystemWatchService =
                 new FileSystemWatchService(Path.of(keystorePathOpt.get()).getParent().toString()) {
                     @Override
@@ -160,7 +181,8 @@ public class FlinkOperatorWebhook {
                             reloadableSslContext.reload();
                             LOG.info("SSL context reloaded successfully");
                         } catch (Exception e) {
-                            LOG.error("SSL context reload received exception: " + e);
+                            LOG.error(
+                                    "SSL context reload received exception: {}", String.valueOf(e));
                         }
                     }
                 };
