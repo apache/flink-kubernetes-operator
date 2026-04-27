@@ -359,12 +359,18 @@ under the License.
                             <version>${flink.version}</version>
                             <outputDirectory>${plugins.tmp.dir}/flink-metrics-dropwizard</outputDirectory>
                         </artifactItem>
+                        <!--
+                        flink-metrics-otel is only published from Flink 2.0.0 onwards on Maven Central.
+                        While this repo still pins flink.version=1.20.1 the artifact cannot be resolved
+                        and breaks the build. Restore this block once flink.version is bumped to >= 2.0.0
+                        (introduced by FLINK-39541).
                         <artifactItem>
                             <groupId>org.apache.flink</groupId>
                             <artifactId>flink-metrics-otel</artifactId>
                             <version>${flink.version}</version>
                             <outputDirectory>${plugins.tmp.dir}/flink-metrics-otel</outputDirectory>
                         </artifactItem>
+                        -->
                     </artifactItems>
                 </configuration>
             </plugin>

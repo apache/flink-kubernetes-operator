@@ -32,8 +32,8 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
  * metric reporters</a>) is also honoured when prefixed with {@code kubernetes.operator.}; at
  * startup {@link
  * OperatorMetricUtils#createMetricConfig(org.apache.flink.configuration.Configuration)} strips that
- * prefix and forwards the result to Flink's metric registry. Reporter options are intentionally
- * not redeclared here as typed {@link ConfigOption}s to avoid mirroring upstream changes.
+ * prefix and forwards the result to Flink's metric registry. Reporter options are intentionally not
+ * redeclared here as typed {@link ConfigOption}s to avoid mirroring upstream changes.
  */
 public class KubernetesOperatorMetricOptions {
 
