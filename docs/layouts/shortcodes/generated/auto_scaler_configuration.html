@@ -183,6 +183,24 @@
             <td>Max scale up factor. 2.0 means job can only be scaled up with 200% of the current parallelism.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scaling.custom-executor.&lt;name&gt;.&lt;parameter&gt;</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>Free-form, plugin-specific options for the scaling custom executor instance referenced by '&lt;name&gt;' in 'job.autoscaler.scaling.custom-executors'. All keys with this prefix are passed to the plugin at runtime with the 'job.autoscaler.scaling.custom-executor.&lt;name&gt;.' prefix stripped.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.scaling.custom-executor.&lt;name&gt;.class</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>Fully-qualified class name of the implementation to instantiate for the custom scaling executor instance &lt;name&gt; declared in 'job.autoscaler.scaling.custom-executors'. The class must be discovered via the Plugin / ServiceLoader mechanism and registered under META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.scaling.custom-executors</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>List&lt;String&gt;</td>
+            <td>List of named custom scaling executors instances to register with the autoscaler. For each &lt;name&gt; entry, the implementation class to instantiate must be set via 'job.autoscaler.scaling.custom-executor.&lt;name&gt;.class', and additional per-instance options live under 'job.autoscaler.scaling.custom-executor.&lt;name&gt;.&lt;parameter&gt;'. Custom executors are executed in ascending order of their ScalingExecutorPlugin#priority() value, regardless of the order in which they appear in this list.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.scaling.effectiveness.detection.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
