@@ -149,6 +149,53 @@ public class SessionReconcilerTest extends OperatorTestBase {
         Assertions.assertEquals(expectedOwnerReferences, or);
     }
 
+    /**
+     * Regression test: the recovery path (recoverSession) must populate
+     * KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE on the configuration used to recreate the
+     * JobManager Deployment. Otherwise the recreated Deployment has no ownerReferences and JOSDK
+     * cannot link it back to the FlinkDeployment via getSecondaryResource(), causing an
+     * unrecoverable MISSING / AlreadyExists loop.
+     */
+    @Test
+    public void testRecoverSessionSetsOwnerReference() throws Exception {
+        var capturedConfigs = new java.util.ArrayList<Configuration>();
+        flinkService =
+                new TestingFlinkService(kubernetesClient) {
+                    @Override
+                    public void submitSessionCluster(Configuration conf) throws Exception {
+                        capturedConfigs.add(new Configuration(conf));
+                        super.submitSessionCluster(conf);
+                    }
+                };
+
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        // Initial deploy goes through SessionReconciler.deploy() which already sets ownerRef.
+        reconciler.reconcile(deployment, flinkService.getContext());
+        assertEquals(1, capturedConfigs.size());
+
+        // Simulate the JM Deployment going missing (e.g. node failure / informer cache miss).
+        // shouldRecoverDeployment() requires HA to be enabled (it is by default for the test
+        // session cluster) and the JM status to be MISSING for a non-terminal deployment.
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        capturedConfigs.clear();
+
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        assertEquals(
+                1,
+                capturedConfigs.size(),
+                "recoverSession should have invoked submitSessionCluster exactly once");
+        Configuration recoverConfig = capturedConfigs.get(0);
+        List<Map<String, String>> ownerRefs =
+                recoverConfig.get(KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE);
+        Assertions.assertEquals(
+                List.of(TestUtils.generateTestOwnerReferenceMap(deployment)),
+                ownerRefs,
+                "recoverSession must populate JOB_MANAGER_OWNER_REFERENCE so the recreated"
+                        + " JobManager Deployment carries ownerReferences linking it to the"
+                        + " FlinkDeployment CR");
+    }
+
     @Test
     public void testGetNonTerminalJobs() throws Exception {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
