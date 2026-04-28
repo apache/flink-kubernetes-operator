@@ -35,10 +35,10 @@ public class AutoscalerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerUtils.class);
 
     /**
-     * Discovers custom evaluator's for autoscaler.
+     * Discovers custom metric evaluators for autoscaler.
      *
      * @param conf Base FlinkConfigManager configuration
-     * @return The list of discovered custom evaluators.
+     * @return The list of discovered custom metric evaluators.
      */
     public static Collection<FlinkAutoscalerEvaluator> discoverCustomEvaluators(
             Configuration conf) {
@@ -48,7 +48,7 @@ public class AutoscalerUtils {
                 .forEachRemaining(
                         customEvaluator -> {
                             LOG.info(
-                                    "Discovered custom evaluator for autoscaler from plugin directory[{}]: {}.",
+                                    "Discovered custom metric evaluator for autoscaler from plugin directory[{}]: {}.",
                                     System.getenv()
                                             .getOrDefault(
                                                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,

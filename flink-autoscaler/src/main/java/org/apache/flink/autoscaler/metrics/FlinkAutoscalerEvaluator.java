@@ -28,9 +28,28 @@ import java.util.Map;
 import java.util.SortedMap;
 
 /**
- * Interface for custom evaluators that allow tailored scaling metric evaluations. Implementations
- * of this interface can provide custom logic to evaluate vertex metrics and merge them with
- * internally evaluated metrics.
+ * A pluggable plugin that allows users to provide custom scaling-metric evaluation logic on top of
+ * the metrics evaluated internally by the autoscaler. Implementations are invoked once per job
+ * vertex during each evaluation cycle, and the metrics they return are merged on top of the
+ * internally evaluated metrics, allowing users to override or augment specific {@link
+ * ScalingMetric} values.
+ *
+ * <p>Only one custom metric evaluator per pipeline is supported for now. If multiple instances are
+ * configured, the autoscaler logs a warning and falls back to the first entry, ignoring the rest.
+ * Registering multiple implementations via {@code META-INF/services} is fine as they form a
+ * registry that different jobs can select from by class FQN, but a single job cannot chain or
+ * compose more than one evaluator.
+ *
+ * <p>This was introduced as part of <a
+ * href="https://cwiki.apache.org/confluence/display/FLINK/FLIP-514%3A+Custom+Evaluator+plugin+for+Flink+Autoscaler">FLIP-514:
+ * Custom Evaluator plugin for Flink Autoscaler</a> and is complementary to <a
+ * href="https://cwiki.apache.org/confluence/display/FLINK/FLIP-575%3A+Scaling+Executor+Plugin+SPI+for+Flink+Autoscaler">FLIP-575:
+ * Scaling Executor Plugin SPI for Flink Autoscaler</a> which provides extensibility at the scaling
+ * decision execution layer.
+ *
+ * <p>Implementations are discovered via Java's {@link java.util.ServiceLoader} mechanism. To
+ * register a custom metric evaluator, add the fully qualified class name of the implementation to
+ * {@code META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator}.
  */
 public interface FlinkAutoscalerEvaluator {
 
@@ -79,7 +98,7 @@ public interface FlinkAutoscalerEvaluator {
          * @param topology The job topology representing the structure of the Flink job.
          * @param processingBacklog Indicates whether the job is processing backlog.
          * @param restartTime Maximum restart time based on scaling records.
-         * @param customEvaluatorConf The configuration associated with the custom evaluator.
+         * @param customEvaluatorConf The configuration associated with the custom metric evaluator.
          */
         public Context(
                 Configuration jobConf,

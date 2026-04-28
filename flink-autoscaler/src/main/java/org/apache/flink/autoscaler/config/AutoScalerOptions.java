@@ -429,7 +429,7 @@ public class AutoScalerOptions {
                     .defaultValues()
                     .withFallbackKeys(oldOperatorConfigKey("metrics.custom-evaluators"))
                     .withDescription(
-                            "List of named custom evaluator instances to register with the autoscaler. "
+                            "List of named custom metric evaluator instances to register with the autoscaler. "
                                     + "For each <name> entry, the implementation class to instantiate must be set via "
                                     + "'job.autoscaler.metrics.custom-evaluator.<name>.class', and additional per-instance "
                                     + "options live under 'job.autoscaler.metrics.custom-evaluator.<name>.<option>'. "
@@ -449,9 +449,8 @@ public class AutoScalerOptions {
                     .noDefaultValue()
                     .withFallbackKeys(oldOperatorConfigKey("metrics.custom-evaluator.<name>.class"))
                     .withDescription(
-                            "Fully-qualified class name of the implementation to instantiate for the custom evaluator "
-                                    + "instance <name> declared in 'job.autoscaler.metrics.custom-evaluators' "
-                                    + "(or its legacy fallback 'kubernetes.operator.job.autoscaler.metrics.custom-evaluators'). "
+                            "Fully-qualified class name of the implementation to instantiate for the custom metric evaluator "
+                                    + "instance <name> declared in 'job.autoscaler.metrics.custom-evaluators'. "
                                     + "The class must be discovered via the Plugin / ServiceLoader mechanism and registered "
                                     + "under META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator.");
 
@@ -468,11 +467,9 @@ public class AutoScalerOptions {
                     .withFallbackKeys(
                             oldOperatorConfigKey("metrics.custom-evaluator.<name>.<parameter>"))
                     .withDescription(
-                            "Free-form, evaluator-specific options for the custom evaluator instance <name>. "
+                            "Free-form, evaluator-specific options for the custom metric evaluator instance <name>. "
                                     + "All keys with this prefix are passed to the evaluator at runtime with the "
-                                    + "'job.autoscaler.metrics.custom-evaluator.<name>.' prefix stripped. "
-                                    + "The legacy 'kubernetes.operator.' prefix is honored as a fallback, with canonical "
-                                    + "keys taking precedence on overlap.");
+                                    + "'job.autoscaler.metrics.custom-evaluator.<name>.' prefix stripped.");
 
     public static String customEvaluatorClassKey(String instanceName) {
         return AUTOSCALER_CONF_PREFIX
@@ -488,8 +485,8 @@ public class AutoScalerOptions {
 
     /**
      * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
-     * custom evaluator instance, including the legacy {@code kubernetes.operator.} prefix as a
-     * fallback key (canonical key takes precedence on overlap).
+     * custom metric evaluator instance, including the legacy {@code kubernetes.operator.} prefix as
+     * a fallback key (canonical key takes precedence on overlap).
      */
     public static ConfigOption<String> customEvaluatorClassOption(String instanceName) {
         return ConfigOptions.key(customEvaluatorClassKey(instanceName))
@@ -498,13 +495,18 @@ public class AutoScalerOptions {
                 .withFallbackKeys(customEvaluatorClassFallbackKey(instanceName));
     }
 
+    /**
+     * Builds a fresh, prefix-stripped {@link Configuration} that exposes the per-instance options
+     * configured for the scaling custom metric evaluator instance identified by {@code
+     * instanceName} under both the canonical ({@code
+     * job.autoscaler.metrics.custom-evaluator.<name>.}) and the legacy ({@code
+     * kubernetes.operator.job.autoscaler.metrics.custom-evaluator.<name>.}) namespaces. The legacy
+     * prefix is applied first so that, on overlap, values written under the canonical prefix take
+     * precedence, matching the semantics of {@link
+     * org.apache.flink.configuration.ConfigOption#withFallbackKeys} used elsewhere in this class.
+     */
     public static Configuration customEvaluatorConfiguration(
             Configuration configuration, String customEvaluatorName) {
-        // Build a fresh, prefix-stripped Configuration that exposes both the canonical and the
-        // legacy (kubernetes.operator.) namespaces of the custom evaluator's options. The legacy
-        // prefix is applied first so that, on overlap, values written under the canonical prefix
-        // take precedence, matching the precedence semantics of withFallbackKeys() used by the
-        // top-level ConfigOptions in this class.
         String canonicalPrefix =
                 AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + customEvaluatorName + ".";
         String legacyPrefix =

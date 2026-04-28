@@ -286,7 +286,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
         if (instances.size() > 1) {
             LOG.warn(
-                    "Only a single custom evaluator is currently supported, but {} were configured via '{}': {}. "
+                    "Only a single custom metric evaluator is currently supported, but {} were configured via '{}': {}. "
                             + "Falling back to the first entry ('{}'); the remaining entries will be ignored. "
                             + "Multi-instance support (with a priority/ordering contract) will be added as a follow-up.",
                     instances.size(),
@@ -300,8 +300,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
                 conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
         if (configuredClassName == null || configuredClassName.isBlank()) {
             LOG.warn(
-                    "Custom evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
-                            + "No custom evaluator will be applied.",
+                    "Custom metric evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
+                            + "No custom metric evaluator will be applied.",
                     instance,
                     CUSTOM_EVALUATORS.key(),
                     classKey);
@@ -316,7 +316,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
         if (match == null) {
             LOG.warn(
-                    "No registered custom evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
+                    "No registered custom metric evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
                     configuredClassName,
                     instance,
                     classKey,

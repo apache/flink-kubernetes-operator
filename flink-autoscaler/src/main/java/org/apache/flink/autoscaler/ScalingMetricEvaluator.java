@@ -637,12 +637,12 @@ public class ScalingMetricEvaluator {
     }
 
     /**
-     * Executes the provided custom evaluator for the given job vertex. Calls {@link
+     * Executes the provided custom metric evaluator for the given job vertex. Calls {@link
      * FlinkAutoscalerEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
      *
      * @param vertex The job vertex being evaluated.
      * @param evaluatedMetrics Current evaluated metrics.
-     * @param customEvaluationSession A tuple containing the custom evaluator and evaluation
+     * @param customEvaluationSession A tuple containing the custom metric evaluator and evaluation
      *     context.
      * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
      */
@@ -657,12 +657,12 @@ public class ScalingMetricEvaluator {
                     vertex, evaluatedMetrics, customEvaluationSession.f1);
         } catch (UnsupportedOperationException e) {
             LOG.warn(
-                    "Custom evaluator {} tried accessing an un-modifiable view.",
+                    "Custom metric evaluator {} tried accessing an un-modifiable view.",
                     customEvaluationSession.f0.getClass(),
                     e);
         } catch (Exception e) {
             LOG.warn(
-                    "Custom evaluator {} threw an exception.",
+                    "Custom metric evaluator {} threw an exception.",
                     customEvaluationSession.f0.getClass(),
                     e);
         }

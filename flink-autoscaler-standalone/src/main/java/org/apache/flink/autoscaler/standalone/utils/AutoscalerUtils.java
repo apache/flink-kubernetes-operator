@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.autoscaler.standalone;
+package org.apache.flink.autoscaler.standalone.utils;
 
 import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 
@@ -33,12 +33,12 @@ public class AutoscalerUtils {
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerUtils.class);
 
     /**
-     * Discovers custom evaluators for the standalone autoscaler via Java's {@link ServiceLoader}
-     * mechanism. Implementations must be registered under {@code
+     * Discovers custom metric evaluators for the standalone autoscaler via Java's {@link
+     * ServiceLoader} mechanism. Implementations must be registered under {@code
      * META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator} on the
      * classpath.
      *
-     * @return The list of discovered custom evaluators.
+     * @return The list of discovered custom metric evaluators.
      */
     public static Collection<FlinkAutoscalerEvaluator> discoverCustomEvaluators() {
         List<FlinkAutoscalerEvaluator> customEvaluators = new ArrayList<>();
@@ -46,7 +46,7 @@ public class AutoscalerUtils {
                 .forEach(
                         customEvaluator -> {
                             LOG.info(
-                                    "Discovered custom evaluator via ServiceLoader: {}.",
+                                    "Discovered custom metric evaluator via ServiceLoader: {}.",
                                     customEvaluator.getClass().getName());
                             customEvaluators.add(customEvaluator);
                         });

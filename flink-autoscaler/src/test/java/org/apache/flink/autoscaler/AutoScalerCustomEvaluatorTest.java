@@ -51,7 +51,7 @@ import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Unit test for testing the integration of custom evaluators with the Flink job autoscaler. */
+/** Unit test for testing the integration of custom metric evaluators with the Flink job autoscaler. */
 public class AutoScalerCustomEvaluatorTest {
     private JobAutoScalerContext<JobID> context;
     private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
