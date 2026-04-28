@@ -34,6 +34,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -81,6 +82,8 @@ public class FlinkOperatorConfiguration {
     int reportedExceptionEventsMaxStackTraceLength;
     boolean manageIngress;
     Duration jobSubmissionTimeout;
+    List<String> jarUriAllowedSchemes;
+    boolean jarUriDisallowRestrictedHosts;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -211,6 +214,13 @@ public class FlinkOperatorConfiguration {
         Duration jobSubmissionTimeout =
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JOB_SUBMISSION_TIMEOUT);
 
+        List<String> jarUriAllowedSchemes =
+                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES);
+
+        boolean jarUriDisallowRestrictedHosts =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -244,7 +254,9 @@ public class FlinkOperatorConfiguration {
                 reportedExceptionEventsMaxCount,
                 reportedExceptionEventsMaxStackTraceLength,
                 manageIngress,
-                jobSubmissionTimeout);
+                jobSubmissionTimeout,
+                jarUriAllowedSchemes,
+                jarUriDisallowRestrictedHosts);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {

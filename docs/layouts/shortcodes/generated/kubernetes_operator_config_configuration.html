@@ -459,10 +459,22 @@
             <td>Operator shutdown timeout before reconciliation threads are killed.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.user.artifacts.allowed-schemes</h5></td>
+            <td style="word-wrap: break-word;">"https"</td>
+            <td>List&lt;String&gt;</td>
+            <td>Comma separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. Only 'https' is allowed by default. Operators that need to fetch artifacts via other schemes (such as 's3' or 'hdfs') can extend this list. Scheme matching is case-insensitive.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.user.artifacts.base.dir</h5></td>
             <td style="word-wrap: break-word;">"/opt/flink/artifacts"</td>
             <td>String</td>
             <td>The base dir to put the session job artifacts.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.disallow-restricted-hosts</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, site-local, wildcard or multicast addresses are rejected during validation. Disable only if the operator legitimately needs to fetch from such addresses.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>
