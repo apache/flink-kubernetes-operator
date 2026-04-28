@@ -121,7 +121,14 @@ public class SessionReconciler
     }
 
     private void recoverSession(FlinkResourceContext<FlinkDeployment> ctx) throws Exception {
-        ctx.getFlinkService().submitSessionCluster(ctx.getObserveConfig());
+        var conf = ctx.getObserveConfig();
+        // Owner references must be re-applied on the deploy config used for recovery.
+        // Without this, the recreated JobManager Deployment is created with no
+        // ownerReferences, which prevents JOSDK from linking it back to the
+        // FlinkDeployment via getSecondaryResource(), leading to an unrecoverable
+        // MISSING / AlreadyExists loop.
+        setOwnerReference(ctx.getResource(), conf);
+        ctx.getFlinkService().submitSessionCluster(conf);
         ctx.getResource()
                 .getStatus()
                 .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
