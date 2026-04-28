@@ -546,6 +546,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 ReconciliationState.UPGRADING,
                 flinkDeployments.get(1).getStatus().getReconciliationStatus().getState());
         assertTrue(instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()) > 0);
+        // savepointTriggerId must be cleared on abort so the next transition
+        // triggers a fresh savepoint instead of reusing a stale triggerId
+        assertNull(rs.reconciledStatus.getSavepointTriggerId());
 
         // Simulate another change in the spec to trigger a redeployment
         customValue = UUID.randomUUID().toString();
