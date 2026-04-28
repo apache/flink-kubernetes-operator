@@ -601,6 +601,95 @@ public class DefaultValidatorTest {
                 "InitialSavepointPath must not be empty for savepoint redeploymen");
     }
 
+    @Test
+    public void testJarUriSchemeValidation() {
+        // Default allowlist permits 'https' and 'local'.
+        testSuccess(dep -> dep.getSpec().getJob().setJarURI("local:///tmp/sample.jar"));
+        testSuccess(dep -> dep.getSpec().getJob().setJarURI("https://example.com/path/to/job.jar"));
+        // Null jarURI is allowed (e.g. for entryClass-only jobs).
+        testSuccess(dep -> dep.getSpec().getJob().setJarURI(null));
+
+        // Schemes outside the default allowlist must be rejected.
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("http://example.com/job.jar"),
+                "jarURI scheme 'http' is not in the allowlist");
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getJob()
+                                .setJarURI(
+                                        "file:///var/run/secrets/kubernetes.io/serviceaccount/token"),
+                "jarURI scheme 'file' is not in the allowlist");
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("s3://my-bucket/job.jar"),
+                "jarURI scheme 's3' is not in the allowlist");
+
+        // Missing scheme is rejected.
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("/no/scheme/job.jar"),
+                "jarURI must include a scheme");
+
+        // Malformed URI is rejected.
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("ht tp://bad uri"),
+                "jarURI is not a valid URI");
+
+        // Operators can extend the allowlist via configuration.
+        testSuccess(
+                dep -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key(),
+                                    "https;s3;local");
+                    dep.getSpec().getJob().setJarURI("s3://my-bucket/job.jar");
+                });
+    }
+
+    @Test
+    public void testJarUriHostValidation() {
+        // Cloud-metadata link-local addresses must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getJob()
+                                .setJarURI(
+                                        "https://169.254.169.254/latest/meta-data/iam/security-credentials/"),
+                "jarURI host '169.254.169.254' resolves to a restricted address");
+
+        // Loopback addresses must be rejected.
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("https://127.0.0.1/job.jar"),
+                "jarURI host '127.0.0.1' resolves to a restricted address");
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("https://localhost/job.jar"),
+                "jarURI host 'localhost' resolves to a restricted address");
+
+        // Site-local (RFC 1918 private) addresses must be rejected.
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("https://10.0.0.1/job.jar"),
+                "jarURI host '10.0.0.1' resolves to a restricted address");
+        testError(
+                dep -> dep.getSpec().getJob().setJarURI("https://192.168.1.1/job.jar"),
+                "jarURI host '192.168.1.1' resolves to a restricted address");
+
+        // The host check only applies to http/https schemes.
+        testSuccess(dep -> dep.getSpec().getJob().setJarURI("local:///etc/passwd"));
+
+        // Disabling the restricted-host check via configuration must allow loopback.
+        testSuccess(
+                dep -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    KubernetesOperatorConfigOptions
+                                            .JAR_URI_DISALLOW_RESTRICTED_HOSTS
+                                            .key(),
+                                    "false");
+                    dep.getSpec().getJob().setJarURI("https://127.0.0.1/job.jar");
+                });
+    }
+
     @ParameterizedTest
     @EnumSource(UpgradeMode.class)
     public void testFlinkVersionChangeValidation(UpgradeMode toUpgradeMode) {

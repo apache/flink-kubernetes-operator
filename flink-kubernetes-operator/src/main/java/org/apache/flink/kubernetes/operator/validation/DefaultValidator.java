@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.validation.AutoscalerValidator;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -57,11 +58,17 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
@@ -240,6 +247,11 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         Configuration configuration = Configuration.fromMap(confMap);
 
+        Optional<String> jarUriError = validateJarURI(job.getJarURI(), configuration);
+        if (jarUriError.isPresent()) {
+            return jarUriError;
+        }
+
         if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
             if (StringUtils.isNullOrWhitespaceOnly(
                     configuration.getString(CheckpointingOptions.CHECKPOINTS_DIRECTORY))) {
@@ -287,6 +299,60 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Job parallelism must be larger than 0");
         }
 
+        return Optional.empty();
+    }
+
+    @VisibleForTesting
+    static Optional<String> validateJarURI(String jarURI, Configuration conf) {
+        if (jarURI == null) {
+            return Optional.empty();
+        }
+
+        URI uri;
+        try {
+            uri = new URI(jarURI);
+        } catch (URISyntaxException e) {
+            return Optional.of("jarURI is not a valid URI: " + e.getMessage());
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null) {
+            return Optional.of("jarURI must include a scheme");
+        }
+
+        Set<String> allowedSchemes =
+                conf.get(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES).stream()
+                        .map(s -> s.toLowerCase(Locale.ROOT))
+                        .collect(Collectors.toSet());
+        if (!allowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
+            return Optional.of(
+                    String.format(
+                            "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
+                            scheme,
+                            allowedSchemes,
+                            KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key()));
+        }
+
+        if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                && conf.get(KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS)) {
+            String host = uri.getHost();
+            if (host == null || host.isEmpty()) {
+                return Optional.of("jarURI must include a host for http/https schemes");
+            }
+            InetAddress addr;
+            try {
+                addr = InetAddress.getByName(host);
+            } catch (UnknownHostException e) {
+                return Optional.of("jarURI host '" + host + "' cannot be resolved");
+            }
+            if (addr.isLoopbackAddress()
+                    || addr.isLinkLocalAddress()
+                    || addr.isSiteLocalAddress()
+                    || addr.isAnyLocalAddress()
+                    || addr.isMulticastAddress()) {
+                return Optional.of("jarURI host '" + host + "' resolves to a restricted address");
+            }
+        }
         return Optional.empty();
     }
 
