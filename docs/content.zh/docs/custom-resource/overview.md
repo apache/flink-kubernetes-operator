@@ -201,9 +201,11 @@ The job specification has the same structure in FlinkSessionJobs and FlinkDeploy
 It leverages the [Flink filesystem](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/overview/) mechanism to download the jar and submit to the session cluster.
 So the FlinkSessionJob must be run with an existing session cluster managed by the FlinkDeployment.
 
-By default the operator only accepts `https` and `local` URI schemes for `jarURI` to prevent the operator pod from being coerced into fetching attacker-controlled resources (SSRF) or reading local files on its own filesystem.
-For `https`, hosts that resolve to loopback, link-local, site-local or wildcard addresses (e.g. cloud metadata services such as `169.254.169.254`) are also rejected.
+By default the FlinkSessionJob `jarURI` is restricted to the `https` scheme.
+For `https`, hosts that resolve to loopback, link-local, site-local, wildcard or multicast addresses (e.g. cloud metadata services such as `169.254.169.254`) are also rejected.
 If you need to fetch artifacts via additional schemes such as `s3` or `hdfs`, extend the allowlist via `kubernetes.operator.user.artifacts.allowed-schemes` (and review `kubernetes.operator.user.artifacts.disallow-restricted-hosts` if you legitimately need to reach private addresses).
+Both options are operator-level and can only be set in the operator configuration; values supplied in a CR's `flinkConfiguration` are ignored for these keys.
+The check applies only to FlinkSessionJob — FlinkDeployment `jarURI` is not validated, since application clusters typically reference a JAR shipped inside the image (e.g. `local://`) and the operator does not fetch it.
 
 To support jar from different filesystems, you should extend the base docker image as below, and put the related filesystem jar to the plugin dir and deploy the operator.
 For example, to support the hadoop fs resource:

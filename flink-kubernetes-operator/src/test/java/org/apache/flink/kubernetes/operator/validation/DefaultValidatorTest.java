@@ -61,6 +61,7 @@ import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
@@ -603,91 +604,114 @@ public class DefaultValidatorTest {
 
     @Test
     public void testJarUriSchemeValidation() {
-        // Default allowlist permits 'https' and 'local'.
-        testSuccess(dep -> dep.getSpec().getJob().setJarURI("local:///tmp/sample.jar"));
-        testSuccess(dep -> dep.getSpec().getJob().setJarURI("https://example.com/path/to/job.jar"));
-        // Null jarURI is allowed (e.g. for entryClass-only jobs).
-        testSuccess(dep -> dep.getSpec().getJob().setJarURI(null));
+        var defaultAllowed = List.of("https");
 
-        // Schemes outside the default allowlist must be rejected.
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("http://example.com/job.jar"),
-                "jarURI scheme 'http' is not in the allowlist");
-        testError(
-                dep ->
-                        dep.getSpec()
-                                .getJob()
-                                .setJarURI(
-                                        "file:///var/run/secrets/kubernetes.io/serviceaccount/token"),
-                "jarURI scheme 'file' is not in the allowlist");
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("s3://my-bucket/job.jar"),
-                "jarURI scheme 's3' is not in the allowlist");
+        // Allowed scheme is accepted.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://example.com/path/to/job.jar", defaultAllowed, true));
+        // Null jarURI is allowed (e.g. for entryClass-only jobs).
+        Assertions.assertEquals(
+                Optional.empty(), DefaultValidator.validateJarURI(null, defaultAllowed, true));
+
+        // Disallowed schemes are rejected.
+        for (String disallowed :
+                List.of(
+                        "http://example.com/job.jar",
+                        "file:///var/run/secrets/kubernetes.io/serviceaccount/token",
+                        "s3://my-bucket/job.jar",
+                        "local:///tmp/sample.jar")) {
+            var error = DefaultValidator.validateJarURI(disallowed, defaultAllowed, true);
+            assertTrue(error.isPresent(), "expected error for " + disallowed);
+            assertTrue(
+                    error.get().startsWith("jarURI scheme '"),
+                    "unexpected message for " + disallowed + ": " + error.get());
+        }
 
         // Missing scheme is rejected.
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("/no/scheme/job.jar"),
-                "jarURI must include a scheme");
+        var noScheme = DefaultValidator.validateJarURI("/no/scheme/job.jar", defaultAllowed, true);
+        assertTrue(noScheme.isPresent());
+        assertTrue(noScheme.get().startsWith("jarURI must include a scheme"));
 
         // Malformed URI is rejected.
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("ht tp://bad uri"),
-                "jarURI is not a valid URI");
+        var malformed = DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true);
+        assertTrue(malformed.isPresent());
+        assertTrue(malformed.get().startsWith("jarURI is not a valid URI"));
 
-        // Operators can extend the allowlist via configuration.
-        testSuccess(
-                dep -> {
-                    dep.getSpec()
-                            .getFlinkConfiguration()
-                            .put(
-                                    KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key(),
-                                    "https;s3;local");
-                    dep.getSpec().getJob().setJarURI("s3://my-bucket/job.jar");
-                });
+        // Operators can extend the allowlist (case-insensitive matching).
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "S3://my-bucket/job.jar", List.of("https", "s3"), true));
     }
 
     @Test
     public void testJarUriHostValidation() {
-        // Cloud-metadata link-local addresses must be rejected.
-        testError(
-                dep ->
-                        dep.getSpec()
-                                .getJob()
-                                .setJarURI(
-                                        "https://169.254.169.254/latest/meta-data/iam/security-credentials/"),
-                "jarURI host '169.254.169.254' resolves to a restricted address");
+        var defaultAllowed = List.of("https");
 
-        // Loopback addresses must be rejected.
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("https://127.0.0.1/job.jar"),
-                "jarURI host '127.0.0.1' resolves to a restricted address");
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("https://localhost/job.jar"),
-                "jarURI host 'localhost' resolves to a restricted address");
+        // Cloud-metadata link-local, loopback, site-local and wildcard addresses must be rejected.
+        for (String restricted :
+                List.of(
+                        "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
+                        "https://127.0.0.1/job.jar",
+                        "https://localhost/job.jar",
+                        "https://10.0.0.1/job.jar",
+                        "https://192.168.1.1/job.jar")) {
+            var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
+            assertTrue(error.isPresent(), "expected error for " + restricted);
+            assertTrue(
+                    error.get().contains("resolves to a restricted address"),
+                    "unexpected message for " + restricted + ": " + error.get());
+        }
 
-        // Site-local (RFC 1918 private) addresses must be rejected.
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("https://10.0.0.1/job.jar"),
-                "jarURI host '10.0.0.1' resolves to a restricted address");
-        testError(
-                dep -> dep.getSpec().getJob().setJarURI("https://192.168.1.1/job.jar"),
-                "jarURI host '192.168.1.1' resolves to a restricted address");
+        // Disabling the restricted-host check allows loopback.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://127.0.0.1/job.jar", defaultAllowed, false));
+    }
 
-        // The host check only applies to http/https schemes.
-        testSuccess(dep -> dep.getSpec().getJob().setJarURI("local:///etc/passwd"));
+    @Test
+    public void testSessionJobJarUriValidationUsesOperatorConfig() {
+        // Operator-level config sets a custom allowlist; the CR cannot override it.
+        var operatorConf = new Configuration();
+        operatorConf.set(
+                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("https", "s3"));
+        var customValidator = new DefaultValidator(new FlinkConfigManager(operatorConf));
 
-        // Disabling the restricted-host check via configuration must allow loopback.
-        testSuccess(
-                dep -> {
-                    dep.getSpec()
-                            .getFlinkConfiguration()
-                            .put(
-                                    KubernetesOperatorConfigOptions
-                                            .JAR_URI_DISALLOW_RESTRICTED_HOSTS
-                                            .key(),
-                                    "false");
-                    dep.getSpec().getJob().setJarURI("https://127.0.0.1/job.jar");
-                });
+        // s3 is allowed by operator config.
+        var s3Job = TestUtils.buildSessionJob();
+        s3Job.getSpec().getJob().setJarURI("s3://my-bucket/job.jar");
+        Assertions.assertEquals(
+                Optional.empty(), customValidator.validateSessionJob(s3Job, Optional.empty()));
+
+        // file:// is still rejected.
+        var fileJob = TestUtils.buildSessionJob();
+        fileJob.getSpec().getJob().setJarURI("file:///etc/passwd");
+        var fileError = customValidator.validateSessionJob(fileJob, Optional.empty());
+        assertTrue(fileError.isPresent());
+        assertTrue(fileError.get().startsWith("jarURI scheme 'file'"));
+
+        // A CR-supplied override of the allowlist is ignored — the operator-level config wins.
+        var overrideJob = TestUtils.buildSessionJob();
+        overrideJob
+                .getSpec()
+                .setFlinkConfiguration(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key(),
+                                "https;file"));
+        overrideJob.getSpec().getJob().setJarURI("file:///etc/passwd");
+        var overrideError = customValidator.validateSessionJob(overrideJob, Optional.empty());
+        assertTrue(overrideError.isPresent());
+        assertTrue(overrideError.get().startsWith("jarURI scheme 'file'"));
+
+        // Default validator (https only) rejects the default https-but-link-local URI for sanity.
+        var loopbackJob = TestUtils.buildSessionJob();
+        loopbackJob.getSpec().getJob().setJarURI("https://169.254.169.254/job.jar");
+        var loopbackError = validator.validateSessionJob(loopbackJob, Optional.empty());
+        assertTrue(loopbackError.isPresent());
+        assertTrue(loopbackError.get().contains("resolves to a restricted address"));
     }
 
     @ParameterizedTest

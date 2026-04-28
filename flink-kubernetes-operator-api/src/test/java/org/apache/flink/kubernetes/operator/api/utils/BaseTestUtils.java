@@ -67,6 +67,7 @@ public class BaseTestUtils {
     public static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
     public static final String IMAGE_POLICY = "IfNotPresent";
     public static final String SAMPLE_JAR = "local:///tmp/sample.jar";
+    public static final String SAMPLE_SESSION_JOB_JAR = "https://example.com/sample.jar";
 
     public static FlinkDeployment buildSessionCluster() {
         return buildSessionCluster(FlinkVersion.v1_17);
@@ -154,7 +155,7 @@ public class BaseTestUtils {
                         .deploymentName(TEST_DEPLOYMENT_NAME)
                         .job(
                                 JobSpec.builder()
-                                        .jarURI(SAMPLE_JAR)
+                                        .jarURI(SAMPLE_SESSION_JOB_JAR)
                                         .parallelism(1)
                                         .upgradeMode(UpgradeMode.STATELESS)
                                         .state(jobState)

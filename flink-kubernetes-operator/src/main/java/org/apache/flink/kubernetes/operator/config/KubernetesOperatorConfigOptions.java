@@ -333,32 +333,26 @@ public class KubernetesOperatorConfigOptions {
                             "Custom HTTP header for HttpArtifactFetcher. The header will be applied when getting the session job artifacts. "
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
-    @Documentation.Section(SECTION_DYNAMIC)
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<List<String>> JAR_URI_ALLOWED_SCHEMES =
             operatorConfig("user.artifacts.allowed-schemes")
                     .stringType()
                     .asList()
-                    .defaultValues("https", "local")
+                    .defaultValues("https")
                     .withDescription(
-                            "Comma separated list of URI schemes that are allowed for the job's jarURI. "
-                                    + "By default only 'https' and 'local' are allowed to prevent SSRF and "
-                                    + "local file disclosure via user-supplied URIs (e.g. 'http', 'file', "
-                                    + "'s3', 'hdfs', 'gs'). The 'local' scheme is preserved for application "
-                                    + "clusters that ship the JAR inside the image and is never fetched by "
-                                    + "the operator. Operators that need to fetch artifacts via other "
-                                    + "schemes (such as 's3' or 'hdfs') can extend this list. "
+                            "Comma separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. "
+                                    + "Only 'https' is allowed by default. Operators that need to fetch artifacts "
+                                    + "via other schemes (such as 's3' or 'hdfs') can extend this list. "
                                     + "Scheme matching is case-insensitive.");
 
-    @Documentation.Section(SECTION_DYNAMIC)
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Boolean> JAR_URI_DISALLOW_RESTRICTED_HOSTS =
             operatorConfig("user.artifacts.disallow-restricted-hosts")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
-                            "If enabled, jarURI hosts that resolve to loopback, link-local, site-local "
-                                    + "or wildcard addresses are rejected during validation. This prevents "
-                                    + "the operator from being coerced into issuing requests against cloud "
-                                    + "metadata services (e.g. 169.254.169.254) or other in-cluster services. "
+                            "If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, "
+                                    + "site-local, wildcard or multicast addresses are rejected during validation. "
                                     + "Disable only if the operator legitimately needs to fetch from such addresses.");
 
     @Documentation.Section(SECTION_DYNAMIC)

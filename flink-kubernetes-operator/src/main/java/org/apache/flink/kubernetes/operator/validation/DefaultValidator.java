@@ -62,6 +62,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -247,11 +248,6 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         Configuration configuration = Configuration.fromMap(confMap);
 
-        Optional<String> jarUriError = validateJarURI(job.getJarURI(), configuration);
-        if (jarUriError.isPresent()) {
-            return jarUriError;
-        }
-
         if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
             if (StringUtils.isNullOrWhitespaceOnly(
                     configuration.getString(CheckpointingOptions.CHECKPOINTS_DIRECTORY))) {
@@ -303,7 +299,8 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     @VisibleForTesting
-    static Optional<String> validateJarURI(String jarURI, Configuration conf) {
+    static Optional<String> validateJarURI(
+            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
         if (jarURI == null) {
             return Optional.empty();
         }
@@ -320,21 +317,21 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("jarURI must include a scheme");
         }
 
-        Set<String> allowedSchemes =
-                conf.get(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES).stream()
+        Set<String> normalizedAllowedSchemes =
+                allowedSchemes.stream()
                         .map(s -> s.toLowerCase(Locale.ROOT))
                         .collect(Collectors.toSet());
-        if (!allowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
+        if (!normalizedAllowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
             return Optional.of(
                     String.format(
                             "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
                             scheme,
-                            allowedSchemes,
+                            normalizedAllowedSchemes,
                             KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key()));
         }
 
         if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && conf.get(KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS)) {
+                && disallowRestrictedHosts) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");
@@ -354,6 +351,18 @@ public class DefaultValidator implements FlinkResourceValidator {
             }
         }
         return Optional.empty();
+    }
+
+    private Optional<String> validateSessionJobJarURI(FlinkSessionJob sessionJob) {
+        var jobSpec = sessionJob.getSpec().getJob();
+        if (jobSpec == null) {
+            return Optional.empty();
+        }
+        var operatorConfiguration = configManager.getOperatorConfiguration();
+        return validateJarURI(
+                jobSpec.getJarURI(),
+                operatorConfiguration.getJarUriAllowedSchemes(),
+                operatorConfiguration.isJarUriDisallowRestrictedHosts());
     }
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
@@ -580,7 +589,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateDeploymentName(sessionJob.getSpec().getDeploymentName()),
                 validateJobNotEmpty(sessionJob),
-                validateSpecChange(sessionJob));
+                validateSpecChange(sessionJob),
+                validateSessionJobJarURI(sessionJob));
     }
 
     private Optional<String> validateSessionJobWithCluster(
