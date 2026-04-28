@@ -65,4 +65,16 @@ data:
 {{- if index (.Values.defaultConfiguration) "log4j-console.properties" }}
   {{- index (.Values.defaultConfiguration) "log4j-console.properties" | nindent 4 -}}
 {{- end }}
+  logback-operator.xml: |+
+{{- if index (.Values.defaultConfiguration) "logback-operator.xml" }}
+  {{- index (.Values.defaultConfiguration) "logback-operator.xml" | nindent 4 -}}
+{{- else if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/logback-operator.xml"  | nindent 4 -}}
+{{- end }}
+  logback-console.xml: |+
+{{- if index (.Values.defaultConfiguration) "logback-console.xml" }}
+  {{- index (.Values.defaultConfiguration) "logback-console.xml" | nindent 4 -}}
+{{- else if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/logback-console.xml"  | nindent 4 -}}
+{{- end }}
 {{- end }}

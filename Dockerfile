@@ -44,7 +44,8 @@ ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar
 
 ENV OPERATOR_LIB=$FLINK_HOME/operator-lib
-RUN mkdir -p $OPERATOR_LIB
+ENV OPERATOR_LOG=$FLINK_HOME/log
+RUN mkdir -p $OPERATOR_LIB $OPERATOR_LOG/log4j $OPERATOR_LOG/logback
 
 WORKDIR /flink-kubernetes-operator
 RUN groupadd --system --gid=9999 flink && \
@@ -56,6 +57,8 @@ COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/$OPE
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/log4j/ $FLINK_HOME/log/log4j/
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/logback/ $FLINK_HOME/log/logback/
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/licenses ./licenses
 COPY --chown=flink:flink --from=build /app/LICENSE ./LICENSE

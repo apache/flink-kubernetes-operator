@@ -194,6 +194,13 @@ defaultConfiguration:
   log4j-console.properties: |+
     # Flink Deployment Logging Overrides
     # rootLogger.level = DEBUG
+  logback-operator.xml:
+  logback-console.xml:
+
+# Logging framework to use for the operator. Supported values: "log4j2", "logback".
+# This controls which config file is passed to the JVM and which files are mounted.
+logging:
+  framework: "log4j2"
 
 # (Optional) Exposes metrics port on the container if defined
 metrics:
@@ -206,7 +213,6 @@ fullnameOverride: ""
 jvmArgs:
   webhook: ""
   operator: ""
-  logConfig: "-Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties"
 
 # Configure health probes for the operator
 operatorHealth:
