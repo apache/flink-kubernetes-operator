@@ -89,7 +89,7 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void receivedEvent(Event event, Map<String, Object> metadata) {
+    public void eventReceived(Event event, Map<String, Object> metadata) {
         if (event instanceof ResourceEvent) {
             var action = ((ResourceEvent) event).getAction();
             counter(getResourceMg(event.getRelatedCustomResourceID(), metadata), RESOURCE, EVENT)
@@ -104,12 +104,12 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void cleanupDoneFor(ResourceID resourceID, Map<String, Object> metadata) {
+    public void cleanupDone(ResourceID resourceID, Map<String, Object> metadata) {
         counter(getResourceMg(resourceID, metadata), RECONCILIATION, "cleanup").inc();
     }
 
     @Override
-    public void reconcileCustomResource(
+    public void reconciliationSubmitted(
             HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
         var resourceID = ResourceID.fromResource(resource);
         counter(getResourceMg(resourceID, metadata), RECONCILIATION).inc();
@@ -120,7 +120,8 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void finishedReconciliation(HasMetadata resource, Map<String, Object> metadata) {
+    public void reconciliationFinished(
+            HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
         counter(
                         getResourceMg(ResourceID.fromResource(resource), metadata),
                         RECONCILIATION,
@@ -129,19 +130,16 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void failedReconciliation(
-            HasMetadata resource, Exception exception, Map<String, Object> metadata) {
+    public void reconciliationFailed(
+            HasMetadata resource,
+            RetryInfo retryInfoNullable,
+            Exception exception,
+            Map<String, Object> metadata) {
         counter(
                         getResourceMg(ResourceID.fromResource(resource), metadata),
                         RECONCILIATION,
                         "failed")
                 .inc();
-    }
-
-    @Override
-    public <T extends Map<?, ?>> T monitorSizeOf(T map, String name) {
-        operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP).addGroup(name).gauge("size", map::size);
-        return map;
     }
 
     private Histogram histogram(ControllerExecution<?> execution, String name) {
