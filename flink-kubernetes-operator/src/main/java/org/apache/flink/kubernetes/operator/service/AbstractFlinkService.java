@@ -401,7 +401,7 @@ public abstract class AbstractFlinkService implements FlinkService {
      * @return {@code true} if the job was already missing or terminated, and no further action is
      *     needed. {@code false} if cancellation was successfully initiated and is still pending
      *     (the caller should await completion before proceeding).
-     * @throws UpgradeFailureException if the job cannot be canceled due to an unexpected error, or
+     * @throws UpgradeFailureException if the job cannot be cancelled due to an unexpected error, or
      *     if the job is missing and {@code ignoreMissing} is set to {@code false}.
      */
     public boolean cancelJobOrError(
