@@ -345,7 +345,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     }
                     break;
                 case CANCEL:
-                    if (cancelJobOrError(clusterClient, status, false)) {
+                    if (!cancelJobOrError(clusterClient, status, false)) {
                         // This is async we need to return
                         return CancelResult.pending();
                     }
@@ -372,7 +372,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             switch (suspendMode) {
                 case STATELESS:
                 case CANCEL:
-                    if (cancelJobOrError(
+                    if (!cancelJobOrError(
                             clusterClient, status, suspendMode == SuspendMode.STATELESS)) {
                         // This is async we need to return and re-observe
                         return CancelResult.pending();
@@ -388,6 +388,22 @@ public abstract class AbstractFlinkService implements FlinkService {
         return CancelResult.completed(savepointPath);
     }
 
+    /**
+     * Attempts to cancel a Flink job given its current status. If the job is already in the process
+     * of being cancelled or has been terminated, the method handles these cases accordingly.
+     *
+     * @param clusterClient the {@code RestClusterClient} instance used to interact with the Flink
+     *     cluster.
+     * @param status the current status of the job, encapsulated in a {@code CommonStatus} object.
+     * @param ignoreMissing a flag indicating whether the absence of the job should be ignored. If
+     *     {@code true}, the method will return {@code true} when the job is missing. If {@code
+     *     false}, an exception will be thrown when the job cannot be found.
+     * @return {@code true} if the job was already missing or terminated, and no further action is
+     *     needed. {@code false} if cancellation was successfully initiated and is still pending
+     *     (the caller should await completion before proceeding).
+     * @throws UpgradeFailureException if the job cannot be canceled due to an unexpected error, or
+     *     if the job is missing and {@code ignoreMissing} is set to {@code false}.
+     */
     public boolean cancelJobOrError(
             RestClusterClient<String> clusterClient,
             CommonStatus<?> status,
@@ -395,7 +411,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
         if (ReconciliationUtils.isJobCancelling(status)) {
             LOG.info("Job already cancelling");
-            return true;
+            return false;
         }
         LOG.info("Cancelling job");
         try {
@@ -407,7 +423,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             if (isJobMissing(e)) {
                 if (ignoreMissing) {
                     LOG.info("Job already missing");
-                    return false;
+                    return true;
                 } else {
                     throw new UpgradeFailureException(
                             "Cannot find job when trying to cancel",
@@ -416,7 +432,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 }
             } else if (isJobTerminated(e)) {
                 LOG.info("Job already terminated");
-                return false;
+                return true;
             } else {
                 LOG.warn("Error while cancelling job", e);
                 throw new UpgradeFailureException(
@@ -424,7 +440,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         status.getJobStatus().setState(JobStatus.CANCELLING);
-        return true;
+        return false;
     }
 
     public String savepointJobOrError(
