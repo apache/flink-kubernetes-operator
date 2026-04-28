@@ -25,7 +25,6 @@ under the License.
     <fileSets>
         <fileSet>
             <directory>${project.build.testOutputDirectory}</directory>
-            <outputDirectory>/</outputDirectory>
             <!-- the service impl -->
             <includes>
                 <include>org/apache/flink/kubernetes/operator/validation/TestValidator.class</include>
@@ -37,7 +36,7 @@ under the License.
         <fileSet>
             <!-- declaring the service impl -->
             <directory>${project.basedir}/src/test/resources/META-INF/services</directory>
-            <outputDirectory>/META-INF/services</outputDirectory>
+            <outputDirectory>META-INF/services</outputDirectory>
         </fileSet>
     </fileSets>
 </assembly>
