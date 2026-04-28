@@ -48,12 +48,15 @@ import java.util.Objects;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
+import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.allowsOutsideRange;
+import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.searchesWithinRange;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_MIN_OBSERVATIONS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALE_DOWN_INTERVAL;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_FALLBACK;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
@@ -518,20 +521,12 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * the parallelism is further adjusted to align with the number of key groups or source
      * partitions, according to the configured {@link KeyGroupOrPartitionsAdjustMode}.
      *
-     * <p>The alignment uses a two-phase algorithm:
-     *
-     * <ol>
-     *   <li><b>Phase 1 (upward search):</b> searches from the computed {@code newParallelism}
-     *       upward for divisor-aligned values. For scale-down, the search is capped at {@code
-     *       currentParallelism} to prevent the alignment from crossing into the scale-up direction.
-     *       If the nearest divisor is {@code currentParallelism} itself, it is returned
-     *       (effectively blocking the scale-down).
-     *   <li><b>Phase 2 (downward fallback):</b> if Phase 1 finds no match, searches downward from
-     *       {@code newParallelism} for the boundary where per-subtask load increases. A
-     *       direction-safety guard ensures the result never inverts the intended scaling direction
-     *       (scale-up results stay above {@code currentParallelism}, scale-down results stay
-     *       below).
-     * </ol>
+     * <p>When alignment is required and the computed parallelism differs from the current
+     * parallelism, the method delegates to {@link #scaleUp} or {@link #scaleDown} based on the
+     * scaling direction. These methods enforce direction-safety: scale-up adjustments never produce
+     * a result below {@code currentParallelism}, and scale-down adjustments never produce a result
+     * above {@code currentParallelism}. This prevents the alignment logic from cancelling or
+     * inverting the intended scaling direction.
      */
     @VisibleForTesting
     protected static <KEY, Context extends JobAutoScalerContext<KEY>> int scale(
@@ -584,40 +579,372 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
         var upperBoundForAlignment = Math.min(numKeyGroupsOrPartitions, upperBound);
 
-        KeyGroupOrPartitionsAdjustMode mode =
-                context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
+        var mode = context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
+        var fallback =
+                KeyGroupOrPartitionsAdjustFallback.resolve(
+                        mode,
+                        context.getConfiguration()
+                                .get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_FALLBACK));
 
-        if (newParallelism == currentParallelism) {
-            return newParallelism;
+        if (newParallelism > currentParallelism) {
+            return scaleUp(
+                    vertex,
+                    currentParallelism,
+                    newParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBoundForAlignment,
+                    upperBound,
+                    parallelismLowerLimit,
+                    mode,
+                    fallback,
+                    eventHandler,
+                    context);
+        } else if (newParallelism < currentParallelism) {
+            return scaleDown(
+                    vertex,
+                    currentParallelism,
+                    newParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBoundForAlignment,
+                    upperBound,
+                    parallelismLowerLimit,
+                    mode,
+                    fallback,
+                    eventHandler,
+                    context);
         }
 
-        boolean isScaleUp = newParallelism > currentParallelism;
+        return newParallelism;
+    }
 
-        // Phase 1: Upward search from newParallelism for divisor or approximate match.
-        // For scale-down, cap search at currentParallelism to prevent the alignment
-        // from crossing into the scale-up direction (direction-safety fix).
-        // Returning currentParallelism itself is allowed — it effectively blocks the
-        // scale-down since no aligned value was found strictly below it.
-        int phase1UpperBound =
-                isScaleUp
-                        ? upperBoundForAlignment
-                        : Math.min(currentParallelism, upperBoundForAlignment);
+    /**
+     * Adjusts parallelism for a scale-up operation using a sequential mode-then-fallback strategy,
+     * ensuring the result always stays strictly above {@code currentParallelism} to preserve the
+     * scaling direction.
+     *
+     * <p>First, the primary {@code mode}'s complete alignment algorithm is executed via {@link
+     * #applyScaleUpMode}. If the mode cannot find an aligned value (returns {@code
+     * currentParallelism}), the configured {@code fallback} is resolved to a mode via {@link
+     * KeyGroupOrPartitionsAdjustFallback#toMode()} and executed as a second pass. If both fail, a
+     * {@link #SCALING_LIMITED} event is emitted and {@code currentParallelism} is returned,
+     * effectively blocking the scale-up.
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> int scaleUp(
+            JobVertexID vertex,
+            int currentParallelism,
+            int newParallelism,
+            int numKeyGroupsOrPartitions,
+            int upperBoundForAlignment,
+            int upperBound,
+            int parallelismLowerLimit,
+            KeyGroupOrPartitionsAdjustMode mode,
+            KeyGroupOrPartitionsAdjustFallback fallback,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
 
-        for (int p = newParallelism; p <= phase1UpperBound; p++) {
+        int result =
+                applyScaleUpMode(
+                        vertex,
+                        currentParallelism,
+                        newParallelism,
+                        numKeyGroupsOrPartitions,
+                        upperBoundForAlignment,
+                        upperBound,
+                        parallelismLowerLimit,
+                        mode,
+                        eventHandler,
+                        context);
+
+        if (result == currentParallelism && fallback != KeyGroupOrPartitionsAdjustFallback.NONE) {
+            var fallbackMode = fallback.toMode();
+            if (fallbackMode != null) {
+                result =
+                        applyScaleUpMode(
+                                vertex,
+                                currentParallelism,
+                                newParallelism,
+                                numKeyGroupsOrPartitions,
+                                upperBoundForAlignment,
+                                upperBound,
+                                parallelismLowerLimit,
+                                fallbackMode,
+                                eventHandler,
+                                context);
+            }
+        }
+
+        if (result == currentParallelism) {
+            boolean compliant = isAligned(currentParallelism, numKeyGroupsOrPartitions, mode);
+            if (!compliant && fallback.toMode() != null) {
+                compliant =
+                        isAligned(currentParallelism, numKeyGroupsOrPartitions, fallback.toMode());
+            }
+            if (compliant) {
+                LOG.warn(
+                        "Scale-up of {} blocked: current parallelism {} is aligned with mode {} "
+                                + "(fallback {}), but no aligned value found above it in ({}, {}].",
+                        vertex,
+                        currentParallelism,
+                        mode,
+                        fallback,
+                        currentParallelism,
+                        upperBoundForAlignment);
+            } else {
+                LOG.warn(
+                        "Scale-up of {} blocked: current parallelism {} does NOT comply with "
+                                + "mode {} or fallback {}. No aligned value found in ({}, {}]. "
+                                + "Returning current parallelism as last resort to preserve "
+                                + "scaling direction.",
+                        vertex,
+                        currentParallelism,
+                        mode,
+                        fallback,
+                        currentParallelism,
+                        upperBoundForAlignment);
+            }
+            emitScalingLimitedEvent(
+                    vertex,
+                    newParallelism,
+                    currentParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBound,
+                    parallelismLowerLimit,
+                    eventHandler,
+                    context);
+        }
+
+        return result;
+    }
+
+    /**
+     * Adjusts parallelism for a scale-down operation using a sequential mode-then-fallback
+     * strategy, ensuring the result always stays strictly below {@code currentParallelism} to
+     * preserve the scaling direction.
+     *
+     * <p>First, the primary {@code mode}'s complete alignment algorithm is executed via {@link
+     * #applyScaleDownMode}. If the mode cannot find an aligned value (returns {@code
+     * currentParallelism}), the configured {@code fallback} is resolved to a mode via {@link
+     * KeyGroupOrPartitionsAdjustFallback#toMode()} and executed as a second pass. If both fail, a
+     * {@link #SCALING_LIMITED} event is emitted and {@code currentParallelism} is returned,
+     * effectively blocking the scale-down.
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> int scaleDown(
+            JobVertexID vertex,
+            int currentParallelism,
+            int newParallelism,
+            int numKeyGroupsOrPartitions,
+            int upperBoundForAlignment,
+            int upperBound,
+            int parallelismLowerLimit,
+            KeyGroupOrPartitionsAdjustMode mode,
+            KeyGroupOrPartitionsAdjustFallback fallback,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
+
+        int result =
+                applyScaleDownMode(
+                        vertex,
+                        currentParallelism,
+                        newParallelism,
+                        numKeyGroupsOrPartitions,
+                        upperBoundForAlignment,
+                        upperBound,
+                        parallelismLowerLimit,
+                        mode,
+                        eventHandler,
+                        context);
+
+        if (result == currentParallelism && fallback != KeyGroupOrPartitionsAdjustFallback.NONE) {
+            var fallbackMode = fallback.toMode();
+            if (fallbackMode != null) {
+                result =
+                        applyScaleDownMode(
+                                vertex,
+                                currentParallelism,
+                                newParallelism,
+                                numKeyGroupsOrPartitions,
+                                upperBoundForAlignment,
+                                upperBound,
+                                parallelismLowerLimit,
+                                fallbackMode,
+                                eventHandler,
+                                context);
+            }
+        }
+
+        if (result == currentParallelism) {
+            boolean compliant = isAligned(currentParallelism, numKeyGroupsOrPartitions, mode);
+            if (!compliant && fallback.toMode() != null) {
+                compliant =
+                        isAligned(currentParallelism, numKeyGroupsOrPartitions, fallback.toMode());
+            }
+            if (compliant) {
+                LOG.warn(
+                        "Scale-down of {} blocked: current parallelism {} is aligned with mode {} "
+                                + "(fallback {}), but no aligned value found below it in [{}, {}).",
+                        vertex,
+                        currentParallelism,
+                        mode,
+                        fallback,
+                        parallelismLowerLimit,
+                        currentParallelism);
+            } else {
+                LOG.warn(
+                        "Scale-down of {} blocked: current parallelism {} does NOT comply with "
+                                + "mode {} or fallback {}. No aligned value found in [{}, {}). "
+                                + "Returning current parallelism as last resort to preserve "
+                                + "scaling direction.",
+                        vertex,
+                        currentParallelism,
+                        mode,
+                        fallback,
+                        parallelismLowerLimit,
+                        currentParallelism);
+            }
+            emitScalingLimitedEvent(
+                    vertex,
+                    newParallelism,
+                    currentParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBound,
+                    parallelismLowerLimit,
+                    eventHandler,
+                    context);
+        }
+
+        return result;
+    }
+
+    /**
+     * Runs a single mode's complete alignment algorithm for a scale-up operation.
+     *
+     * <p>Search strategy (phases are tried in order; first match wins):
+     *
+     * <ol>
+     *   <li><b>Phase 1 (within range, divisor search):</b> Search from {@code newParallelism}
+     *       downward to {@code currentParallelism + 1} for the largest divisor of {@code
+     *       numKeyGroupsOrPartitions}. Only active for modes where {@link
+     *       KeyGroupOrPartitionsAdjustMode#searchesWithinRange} returns {@code true} (i.e., {@link
+     *       KeyGroupOrPartitionsAdjustMode#EVENLY_SPREAD EVENLY_SPREAD} and {@link
+     *       KeyGroupOrPartitionsAdjustMode#OPTIMIZE_RESOURCE_UTILIZATION
+     *       OPTIMIZE_RESOURCE_UTILIZATION}).
+     *   <li><b>Phase 2 + Phase 3 (outside-range search):</b> Delegated to {@link
+     *       #applyOutsideRangeSearch}. Only active for modes where {@link
+     *       KeyGroupOrPartitionsAdjustMode#allowsOutsideRange} returns {@code true}. Phase 2
+     *       searches upward to {@code upperBoundForAlignment}; Phase 3 is a relaxed downward
+     *       fallback with a direction guard ensuring the result stays above {@code
+     *       currentParallelism}.
+     * </ol>
+     *
+     * @return the aligned parallelism, or {@code currentParallelism} if no aligned value was found
+     *     (used as a sentinel by the caller to trigger fallback or emit a blocking event)
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> int applyScaleUpMode(
+            JobVertexID vertex,
+            int currentParallelism,
+            int newParallelism,
+            int numKeyGroupsOrPartitions,
+            int upperBoundForAlignment,
+            int upperBound,
+            int parallelismLowerLimit,
+            KeyGroupOrPartitionsAdjustMode mode,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
+
+        // Phase 1: Search within [currentParallelism+1, newParallelism] downward from target.
+        // Active for EVENLY_SPREAD and OPTIMIZE_RESOURCE_UTILIZATION.
+        // Skipped for MAXIMIZE_UTILISATION (whose N/p < N/new condition only triggers
+        // above newParallelism) and ADAPTIVE_UPWARD_SPREAD (which delegates directly to
+        // the upward Phase 2 search).
+        if (searchesWithinRange(mode)) {
+            for (int p = newParallelism; p > currentParallelism; p--) {
+                if (isAligned(p, numKeyGroupsOrPartitions, mode)) {
+                    if (p != newParallelism) {
+                        emitScalingLimitedEvent(
+                                vertex,
+                                newParallelism,
+                                p,
+                                numKeyGroupsOrPartitions,
+                                upperBound,
+                                parallelismLowerLimit,
+                                eventHandler,
+                                context);
+                    }
+                    return p;
+                }
+            }
+        }
+
+        // Phase 2 + Phase 3: Outside-range upward search with relaxed downward fallback.
+        // Direction guard ensures scale-up results stay above currentParallelism.
+        if (allowsOutsideRange(mode)) {
+            return applyOutsideRangeSearch(
+                    vertex,
+                    currentParallelism,
+                    newParallelism,
+                    numKeyGroupsOrPartitions,
+                    upperBoundForAlignment,
+                    upperBound,
+                    parallelismLowerLimit,
+                    mode,
+                    true,
+                    eventHandler,
+                    context);
+        }
+
+        // No aligned value found for this mode
+        return currentParallelism;
+    }
+
+    /**
+     * Runs Phase 2 (upward outside-range search) and Phase 3 (relaxed downward fallback) of the
+     * alignment algorithm. Shared by both scale-up and scale-down operations.
+     *
+     * <p><b>Phase 2 (upward search):</b> Searches from {@code newParallelism} upward to {@code
+     * phase2UpperBound} for exact divisors ({@code N % p == 0}), or, in {@link
+     * KeyGroupOrPartitionsAdjustMode#MAXIMIZE_UTILISATION MAXIMIZE_UTILISATION} mode, values where
+     * per-subtask load decreases ({@code N/p < N/newParallelism}).
+     *
+     * <p><b>Phase 3 (relaxed downward fallback):</b> Searches downward from {@code newParallelism}
+     * for the boundary where per-subtask load increases ({@code N/p > N/newParallelism}), then
+     * snaps up to the nearest divisor-aligned value. For scale-up operations, a direction guard
+     * ensures the result stays above {@code currentParallelism}.
+     *
+     * @param phase2UpperBound upper bound for Phase 2 search ({@code upperBoundForAlignment} for
+     *     scale-up, {@code min(currentParallelism, upperBoundForAlignment)} for scale-down)
+     * @param isScaleUp {@code true} for scale-up (enables direction guard in Phase 3), {@code
+     *     false} for scale-down
+     * @return the aligned parallelism, or {@code currentParallelism} if no valid value was found
+     *     (sentinel for the caller to trigger fallback or emit a blocking event)
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> int applyOutsideRangeSearch(
+            JobVertexID vertex,
+            int currentParallelism,
+            int newParallelism,
+            int numKeyGroupsOrPartitions,
+            int phase2UpperBound,
+            int upperBound,
+            int parallelismLowerLimit,
+            KeyGroupOrPartitionsAdjustMode mode,
+            boolean isScaleUp,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
+
+        // Phase 2: Search upward from newParallelism to phase2UpperBound.
+        // Checks for exact divisors (N % p == 0). Additionally, for MAXIMIZE_UTILISATION,
+        // accepts values where per-subtask load decreases (N/p < N/newParallelism).
+        for (int p = newParallelism; p <= phase2UpperBound; p++) {
             if (numKeyGroupsOrPartitions % p == 0
-                    ||
-                    // When Mode is MAXIMIZE_UTILISATION , Try to find the smallest parallelism
-                    // that can satisfy the current consumption rate.
-                    (mode == MAXIMIZE_UTILISATION
+                    || (mode == MAXIMIZE_UTILISATION
                             && numKeyGroupsOrPartitions / p
                                     < numKeyGroupsOrPartitions / newParallelism)) {
                 return p;
             }
         }
 
-        // When adjusting the parallelism after rounding up cannot
-        // find the parallelism to meet requirements.
-        // Try to find the smallest parallelism that can satisfy the current consumption rate.
+        // Phase 3: Relaxed downward fallback.
+        // Finds the boundary where per-subtask load increases (N/p > N/newParallelism),
+        // then snaps up to the nearest divisor-aligned value.
         int p = newParallelism;
         for (; p > 0; p--) {
             if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
@@ -629,40 +956,146 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
         p = Math.max(p, parallelismLowerLimit);
 
-        // Direction-safety guard: prevent the alignment from inverting the scaling direction.
-        if ((isScaleUp && p <= currentParallelism) || (!isScaleUp && p >= currentParallelism)) {
-            LOG.warn(
-                    "Scaling of {} blocked: alignment could not find a value that preserves the "
-                            + "{} direction from current parallelism {} with mode {}. "
-                            + "Keeping current parallelism.",
-                    vertex,
-                    isScaleUp ? "scale-up" : "scale-down",
-                    currentParallelism,
-                    mode);
-            emitScalingLimitedEvent(
-                    vertex,
-                    newParallelism,
-                    currentParallelism,
-                    numKeyGroupsOrPartitions,
-                    upperBound,
-                    parallelismLowerLimit,
-                    eventHandler,
-                    context);
+        // Direction guard: for scale-up, the result must stay above currentParallelism
+        if (isScaleUp && p <= currentParallelism) {
             return currentParallelism;
         }
 
-        if (p != newParallelism) {
-            emitScalingLimitedEvent(
+        emitScalingLimitedEvent(
+                vertex,
+                newParallelism,
+                p,
+                numKeyGroupsOrPartitions,
+                upperBound,
+                parallelismLowerLimit,
+                eventHandler,
+                context);
+        return p;
+    }
+
+    /**
+     * Runs a single mode's complete alignment algorithm for a scale-down operation.
+     *
+     * <p>Search strategy (phases are tried in order; first match wins):
+     *
+     * <ol>
+     *   <li><b>Phase 1 (within range, divisor search):</b> Search from {@code newParallelism}
+     *       upward to {@code currentParallelism - 1} for the smallest divisor of {@code
+     *       numKeyGroupsOrPartitions}. Only active for modes where {@link
+     *       KeyGroupOrPartitionsAdjustMode#searchesWithinRange} returns {@code true}.
+     *   <li><b>Phase 2 + Phase 3 (outside-range search):</b> Delegated to {@link
+     *       #applyOutsideRangeSearch}. Only active for modes where {@link
+     *       KeyGroupOrPartitionsAdjustMode#allowsOutsideRange} returns {@code true}. Phase 2
+     *       searches upward, capped at {@code min(currentParallelism, upperBoundForAlignment)} to
+     *       prevent crossing the current parallelism; Phase 3 is a relaxed downward fallback that
+     *       is inherently direction-safe since results never exceed {@code newParallelism}, which
+     *       is already below {@code currentParallelism}.
+     * </ol>
+     *
+     * @return the aligned parallelism, or {@code currentParallelism} if no aligned value was found
+     *     (used as a sentinel by the caller to trigger fallback or emit a blocking event)
+     */
+    private static <KEY, Context extends JobAutoScalerContext<KEY>> int applyScaleDownMode(
+            JobVertexID vertex,
+            int currentParallelism,
+            int newParallelism,
+            int numKeyGroupsOrPartitions,
+            int upperBoundForAlignment,
+            int upperBound,
+            int parallelismLowerLimit,
+            KeyGroupOrPartitionsAdjustMode mode,
+            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Context context) {
+
+        // Phase 1: Search within [newParallelism, currentParallelism-1] upward from target.
+        // Active for EVENLY_SPREAD and OPTIMIZE_RESOURCE_UTILIZATION.
+        // Skipped for MAXIMIZE_UTILISATION and ADAPTIVE_UPWARD_SPREAD which delegate
+        // directly to the upward Phase 2 search.
+        if (searchesWithinRange(mode)) {
+            for (int p = newParallelism; p < currentParallelism; p++) {
+                if (isAligned(p, numKeyGroupsOrPartitions, mode)) {
+                    if (p != newParallelism) {
+                        emitScalingLimitedEvent(
+                                vertex,
+                                newParallelism,
+                                p,
+                                numKeyGroupsOrPartitions,
+                                upperBound,
+                                parallelismLowerLimit,
+                                eventHandler,
+                                context);
+                    }
+                    return p;
+                }
+            }
+        }
+
+        // Phase 2 + Phase 3: Outside-range upward search (capped at currentParallelism to
+        // prevent crossing) with relaxed downward fallback. Inherently direction-safe
+        // since results are always <= newParallelism < currentParallelism.
+        if (allowsOutsideRange(mode)) {
+            return applyOutsideRangeSearch(
                     vertex,
+                    currentParallelism,
                     newParallelism,
-                    p,
                     numKeyGroupsOrPartitions,
+                    Math.min(currentParallelism, upperBoundForAlignment),
                     upperBound,
                     parallelismLowerLimit,
+                    mode,
+                    false,
                     eventHandler,
                     context);
         }
-        return p;
+
+        // No aligned value found for this mode
+        return currentParallelism;
+    }
+
+    /**
+     * Checks whether a given parallelism value is considered "aligned" with the number of key
+     * groups or partitions, based on the configured {@link KeyGroupOrPartitionsAdjustMode}.
+     *
+     * <p>This method is only used for <b>within-range</b> searches (Phase 1), where candidates lie
+     * between {@code currentParallelism} and {@code newParallelism}. Outside-range alignment (Phase
+     * 2 + Phase 3) is handled directly inside {@link #applyOutsideRangeSearch}.
+     *
+     * <p>All modes accept a perfect divisor ({@code numKeyGroupsOrPartitions % parallelism == 0})
+     * as the universal alignment condition. Beyond that, behavior differs per mode:
+     *
+     * <ul>
+     *   <li>{@link KeyGroupOrPartitionsAdjustMode#EVENLY_SPREAD EVENLY_SPREAD} - strict divisor
+     *       only. No relaxation beyond the universal check.
+     *   <li>{@link KeyGroupOrPartitionsAdjustMode#MAXIMIZE_UTILISATION MAXIMIZE_UTILISATION} -
+     *       within range, only divisors are accepted. The relaxed per-subtask load condition
+     *       ({@code N/p < N/newParallelism}) is applied in {@link #applyOutsideRangeSearch}.
+     *   <li>{@link KeyGroupOrPartitionsAdjustMode#OPTIMIZE_RESOURCE_UTILIZATION
+     *       OPTIMIZE_RESOURCE_UTILIZATION} - accepts any parallelism where every subtask has at
+     *       least one item to process ({@code parallelism <= numKeyGroupsOrPartitions}), regardless
+     *       of even distribution.
+     *   <li>{@link KeyGroupOrPartitionsAdjustMode#ADAPTIVE_UPWARD_SPREAD ADAPTIVE_UPWARD_SPREAD} -
+     *       strict divisor only (same as {@code EVENLY_SPREAD}). The relaxed
+     *       MAXIMIZE_UTILISATION-style fallback is handled in {@link #applyOutsideRangeSearch}.
+     * </ul>
+     *
+     * @param parallelism the candidate parallelism value to check
+     * @param numKeyGroupsOrPartitions the number of key groups or source partitions
+     * @param mode the configured alignment mode
+     * @return {@code true} if the candidate parallelism is considered aligned
+     */
+    private static boolean isAligned(
+            int parallelism, int numKeyGroupsOrPartitions, KeyGroupOrPartitionsAdjustMode mode) {
+
+        if (numKeyGroupsOrPartitions % parallelism == 0) {
+            return true;
+        }
+
+        return switch (mode) {
+            case EVENLY_SPREAD, MAXIMIZE_UTILISATION, ADAPTIVE_UPWARD_SPREAD ->
+            false;
+            case OPTIMIZE_RESOURCE_UTILIZATION ->
+            parallelism <= numKeyGroupsOrPartitions;
+        };
     }
 
     /**
@@ -708,14 +1141,34 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     /** The mode of the key group or parallelism adjustment. */
     public enum KeyGroupOrPartitionsAdjustMode implements DescribedEnum {
         EVENLY_SPREAD(
-                "This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks"
-                        + ". It is particularly effective for source vertices that are aware of partition counts or vertices after "
-                        + "'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew."),
+                "Conservative mode that only accepts parallelism values that evenly divide the "
+                        + "number of key groups or partitions (N % p == 0). Searches within the "
+                        + "direction-safe range between currentParallelism and newParallelism. "
+                        + "If no divisor is found, scaling is blocked to avoid uneven data "
+                        + "distribution."),
+
+        ADAPTIVE_UPWARD_SPREAD(
+                "Default mode. Combines the divisor alignment of EVENLY_SPREAD with the "
+                        + "relaxed fallback of MAXIMIZE_UTILISATION. Searches above the computed "
+                        + "target for a divisor of key groups or partitions, falling back to the "
+                        + "nearest value that reduces per-subtask load. Direction-safety guards "
+                        + "prevent cancelling or inverting the scaling direction."),
 
         MAXIMIZE_UTILISATION(
-                "This model is to maximize resource utilization. In this mode, an attempt is made to set"
-                        + " the parallelism that meets the current consumption rate requirements. It is not enforced "
-                        + "that the number of key groups or partitions is divisible by the parallelism."),
+                "Searches upward from the computed target parallelism for the smallest value "
+                        + "where either (a) it evenly divides the number of key groups or "
+                        + "partitions, or (b) the per-subtask load decreases compared to the "
+                        + "target (N/p < N/newParallelism). This accepts slightly uneven "
+                        + "distribution in exchange for using fewer resources than a strict "
+                        + "divisor alignment."),
+
+        OPTIMIZE_RESOURCE_UTILIZATION(
+                "Accepts any parallelism where every subtask has at least one key group or "
+                        + "partition to process (p <= N). Does not enforce even distribution. "
+                        + "Searches within the direction-safe range between currentParallelism "
+                        + "and newParallelism. This is the most resource-efficient mode, using "
+                        + "exactly the parallelism the autoscaler computes without alignment "
+                        + "overhead."),
         ;
 
         private final InlineElement description;
@@ -727,6 +1180,93 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         @Override
         public InlineElement getDescription() {
             return description;
+        }
+
+        public static boolean searchesWithinRange(KeyGroupOrPartitionsAdjustMode mode) {
+            return mode != MAXIMIZE_UTILISATION && mode != ADAPTIVE_UPWARD_SPREAD;
+        }
+
+        public static boolean allowsOutsideRange(KeyGroupOrPartitionsAdjustMode mode) {
+            return mode == MAXIMIZE_UTILISATION || mode == ADAPTIVE_UPWARD_SPREAD;
+        }
+    }
+
+    /**
+     * Controls the fallback strategy when the primary {@link KeyGroupOrPartitionsAdjustMode} cannot
+     * find an aligned parallelism value.
+     *
+     * <p>When set to {@link #DEFAULT}, only {@link
+     * KeyGroupOrPartitionsAdjustMode#ADAPTIVE_UPWARD_SPREAD} has a built-in fallback ({@link
+     * #MAXIMIZE_UTILISATION}). All other modes resolve to {@link #NONE}, blocking scaling when no
+     * aligned value is found.
+     */
+    public enum KeyGroupOrPartitionsAdjustFallback implements DescribedEnum {
+        DEFAULT(
+                "Uses the mode's built-in fallback. Only ADAPTIVE_UPWARD_SPREAD has a "
+                        + "built-in fallback (MAXIMIZE_UTILISATION). All other modes resolve "
+                        + "to NONE, blocking scaling when no aligned value is found."),
+
+        NONE(
+                "Blocks scaling when no aligned parallelism is found. Returns "
+                        + "currentParallelism, effectively cancelling the scaling operation."),
+
+        ADAPTIVE_UPWARD_SPREAD(
+                "Delegates to the full ADAPTIVE_UPWARD_SPREAD strategy: searches upward "
+                        + "from the target for a divisor, then falls back to a relaxed search "
+                        + "for the nearest value that reduces per-subtask load."),
+
+        MAXIMIZE_UTILISATION(
+                "Falls back to a relaxed search that finds the smallest parallelism "
+                        + "where per-subtask load decreases compared to the target "
+                        + "(N/p < N/newParallelism). Direction-safety guards still apply."),
+
+        OPTIMIZE_RESOURCE_UTILIZATION(
+                "Accepts the computed target parallelism directly as long as every "
+                        + "subtask has at least one item to process (p <= N)."),
+        ;
+
+        private final InlineElement description;
+
+        KeyGroupOrPartitionsAdjustFallback(String description) {
+            this.description = text(description);
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return description;
+        }
+
+        /**
+         * Resolves the effective fallback. Only {@link
+         * KeyGroupOrPartitionsAdjustMode#ADAPTIVE_UPWARD_SPREAD} has a built-in fallback ({@link
+         * #MAXIMIZE_UTILISATION}). All other modes resolve to {@link #NONE}.
+         */
+        public static KeyGroupOrPartitionsAdjustFallback resolve(
+                KeyGroupOrPartitionsAdjustMode mode, KeyGroupOrPartitionsAdjustFallback fallback) {
+            if (fallback != DEFAULT) {
+                return fallback;
+            }
+            if (mode == KeyGroupOrPartitionsAdjustMode.ADAPTIVE_UPWARD_SPREAD) {
+                return MAXIMIZE_UTILISATION;
+            }
+            return NONE;
+        }
+
+        /**
+         * Maps this fallback to the equivalent {@link KeyGroupOrPartitionsAdjustMode} so it can be
+         * executed as a full second-pass search via {@code applyScaleUpMode} / {@code
+         * applyScaleDownMode}. Returns {@code null} for {@link #NONE} and {@link #DEFAULT} which do
+         * not map to a mode.
+         */
+        public KeyGroupOrPartitionsAdjustMode toMode() {
+            return switch (this) {
+                case ADAPTIVE_UPWARD_SPREAD -> KeyGroupOrPartitionsAdjustMode
+                        .ADAPTIVE_UPWARD_SPREAD;
+                case MAXIMIZE_UTILISATION -> KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
+                case OPTIMIZE_RESOURCE_UTILIZATION -> KeyGroupOrPartitionsAdjustMode
+                        .OPTIMIZE_RESOURCE_UTILIZATION;
+                case NONE, DEFAULT -> null;
+            };
         }
     }
 }
