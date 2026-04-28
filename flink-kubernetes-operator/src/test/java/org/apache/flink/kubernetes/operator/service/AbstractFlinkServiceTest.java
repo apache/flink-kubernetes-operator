@@ -113,6 +113,7 @@ import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import lombok.SneakyThrows;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -334,15 +335,7 @@ public class AbstractFlinkServiceTest {
     @ValueSource(ints = {404, 409, 500})
     public void cancelErrorHandling(int statusCode) throws Exception {
 
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
-        testingClusterClient.setCancelFunction(
-                jobID ->
-                        CompletableFuture.failedFuture(
-                                new RuntimeException(
-                                        new RestClientException(
-                                                "errrr", HttpResponseStatus.valueOf(statusCode)))));
-        var flinkService = new TestingService(testingClusterClient);
+        var flinkService = getTestingService("errrr", HttpResponseStatus.valueOf(statusCode));
 
         JobID jobID = JobID.generate();
         var job = TestUtils.buildSessionJob();
@@ -360,8 +353,102 @@ public class AbstractFlinkServiceTest {
             assertEquals(RUNNING, jobStatus.getState());
         } else {
             flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
-            assertEquals(CANCELLING, jobStatus.getState());
+            assertEquals(FINISHED, jobStatus.getState());
+            assertNull(jobStatus.getJobId());
         }
+    }
+
+    @Test
+    public void cancelErrorHandlingWithTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
+        assertEquals(FINISHED, jobStatus.getState());
+        assertNull(jobStatus.getJobId());
+    }
+
+    /**
+     * Reproduces the operator-upgrade scenario for Session Mode with CANCEL upgrade mode: when a
+     * running session job's JobManager has already moved the job into a terminal state (e.g.
+     * FAILED) and the operator (after a restart/upgrade) tries to cancel it, the cancellation
+     * request comes back with "already reached another terminal state". Previously this caused the
+     * finalizer to never be removed, leaving the CR stuck in Terminating.
+     */
+    @Test
+    public void cancelSessionJobWithCancelModeAndTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        var result = flinkService.cancelSessionJob(job, SuspendMode.CANCEL, new Configuration());
+        // Must NOT be pending — the CR would otherwise be stuck in Terminating indefinitely
+        assertFalse(result.isPending());
+        assertEquals(FINISHED, jobStatus.getState());
+        assertNull(jobStatus.getJobId());
+    }
+
+    @NotNull
+    private TestingService getTestingService(String message, HttpResponseStatus badRequest)
+            throws Exception {
+        final var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        testingClusterClient.setCancelFunction(
+                jobID ->
+                        CompletableFuture.failedFuture(
+                                new RuntimeException(
+                                        new RestClientException(message, badRequest))));
+        return new TestingService(testingClusterClient);
+    }
+
+    /**
+     * Reproduces FLINK-37766 for Application Mode: when a running application job's JobManager has
+     * moved the job to a terminal state (e.g. FAILED due to HA desync) and the operator tries to
+     * cancel the job with CANCEL suspend mode (used for last-state upgrades), the "already reached
+     * another terminal state" response previously caused the operator to always return
+     * CancelResult.pending(), looping forever without completing the upgrade/deletion.
+     */
+    @Test
+    public void cancelApplicationJobWithCancelModeAndTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        var result =
+                flinkService.cancelJob(
+                        deployment,
+                        SuspendMode.CANCEL,
+                        configManager.getObserveConfig(deployment),
+                        false);
+        // Must NOT be pending — the operator would otherwise loop forever on the upgrade
+        assertFalse(result.isPending());
+        assertEquals(FINISHED, jobStatus.getState());
     }
 
     @ParameterizedTest
