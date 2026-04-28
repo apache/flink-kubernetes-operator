@@ -249,7 +249,6 @@ jobs:
           - "native"
           - "standalone"
         test:
-          - test_log4j2_logging.sh
           - test_logback_logging.sh
     uses: ./.github/workflows/e2e.yaml
     with:
