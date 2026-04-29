@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
@@ -293,6 +294,12 @@ public class JobAutoScalerImplTest {
         autoscaler.scale(context);
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
+        // Test job not running: overrides must still be re-projected onto the spec so that an
+        // in-flight upgrade does not regress the autoscaler's last decision (self-heal).
+        var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        autoscaler.scale(notRunningContext);
+        assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
+
         // Make sure cleanup removes everything
         assertTrue(stateStore.hasDataFor(context));
         autoscaler.cleanup(context);
@@ -352,6 +359,55 @@ public class JobAutoScalerImplTest {
     }
 
     @Test
+    void testOverridesAreReappliedWhenJobNotRunning() throws Exception {
+        // Regression guard for the self-heal contract: while the job is in an in-flight upgrade
+        // (JobStatus != RUNNING), the autoscaler must still re-project its persisted decisions
+        // onto the spec on every reconcile cycle. Skipping the realizer in this state (as an
+        // earlier "if (!waiting)" guard did) lets external resets of spec.flinkConfiguration go
+        // unhealed and triggers a spurious second upgrade once the reconciler diffs the spec
+        // against lastReconciledSpec.
+        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+
+        var v1 = new JobVertexID().toString();
+        stateStore.storeParallelismOverrides(context, Map.of(v1, "3"));
+        ConfigChanges configChanges = new ConfigChanges();
+        configChanges.addOverride(TaskManagerOptions.MANAGED_MEMORY_FRACTION, 0.42f);
+        stateStore.storeConfigChanges(context, configChanges);
+        stateStore.flush(context);
+
+        var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        new TestingMetricsCollector<>(new JobTopology()),
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore);
+
+        autoscaler.scale(notRunningContext);
+
+        boolean sawParallelism = false;
+        boolean sawConfig = false;
+        for (var event : scalingRealizer.events) {
+            if (event.getParallelismOverrides() != null) {
+                sawParallelism = true;
+                assertEquals(Map.of(v1, "3"), event.getParallelismOverrides());
+            }
+            if (event.getConfigChanges() != null) {
+                sawConfig = true;
+                assertThat(event.getConfigChanges().getOverrides())
+                        .containsExactly(
+                                entry(TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(), "0.42"));
+            }
+        }
+        assertTrue(
+                sawParallelism,
+                "Parallelism overrides must be re-applied while job is not running");
+        assertTrue(sawConfig, "Config overrides must be re-applied while job is not running");
+    }
+
+    @Test
     void testApplyConfigOverrides() throws Exception {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =
@@ -384,7 +440,7 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testAutoscalerDisabled() throws Exception {
-        context.getConfiguration().setBoolean(AUTOSCALER_ENABLED, false);
+        context.getConfiguration().set(AUTOSCALER_ENABLED, false);
         context.getConfiguration().set(VERTEX_SCALING_HISTORY_AGE, Duration.ofMillis(200));
 
         var scalingHistory = new TreeMap<Instant, ScalingSummary>();
