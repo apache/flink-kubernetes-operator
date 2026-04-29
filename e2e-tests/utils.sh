@@ -296,6 +296,18 @@ function start_minikube {
         echo "Could not start minikube. Aborting..."
         exit 1
     fi
+    if ! retry_times 3 30 enable_minikube_ingress; then
+        echo "Could not enable minikube ingress addon. Aborting..."
+        exit 1
+    fi
+}
+
+function enable_minikube_ingress {
+    # `minikube addons enable ingress` performs its own synchronous verify with
+    # an internal ~3m deadline that is frequently exceeded on cold CI runners
+    # while pulling the ingress-nginx controller and webhook-certgen images.
+    # The addon Deployment is applied even when verify times out, so retrying
+    # is cheap and idempotent: the second attempt reuses the cached images.
     minikube addons enable ingress
 }
 
