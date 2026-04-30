@@ -291,6 +291,107 @@ public class ScalingMetricsTest {
         return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, sum, Double.NaN);
     }
 
+    private static AggregatedMetric aggAvg(double avg) {
+        return new AggregatedMetric("", Double.NaN, Double.NaN, avg, Double.NaN, Double.NaN);
+    }
+
+    private static double computeNonSourceObservedTpr(
+            double busyAvg,
+            double bpAvg,
+            double inputRatePerSecSum,
+            Configuration conf,
+            double prevTpr) {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source, Collections.emptyMap(), 1, 1, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(
+                                sink, Map.of(source, REBALANCE), 1, 1, new IOMetrics(0, 0, 0)));
+
+        Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
+        var flinkMetrics = new HashMap<FlinkMetric, AggregatedMetric>();
+        flinkMetrics.put(FlinkMetric.BUSY_TIME_PER_SEC, aggAvg(busyAvg));
+        if (!Double.isNaN(bpAvg)) {
+            flinkMetrics.put(FlinkMetric.BACKPRESSURE_TIME_PER_SEC, aggAvg(bpAvg));
+        }
+        if (!Double.isNaN(inputRatePerSecSum)) {
+            flinkMetrics.put(FlinkMetric.NUM_RECORDS_IN_PER_SEC, aggSum(inputRatePerSecSum));
+        }
+        ScalingMetrics.computeDataRateMetrics(
+                sink, flinkMetrics, scalingMetrics, topology, conf, () -> prevTpr);
+        return scalingMetrics.getOrDefault(ScalingMetric.OBSERVED_TPR, Double.NaN);
+    }
+
+    @Test
+    public void testNonSourceObservedTprDisabledByDefault() {
+        // Even with all required metrics present and the vertex fully engaged,
+        // OBSERVED_TPR must NOT be populated for non-sources unless the flag is on.
+        var conf = new Configuration();
+        // Flag intentionally NOT set -> default false.
+        double tpr = computeNonSourceObservedTpr(900., 100., 1000., conf, Double.NaN);
+        assertTrue(Double.isNaN(tpr));
+    }
+
+    @Test
+    public void testNonSourceObservedTprEnabled() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+
+        // Fully engaged (busy 900 + bp 100 = 1000ms/s) and 200ms/s backpressure.
+        // Wait — set bp=200 so it's clearly above zero and the formula is exercised.
+        // engagement = (busy + bp)/1000 = (700+200)/1000 = 0.9 -> below default 0.95 -> NaN
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(700., 200., 1000., conf, Double.NaN)));
+
+        // engagement = (800+200)/1000 = 1.0 >= 0.95 -> compute
+        // observedTpr = rate / (1 - bp/1000) = 1000 / 0.8 = 1250
+        assertEquals(1000. / 0.8, computeNonSourceObservedTpr(800., 200., 1000., conf, Double.NaN));
+
+        // Zero input rate while engaged -> POSITIVE_INFINITY (mirrors source behavior).
+        assertEquals(
+                Double.POSITIVE_INFINITY,
+                computeNonSourceObservedTpr(950., 50., 0., conf, Double.NaN));
+
+        // Backpressure >= 1000ms/s -> formula degenerates -> fallback supplier (null here)
+        // is returned only if non-NaN, otherwise OBSERVED_TPR is not set.
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(0., 1000., 1000., conf, Double.NaN)));
+
+        // Below engagement threshold -> fallback to historical observedTprAvg (PREV_TPR).
+        assertEquals(PREV_TPR, computeNonSourceObservedTpr(100., 100., 1000., conf, PREV_TPR));
+    }
+
+    @Test
+    public void testNonSourceObservedTprCustomEngagementThreshold() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+        conf.set(
+                AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENGAGEMENT_THRESHOLD,
+                0.5);
+
+        // engagement = 0.6 >= 0.5 -> compute
+        assertEquals(
+                500. / (1 - 0.1), computeNonSourceObservedTpr(500., 100., 500., conf, Double.NaN));
+
+        // engagement = 0.4 < 0.5 -> NaN
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(300., 100., 500., conf, Double.NaN)));
+    }
+
+    @Test
+    public void testNonSourceObservedTprMissingMetricsAreSilentlySkipped() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+
+        // No backpressure metric available (e.g. older Flink / metric not requested) -> NaN
+        assertTrue(
+                Double.isNaN(
+                        computeNonSourceObservedTpr(900., Double.NaN, 1000., conf, Double.NaN)));
+        // No input rate metric available -> NaN
+        assertTrue(
+                Double.isNaN(
+                        computeNonSourceObservedTpr(900., 100., Double.NaN, conf, Double.NaN)));
+    }
+
     private static AggregatedMetric aggMax(double max) {
         return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN, Double.NaN);
     }

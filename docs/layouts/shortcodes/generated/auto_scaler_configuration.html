@@ -129,6 +129,18 @@
             <td>Minimum nr of observations used when estimating / switching to observed true processing rate.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.observed-true-processing-rate.non-source.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Whether to also compute the observed (backpressure-derived) true processing rate for non-source vertices. When enabled, OBSERVED_TPR is populated for any vertex whose engagement (busy + backpressured time) crosses the configured threshold, mirroring the source-side behavior gated on lag. Default off for backward compatibility.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.observed-true-processing-rate.non-source.engagement-threshold</h5></td>
+            <td style="word-wrap: break-word;">0.95</td>
+            <td>Double</td>
+            <td>Engagement threshold (between 0 and 1) for triggering observed true processing rate computation on non-source vertices. Computed as (busyTimeMsPerSecond + backPressuredTimeMsPerSecond) / 1000. The vertex is considered fully engaged (and therefore not input-starved) when this value crosses the threshold, which is the non-source analogue of the source 'has lag' condition.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.observed-true-processing-rate.switch-threshold</h5></td>
             <td style="word-wrap: break-word;">0.15</td>
             <td>Double</td>
