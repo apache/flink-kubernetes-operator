@@ -27,8 +27,10 @@ import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
 import org.apache.flink.autoscaler.standalone.realizer.RescaleApiScalingRealizer;
+import org.apache.flink.autoscaler.standalone.utils.AutoscalerUtils;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
@@ -37,6 +39,8 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
@@ -88,13 +92,16 @@ public class StandaloneAutoscalerEntrypoint {
             JobAutoScaler<KEY, Context> createJobAutoscaler(
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
+        Collection<FlinkAutoscalerEvaluator> customEvaluators =
+                AutoscalerUtils.discoverCustomEvaluators();
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
                 new ScalingExecutor<>(eventHandler, stateStore),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
-                stateStore);
+                stateStore,
+                customEvaluators);
     }
 
     @VisibleForTesting

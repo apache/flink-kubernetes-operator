@@ -185,3 +185,96 @@ The following steps demonstrate how to develop and use a custom mutator.
     ```text
     2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
     ```
+
+## Custom Scaling Metric Evaluators
+
+`FlinkAutoscalerEvaluator` is a pluggable component that allows users to provide custom scaling-metric evaluation logic on top of the metrics evaluated internally by the autoscaler. Custom metric evaluators are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+
+For each evaluation cycle, the autoscaler invokes the custom metric evaluator selected via the `job.autoscaler.metrics.custom-evaluators` configuration option once per job vertex. The metrics returned by the custom evaluator are merged on top of the internally evaluated metrics, allowing users to override or augment specific `ScalingMetric` values (e.g. `TARGET_DATA_RATE`, `TRUE_PROCESSING_RATE`, `CATCH_UP_DATA_RATE`).
+
+All `job.autoscaler.*` keys related to custom metric evaluators also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.metrics.custom-evaluators`). The canonical key takes precedence on overlap.
+
+The following steps demonstrate how to develop and use a custom metric evaluator.
+
+1. Implement the `FlinkAutoscalerEvaluator` interface:
+    ```java
+    package org.apache.flink.autoscaler.custom;
+
+    import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+    import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
+    import org.apache.flink.autoscaler.metrics.ScalingMetric;
+    import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+    import java.util.HashMap;
+    import java.util.Map;
+
+    /** Custom metric evaluator implementation of {@link FlinkAutoscalerEvaluator}. */
+    public class CustomEvaluator implements FlinkAutoscalerEvaluator {
+
+
+        @Override
+        public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
+                JobVertexID vertex,
+                Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+                Context context) {
+            Map<ScalingMetric, EvaluatedScalingMetric> overrides = new HashMap<>();
+            // Example: override the target data rate for source vertices based
+            // on a value read from the evaluator-specific configuration.
+            double target = context.getCustomEvaluatorConf().getDouble("target-data-rate", 0.0);
+            if (target > 0 && context.getTopology().isSource(vertex)) {
+                overrides.put(
+                        ScalingMetric.TARGET_DATA_RATE,
+                        EvaluatedScalingMetric.avg(target));
+            }
+            return overrides;
+        }
+    }
+    ```
+
+   The `Context` object exposes an un-modifiable view of the job configuration, the metrics history, previously evaluated vertex metrics (evaluation happens topologically), the job topology, backlog status, max restart time, and the evaluator-specific configuration.
+
+2. Create the service definition file `org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator` in `META-INF/services` with the fully-qualified class name of your implementation:
+    ```text
+    org.apache.flink.autoscaler.custom.CustomEvaluator
+    ```
+
+3. Use the Maven tool to package the project and generate the custom metric evaluator JAR.
+
+4. Select the custom metric evaluator via configuration. The evaluator whose implementation class FQN matches the configured `job.autoscaler.metrics.custom-evaluator.<name>.class` value will be invoked, and any other `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are passed to the evaluator as evaluator-specific configuration with the `job.autoscaler.metrics.custom-evaluator.<instance>.` prefix stripped. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN.
+    ```yaml
+    job.autoscaler.metrics.custom-evaluators: my-evaluator
+    job.autoscaler.metrics.custom-evaluator.my-evaluator.class: org.apache.flink.autoscaler.custom.CustomEvaluator
+    job.autoscaler.metrics.custom-evaluator.my-evaluator.target-data-rate: 100000.0
+    ```
+   {{< hint warning >}}
+   **Only one custom metric evaluator per pipeline is supported for now**. Currently, `job.autoscaler.metrics.custom-evaluators` is parsed as a list, but if more than one entry is configured the autoscaler logs a warning and falls back to the first entry, ignoring the rest. Registering multiple implementations via `META-INF/services` is fine as they form a registry that different jobs can select from by class FQN, but a single job cannot chain or compose more than one evaluator. Multi-instance support, including a priority/ordering contract aligned with [FLIP-575](https://cwiki.apache.org/confluence/display/FLINK/FLIP-575%3A+Scaling+Executor+Plugin+SPI+for+Flink+Autoscaler) (`ScalingExecutorPlugin`), will be added as a follow-up.
+   {{< /hint >}}
+
+5. Deploy the evaluator.
+
+   - **Operator deployment** - create a Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to a custom metric evaluator plugin directory under `/opt/flink/plugins` (the value of the `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart). The structure of the custom evaluator directory under `/opt/flink/plugins` is as follows:
+       ```text
+       /opt/flink/plugins
+           ├── custom-evaluator
+           │   ├── custom-evaluator.jar
+           └── ...
+       ```
+
+     With the custom metric evaluator directory location, the Dockerfile is defined as follows:
+       ```shell script
+       FROM apache/flink-kubernetes-operator
+       ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+       ENV CUSTOM_EVALUATOR_DIR=custom-evaluator
+       RUN mkdir $FLINK_PLUGINS_DIR/$CUSTOM_EVALUATOR_DIR
+       COPY custom-evaluator.jar $FLINK_PLUGINS_DIR/$CUSTOM_EVALUATOR_DIR/
+       ```
+
+     Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
+       ```text
+       o.a.f.k.o.a.AutoscalerUtils [INFO ] Discovered custom metric evaluator from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.custom.CustomEvaluator.
+       ```
+
+   - **Standalone autoscaler** - simply place the custom metric evaluator JAR on the classpath of the `flink-autoscaler-standalone` process. It will be picked up automatically via Java's `ServiceLoader` and discovery will be logged:
+       ```text
+       o.a.f.a.s.AutoscalerUtils [INFO ] Discovered custom metric evaluator via ServiceLoader: org.apache.flink.autoscaler.custom.CustomEvaluator.
+       ```
