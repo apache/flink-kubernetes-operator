@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
@@ -49,6 +50,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -87,6 +89,17 @@ public class FlinkConfigManager {
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
     private volatile ConcurrentHashMap<FlinkVersion, List<String>> relevantFlinkVersionPrefixes;
+
+    private final Cache<RuntimeConfigCacheKey, Map<String, String>> runtimeConfigCache;
+
+    /** Cache key for runtime configuration overrides, scoped to a specific job instance. */
+    @Value
+    @Builder
+    private static class RuntimeConfigCacheKey {
+        String namespace;
+        String name;
+        String jobId;
+    }
 
     protected static final Pattern FLINK_VERSION_PATTERN =
             Pattern.compile(
@@ -131,6 +144,14 @@ public class FlinkConfigManager {
                                         return generateConfig(k);
                                     }
                                 });
+
+        this.runtimeConfigCache =
+                CacheBuilder.newBuilder()
+                        .maximumSize(
+                                defaultConfig.get(
+                                        KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_SIZE))
+                        .expireAfterAccess(cacheTimeout)
+                        .build();
 
         updateDefaultConfig(defaultConfig);
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
@@ -349,6 +370,81 @@ public class FlinkConfigManager {
         var conf = getConfig(deployment.getMetadata(), deployedSpec);
         applyConfigsFromCurrentSpec(deployment.getSpec(), conf, SAVEPOINT_DIRECTORY);
         return conf;
+    }
+
+    private RuntimeConfigCacheKey cacheKey(String namespace, String name, String jobId) {
+        return RuntimeConfigCacheKey.builder().namespace(namespace).name(name).jobId(jobId).build();
+    }
+
+    /**
+     * Store runtime configuration overrides in the cache. Called by observers after fetching
+     * configuration from the Flink REST API.
+     *
+     * @param namespace Resource namespace
+     * @param name Resource name
+     * @param jobId Job ID string
+     * @param config Runtime configuration key-value pairs
+     */
+    public void putRuntimeConfig(
+            String namespace, String name, String jobId, Map<String, String> config) {
+        runtimeConfigCache.put(
+                cacheKey(namespace, name, jobId), Collections.unmodifiableMap(config));
+        LOG.debug("Cached runtime configuration with {} entries", config.size());
+    }
+
+    /**
+     * Get cached runtime configuration overrides for a specific job instance.
+     *
+     * @param namespace Resource namespace
+     * @param name Resource name
+     * @param jobId Job ID string
+     * @return Cached runtime config if present
+     */
+    public Optional<Map<String, String>> getRuntimeConfig(
+            String namespace, String name, String jobId) {
+        return Optional.ofNullable(
+                runtimeConfigCache.getIfPresent(cacheKey(namespace, name, jobId)));
+    }
+
+    /**
+     * Invalidate all cached runtime configurations for a given resource. Should be called when a
+     * job is cancelled or an upgrade replaces the running job.
+     *
+     * @param namespace Resource namespace
+     * @param name Resource name
+     */
+    public void invalidateRuntimeConfig(String namespace, String name) {
+        runtimeConfigCache
+                .asMap()
+                .keySet()
+                .removeIf(
+                        key -> namespace.equals(key.getNamespace()) && name.equals(key.getName()));
+        LOG.debug("Invalidated runtime configuration cache");
+    }
+
+    /**
+     * Apply any cached runtime configuration overrides to the given configuration. Looks up the
+     * cache using the resource's current job ID from its status.
+     *
+     * @param resource Flink resource (FlinkDeployment or FlinkSessionJob)
+     * @param conf Configuration to apply overrides to
+     */
+    public void applyCachedRuntimeConfig(AbstractFlinkResource<?, ?> resource, Configuration conf) {
+        var jobStatus = resource.getStatus().getJobStatus();
+        if (jobStatus == null || jobStatus.getJobId() == null) {
+            return;
+        }
+        getRuntimeConfig(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        jobStatus.getJobId())
+                .ifPresent(
+                        config -> {
+                            LOG.debug(
+                                    "Applying {} cached runtime configuration overrides",
+                                    config.size());
+                            config.forEach(conf::setString);
+                        });
     }
 
     private void addOperatorConfigsFromSpec(AbstractFlinkSpec spec, Configuration conf) {
