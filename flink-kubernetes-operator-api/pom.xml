@@ -266,6 +266,9 @@ under the License.
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.12.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.13.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.14.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -285,6 +288,9 @@ under the License.
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.9.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.12.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.13.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.14.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -318,6 +324,10 @@ under the License.
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
                                     <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.10.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.11.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.12.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.13.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.14.0/helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
