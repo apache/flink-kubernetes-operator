@@ -270,6 +270,22 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
+                <dependencies>
+                    <!--
+                        Adds Log4j2PluginCacheFileTransformer so that the per-jar
+                        META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
+                        cache files (shipped by both log4j-core and log4j-1.2-api) are
+                        properly MERGED into the uber-JAR. Without this transformer
+                        only one of the input cache files would survive (last-write-wins),
+                        breaking log4j2 plugin lookup for whichever side is dropped, and
+                        maven-shade-plugin would log it as an "overlapping resource" warning.
+                    -->
+                    <dependency>
+                        <groupId>org.apache.logging.log4j</groupId>
+                        <artifactId>log4j-transform-maven-shade-plugin-extensions</artifactId>
+                        <version>0.2.0</version>
+                    </dependency>
+                </dependencies>
                 <executions>
                     <execution>
                         <id>shade-flink-operator</id>
@@ -279,17 +295,154 @@ under the License.
                         </goals>
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <!--
+                                The non-shaded JAR is the main artifact (consumers like
+                                flink-kubernetes-webhook compile against it as a regular
+                                Maven dep). Shade still tries to publish a
+                                dependency-reduced-pom.xml that pretends every dep was
+                                absorbed into the shaded fat-JAR, which strips compile-scope
+                                deps (flink-core, slf4j, fabric8, jackson, …) from the
+                                installed pom and breaks downstream compilation. Disable
+                                pom reduction so the original pom — with the full dep tree —
+                                is the one published / installed for this artifact.
+                            -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <filters combine.children="append">
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
+                                        <!-- JPMS module descriptors: the uber-JAR is not modular,
+                                        so these are meaningless and only cause shade's
+                                        "Discovered module-info.class …" warnings. -->
+                                        <exclude>module-info.class</exclude>
                                         <exclude>META-INF/**/module-info.class</exclude>
+                                        <!-- Signature files of signed input jars: keeping them
+                                        in an uber-JAR triggers SecurityException at runtime. -->
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <!-- Per-dependency Maven build metadata: pom.xml /
+                                        pom.properties shipped under META-INF/maven/ are only
+                                        used to identify the original dep, not at runtime. -->
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <!-- Per-dependency LICENSE/NOTICE/DEPENDENCIES files.
+                                        NOTICE is already aggregated by the parent pom's
+                                        ApacheNoticeResourceTransformer; the project's
+                                        top-level LICENSE / NOTICE / licenses/ directory is the
+                                        canonical attribution and is shipped at the repo root. -->
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                        <exclude>META-INF/LICENSE.txt</exclude>
+                                        <exclude>META-INF/license.txt</exclude>
+                                        <exclude>META-INF/NOTICE</exclude>
+                                        <exclude>META-INF/NOTICE.txt</exclude>
+                                        <exclude>META-INF/licenses/**</exclude>
+                                        <!-- Kotlin compilation metadata: only used by kotlinc
+                                        for cross-module compilation; irrelevant at runtime. -->
+                                        <exclude>META-INF/*.kotlin_module</exclude>
+                                        <!-- ProGuard rules shipped by some libs (e.g. Guava):
+                                        only consumed by ProGuard, irrelevant in this uber-JAR. -->
+                                        <exclude>META-INF/proguard/**</exclude>
+                                        <!-- GraalVM native-image hints: only consumed by the
+                                        native-image build; this uber-JAR runs on the JVM. -->
+                                        <exclude>META-INF/native-image/**</exclude>
+                                        <!-- Quarkus jandex pre-computed annotation indexes
+                                        shipped by the fabric8 kubernetes-* jars; not needed. -->
+                                        <exclude>META-INF/jandex.idx</exclude>
+                                        <!-- Netty release metadata; flink-shaded-netty wins on
+                                        overlap with flink-shaded-zookeeper-3's bundled netty. -->
+                                        <exclude>META-INF/io.netty.versions.properties</exclude>
+                                        <!-- A fresh manifest is produced by the
+                                        ManifestResourceTransformer below, so dropping the inputs
+                                        avoids shade's "META-INF/MANIFEST.MF" overlap warning. -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
                                 <filter>
                                     <artifact>org.apache.flink:flink-kubernetes</artifact>
                                     <excludes>
                                         <exclude>META-INF/versions/**/com/fasterxml/jackson/core/io/doubleparser/**</exclude>
+                                        <!--
+                                            FlinkConfMountDecorator is intentionally forked under
+                                            flink-kubernetes-operator's source tree
+                                            (org.apache.flink.kubernetes.kubeclient.decorators)
+                                            to override the version shipped by flink-kubernetes.
+                                            Drop the upstream copy so the fork deterministically
+                                            wins, silencing shade's "overlapping classes" warning.
+                                        -->
+                                        <exclude>org/apache/flink/kubernetes/kubeclient/decorators/FlinkConfMountDecorator.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!--
+                                        flink-autoscaler / flink-kubernetes-operator(-api) /
+                                        flink-autoscaler-standalone all ship intentional forks of
+                                        a handful of org.apache.flink.runtime.rest.messages.*
+                                        classes (see e.g.
+                                        flink-kubernetes-operator/src/main/java/org/apache/flink/runtime/rest/messages/
+                                        and flink-autoscaler/src/main/java/org/apache/flink/runtime/rest/messages/).
+                                        Drop the upstream copies from flink-runtime so the local
+                                        forks deterministically win, silencing shade's
+                                        "overlapping classes" warnings.
+                                    -->
+                                    <artifact>org.apache.flink:flink-runtime</artifact>
+                                    <excludes>
+                                        <exclude>org/apache/flink/runtime/rest/messages/job/metrics/AggregatedMetric.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/job/metrics/IOMetricsInfo.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/JobExceptionsInfoWithHistory.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/JobExceptionsInfoWithHistory$*.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/job/JobDetailsInfo.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/job/JobDetailsInfo$*.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/json/SlotSharingGroupIDDeserializer.class</exclude>
+                                        <exclude>org/apache/flink/runtime/rest/messages/json/SlotSharingGroupIDSerializer.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!--
+                                        flink-autoscaler also ships its own fork of
+                                        AggregatedMetric (see
+                                        flink-autoscaler/src/main/java/org/apache/flink/runtime/rest/messages/job/metrics/AggregatedMetric.java).
+                                        flink-kubernetes-operator carries the canonical fork
+                                        consumed by the rest of the operator code, so let it win.
+                                    -->
+                                    <artifact>org.apache.flink:flink-autoscaler</artifact>
+                                    <excludes>
+                                        <exclude>org/apache/flink/runtime/rest/messages/job/metrics/AggregatedMetric.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!--
+                                        flink-shaded-zookeeper-3 re-bundles its own private copy
+                                        of netty under META-INF/native-image / META-INF/io.netty.*
+                                        Drop them so the canonical flink-shaded-netty values win
+                                        deterministically.
+                                    -->
+                                    <artifact>org.apache.flink:flink-shaded-zookeeper-3</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/io.netty.versions.properties</exclude>
+                                        <exclude>META-INF/native-image/io.netty/**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!--
+                                        Both flink-kubernetes-operator and -api ship a default
+                                        log4j2.properties; the operator module's copy is the
+                                        runtime configuration, so drop the api module's.
+                                    -->
+                                    <artifact>org.apache.flink:flink-kubernetes-operator-api</artifact>
+                                    <excludes>
+                                        <exclude>log4j2.properties</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!--
+                                        okio and okio-jvm ship the same Kotlin module descriptor;
+                                        keep the one from okio-jvm (the actual JVM artifact) and
+                                        drop okio's.
+                                    -->
+                                    <artifact>com.squareup.okio:okio</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/okio.kotlin_module</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -303,6 +456,14 @@ under the License.
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>org.apache.flink.kubernetes.operator.FlinkOperator</mainClass>
                                 </transformer>
+                                <!--
+                                    Properly merge the Log4j2 plugin cache files shipped under
+                                    META-INF/org/apache/logging/log4j/core/config/plugins/
+                                    Log4j2Plugins.dat by both log4j-core and log4j-1.2-api into a
+                                    single combined cache, instead of last-write-wins.
+                                -->
+                                <transformer
+                                        implementation="org.apache.logging.log4j.maven.plugins.shade.transformer.Log4j2PluginCacheFileTransformer"/>
                             </transformers>
                         </configuration>
                     </execution>
@@ -409,6 +570,20 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
+                <!--
+                    Pinned because the version inherited from the Apache Parent POM (3.2.0)
+                    flags <finalName> as read-only at execution scope only since 3.4+ AND
+                    older versions log "*nix-specific root-relative reference" for any
+                    <outputDirectory> entry in the assembly descriptor.
+                -->
+                <version>3.8.0</version>
+                <configuration>
+                    <!-- finalName must live at plugin scope (or be inherited from
+                    ${project.build.finalName}); placing it inside <execution><configuration>
+                    triggers maven-assembly-plugin's "Parameter 'finalName' is read-only"
+                    warning since 3.4. -->
+                    <finalName>test-plugins</finalName>
+                </configuration>
                 <executions>
                     <execution>
                         <id>create-test-plugin-jar</id>
@@ -417,7 +592,6 @@ under the License.
                             <goal>single</goal>
                         </goals>
                         <configuration>
-                            <finalName>test-plugins</finalName>
                             <attach>false</attach>
                             <descriptors>
                                 <descriptor>src/test/assembly/test-plugins-assembly.xml</descriptor>

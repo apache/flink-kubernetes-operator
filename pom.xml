@@ -340,7 +340,7 @@ under the License.
             <plugin>
                 <groupId>org.apache.rat</groupId>
                 <artifactId>apache-rat-plugin</artifactId>
-                <version>0.16.1</version><!--$NO-MVN-MAN-VER$-->
+                <version>0.18</version><!--$NO-MVN-MAN-VER$-->
                 <inherited>false</inherited>
                 <executions>
                     <execution>
@@ -352,75 +352,79 @@ under the License.
                 </executions>
                 <configuration>
                     <excludeSubProjects>false</excludeSubProjects>
-                    <numUnapprovedLicenses>0</numUnapprovedLicenses>
-                    <licenses>
-                        <!-- Enforce this license:
-                            Licensed to the Apache Software Foundation (ASF) under one
-                            or more contributor license agreements.  See the NOTICE file
-                            distributed with this work for additional information
-                            regarding copyright ownership.  The ASF licenses this file
-                            to you under the Apache License, Version 2.0 (the
-                            "License"); you may not use this file except in compliance
-                            with the License.  You may obtain a copy of the License at
-                              http://www.apache.org/licenses/LICENSE-2.0
-                            Unless required by applicable law or agreed to in writing,
-                            software distributed under the License is distributed on an
-                            "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-                            KIND, either express or implied.  See the License for the
-                            specific language governing permissions and limitations
-                            under the License.
-                        -->
-                        <license implementation="org.apache.rat.analysis.license.SimplePatternBasedLicense">
-                            <licenseFamilyCategory>AL2 </licenseFamilyCategory>
-                            <licenseFamilyName>Apache License 2.0</licenseFamilyName>
-                            <notes />
-                            <patterns>
-                                <pattern>Licensed to the Apache Software Foundation (ASF) under one</pattern>
-                            </patterns>
-                        </license>
-                    </licenses>
-                    <licenseFamilies>
-                        <licenseFamily implementation="org.apache.rat.license.SimpleLicenseFamily">
-                            <familyName>Apache License 2.0</familyName>
-                        </licenseFamily>
-                    </licenseFamilies>
-                    <excludes>
+                    <!--
+                        Strict Apache License 2.0 enforcement.
+
+                        apache-rat-plugin 0.17 deprecated the inline <families>,
+                        <licenses> and <approvedLicenses> parameters ("Use specific
+                        configuration under <configuration>. See configuration file
+                        documentation."). The custom ruleset now lives in
+                        tools/rat/rat-config.xml and is loaded via <configs> below;
+                        <configurationNoDefaults>true</configurationNoDefaults>
+                        disables apache-rat-core/org/apache/rat/default.xml so the
+                        external file is the ONLY ruleset RAT applies. The result:
+                        - Recognised family: AL only.
+                        - Recognised license: AL2.0 only (matched on the canonical
+                          ASF source-header opener).
+                        - Approved family: AL.
+                        Any other header is reported as Unknown license (Unapproved).
+
+                        Replacements vs the deprecated 0.16 schema (still relevant):
+                          - <numUnapprovedLicenses>0</numUnapprovedLicenses>
+                              -> <counterMaxs><counterMax>Unapproved:0</counterMax></counterMaxs>
+                          - <excludes><exclude>...</exclude></excludes>
+                              -> <inputExcludes><inputExclude>...</inputExclude></inputExcludes>
+
+                        See: https://creadur.apache.org/rat/apache-rat-plugin/check-mojo.html
+                    -->
+                    <configurationNoDefaults>true</configurationNoDefaults>
+                    <configs>
+                        <config>${maven.multiModuleProjectDirectory}/tools/rat/rat-config.xml</config>
+                    </configs>
+                    <counterMaxs>
+                        <counterMax>Unapproved:0</counterMax>
+                    </counterMaxs>
+                    <inputExcludes>
                         <!-- Additional files like .gitignore etc.-->
-                        <exclude>**/.*/**</exclude>
-                        <exclude>**/*.prefs</exclude>
-                        <exclude>**/*.log</exclude>
-                        <exclude>**/dependency-reduced-pom.xml</exclude>
+                        <inputExclude>**/.*/**</inputExclude>
+                        <inputExclude>**/*.prefs</inputExclude>
+                        <inputExclude>**/*.log</inputExclude>
+                        <inputExclude>**/dependency-reduced-pom.xml</inputExclude>
                         <!-- Administrative files in the main trunk. -->
-                        <exclude>**/README.md</exclude>
-                        <exclude>.git/**</exclude>
-                        <exclude>.github/**</exclude>
+                        <inputExclude>**/README.md</inputExclude>
+                        <inputExclude>.git/**</inputExclude>
+                        <inputExclude>.github/**</inputExclude>
                         <!-- Build files -->
-                        <exclude>**/*.iml</exclude>
+                        <inputExclude>**/*.iml</inputExclude>
                         <!-- Generated content -->
-                        <exclude>**/target/**</exclude>
-                        <exclude>apache-maven-3.2.5/**</exclude>
+                        <inputExclude>**/target/**</inputExclude>
+                        <inputExclude>apache-maven-3.2.5/**</inputExclude>
                         <!-- Documentation -->
-                        <exclude>docs/static/font-awesome/**</exclude>
-                        <exclude>docs/resources/**</exclude>
-                        <exclude>docs/public/**</exclude>
-                        <exclude>docs/themes/book/**</exclude>
-                        <exclude>docs/assets/github.css</exclude>
-                        <exclude>docs/static/js/anchor.min.js</exclude>
-                        <exclude>docs/layouts/shortcodes/generated/**</exclude>
+                        <inputExclude>docs/static/font-awesome/**</inputExclude>
+                        <inputExclude>docs/resources/**</inputExclude>
+                        <inputExclude>docs/public/**</inputExclude>
+                        <inputExclude>docs/themes/book/**</inputExclude>
+                        <inputExclude>docs/assets/github.css</inputExclude>
+                        <inputExclude>docs/static/js/anchor.min.js</inputExclude>
+                        <inputExclude>docs/layouts/shortcodes/generated/**</inputExclude>
                         <!-- PyCharm -->
-                        <exclude>**/.idea/**</exclude>
+                        <inputExclude>**/.idea/**</inputExclude>
                         <!-- Generated CRD -->
-                        <exclude>helm/flink-kubernetes-operator/crds/flinkbluegreendeployments.flink.apache.org-v1.yml</exclude>
-                        <exclude>helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml</exclude>
-                        <exclude>helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml</exclude>
-                        <exclude>helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml</exclude>
-                        <exclude>rio.yml</exclude>
+                        <inputExclude>helm/flink-kubernetes-operator/crds/flinkbluegreendeployments.flink.apache.org-v1.yml</inputExclude>
+                        <inputExclude>helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml</inputExclude>
+                        <inputExclude>helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml</inputExclude>
+                        <inputExclude>helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml</inputExclude>
+                        <inputExclude>rio.yml</inputExclude>
                         <!-- the licenses that are re-bundled -->
-                        <exclude>**/packaged_licenses/LICENSE.*.txt</exclude>
-                        <exclude>**/licenses/LICENSE*</exclude>
-                        <exclude>**/licenses-binary/LICENSE*</exclude>
-                        <exclude>tools/license/NOTICE-binary_PREAMBLE.txt</exclude>
-                    </excludes>
+                        <inputExclude>**/packaged_licenses/LICENSE.*.txt</inputExclude>
+                        <inputExclude>**/licenses/LICENSE*</inputExclude>
+                        <inputExclude>**/licenses-binary/LICENSE*</inputExclude>
+                        <inputExclude>LICENSE.rsync-deployments</inputExclude>
+                        <inputExclude>tools/license/NOTICE-binary_PREAMBLE.txt</inputExclude>
+                        <!-- Third-party manifests vendored for e2e tests (carry their
+                             upstream license headers, not the ASF AL2.0 header). -->
+                        <inputExclude>e2e-tests/cert-manager.yaml</inputExclude>
+                    </inputExcludes>
                 </configuration>
             </plugin>
 
@@ -450,6 +454,15 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
+                <!--
+                    Pinned centrally so every module shares the same version.
+                    Overrides the older 3.1.1 inherited from the Apache Parent POM.
+                    3.5+ is also required to suppress the spurious
+                    "Discovered module-info.class. Shading will break its strong
+                    encapsulation." warning when JPMS descriptors are filtered out
+                    via <filters> (see MSHADE-460 / MSHADE-441).
+                -->
+                <version>3.6.2</version>
                 <configuration>
                     <transformers combine.children="append">
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
@@ -492,7 +505,7 @@ under the License.
             <plugin>
                 <groupId>org.cyclonedx</groupId>
                 <artifactId>cyclonedx-maven-plugin</artifactId>
-                <version>2.9.0</version>
+                <version>2.9.1</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
