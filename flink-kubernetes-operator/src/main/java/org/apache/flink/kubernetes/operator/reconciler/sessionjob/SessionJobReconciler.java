@@ -158,12 +158,20 @@ public class SessionJobReconciler
         var flinkDep = flinkDepOptional.get();
 
         // If the session cluster is being deleted, the job will not survive regardless,
-        // so there is no need to explicitly cancel it.
+        // so there is no need to explicitly cancel it, unless BLOCK_ON_SESSION_JOBS is
+        // enabled.
         var sessionLifecycleState = flinkDep.getStatus().getLifecycleState();
         if (sessionLifecycleState == ResourceLifecycleState.DELETING
                 || sessionLifecycleState == ResourceLifecycleState.DELETED) {
-            LOG.info("Session cluster is being deleted, skipping job cancellation");
-            return DeleteControl.defaultDelete();
+            var observeConfig = ctx.getObserveConfig();
+            var blockOnSessionJobs =
+                    observeConfig != null
+                            && observeConfig.get(
+                                    KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS);
+            if (!blockOnSessionJobs) {
+                LOG.info("Session cluster is being deleted, skipping job cancellation");
+                return DeleteControl.defaultDelete();
+            }
         }
 
         if (!sessionClusterReady(flinkDepOptional)) {
@@ -189,9 +197,9 @@ public class SessionJobReconciler
         }
 
         try {
-            var observeConfig = ctx.getObserveConfig();
             var suspendMode =
-                    observeConfig.getBoolean(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                    ctx.getObserveConfig()
+                                    .get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
                             ? SuspendMode.SAVEPOINT
                             : SuspendMode.STATELESS;
             if (cancelJob(ctx, suspendMode)) {

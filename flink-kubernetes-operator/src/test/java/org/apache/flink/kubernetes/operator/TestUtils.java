@@ -266,6 +266,24 @@ public class TestUtils extends BaseTestUtils {
         };
     }
 
+    public static <T extends HasMetadata>
+            Context<T> createContextWithReadyFlinkDeploymentInLifecycleState(
+                    ResourceLifecycleState lifecycleState, Map<String, String> flinkDepConfig) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus().setLifecycleState(lifecycleState);
+                session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                session.getSpec().getFlinkConfiguration().putAllFrom(flinkDepConfig);
+                session.getStatus()
+                        .getReconciliationStatus()
+                        .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
     public static <T extends HasMetadata> Context<T> createContextWithUnhealthyFlinkDeployment(
             boolean haEnabled) {
         return new TestingContext<>() {
