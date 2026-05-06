@@ -33,7 +33,7 @@ under the License.
 
     <properties>
         <testcontainers.version>1.18.2</testcontainers.version>
-        <postgres.version>42.5.6</postgres.version>
+        <postgres.version>42.7.11</postgres.version>
         <mysql.version>8.4.0</mysql.version>
     </properties>
 
