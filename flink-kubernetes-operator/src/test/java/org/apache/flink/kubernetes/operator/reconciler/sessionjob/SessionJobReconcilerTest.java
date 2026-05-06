@@ -48,6 +48,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -905,6 +906,63 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         assertTrue(deleteControl.isRemoveFinalizer());
         // No cancellation attempted, job still in RUNNING state
         assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ResourceLifecycleState.class,
+            names = {"DELETING", "DELETED"})
+    public void testCleanupWithDeletingClusterBlockOnSessionJobsDisabled(
+            ResourceLifecycleState lifecycleState) throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        var ctx =
+                TestUtils.createContextWithReadyFlinkDeploymentInLifecycleState(
+                        lifecycleState,
+                        Map.of(
+                                KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS.key(),
+                                "false"));
+        var deleteControl = reconciler.cleanup(sessionJob, ctx);
+
+        assertTrue(deleteControl.isRemoveFinalizer());
+        // Bypass fired: no cancellation attempted, job still RUNNING.
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ResourceLifecycleState.class,
+            names = {"DELETING", "DELETED"})
+    public void testCleanupWithDeletingClusterBlockOnSessionJobsEnabled(
+            ResourceLifecycleState lifecycleState) throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        var ctx =
+                TestUtils.createContextWithReadyFlinkDeploymentInLifecycleState(
+                        lifecycleState,
+                        Map.of(
+                                KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS.key(),
+                                "true"));
+        var deleteControl = reconciler.cleanup(sessionJob, ctx);
+
+        // Cancellation was initiated: cancelJobOrError returns pending so the reconciler
+        // reschedules and holds the finalizer until the cancel is re-observed. The job has
+        // already transitioned to CANCELED on the cluster side (TestingFlinkService).
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertEquals(10_000L, deleteControl.getScheduleDelay().orElse(null));
+        assertEquals(CANCELED, flinkService.listJobs().get(0).f1.getJobState());
     }
 
     @Test
