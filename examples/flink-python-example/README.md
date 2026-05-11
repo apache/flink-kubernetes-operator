@@ -46,11 +46,11 @@ user-defined arguments should be placed in the end. Check the [doc](https://nigh
 
 A working example would be:
 ```yaml
-args: ["-pyfs", "/opt/flink/usrlib/pythonjob/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/pythonjob/python_demo.py", "-myarg", "123"]
+args: ["-pyfs", "/opt/flink/usrlib/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py", "-myarg", "123"]
 ```
 But the following will throw exception:
 ```yaml
-args: ["-myarg", "123", "-pyfs", "/opt/flink/usrlib/pythonjob/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/pythonjob/python_demo.py"]
+args: ["-myarg", "123", "-pyfs", "/opt/flink/usrlib/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py"]
 ```
 
 ## Usage
@@ -65,13 +65,13 @@ Dockerfile
 
 Check this [doc](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building a PyFlink image. The included Dockerfile is based on `flink:2.2` and installs PyFlink 2.2.0 (which supports Python 3.9, 3.10, 3.11 and 3.12).
 
-Note: PyFlink's `pemja` dependency only ships pre-built Linux wheels for `x86_64`. On other architectures (e.g. Apple Silicon) the build falls back to compiling from source, which fails because `flink:2.2` ships a JRE-only image. Build for `linux/amd64` explicitly in that case (`docker build --platform linux/amd64 ...`).
+Note: PyFlink's `pemja` dependency only ships pre-built Linux wheels for `x86_64`, and the `flink:2.2` base image is JRE-only, so building from source on other architectures fails. Build for `linux/amd64` explicitly - the resulting image runs natively on x86 and on Apple Silicon via Docker Desktop's emulation.
 
 ```bash
 # Uncomment when building for local minikube env:
 # eval $(minikube docker-env)
 
-DOCKER_BUILDKIT=1 docker build . -t flink-python-example:latest
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 . -t flink-python-example:latest
 ```
 This step will create an image based on an official Flink base image including the Python scripts.
 
