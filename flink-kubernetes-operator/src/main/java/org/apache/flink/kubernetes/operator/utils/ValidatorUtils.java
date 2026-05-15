@@ -17,8 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.ConfigConstants;
-import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -36,13 +37,22 @@ public final class ValidatorUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
 
+    @VisibleForTesting
     public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
+        return discoverValidators(
+                configManager,
+                OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig()));
+    }
+
+    public static Set<FlinkResourceValidator> discoverValidators(
+            FlinkConfigManager configManager, PluginManager pluginManager) {
         var conf = configManager.getDefaultConfig();
         Set<FlinkResourceValidator> resourceValidators = new HashSet<>();
         DefaultValidator defaultValidator = new DefaultValidator(configManager);
         defaultValidator.configure(conf);
         resourceValidators.add(defaultValidator);
-        PluginUtils.createPluginManagerFromRootFolder(conf)
+        LOG.info("Loading FlinkResourceValidator implementations from plugin directory.");
+        pluginManager
                 .load(FlinkResourceValidator.class)
                 .forEachRemaining(
                         validator -> {

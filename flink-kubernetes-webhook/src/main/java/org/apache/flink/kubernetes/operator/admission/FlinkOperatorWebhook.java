@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.operator.ssl.ReloadableSslContext;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.MutatorUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -83,8 +85,10 @@ public class FlinkOperatorWebhook {
             informerManager.setNamespaces(operatorConfig.getWatchedNamespaces());
         }
 
-        this.validators = ValidatorUtils.discoverValidators(configManager);
-        this.mutators = MutatorUtils.discoverMutators(configManager);
+        PluginManager pluginManager =
+                OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig());
+        this.validators = ValidatorUtils.discoverValidators(configManager, pluginManager);
+        this.mutators = MutatorUtils.discoverMutators(configManager, pluginManager);
         this.admissionHandler =
                 new AdmissionHandler(
                         new FlinkValidator(validators, informerManager),
