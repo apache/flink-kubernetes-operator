@@ -35,7 +35,7 @@ This is an end-to-end example of running Flink Python jobs using the Flink Kuber
 Flink supports Python jobs in application mode by utilizing `org.apache.flink.client.python.PythonDriver` class as the 
 entry class. With the Flink Kubernetes Operator, we can reuse this class to run Python jobs as well. 
 
-The class is packaged in flink-python_${scala_version}-${flink_version}.jar which is in the default Flink image.
+The class is packaged in flink-python-${flink_version}.jar which is in the default Flink image.
 So we do not need to create a new job jar. Instead, we just set `entryClass` of the job crd to 
 `org.apache.flink.client.python.PythonDriver`. After applying the job yaml, the launched job manager pod will run the `main()` 
 method of PythonDriver and parse arguments declared in the `args` field of the job crd.
@@ -46,11 +46,11 @@ user-defined arguments should be placed in the end. Check the [doc](https://nigh
 
 A working example would be:
 ```yaml
-args: ["-pyfs", "/opt/flink/usrlib/pythonjob/python_demo.py", "-pyclientexec", "/usr/local/bin/python3", "-py", "/opt/flink/usrlib/pythonjob/python_demo.py", "-myarg", "123"]
+args: ["-pyfs", "/opt/flink/usrlib/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py", "-myarg", "123"]
 ```
 But the following will throw exception:
 ```yaml
-args: ["-myarg", "123", "-pyfs", "/opt/flink/usrlib/pythonjob/python_demo.py", "-pyclientexec", "/usr/local/bin/python3", "-py", "/opt/flink/usrlib/pythonjob/python_demo.py"]
+args: ["-myarg", "123", "-pyfs", "/opt/flink/usrlib/python_demo.py", "-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py"]
 ```
 
 ## Usage
@@ -63,16 +63,19 @@ Dockerfile
 
 **Step 2**: Build docker image
 
-Check this [doc](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building Pyflink image. Note, Pyflink 1.15.3 is only supported on x86 arch.  
+Check this [doc](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building a PyFlink image. The included Dockerfile is based on `flink:2.2` and installs PyFlink 2.2.0 (which supports Python 3.9, 3.10, 3.11 and 3.12).
+
+Note: PyFlink's `pemja` dependency only ships pre-built Linux wheels for `x86_64`, and the `flink:2.2` base image is JRE-only, so building from source on other architectures fails. Build for `linux/amd64` explicitly - the resulting image runs natively on x86 and on Apple Silicon via Docker Desktop's emulation.
+
 ```bash
 # Uncomment when building for local minikube env:
 # eval $(minikube docker-env)
 
-DOCKER_BUILDKIT=1 docker build . -t flink-python-example:latest
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 . -t flink-python-example:latest
 ```
 This step will create an image based on an official Flink base image including the Python scripts.
 
-**Step 4**: Create FlinkDeployment Yaml and Submit
+**Step 3**: Create FlinkDeployment Yaml and Submit
 
 Edit the included `python-example.yaml` so that the `job.args` section points to the Python script that you wish to execute, then submit it.
 

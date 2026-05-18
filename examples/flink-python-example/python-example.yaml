@@ -22,7 +22,7 @@ metadata:
   name: python-example
 spec:
   image: flink-python-example:latest
-  flinkVersion: v1_20
+  flinkVersion: v2_2
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: 1
   serviceAccount: flink
@@ -35,8 +35,8 @@ spec:
       memory: "2048m"
       cpu: 1
   job:
-    jarURI: local:///opt/flink/opt/flink-python_2.12-1.16.1.jar # Note, this jarURI is actually a placeholder
+    jarURI: local:///opt/flink/opt/flink-python-2.2.0.jar # Note, this jarURI is actually a placeholder
     entryClass: "org.apache.flink.client.python.PythonDriver"
-    args: ["-pyclientexec", "/usr/local/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py"]
+    args: ["-pyclientexec", "/usr/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py"]
     parallelism: 1
     upgradeMode: stateless
