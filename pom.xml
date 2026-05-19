@@ -87,7 +87,7 @@ under the License.
         <guava.version>33.4.0-jre</guava.version>
 
         <slf4j.version>1.7.36</slf4j.version>
-        <log4j.version>2.23.1</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
         <logback.version>1.2.13</logback.version>
 
         <spotless.version>2.40.0</spotless.version>
@@ -126,7 +126,7 @@ under the License.
                 <artifactId>jackson-bom</artifactId>
                 <type>pom</type>
                 <scope>import</scope>
-                <version>2.15.0</version>
+                <version>2.21.3</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>
