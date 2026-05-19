@@ -21,6 +21,7 @@ import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -56,10 +57,11 @@ public class ListenerUtilsTest {
                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
+            var configManager = new FlinkConfigManager(Configuration.fromMap(testConfig));
+            var pluginManager =
+                    OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig());
             var listeners =
-                    new ArrayList<>(
-                            ListenerUtils.discoverListeners(
-                                    new FlinkConfigManager(Configuration.fromMap(testConfig))));
+                    new ArrayList<>(ListenerUtils.discoverListeners(configManager, pluginManager));
             assertEquals(1, listeners.size());
 
             var testingListener = (TestingListener) listeners.get(0);

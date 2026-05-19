@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -34,19 +33,6 @@ import java.util.Set;
 public final class MutatorUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(MutatorUtils.class);
-
-    /**
-     * discovers mutators.
-     *
-     * @param configManager Flink Config manager
-     * @return Set of FlinkResourceMutator
-     */
-    @VisibleForTesting
-    public static Set<FlinkResourceMutator> discoverMutators(FlinkConfigManager configManager) {
-        return discoverMutators(
-                configManager,
-                OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig()));
-    }
 
     public static Set<FlinkResourceMutator> discoverMutators(
             FlinkConfigManager configManager, PluginManager pluginManager) {

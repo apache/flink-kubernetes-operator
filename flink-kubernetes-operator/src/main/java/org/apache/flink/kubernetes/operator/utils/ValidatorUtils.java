@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -36,13 +35,6 @@ import java.util.Set;
 public final class ValidatorUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
-
-    @VisibleForTesting
-    public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
-        return discoverValidators(
-                configManager,
-                OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig()));
-    }
 
     public static Set<FlinkResourceValidator> discoverValidators(
             FlinkConfigManager configManager, PluginManager pluginManager) {

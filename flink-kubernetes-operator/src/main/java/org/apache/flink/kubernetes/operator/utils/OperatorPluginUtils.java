@@ -42,7 +42,7 @@ public final class OperatorPluginUtils {
     private OperatorPluginUtils() {}
 
     /** Returns a copy of {@code baseConf} with the operator's parent-first patterns merged in. */
-    public static Configuration enrichWithPluginParentFirstPatterns(Configuration baseConf) {
+    private static Configuration enrichWithPluginParentFirstPatterns(Configuration baseConf) {
         var conf = new Configuration(baseConf);
         var patterns =
                 new ArrayList<>(

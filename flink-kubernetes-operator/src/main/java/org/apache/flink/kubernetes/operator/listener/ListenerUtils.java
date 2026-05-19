@@ -26,7 +26,6 @@ import org.apache.flink.configuration.DelegatingConfiguration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,16 +59,9 @@ public class ListenerUtils {
      * kubernetes.operator.plugins.listeners.test.k1: v1
      *
      * @param configManager {@link FlinkConfigManager} to access plugin configurations.
+     * @param pluginManager shared {@link PluginManager} used for plugin discovery.
      * @return Enabled listeners.
      */
-    @VisibleForTesting
-    public static Collection<FlinkResourceListener> discoverListeners(
-            FlinkConfigManager configManager) {
-        return discoverListeners(
-                configManager,
-                OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig()));
-    }
-
     public static Collection<FlinkResourceListener> discoverListeners(
             FlinkConfigManager configManager, PluginManager pluginManager) {
         var listeners = new ArrayList<FlinkResourceListener>();

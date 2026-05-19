@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
@@ -27,6 +28,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.MutatorUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -67,15 +69,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnableKubernetesMockClient(crud = true)
 public class AdmissionHandlerTest {
 
+    private static final FlinkConfigManager CONFIG_MANAGER = new FlinkConfigManager(ns -> {}, true);
+    private static final PluginManager PLUGIN_MANAGER =
+            OperatorPluginUtils.createPluginManager(CONFIG_MANAGER.getDefaultConfig());
+
     private KubernetesClient kubernetesClient;
     private AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            ValidatorUtils.discoverValidators(
-                                    new FlinkConfigManager(ns -> {}, true)),
+                            ValidatorUtils.discoverValidators(CONFIG_MANAGER, PLUGIN_MANAGER),
                             new InformerManager(null)),
                     new FlinkMutator(
-                            MutatorUtils.discoverMutators(new FlinkConfigManager(ns -> {}, true)),
+                            MutatorUtils.discoverMutators(CONFIG_MANAGER, PLUGIN_MANAGER),
                             new InformerManager(kubernetesClient)));
 
     @Test
@@ -149,12 +154,10 @@ public class AdmissionHandlerTest {
         admissionHandler =
                 new AdmissionHandler(
                         new FlinkValidator(
-                                ValidatorUtils.discoverValidators(
-                                        new FlinkConfigManager(ns -> {}, true)),
+                                ValidatorUtils.discoverValidators(CONFIG_MANAGER, PLUGIN_MANAGER),
                                 new InformerManager(null)),
                         new FlinkMutator(
-                                MutatorUtils.discoverMutators(
-                                        new FlinkConfigManager(ns -> {}, true)),
+                                MutatorUtils.discoverMutators(CONFIG_MANAGER, PLUGIN_MANAGER),
                                 informerManager));
 
         final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);
