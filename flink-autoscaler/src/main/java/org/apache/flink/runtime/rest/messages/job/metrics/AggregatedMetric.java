@@ -18,14 +18,12 @@
 
 package org.apache.flink.runtime.rest.messages.job.metrics;
 
+import static java.util.Objects.requireNonNull;
+import javax.annotation.Nullable;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnore;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
-
-import javax.annotation.Nullable;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * TODO : It can be removed after upgrading flink dependency to 1.20.
