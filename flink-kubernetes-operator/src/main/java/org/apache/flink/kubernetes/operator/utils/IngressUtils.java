@@ -367,7 +367,7 @@ public class IngressUtils {
                             .compareTo(ModuleDescriptor.Version.parse(targetVersion))
                     >= 0;
         } catch (IllegalArgumentException e) {
-            LOG.warn("Failed to parse Kubernetes server version: {}", serverVersion);
+            LOG.warn("Failed to parse Kubernetes server version: {}", serverVersion, e);
             return serverVersion.compareTo(targetVersion) >= 0;
         }
     }

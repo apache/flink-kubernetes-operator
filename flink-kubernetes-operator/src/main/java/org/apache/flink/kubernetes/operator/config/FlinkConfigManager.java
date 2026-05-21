@@ -262,9 +262,15 @@ public class FlinkConfigManager {
                                         + ".");
                     }
                 } catch (NumberFormatException numberFormatException) {
-                    LOG.warn("Unable to parse version number in config key: {}", entry.getKey());
+                    LOG.warn(
+                            "Unable to parse version number in config key: {}",
+                            entry.getKey(),
+                            numberFormatException);
                 } catch (IllegalArgumentException illegalArgumentException) {
-                    LOG.warn("Unknown Flink version in config key: {}", entry.getKey());
+                    LOG.warn(
+                            "Unknown Flink version in config key: {}",
+                            entry.getKey(),
+                            illegalArgumentException);
                 }
             }
         }

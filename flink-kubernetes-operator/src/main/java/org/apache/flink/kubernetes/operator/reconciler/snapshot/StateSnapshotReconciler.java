@@ -174,7 +174,8 @@ public class StateSnapshotReconciler {
             LOG.error(
                     "Failed to dispose savepoint {} from deployment {}",
                     path,
-                    ctxFlinkDeployment.getResource().getMetadata().getName());
+                    ctxFlinkDeployment.getResource().getMetadata().getName(),
+                    e);
             return DeleteControl.noFinalizerRemoval()
                     .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
         }
