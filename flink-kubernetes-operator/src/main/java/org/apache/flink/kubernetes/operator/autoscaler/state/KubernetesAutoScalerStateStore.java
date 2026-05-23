@@ -391,7 +391,7 @@ public class KubernetesAutoScalerStateStore
                 return IOUtils.toString(zi, StandardCharsets.UTF_8);
             }
         } catch (Exception e) {
-            LOG.warn("Error while decompressing scaling data, treating as uncompressed", e);
+            LOG.warn("Error while decompressing scaling data, treating as uncompressed");
             // Fall back to non-compressed for migration
             return compressed;
         }

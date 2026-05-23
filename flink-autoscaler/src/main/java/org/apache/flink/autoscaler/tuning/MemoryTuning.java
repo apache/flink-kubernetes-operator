@@ -88,7 +88,7 @@ public class MemoryTuning {
         try {
             memSpecs = FLINK_MEMORY_UTILS.memoryProcessSpecFromConfig(config);
         } catch (IllegalConfigurationException e) {
-            LOG.warn("Current memory configuration is not valid. Aborting memory tuning.", e);
+            LOG.warn("Current memory configuration is not valid. Aborting memory tuning.");
             return EMPTY_CONFIG;
         }
 
