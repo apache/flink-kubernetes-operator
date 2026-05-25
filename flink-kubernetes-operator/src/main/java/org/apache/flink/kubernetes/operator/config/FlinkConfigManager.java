@@ -145,6 +145,10 @@ public class FlinkConfigManager {
         }
     }
 
+    public boolean isSnapshotCrdInstalled() {
+        return snapshotCrdInstalled;
+    }
+
     /**
      * Update the base configuration for the operator. Newly generated configs (observe, deploy,
      * etc.) will use this as the base.

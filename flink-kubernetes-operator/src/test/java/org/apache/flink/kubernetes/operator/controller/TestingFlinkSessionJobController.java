@@ -97,7 +97,8 @@ public class TestingFlinkSessionJobController
                         new FlinkSessionJobObserver(eventRecorder),
                         statusRecorder,
                         eventRecorder,
-                        canaryResourceManager);
+                        canaryResourceManager,
+                        configManager);
     }
 
     @Override

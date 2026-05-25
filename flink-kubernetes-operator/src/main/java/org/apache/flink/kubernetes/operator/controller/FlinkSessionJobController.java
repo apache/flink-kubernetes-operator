@@ -19,9 +19,9 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
-import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -67,6 +66,7 @@ public class FlinkSessionJobController
     private final StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder;
     private final EventRecorder eventRecorder;
     private final CanaryResourceManager<FlinkSessionJob> canaryResourceManager;
+    private final FlinkConfigManager flinkConfigManager;
 
     public FlinkSessionJobController(
             Set<FlinkResourceValidator> validators,
@@ -75,7 +75,8 @@ public class FlinkSessionJobController
             Observer<FlinkSessionJob> observer,
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
             EventRecorder eventRecorder,
-            CanaryResourceManager<FlinkSessionJob> canaryResourceManager) {
+            CanaryResourceManager<FlinkSessionJob> canaryResourceManager,
+            FlinkConfigManager flinkConfigManager) {
         this.validators = validators;
         this.ctxFactory = ctxFactory;
         this.reconciler = reconciler;
@@ -83,6 +84,7 @@ public class FlinkSessionJobController
         this.statusRecorder = statusRecorder;
         this.eventRecorder = eventRecorder;
         this.canaryResourceManager = canaryResourceManager;
+        this.flinkConfigManager = flinkConfigManager;
     }
 
     @Override
@@ -179,7 +181,7 @@ public class FlinkSessionJobController
         List<EventSource<?, FlinkSessionJob>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
 
-        if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
+        if (flinkConfigManager.isSnapshotCrdInstalled()) {
             eventSources.add(
                     EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
         } else {
