@@ -40,3 +40,16 @@ tests:
       value:
         kind: Issuer
         name: flink-operator-selfsigned-issuer
+
+- it: Should not include pkcs12 profile when not set
+  asserts:
+  - isNull:
+      path: spec.keystores.pkcs12.profile
+
+- it: Should include pkcs12 profile when set
+  set:
+    webhook.keystore.pkcs12Profile: Modern2023
+  asserts:
+  - equal:
+      path: spec.keystores.pkcs12.profile
+      value: "Modern2023"

@@ -157,6 +157,10 @@ webhook:
     passwordSecretRef:
     # name: jks-password-secret
     # key: password-key
+    # PKCS12 encryption profile for the webhook certificate.
+    # Options: Modern2023, LegacyDES, LegacyRC2
+    # Modern2023 uses AES-256-CBC and is required for FIPS-compliant environments.
+    pkcs12Profile: ""
   serviceLabels: {}
 
 defaultConfiguration:
