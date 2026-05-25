@@ -20,15 +20,19 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
+import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
@@ -98,39 +102,40 @@ public class FlinkResourceContextFactory {
                 configManager);
     }
 
+    public BlueGreenContext getBlueGreenContext(
+            FlinkBlueGreenDeployment bgDeployment,
+            FlinkBlueGreenDeploymentStatus deploymentStatus,
+            Context<FlinkBlueGreenDeployment> josdkContext,
+            FlinkBlueGreenDeployments deployments) {
+        return new BlueGreenContext(
+                bgDeployment, deploymentStatus, josdkContext, deployments, this);
+    }
+
+    @SuppressWarnings("unchecked")
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
-            CR resource, Context josdkContext) {
+            CR resource, Context<CR> josdkContext) {
         var resMg =
                 resourceMetricGroups.computeIfAbsent(
                         Tuple2.of(resource.getClass(), ResourceID.fromResource(resource)),
                         r ->
                                 OperatorMetricUtils.createResourceMetricGroup(
                                         operatorMetricGroup, configManager, resource));
-        String jobId = null;
-        if (resource.getStatus() != null) {
-            if (resource.getStatus().getJobStatus() != null) {
-                jobId = resource.getStatus().getJobStatus().getJobId();
-            }
-        }
-        if (resource instanceof FlinkDeployment) {
-            var flinkDep = (FlinkDeployment) resource;
-            var resourceId = ResourceID.fromResource(flinkDep);
-            var flinkDepJobId = jobId;
+        if (resource instanceof FlinkDeployment flinkDeployment) {
+            var resourceId = ResourceID.fromResource(flinkDeployment);
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
-                            flinkDep,
+                            flinkDeployment,
                             josdkContext,
                             resMg,
                             configManager,
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
                                     resourceId, id -> new ExceptionCacheEntry()));
-        } else if (resource instanceof FlinkSessionJob) {
+        } else if (resource instanceof FlinkSessionJob flinkSessionJob) {
             var resourceId = ResourceID.fromResource(resource);
-            var flinkSessionJobId = jobId;
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
-                            (FlinkSessionJob) resource,
+                            flinkSessionJob,
                             josdkContext,
                             resMg,
                             configManager,
@@ -146,24 +151,19 @@ public class FlinkResourceContextFactory {
     @VisibleForTesting
     protected FlinkService getFlinkService(FlinkResourceContext<?> ctx) {
         var deploymentMode = ctx.getDeploymentMode();
-        switch (deploymentMode) {
-            case NATIVE:
-                return new NativeFlinkService(
-                        ctx.getKubernetesClient(),
-                        artifactManager,
-                        clientExecutorService,
-                        ctx.getOperatorConfig(),
-                        eventRecorder);
-            case STANDALONE:
-                return new StandaloneFlinkService(
-                        ctx.getKubernetesClient(),
-                        artifactManager,
-                        clientExecutorService,
-                        ctx.getOperatorConfig());
-            default:
-                throw new UnsupportedOperationException(
-                        String.format("Unsupported deployment mode: %s", deploymentMode));
-        }
+        return switch (deploymentMode) {
+            case NATIVE -> new NativeFlinkService(
+                    ctx.getKubernetesClient(),
+                    artifactManager,
+                    clientExecutorService,
+                    ctx.getOperatorConfig(),
+                    eventRecorder);
+            case STANDALONE -> new StandaloneFlinkService(
+                    ctx.getKubernetesClient(),
+                    artifactManager,
+                    clientExecutorService,
+                    ctx.getOperatorConfig());
+        };
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
