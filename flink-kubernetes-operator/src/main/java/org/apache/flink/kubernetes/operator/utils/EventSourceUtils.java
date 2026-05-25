@@ -39,6 +39,7 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.SecondaryToPrimaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 
 import java.util.Collections;
 import java.util.List;
@@ -127,6 +128,20 @@ public class EventSourceUtils {
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
+        return new InformerEventSource<>(configuration, context);
+    }
+
+    public static InformerEventSource<FlinkDeployment, FlinkBlueGreenDeployment>
+            getBlueGreenFlinkDeploymentInformerEventSource(
+                    EventSourceContext<FlinkBlueGreenDeployment> context) {
+        var configuration =
+                InformerEventSourceConfiguration.from(
+                                FlinkDeployment.class, FlinkBlueGreenDeployment.class)
+                        .withSecondaryToPrimaryMapper(
+                                Mappers.fromOwnerReferences(context.getPrimaryResourceClass()))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
         return new InformerEventSource<>(configuration, context);
     }
 
