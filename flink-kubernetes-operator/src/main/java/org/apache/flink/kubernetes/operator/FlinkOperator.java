@@ -225,7 +225,8 @@ public class FlinkOperator {
                         observer,
                         statusRecorder,
                         eventRecorder,
-                        canaryResourceManager);
+                        canaryResourceManager,
+                        configManager);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
