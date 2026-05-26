@@ -37,7 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,7 +52,7 @@ public class FlinkUtilsZookeeperHATest {
     Configuration configuration;
     TestingServer testingServer;
 
-    @TempDir File temporaryFolder;
+    @TempDir Path temporaryFolder;
 
     CuratorFramework curator;
     JobID jobID = JobID.generate();
@@ -73,7 +73,8 @@ public class FlinkUtilsZookeeperHATest {
         configuration.setString(
                 HighAvailabilityOptions.HA_ZOOKEEPER_QUORUM, testingServer.getConnectString());
         configuration.setString(
-                HighAvailabilityOptions.HA_STORAGE_PATH, temporaryFolder.getAbsolutePath());
+                HighAvailabilityOptions.HA_STORAGE_PATH,
+                temporaryFolder.resolve("ha").toAbsolutePath().toString());
 
         // Create the Curator
         curator = getTestCurator(configuration).asCuratorFramework();
