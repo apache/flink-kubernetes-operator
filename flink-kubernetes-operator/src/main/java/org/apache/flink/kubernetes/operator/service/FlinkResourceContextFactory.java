@@ -113,7 +113,7 @@ public class FlinkResourceContextFactory {
 
     @SuppressWarnings("unchecked")
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
-            CR resource, Context<CR> josdkContext) {
+            CR resource, Context<?> josdkContext) {
         var resMg =
                 resourceMetricGroups.computeIfAbsent(
                         Tuple2.of(resource.getClass(), ResourceID.fromResource(resource)),
