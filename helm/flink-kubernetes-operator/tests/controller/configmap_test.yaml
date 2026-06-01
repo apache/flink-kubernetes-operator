@@ -68,3 +68,66 @@ tests:
     asserts:
       - isNotNull:
           path: data["log4j-console.properties"]
+
+  # FLINK-39791: the ConfigMap emits a single config-file key, always named config.yaml,
+  # resolved as config.yaml (when set) > user flink-conf.yaml > the values.yaml default.
+  - it: Emits a single config.yaml key with today's effective defaults and no redundant seed keys
+    asserts:
+      - isNotNull:
+          path: data["config.yaml"]
+      - notExists:
+          path: data["flink-conf.yaml"]
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?m)^\\s*kubernetes.operator.metrics.reporter.slf4j.factory.class:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?m)^\\s*kubernetes.operator.reconcile.interval: 15 s"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?m)^\\s*kubernetes.operator.health.probe.enabled: true"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?m)^\\s*taskmanager.numberOfTaskSlots:"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?m)^\\s*parallelism.default:"
+
+  - it: A user flink-conf.yaml override flows into config.yaml when config.yaml is unset
+    set:
+      defaultConfiguration:
+        flink-conf.yaml: |+
+          kubernetes.operator.reconcile.interval: 99 s
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "reconcile.interval: 99 s"
+
+  - it: When both are set, config.yaml wins and flink-conf.yaml is ignored
+    set:
+      defaultConfiguration:
+        config.yaml: |+
+          kubernetes.operator:
+            reconcile.interval: 30 s
+        flink-conf.yaml: |+
+          kubernetes.operator.reconcile.interval: 99 s
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "reconcile.interval: 30 s"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "reconcile.interval: 99 s"
+
+  - it: A flat config.yaml override of a former seed key is not duplicated (relies on dropping it from the seed)
+    set:
+      defaultConfiguration:
+        config.yaml: |+
+          taskmanager.numberOfTaskSlots: 2
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "taskmanager.numberOfTaskSlots: 2"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "taskmanager.numberOfTaskSlots: 1"
