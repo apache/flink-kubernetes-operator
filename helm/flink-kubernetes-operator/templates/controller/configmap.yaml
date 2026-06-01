@@ -25,24 +25,14 @@ metadata:
 data:
   config.yaml: |+
 {{- if .Values.defaultConfiguration.append }}
-  {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
+  {{- $.Files.Get "conf/config.yaml"  | nindent 4 -}}
 {{- end }}
-{{- if hasKey (.Values.defaultConfiguration) "config.yaml" }}
-  {{- index (.Values.defaultConfiguration) "config.yaml" | nindent 4 -}}
-{{- end }}
-{{- if .Values.watchNamespaces }}
-    kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
-{{- end }}
-{{- if index .Values "operatorHealth" }}
-    kubernetes.operator.health.probe.enabled: true
-    kubernetes.operator.health.probe.port: {{ .Values.operatorHealth.port }}
-{{- end }}
-  flink-conf.yaml: |+
-{{- if .Values.defaultConfiguration.append }}
-  {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
-{{- end }}
-{{- if hasKey (.Values.defaultConfiguration) "flink-conf.yaml" }}
-  {{- index (.Values.defaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- with (index .Values.defaultConfiguration "config.yaml") }}
+  {{- . | nindent 4 -}}
+{{- else }}
+  {{- with (index .Values.defaultConfiguration "flink-conf.yaml") }}
+  {{- . | nindent 4 -}}
+  {{- end }}
 {{- end }}
 {{- if .Values.watchNamespaces }}
     kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
