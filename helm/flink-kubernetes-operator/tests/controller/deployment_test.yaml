@@ -383,3 +383,18 @@ tests:
         key: log4j-operator.properties
         path: log4j-operator.properties
 
+# FLINK-39791: the operator config is always mounted as config.yaml (the only filename Flink 2.x
+# reads), regardless of which defaultConfiguration key the user populates.
+- it: Should mount the operator config as config.yaml by default
+  asserts:
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: config.yaml
+        path: config.yaml
+  - notContains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: flink-conf.yaml
+        path: flink-conf.yaml
+

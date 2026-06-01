@@ -48,6 +48,23 @@ defaultConfiguration:
     kubernetes.operator.observer.progress-check.interval: 5 s
 ```
 
+The configuration can also be supplied in Flink's modern YAML 1.2 `config.yaml` format (introduced in Flink 1.19 and the only format Flink 2.0 accepts) by defining the `config.yaml` key under `defaultConfiguration`:
+
+```
+defaultConfiguration:
+  create: true
+  append: true
+  config.yaml: |+
+    kubernetes.operator:
+      metrics.reporter.slf4j:
+        factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+        interval: 5 MINUTE
+      reconcile.interval: 15 s
+      observer.progress-check.interval: 5 s
+```
+
+When both `config.yaml` and `flink-conf.yaml` are set, `config.yaml` takes precedence. The operator always mounts the resolved configuration as `config.yaml`, so prefer the nested form shown above: a flat, dotted-key override of a key already present in the chart's default `conf/config.yaml` would otherwise be a duplicate key under Flink's strict YAML parser.
+
 To learn more about metrics and logging configuration please refer to the dedicated [docs page]({{< ref "docs/operations/metrics-logging" >}}).
 
 ### Flink Version and Namespace specific defaults

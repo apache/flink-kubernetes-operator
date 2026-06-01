@@ -174,7 +174,16 @@ defaultConfiguration:
   # This option has not effect, if create is equal to false.
   append: true
 
-#  Uncomment to use the new config.yaml format, but also comment out the flink-config.yaml key.
+# Operator configuration overrides go under ONE of the two keys below. If both are set,
+# config.yaml wins; either way the operator mounts the result as config.yaml.
+#
+#   config.yaml      - modern YAML 1.2 format (Flink 1.19+, required by Flink 2.0). Recommended.
+#   flink-conf.yaml  - legacy flat "key: value" format (shipped as the default below).
+#
+# Prefer the nested config.yaml form: a flat, dotted-key override of a key the chart already
+# ships (e.g. the Java 17 opts in conf/config.yaml) would be a duplicate key under Flink's
+# strict YAML parser and fail at operator startup. Example, equivalent to the default below:
+#
 #  config.yaml: |+
 #    kubernetes.operator:
 #      metrics.reporter.slf4j:
@@ -182,6 +191,10 @@ defaultConfiguration:
 #        interval: 5 MINUTE
 #      reconcile.interval: 15 s
 #      observer.progress-check.interval: 5 s
+#    taskmanager:
+#      numberOfTaskSlots: 1   # default for managed clusters; override per-job via spec.flinkConfiguration
+#
+# Set job parallelism via spec.job.parallelism, not parallelism.default (the operator manages it).
 
   flink-conf.yaml: |+
     # Flink Config Overrides
