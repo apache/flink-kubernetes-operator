@@ -226,10 +226,6 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             scaleFactor = maxScaleFactor;
         }
 
-        // Cap target capacity according to the capped scale factor
-        double cappedTargetCapacity = averageTrueProcessingRate * scaleFactor;
-        LOG.debug("Capped target processing capacity for {} is {}", vertex, cappedTargetCapacity);
-
         int newParallelism =
                 scale(
                         vertex,
@@ -249,6 +245,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             delayedScaleDown.clearVertex(vertex);
             return ParallelismChange.noChange(currentParallelism);
         }
+
+        // Cap target capacity according to the capped scale factor
+        double cappedTargetCapacity = averageTrueProcessingRate * (newParallelism / currentParallelism);
+        LOG.debug("Capped target processing capacity for {} is {}", vertex, cappedTargetCapacity);
 
         // We record our expectations for this scaling operation
         evaluatedMetrics.put(
