@@ -158,8 +158,8 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | v1_14 | No longer supported since 1.7 operator release. |
 | v1_15 | Deprecated since 1.10 operator release. |
 | v1_16 | Deprecated since 1.11 operator release. |
-| v1_17 |  |
-| v1_18 |  |
+| v1_17 | Deprecated since 1.13 operator release. |
+| v1_18 | Deprecated since 1.13 operator release. |
 | v1_19 |  |
 | v1_20 |  |
 | v2_0 |  |

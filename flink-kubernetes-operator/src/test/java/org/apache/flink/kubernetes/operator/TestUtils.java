@@ -215,7 +215,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
             Map<String, String> flinkDepConfig, KubernetesClient client) {
-        return createContextWithReadyFlinkDeployment(flinkDepConfig, client, FlinkVersion.v1_18);
+        return createContextWithReadyFlinkDeployment(flinkDepConfig, client, FlinkVersion.v1_20);
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
@@ -413,7 +413,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static Stream<Arguments> flinkVersionsAndUpgradeModes() {
         List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : Set.of(FlinkVersion.v1_16, FlinkVersion.v1_20)) {
+        for (FlinkVersion version : Set.of(FlinkVersion.v1_19, FlinkVersion.v1_20)) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
                 args.add(arguments(version, upgradeMode));
             }
@@ -422,7 +422,7 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return Stream.of(arguments(FlinkVersion.v1_16), arguments(FlinkVersion.v1_20));
+        return Stream.of(arguments(FlinkVersion.v1_19), arguments(FlinkVersion.v1_20));
     }
 
     public static FlinkDeployment createCanaryDeployment() {

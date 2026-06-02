@@ -465,6 +465,8 @@ public class DefaultValidatorTest {
                         + " is not supported by this operator version");
 
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
+        testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_18));
+        testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_19));
 
         testError(
                 dep -> dep.getSpec().setServiceAccount(null),
@@ -752,7 +754,7 @@ public class DefaultValidatorTest {
             // Stopped with LAST_STATE mode with different Flink Version
             suspendSpec.getJob().setUpgradeMode(fromUpgrade);
             suspendSpec.getJob().setState(fromState);
-            suspendSpec.setFlinkVersion(FlinkVersion.v1_18);
+            suspendSpec.setFlinkVersion(FlinkVersion.v1_19);
 
             dep.getStatus()
                     .getReconciliationStatus()
