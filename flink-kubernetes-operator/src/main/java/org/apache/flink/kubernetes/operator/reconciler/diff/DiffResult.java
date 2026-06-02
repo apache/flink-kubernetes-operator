@@ -70,12 +70,8 @@ public class DiffResult<T> {
         diffList.forEach(
                 diff -> {
                     try {
-                        JsonNode diffBefore =
-                                objectMapper.readTree(
-                                        objectMapper.writeValueAsString(diff.getLeft()));
-                        JsonNode diffAfter =
-                                objectMapper.readTree(
-                                        objectMapper.writeValueAsString(diff.getRight()));
+                        JsonNode diffBefore = objectMapper.valueToTree(diff.getLeft());
+                        JsonNode diffAfter = objectMapper.valueToTree(diff.getRight());
                         JsonNode jsonDiff = JsonDiff.asJson(diffBefore, diffAfter);
                         jsonDiff.forEach(
                                 row -> {
