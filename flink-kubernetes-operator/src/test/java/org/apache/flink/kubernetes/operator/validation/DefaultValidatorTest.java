@@ -485,15 +485,11 @@ public class DefaultValidatorTest {
                 });
 
         testError(
-                dep -> {
-                    dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc");
-                },
+                dep -> dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc"),
                 "JobManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
 
         testError(
-                dep -> {
-                    dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc");
-                },
+                dep -> dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc"),
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
     }
 
@@ -852,9 +848,7 @@ public class DefaultValidatorTest {
                                             CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
                                                     "test-checkpoint-dir"));
                 },
-                flinkDeployment -> {
-                    flinkDeployment.getSpec().setFlinkConfiguration(Map.of());
-                },
+                flinkDeployment -> flinkDeployment.getSpec().setFlinkConfiguration(Map.of()),
                 null);
     }
 
@@ -961,15 +955,32 @@ public class DefaultValidatorTest {
     public void testAutoScalerDeploymentWithInvalidScalingCoefficientMin() {
         var result =
                 testAutoScalerConfiguration(
-                        flinkConf ->
-                                flinkConf.put(
-                                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN
-                                                .key(),
-                                        "1.2"));
+                        flinkConf -> {
+                            // The coefficient is only validated when observed scalability is on.
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED.key(), "true");
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN.key(),
+                                    "1.2");
+                        });
         assertErrorContains(
                 result,
                 getFormattedErrorMessage(
                         AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d));
+    }
+
+    @Test
+    public void testInvalidScalingCoefficientMinIgnoredWhenObservedScalabilityDisabled() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED.key(), "false");
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN.key(),
+                                    "1.2");
+                        });
+        assertErrorNotContains(result);
     }
 
     @Test
@@ -1005,6 +1016,37 @@ public class DefaultValidatorTest {
     @Test
     public void testValidateSessionJob() {
         testSessionJobAutoScalerConfiguration(flinkConf -> {}).ifPresent(Assertions::fail);
+    }
+
+    @Test
+    public void testMetricsWindowSmallerThanReconcileIntervalIsRejected() {
+        // The default reconcile interval is 60s. A smaller metric window means fewer than two
+        // samples are retained per loop and autoscaling never runs, so it must be rejected.
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "30 s"));
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get().contains(AutoScalerOptions.METRICS_WINDOW.key()));
+    }
+
+    @Test
+    public void testMetricsWindowLargerThanReconcileIntervalIsAccepted() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "5 min"));
+        assertErrorNotContains(result);
+    }
+
+    @Test
+    public void testSmallMetricsWindowIgnoredWhenAutoscalerDisabled() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
+                            flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "1 s");
+                        });
+        assertErrorNotContains(result);
     }
 
     @Test
@@ -1128,9 +1170,7 @@ public class DefaultValidatorTest {
 
         deploymentResult =
                 testAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.8");
-                        });
+                        flinkConf -> flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.8"));
         assertErrorContains(
                 deploymentResult,
                 getFormattedErrorMessage(
@@ -1140,9 +1180,8 @@ public class DefaultValidatorTest {
 
         deploymentResult =
                 testAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
-                        });
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5"));
 
         assertErrorContains(
                 deploymentResult,
@@ -1170,9 +1209,7 @@ public class DefaultValidatorTest {
 
         sessionResult =
                 testSessionJobAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6");
-                        });
+                        flinkConf -> flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6"));
         assertErrorContains(
                 sessionResult,
                 getFormattedErrorMessage(
@@ -1182,9 +1219,8 @@ public class DefaultValidatorTest {
 
         sessionResult =
                 testSessionJobAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
-                        });
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5"));
 
         assertErrorContains(
                 sessionResult,
@@ -1224,7 +1260,7 @@ public class DefaultValidatorTest {
         conf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
         conf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "100000.0");
         conf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "0.6");
-        conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED.key(), "0.1");
+        conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD.key(), "0.1");
         conf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.7");
         conf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "1.0");
         conf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.3");
@@ -1238,17 +1274,6 @@ public class DefaultValidatorTest {
                 configValue.key(),
                 min != null ? min.toString() : "-Infinity",
                 max != null ? max.toString() : "+Infinity");
-    }
-
-    private static String getFormattedNumberOrderErrorMessage(
-            ConfigOption<Double> configValueLeft, ConfigOption<Double> configValueRight) {
-        return String.format(
-                "The AutoScalerOption %s or %s is invalid, %s must be less than or equal to the value of "
-                        + "%s",
-                configValueLeft.key(),
-                configValueRight.key(),
-                configValueLeft.key(),
-                configValueRight.key());
     }
 
     private static String getFormattedErrorMessage(ConfigOption<Double> configValue, Double min) {

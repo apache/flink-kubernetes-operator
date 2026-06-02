@@ -25,11 +25,6 @@ import org.apache.flink.configuration.Configuration;
 
 import java.util.Optional;
 
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
-
 /** Validator for Autoscaler. */
 public class AutoscalerValidator {
 
@@ -41,17 +36,46 @@ public class AutoscalerValidator {
      */
     public Optional<String> validateAutoscalerOptions(Configuration flinkConf) {
 
-        if (!flinkConf.getBoolean(AutoScalerOptions.AUTOSCALER_ENABLED)) {
+        if (!flinkConf.get(AutoScalerOptions.AUTOSCALER_ENABLED)) {
             return Optional.empty();
         }
         return firstPresent(
                 validateNumber(flinkConf, AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d),
                 validateNumber(flinkConf, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
-                validateNumber(flinkConf, UTILIZATION_TARGET, 0.0d, 1.0d),
+                validateNumber(flinkConf, AutoScalerOptions.UTILIZATION_TARGET, 0.0d, 1.0d),
                 validateNumber(flinkConf, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
-                validateNumber(flinkConf, UTILIZATION_MAX, flinkConf.get(UTILIZATION_TARGET), 1.0d),
-                validateNumber(flinkConf, UTILIZATION_MIN, 0.0d, flinkConf.get(UTILIZATION_TARGET)),
-                validateNumber(flinkConf, OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d),
+                validateNumber(
+                        flinkConf,
+                        AutoScalerOptions.UTILIZATION_MAX,
+                        flinkConf.get(AutoScalerOptions.UTILIZATION_TARGET),
+                        1.0d),
+                validateNumber(
+                        flinkConf,
+                        AutoScalerOptions.UTILIZATION_MIN,
+                        0.0d,
+                        flinkConf.get(AutoScalerOptions.UTILIZATION_TARGET)),
+                validateNumber(flinkConf, AutoScalerOptions.GC_PRESSURE_THRESHOLD, 0.0d, 1.0d),
+                validateNumber(flinkConf, AutoScalerOptions.HEAP_USAGE_THRESHOLD, 0.0d, 1.0d),
+                // The following options only take effect when their feature is enabled, so they are
+                // only validated in that case.
+                validateNumberIfEnabled(
+                        flinkConf,
+                        AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED,
+                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN,
+                        0.01d,
+                        1d),
+                validateNumberIfEnabled(
+                        flinkConf,
+                        AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED,
+                        AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD,
+                        0.0d,
+                        1.0d),
+                validateNumberIfEnabled(
+                        flinkConf,
+                        AutoScalerOptions.MEMORY_TUNING_ENABLED,
+                        AutoScalerOptions.MEMORY_TUNING_OVERHEAD,
+                        0.0d,
+                        1.0d),
                 CalendarUtils.validateExcludedPeriods(flinkConf));
     }
 
@@ -89,6 +113,23 @@ public class AutoscalerValidator {
                     String.format(
                             "Invalid value in the autoscaler config %s", autoScalerConfig.key()));
         }
+    }
+
+    /**
+     * Validates a numeric option only when the feature it belongs to is enabled. When the feature
+     * is disabled the option has no effect, so an out-of-range value is harmless and is not
+     * reported.
+     */
+    private static <T extends Number> Optional<String> validateNumberIfEnabled(
+            Configuration flinkConfiguration,
+            ConfigOption<Boolean> enabledConfig,
+            ConfigOption<T> autoScalerConfig,
+            Double min,
+            Double max) {
+        if (!flinkConfiguration.get(enabledConfig)) {
+            return Optional.empty();
+        }
+        return validateNumber(flinkConfiguration, autoScalerConfig, min, max);
     }
 
     private static <T extends Number> Optional<String> validateNumber(
