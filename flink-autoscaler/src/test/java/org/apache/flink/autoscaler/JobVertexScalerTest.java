@@ -827,6 +827,62 @@ public class JobVertexScalerTest {
         assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
     }
 
+    @Test
+    public void testExpectedProcessingRateComputation() {
+        var jobVertexID = new JobVertexID();
+        conf.set(UTILIZATION_TARGET, 1.0);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
+        var delayedScaleDown = new DelayedScaleDown();
+        var history = new TreeMap<Instant, ScalingSummary>();
+
+        // Max scale-up factor caps raw target parallelism 200 to 15
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.5);
+        var evaluated = evaluated(10, 200, 10);
+        assertEquals(
+                ParallelismChange.build(15, 10, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        jobVertexID,
+                        NOT_ADJUST_INPUTS,
+                        evaluated,
+                        history,
+                        restartTime,
+                        delayedScaleDown));
+        assertEquals(15.0, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+
+        // Key-group alignment rounds raw target parallelism 3.33 up to 4
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
+        conf.set(UTILIZATION_TARGET, 0.6);
+        evaluated = evaluated(2, 100, 100);
+        assertEquals(
+                ParallelismChange.build(4, 2, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        jobVertexID,
+                        NOT_ADJUST_INPUTS,
+                        evaluated,
+                        history,
+                        restartTime,
+                        delayedScaleDown));
+        assertEquals(200.0, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+
+        // Source-partition count caps raw target parallelism 200 to 150
+        conf.set(UTILIZATION_TARGET, 1.0);
+        evaluated = evaluated(10, 200, 100);
+        evaluated.put(ScalingMetric.NUM_SOURCE_PARTITIONS. EvaluatedScalingMetric.of(15));
+        assertEquals(
+                ParallelismChange.build(15, 10, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        jobVertexID,
+                        NOT_ADJUST_INPUTS,
+                        evaluated,
+                        history,
+                        restartTime,
+                        delayedScaleDown));
+        assertEquals(150.0, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+    }
+
     @ParameterizedTest
     @MethodSource("adjustmentInputsProvider")
     public void testSendingIneffectiveScalingEvents(Collection<ShipStrategy> inputShipStrategies) {
