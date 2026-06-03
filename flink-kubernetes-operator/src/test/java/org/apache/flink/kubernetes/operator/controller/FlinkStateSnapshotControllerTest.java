@@ -150,6 +150,27 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(snapshot.getStatus().getState()).isEqualTo(FAILED);
     }
 
+    @Test
+    public void testReconcileBackoffUnlimited() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        // Default backoffLimit is -1, meaning unlimited retries
+        var snapshot = createSavepoint(deployment, false, -1);
+        snapshot.setStatus(new FlinkStateSnapshotStatus());
+
+        flinkService.setTriggerSavepointFailure(true);
+
+        // With unlimited retries, the snapshot should never transition to FAILED
+        for (int i = 0; i < 10; i++) {
+            controller.updateErrorStatus(snapshot, context, new Exception());
+            assertThat(snapshot.getStatus().getState())
+                    .as(
+                            "Snapshot with backoffLimit=-1 should retry indefinitely, but failed after attempt %d",
+                            i + 1)
+                    .isEqualTo(TRIGGER_PENDING);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testReconcileSavepointAlreadyExists(boolean jobReferenced) {
