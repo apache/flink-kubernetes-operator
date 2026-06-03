@@ -117,6 +117,20 @@ under the License.
             </exclusions>
         </dependency>
 
+        <!--
+            Testcontainers 1.x container types implement org.junit.rules.TestRule, so JUnit 4
+            must stay on the test compile classpath even though all tests use JUnit 5. The unused
+            junit-vintage-engine is excluded above; only the junit:junit core jar is pulled in here.
+            TODO: remove this once Testcontainers is upgraded to a version without the JUnit 4
+            TestRule coupling (tracked in a follow-up JIRA).
+        -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
