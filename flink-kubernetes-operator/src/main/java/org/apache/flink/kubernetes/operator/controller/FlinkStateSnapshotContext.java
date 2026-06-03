@@ -65,7 +65,18 @@ public class FlinkStateSnapshotContext {
     }
 
     private Configuration referencedJobObserveConfig() {
-        return getConfigManager().getObserveConfig(getReferencedJobFlinkDeployment());
+        var flinkDeployment = getReferencedJobFlinkDeployment();
+        return getSecondaryResource()
+                .filter(FlinkSessionJob.class::isInstance)
+                .map(FlinkSessionJob.class::cast)
+                .map(
+                        sessionJob ->
+                                getConfigManager()
+                                        .getSessionJobConfig(
+                                                sessionJob.getMetadata().getName(),
+                                                flinkDeployment,
+                                                sessionJob.getSpec()))
+                .orElseGet(() -> getConfigManager().getObserveConfig(flinkDeployment));
     }
 
     private FlinkDeployment referencedJobFlinkDeployment() {

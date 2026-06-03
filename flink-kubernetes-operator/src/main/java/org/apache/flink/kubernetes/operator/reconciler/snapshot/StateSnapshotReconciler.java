@@ -190,10 +190,10 @@ public class StateSnapshotReconciler {
         var flinkService = flinkDeploymentContext.getFlinkService();
         var conf =
                 Preconditions.checkNotNull(
-                        flinkDeploymentContext.getObserveConfig(),
+                        ctx.getReferencedJobObserveConfig(),
                         String.format(
                                 "Observe config was null for %s",
-                                flinkDeploymentContext.getResource().getMetadata().getName()));
+                                ctx.getResource().getMetadata().getName()));
 
         if (spec.isSavepoint()) {
             var path =
