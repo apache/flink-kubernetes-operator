@@ -35,8 +35,9 @@ import org.apache.curator.test.TestingServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,7 +51,9 @@ public class FlinkUtilsZookeeperHATest {
 
     Configuration configuration;
     TestingServer testingServer;
-    TemporaryFolder temporaryFolder;
+
+    @TempDir Path temporaryFolder;
+
     CuratorFramework curator;
     JobID jobID = JobID.generate();
 
@@ -69,11 +72,9 @@ public class FlinkUtilsZookeeperHATest {
                 HighAvailabilityOptions.HA_MODE, HighAvailabilityMode.ZOOKEEPER.toString());
         configuration.setString(
                 HighAvailabilityOptions.HA_ZOOKEEPER_QUORUM, testingServer.getConnectString());
-        temporaryFolder = new TemporaryFolder();
-        temporaryFolder.create();
         configuration.setString(
                 HighAvailabilityOptions.HA_STORAGE_PATH,
-                temporaryFolder.newFolder().getAbsolutePath());
+                temporaryFolder.resolve("ha").toAbsolutePath().toString());
 
         // Create the Curator
         curator = getTestCurator(configuration).asCuratorFramework();
@@ -95,7 +96,6 @@ public class FlinkUtilsZookeeperHATest {
     public void cleanupZookeeper() throws Exception {
         curator.close();
         testingServer.close();
-        temporaryFolder.delete();
     }
 
     @Test
