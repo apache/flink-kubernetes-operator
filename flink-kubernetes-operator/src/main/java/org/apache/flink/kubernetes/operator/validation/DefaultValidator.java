@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.validation.AutoscalerValidator;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -675,6 +676,31 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.empty();
         }
         Configuration flinkConfiguration = Configuration.fromMap(effectiveConfig);
-        return autoscalerValidator.validateAutoscalerOptions(flinkConfiguration);
+        return firstPresent(
+                autoscalerValidator.validateAutoscalerOptions(flinkConfiguration),
+                validateMetricsWindow(flinkConfiguration));
+    }
+
+    private Optional<String> validateMetricsWindow(Configuration conf) {
+        if (!conf.get(AutoScalerOptions.AUTOSCALER_ENABLED)) {
+            return Optional.empty();
+        }
+        // The autoscaler collects one metric sample per reconcile loop and requires at least two
+        // samples within the metric window to evaluate scaling. If the window is smaller than the
+        // reconcile interval, the window is trimmed down to a single sample on every loop and
+        // autoscaling is never applied.
+        var metricsWindow = conf.get(AutoScalerOptions.METRICS_WINDOW);
+        var reconcileInterval =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL);
+        if (metricsWindow.compareTo(reconcileInterval) < 0) {
+            return Optional.of(
+                    String.format(
+                            "The autoscaler metric window (%s=%s) must not be smaller than the operator reconcile interval (%s=%s), otherwise fewer than two metric samples are retained and autoscaling is never applied.",
+                            AutoScalerOptions.METRICS_WINDOW.key(),
+                            metricsWindow,
+                            KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL.key(),
+                            reconcileInterval));
+        }
+        return Optional.empty();
     }
 }
