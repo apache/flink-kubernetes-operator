@@ -34,7 +34,7 @@ import java.util.Set;
 /** Validator utilities. */
 public final class ValidatorUtils {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ValidatorUtils.class);
 
     public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
         var conf = configManager.getDefaultConfig();
@@ -71,6 +71,11 @@ public final class ValidatorUtils {
                     "Flink version " + version + " is not supported by this operator version",
                     ctx.getJosdkContext().getClient());
             return false;
+        }
+        if (version.isDeprecated()) {
+            LOG.warn(
+                    "Flink version {} is deprecated and may be removed in a future operator release. Plan to upgrade to a non-deprecated version.",
+                    version);
         }
         return true;
     }

@@ -70,7 +70,7 @@ public class BaseTestUtils {
     public static final String SAMPLE_SESSION_JOB_JAR = "https://example.com/sample.jar";
 
     public static FlinkDeployment buildSessionCluster() {
-        return buildSessionCluster(FlinkVersion.v1_17);
+        return buildSessionCluster(FlinkVersion.v1_20);
     }
 
     public static FlinkDeployment buildSessionCluster(FlinkVersion version) {
@@ -94,15 +94,15 @@ public class BaseTestUtils {
     }
 
     public static FlinkDeployment buildApplicationCluster(JobState state) {
-        return buildApplicationCluster(FlinkVersion.v1_17, state);
+        return buildApplicationCluster(FlinkVersion.v1_20, state);
     }
 
     public static FlinkDeployment buildApplicationCluster() {
-        return buildApplicationCluster(FlinkVersion.v1_17, JobState.RUNNING);
+        return buildApplicationCluster(FlinkVersion.v1_20, JobState.RUNNING);
     }
 
     public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
-        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17, JobState.RUNNING);
+        return buildApplicationCluster(name, namespace, FlinkVersion.v1_20, JobState.RUNNING);
     }
 
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {

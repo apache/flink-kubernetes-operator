@@ -35,7 +35,45 @@ class FlinkVersionTest {
 
     @Test
     void isSupported() {
+        assertFalse(FlinkVersion.isSupported(null));
+        assertFalse(FlinkVersion.isSupported(FlinkVersion.v1_13));
+        assertFalse(FlinkVersion.isSupported(FlinkVersion.v1_14));
+        assertTrue(FlinkVersion.isSupported(FlinkVersion.v1_15));
+        assertTrue(FlinkVersion.isSupported(FlinkVersion.v1_18));
+        assertTrue(FlinkVersion.isSupported(FlinkVersion.v1_19));
         assertTrue(FlinkVersion.isSupported(FlinkVersion.v1_20));
+        assertTrue(FlinkVersion.isSupported(FlinkVersion.v2_0));
+        assertTrue(FlinkVersion.isSupported(FlinkVersion.v2_4));
+    }
+
+    @Test
+    void isDeprecated() {
+        assertTrue(FlinkVersion.v1_13.isDeprecated());
+        assertTrue(FlinkVersion.v1_14.isDeprecated());
+        assertTrue(FlinkVersion.v1_15.isDeprecated());
+        assertTrue(FlinkVersion.v1_16.isDeprecated());
+        assertTrue(FlinkVersion.v1_17.isDeprecated());
+        assertTrue(FlinkVersion.v1_18.isDeprecated());
+        assertFalse(FlinkVersion.v1_19.isDeprecated());
+        assertFalse(FlinkVersion.v1_20.isDeprecated());
+        assertFalse(FlinkVersion.v2_0.isDeprecated());
+        assertFalse(FlinkVersion.v2_4.isDeprecated());
+    }
+
+    @Test
+    void isDeprecatedMatchesDeprecatedAnnotation() throws Exception {
+        for (FlinkVersion v : FlinkVersion.values()) {
+            boolean annotated =
+                    FlinkVersion.class.getField(v.name()).isAnnotationPresent(Deprecated.class);
+            assertEquals(
+                    annotated,
+                    v.isDeprecated(),
+                    v
+                            + ": @Deprecated says "
+                            + annotated
+                            + " but isDeprecated() says "
+                            + v.isDeprecated());
+        }
     }
 
     @Test
