@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -104,7 +105,10 @@ public class TestingFlinkDeploymentController
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(
-                        ValidatorUtils.discoverValidators(configManager),
+                        ValidatorUtils.discoverValidators(
+                                configManager,
+                                OperatorPluginUtils.createPluginManager(
+                                        configManager.getDefaultConfig())),
                         contextFactory,
                         reconcilerFactory,
                         new FlinkDeploymentObserverFactory(eventRecorder),

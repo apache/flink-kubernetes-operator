@@ -21,7 +21,6 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.plugin.PluginManager;
-import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -53,6 +52,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -105,7 +105,8 @@ public class FlinkOperator {
                                 KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
 
         baseConfig = configManager.getDefaultConfig();
-        this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig);
+        PluginManager pluginManager = OperatorPluginUtils.createPluginManager(baseConfig);
+        this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig, pluginManager);
         if (client == null) {
             this.client =
                     KubernetesClientUtils.getKubernetesClient(
@@ -114,12 +115,12 @@ public class FlinkOperator {
             this.client = client;
         }
         this.operator = createOperator();
-        this.validators = ValidatorUtils.discoverValidators(configManager);
-        this.listeners = ListenerUtils.discoverListeners(configManager);
+        this.validators = ValidatorUtils.discoverValidators(configManager, pluginManager);
+        this.listeners = ListenerUtils.discoverListeners(configManager, pluginManager);
         this.eventRecorder = EventRecorder.create(client, listeners);
         this.ctxFactory =
                 new FlinkResourceContextFactory(configManager, metricGroup, eventRecorder);
-        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(baseConfig);
+        LOG.info("Initializing file system factories from plugin directory.");
         FileSystem.initialize(baseConfig, pluginManager);
         this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
     }

@@ -52,13 +52,15 @@ public class MutatorUtilsTest {
                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
+            var configManager = new FlinkConfigManager(new Configuration());
+            var pluginManager =
+                    OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig());
             assertEquals(
                     new HashSet<>(
                             Arrays.asList(
                                     DefaultFlinkMutator.class.getName(),
                                     TestMutator.class.getName())),
-                    MutatorUtils.discoverMutators(new FlinkConfigManager(new Configuration()))
-                            .stream()
+                    MutatorUtils.discoverMutators(configManager, pluginManager).stream()
                             .map(v -> v.getClass().getName())
                             .collect(Collectors.toSet()));
         } finally {

@@ -44,6 +44,7 @@ import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotRec
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -122,7 +123,10 @@ public class FlinkStateSnapshotControllerTest {
         statusRecorder = new StatusRecorder<>(metricManager, statusUpdateCounter);
         controller =
                 new FlinkStateSnapshotController(
-                        ValidatorUtils.discoverValidators(configManager),
+                        ValidatorUtils.discoverValidators(
+                                configManager,
+                                OperatorPluginUtils.createPluginManager(
+                                        configManager.getDefaultConfig())),
                         ctxFactory,
                         new StateSnapshotReconciler(ctxFactory, eventRecorder),
                         new StateSnapshotObserver(ctxFactory, eventRecorder),

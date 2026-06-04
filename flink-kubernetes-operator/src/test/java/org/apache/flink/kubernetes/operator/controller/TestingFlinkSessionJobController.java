@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReco
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -90,7 +91,10 @@ public class TestingFlinkSessionJobController
 
         flinkSessionJobController =
                 new FlinkSessionJobController(
-                        ValidatorUtils.discoverValidators(configManager),
+                        ValidatorUtils.discoverValidators(
+                                configManager,
+                                OperatorPluginUtils.createPluginManager(
+                                        configManager.getDefaultConfig())),
                         ctxFactory,
                         new SessionJobReconciler(
                                 eventRecorder, statusRecorder, new NoopJobAutoscaler<>()),
