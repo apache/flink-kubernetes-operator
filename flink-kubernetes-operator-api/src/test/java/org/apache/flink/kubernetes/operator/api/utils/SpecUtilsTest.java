@@ -27,10 +27,28 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link SpecUtils}. */
 class SpecUtilsTest {
+
+    @Test
+    void testCloneProducesDeepCopy() {
+        FlinkDeploymentSpec original = BaseTestUtils.buildApplicationCluster().getSpec();
+
+        FlinkDeploymentSpec cloned = SpecUtils.clone(original);
+
+        assertNotSame(original, cloned);
+        assertEquals(original, cloned);
+        assertNotSame(original.getJob(), cloned.getJob());
+
+        cloned.getJob().setParallelism(original.getJob().getParallelism() + 1);
+
+        assertNotEquals(original.getJob().getParallelism(), cloned.getJob().getParallelism());
+        assertNull(SpecUtils.clone(null));
+    }
 
     @Test
     void testSpecSerializationWithVersion() throws JsonProcessingException {
