@@ -207,7 +207,6 @@ public class FlinkOperator {
 
     @VisibleForTesting
     void registerSessionJobController() {
-        var eventRecorder = EventRecorder.create(client, listeners);
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
@@ -241,7 +240,6 @@ public class FlinkOperator {
                 MetricManager.createFlinkStateSnapshotMetricManager(baseConfig, metricGroup);
         var statusRecorder =
                 StatusRecorder.createForFlinkStateSnapshot(client, metricManager, listeners);
-        var eventRecorder = EventRecorder.create(client, listeners);
         var reconciler = new StateSnapshotReconciler(ctxFactory, eventRecorder);
         var observer = new StateSnapshotObserver(ctxFactory, eventRecorder);
         var controller =
