@@ -439,6 +439,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     @SneakyThrows
     private Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
             Context ctx, JobTopology topology, Stream<JobVertexID> vertexStream) {
+        var conf = ctx.getConfiguration();
         try (var restClient = ctx.getRestClusterClient()) {
             return vertexStream
                     .filter(v -> !topology.getFinishedVertices().contains(v))
@@ -447,7 +448,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                     v -> v,
                                     v ->
                                             getFilteredVertexMetricNames(
-                                                    restClient, ctx.getJobID(), v, topology)));
+                                                    restClient,
+                                                    ctx.getJobID(),
+                                                    v,
+                                                    topology,
+                                                    conf)));
         }
     }
 
@@ -456,7 +461,8 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             RestClusterClient<?> restClient,
             JobID jobID,
             JobVertexID jobVertexID,
-            JobTopology topology) {
+            JobTopology topology,
+            Configuration conf) {
 
         var allMetricNames = queryAggregatedMetricNames(restClient, jobID, jobVertexID);
         var filteredMetrics = new HashMap<String, FlinkMetric>();
@@ -484,6 +490,14 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     .findAny(allMetricNames)
                     .ifPresent(
                             m -> filteredMetrics.put(m, FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT));
+        } else if (conf != null
+                && conf.get(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED)) {
+            FlinkMetric.BACKPRESSURE_TIME_PER_SEC
+                    .findAny(allMetricNames)
+                    .ifPresent(m -> filteredMetrics.put(m, FlinkMetric.BACKPRESSURE_TIME_PER_SEC));
+            FlinkMetric.NUM_RECORDS_IN_PER_SEC
+                    .findAny(allMetricNames)
+                    .ifPresent(m -> filteredMetrics.put(m, FlinkMetric.NUM_RECORDS_IN_PER_SEC));
         }
 
         for (FlinkMetric flinkMetric : requiredMetrics) {

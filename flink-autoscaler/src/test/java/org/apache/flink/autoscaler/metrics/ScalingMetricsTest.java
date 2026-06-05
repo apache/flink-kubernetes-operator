@@ -287,8 +287,60 @@ public class ScalingMetricsTest {
                         conf));
     }
 
+    @Test
+    public void testNonSourceObservedTprDisabledByDefault() {
+        double tpr =
+                computeNonSourceObservedTpr(900., 100., 1000., new Configuration(), Double.NaN);
+
+        assertTrue(Double.isNaN(tpr));
+    }
+
+    @Test
+    public void testNonSourceObservedTprEnabled() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(700., 200., 1000., conf, Double.NaN)));
+        assertEquals(1000. / 0.8, computeNonSourceObservedTpr(800., 200., 1000., conf, Double.NaN));
+        assertEquals(
+                Double.POSITIVE_INFINITY,
+                computeNonSourceObservedTpr(950., 50., 0., conf, Double.NaN));
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(0., 1000., 1000., conf, Double.NaN)));
+        assertEquals(PREV_TPR, computeNonSourceObservedTpr(100., 100., 1000., conf, PREV_TPR));
+    }
+
+    @Test
+    public void testNonSourceObservedTprCustomEngagementThreshold() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+        conf.set(
+                AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENGAGEMENT_THRESHOLD,
+                0.5);
+
+        assertEquals(
+                500. / (1 - 0.1), computeNonSourceObservedTpr(500., 100., 500., conf, Double.NaN));
+        assertTrue(Double.isNaN(computeNonSourceObservedTpr(300., 100., 500., conf, Double.NaN)));
+    }
+
+    @Test
+    public void testNonSourceObservedTprMissingMetricsAreSilentlySkipped() {
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_NON_SOURCE_ENABLED, true);
+
+        assertTrue(
+                Double.isNaN(
+                        computeNonSourceObservedTpr(900., Double.NaN, 1000., conf, Double.NaN)));
+        assertTrue(
+                Double.isNaN(
+                        computeNonSourceObservedTpr(900., 100., Double.NaN, conf, Double.NaN)));
+    }
+
     private static AggregatedMetric aggSum(double sum) {
         return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, sum, Double.NaN);
+    }
+
+    private static AggregatedMetric aggAvg(double avg) {
+        return new AggregatedMetric("", Double.NaN, Double.NaN, avg, Double.NaN, Double.NaN);
     }
 
     private static AggregatedMetric aggMax(double max) {
@@ -297,5 +349,34 @@ public class ScalingMetricsTest {
 
     private static AggregatedMetric aggAvgMax(double avg, double max) {
         return new AggregatedMetric("", Double.NaN, max, avg, Double.NaN, Double.NaN);
+    }
+
+    private static double computeNonSourceObservedTpr(
+            double busyAvg,
+            double bpAvg,
+            double inputRatePerSecSum,
+            Configuration conf,
+            double prevTpr) {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source, Collections.emptyMap(), 1, 1, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(
+                                sink, Map.of(source, REBALANCE), 1, 1, new IOMetrics(0, 0, 0)));
+
+        Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
+        var flinkMetrics = new HashMap<FlinkMetric, AggregatedMetric>();
+        flinkMetrics.put(FlinkMetric.BUSY_TIME_PER_SEC, aggAvg(busyAvg));
+        if (!Double.isNaN(bpAvg)) {
+            flinkMetrics.put(FlinkMetric.BACKPRESSURE_TIME_PER_SEC, aggAvg(bpAvg));
+        }
+        if (!Double.isNaN(inputRatePerSecSum)) {
+            flinkMetrics.put(FlinkMetric.NUM_RECORDS_IN_PER_SEC, aggSum(inputRatePerSecSum));
+        }
+        ScalingMetrics.computeDataRateMetrics(
+                sink, flinkMetrics, scalingMetrics, topology, conf, () -> prevTpr);
+        return scalingMetrics.getOrDefault(ScalingMetric.OBSERVED_TPR, Double.NaN);
     }
 }
