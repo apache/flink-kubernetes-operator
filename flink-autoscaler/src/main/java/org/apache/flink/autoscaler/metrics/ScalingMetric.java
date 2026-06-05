@@ -33,7 +33,15 @@ public enum ScalingMetric {
     /** Processing rate at full capacity (records/sec). */
     TRUE_PROCESSING_RATE(true),
 
-    /** Observed true processing rate for sources. */
+    /**
+     * Observed true processing rate, derived from backpressure. Always populated for source
+     * vertices when the source is catching up, based on source lag. Optionally populated for
+     * non-source vertices when {@code
+     * job.autoscaler.observed-true-processing-rate.non-source.enabled} is set, in which case it is
+     * gated on the vertex being fully engaged (busy plus backpressured time crosses the configured
+     * engagement threshold). That gate is the per vertex analogue of the source "has lag"
+     * condition.
+     */
     OBSERVED_TPR(true),
 
     /** Target processing rate of operators as derived from source inputs (records/sec). */

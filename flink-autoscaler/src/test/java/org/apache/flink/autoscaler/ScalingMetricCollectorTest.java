@@ -392,7 +392,11 @@ public class ScalingMetricCollectorTest {
                 new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>() {
                     @Override
                     protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
-                            RestClusterClient<?> rc, JobID id, JobVertexID jvi, JobTopology t) {
+                            RestClusterClient<?> rc,
+                            JobID id,
+                            JobVertexID jvi,
+                            JobTopology t,
+                            Configuration conf) {
                         metricNameQueryCounter.compute(jvi, (j, c) -> c + 1);
                         return Map.of();
                     }
@@ -517,7 +521,8 @@ public class ScalingMetricCollectorTest {
             metricList.addAll(requiredMetrics);
             metricList.remove(m);
             try {
-                testCollector.getFilteredVertexMetricNames(null, new JobID(), vertex, topology);
+                testCollector.getFilteredVertexMetricNames(
+                        null, new JobID(), vertex, topology, new Configuration());
                 fail(m);
             } catch (Exception e) {
                 assertTrue(e.getMessage().startsWith("Could not find required metric "));
@@ -551,6 +556,6 @@ public class ScalingMetricCollectorTest {
                 MetricNotFoundException.class,
                 () ->
                         metricCollector.getFilteredVertexMetricNames(
-                                null, new JobID(), source, topology));
+                                null, new JobID(), source, topology, new Configuration()));
     }
 }
