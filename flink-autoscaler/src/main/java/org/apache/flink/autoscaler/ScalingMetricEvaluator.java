@@ -158,7 +158,11 @@ public class ScalingMetricEvaluator {
                 TRUE_PROCESSING_RATE,
                 EvaluatedScalingMetric.avg(
                         computeTrueProcessingRate(
-                                busyTimeAvg, inputRateAvg, metricsHistory, vertex, conf)));
+                                busyTimeAvg,
+                                computeTprInputRate(conf, vertex, metricsHistory),
+                                metricsHistory,
+                                vertex,
+                                conf)));
 
         evaluatedMetrics.put(LOAD, EvaluatedScalingMetric.avg(busyTimeAvg / 1000.));
 
@@ -492,6 +496,42 @@ public class ScalingMetricEvaluator {
             return anyInfinite ? Double.POSITIVE_INFINITY : Double.NaN;
         }
         return n < minElements ? Double.NaN : sum / n;
+    }
+
+    /**
+     * Estimate the input record rate used as the {@link ScalingMetric#TRUE_PROCESSING_RATE}
+     * numerator. The busy-time TPR is {@code rate / busyTime}, so to keep the ratio internally
+     * consistent the numerator must be estimated the same way as the busy-time denominator (see
+     * {@link #computeBusyTimeAvg}). The default {@code MAX} (and {@code MIN}) busy-time aggregator
+     * derives busy time from the per-second {@code LOAD} gauge averaged over the window, so we use
+     * the averaged per-second record-rate gauge here too. The {@code AVG} aggregator derives busy
+     * time from the cumulative accumulated busy-time counter via {@link #getRate}, so we keep the
+     * cumulative {@code getRate} in that case.
+     */
+    @VisibleForTesting
+    static double computeTprInputRate(
+            Configuration conf,
+            JobVertexID vertex,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        if (conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR) == MetricAggregator.AVG) {
+            return getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+        }
+        return getAverageWithRateFallback(
+                ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                ScalingMetric.NUM_RECORDS_IN,
+                vertex,
+                metricsHistory);
+    }
+
+    public static double getAverageWithRateFallback(
+            ScalingMetric metric,
+            ScalingMetric fallbackMetric,
+            @Nullable JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        double average = getAverage(metric, jobVertexId, metricsHistory);
+        return Double.isInfinite(average) || Double.isNaN(average)
+                ? getRate(fallbackMetric, jobVertexId, metricsHistory)
+                : average;
     }
 
     /**

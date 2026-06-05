@@ -806,6 +806,52 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(Double.NaN, ScalingMetricEvaluator.getRate(m2, v2, history));
     }
 
+    @Test
+    public void computeTprInputRateTest() {
+        var vertex = new JobVertexID();
+        var cumulative = ScalingMetric.NUM_RECORDS_IN;
+        var perSecond = ScalingMetric.NUM_RECORDS_IN_PER_SECOND;
+
+        // Cumulative getRate = 1000 * (100 - 0) / 1000ms = 100/s.
+        // Per-second average = (40 + 60) / 2 = 50/s. The two intentionally differ so we can tell
+        // which estimator is used.
+        var history = new TreeMap<Instant, CollectedMetrics>();
+        history.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(Map.of(vertex, Map.of(cumulative, 0., perSecond, 40.)), null));
+        history.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(vertex, Map.of(cumulative, 100., perSecond, 60.)), null));
+
+        // The default MAX (and MIN) aggregator derives busy time from the per-second LOAD gauge
+        // mean, so the TPR numerator uses the per-second record-rate gauge mean to stay consistent.
+        for (var aggregator : new MetricAggregator[] {MetricAggregator.MAX, MetricAggregator.MIN}) {
+            var conf = new Configuration();
+            conf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, aggregator);
+            assertEquals(50., ScalingMetricEvaluator.computeTprInputRate(conf, vertex, history));
+        }
+
+        // The AVG aggregator derives busy time from the cumulative counter via getRate, so the TPR
+        // numerator keeps the cumulative getRate.
+        var avgConf = new Configuration();
+        avgConf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.AVG);
+        assertEquals(100., ScalingMetricEvaluator.computeTprInputRate(avgConf, vertex, history));
+
+        // When the per-second gauge is unavailable, MAX falls back to the cumulative getRate.
+        var noPerSecond = new TreeMap<Instant, CollectedMetrics>();
+        noPerSecond.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(Map.of(vertex, Map.of(cumulative, 0.)), null));
+        noPerSecond.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(Map.of(vertex, Map.of(cumulative, 100.)), null));
+        var maxConf = new Configuration();
+        maxConf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.MAX);
+        assertEquals(
+                100., ScalingMetricEvaluator.computeTprInputRate(maxConf, vertex, noPerSecond));
+    }
+
     private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf) {
         return getThresholds(inputTargetRate, catchUpRate, conf, false);

@@ -68,6 +68,8 @@ public enum ScalingMetric {
 
     NUM_RECORDS_IN(false),
 
+    NUM_RECORDS_IN_PER_SECOND(false),
+
     NUM_RECORDS_OUT(false),
 
     ACCUMULATED_BUSY_TIME(false),
