@@ -1307,6 +1307,24 @@ public class JobVertexScalerTest {
         assertEquals(1, linearReturnWithTwoScalingHistoryRecordScalingCoefficient);
     }
 
+    @Test
+    public void testCalculateScalingCoefficientWithZeroProcessingRateFallsBackToLinear() {
+        var currentTime = Instant.now();
+
+        var zeroProcessingRateHistory = new TreeMap<Instant, ScalingSummary>();
+        zeroProcessingRateHistory.put(
+                currentTime.minusSeconds(20), new ScalingSummary(2, 4, evaluated(2, 0, 0)));
+        zeroProcessingRateHistory.put(
+                currentTime.minusSeconds(10), new ScalingSummary(4, 8, evaluated(4, 0, 0)));
+        zeroProcessingRateHistory.put(currentTime, new ScalingSummary(8, 16, evaluated(8, 0, 0)));
+
+        double scalingCoefficient =
+                JobVertexScaler.calculateObservedScalingCoefficient(
+                        zeroProcessingRateHistory, conf);
+
+        assertEquals(1.0, scalingCoefficient);
+    }
+
     @ParameterizedTest
     @MethodSource("adjustmentInputsProvider")
     public void testParallelismScalingWithObservedScalingCoefficient(
