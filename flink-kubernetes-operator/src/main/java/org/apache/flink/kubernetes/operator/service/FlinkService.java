@@ -47,6 +47,7 @@ import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
 public interface FlinkService {
@@ -73,6 +74,18 @@ public interface FlinkService {
     boolean isJobManagerPortReady(Configuration config);
 
     Optional<JobStatusMessage> getJobStatus(Configuration conf, JobID jobId) throws Exception;
+
+    /**
+     * Cancels every non-terminal job currently running on the (session) cluster whose Flink job
+     * name equals {@code jobName} and blocks until each reaches a terminal state. Intended to
+     * remove a job that was orphaned on a session cluster (one no longer backed by a {@link
+     * FlinkSessionJob}) before an identically named job is resubmitted, so the two never run
+     * concurrently. Matching is by Flink job name ({@code pipeline.name}), which the operator
+     * defaults to the resource name.
+     *
+     * @return the ids of the jobs that were cancelled
+     */
+    Set<JobID> cancelRunningJobs(String jobName, Configuration conf) throws Exception;
 
     JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception;
 

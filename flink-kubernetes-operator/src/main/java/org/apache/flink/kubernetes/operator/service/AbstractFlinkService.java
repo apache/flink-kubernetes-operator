@@ -139,12 +139,15 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -294,23 +297,61 @@ public abstract class AbstractFlinkService implements FlinkService {
     public Optional<JobStatusMessage> getJobStatus(Configuration conf, JobID jobId)
             throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
-            return clusterClient
-                    .sendRequest(
-                            JobsOverviewHeaders.getInstance(),
-                            EmptyMessageParameters.getInstance(),
-                            EmptyRequestBody.getInstance())
-                    .thenApply(
-                            mjd -> {
-                                if (mjd.getJobs() == null) {
-                                    return Optional.<JobStatusMessage>empty();
-                                }
-                                return mjd.getJobs().stream()
-                                        .filter(jd -> jd.getJobId().equals(jobId))
-                                        .findAny()
-                                        .map(JobStatusUtils::toJobStatusMessage);
-                            })
-                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+            return listJobs(clusterClient).stream()
+                    .filter(job -> job.getJobId().equals(jobId))
+                    .findAny();
         }
+    }
+
+    @Override
+    public Set<JobID> cancelRunningJobs(String jobName, Configuration conf) throws Exception {
+        var cancelledJobIds = new HashSet<JobID>();
+        try (var clusterClient = getClusterClient(conf)) {
+            for (var job : listJobs(clusterClient)) {
+                if (!jobName.equals(job.getJobName())
+                        || job.getJobState().isGloballyTerminalState()) {
+                    continue;
+                }
+                LOG.info(
+                        "Cancelling existing job {} named '{}' on the session cluster before submission",
+                        job.getJobId(),
+                        jobName);
+                cancelAndAwaitTerminal(clusterClient, job.getJobId());
+                cancelledJobIds.add(job.getJobId());
+            }
+        }
+        return cancelledJobIds;
+    }
+
+    private void cancelAndAwaitTerminal(RestClusterClient<String> clusterClient, JobID jobId)
+            throws Exception {
+        var timeoutSeconds = operatorConfig.getFlinkCancelJobTimeout().toSeconds();
+        try {
+            clusterClient.cancel(jobId).get(timeoutSeconds, TimeUnit.SECONDS);
+            clusterClient.requestJobResult(jobId).get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            if (isJobMissing(e) || isJobTerminated(e)) {
+                return;
+            }
+            throw e;
+        }
+    }
+
+    private Collection<JobStatusMessage> listJobs(RestClusterClient<String> clusterClient)
+            throws Exception {
+        var multipleJobsDetails =
+                clusterClient
+                        .sendRequest(
+                                JobsOverviewHeaders.getInstance(),
+                                EmptyMessageParameters.getInstance(),
+                                EmptyRequestBody.getInstance())
+                        .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+        if (multipleJobsDetails.getJobs() == null) {
+            return List.of();
+        }
+        return multipleJobsDetails.getJobs().stream()
+                .map(JobStatusUtils::toJobStatusMessage)
+                .collect(Collectors.toList());
     }
 
     @Override

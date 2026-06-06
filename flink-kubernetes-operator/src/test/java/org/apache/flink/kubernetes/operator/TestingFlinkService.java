@@ -155,6 +155,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
+    @Getter private int cancelRunningJobsCallCount = 0;
 
     @Getter private Configuration submittedConf;
 
@@ -352,6 +353,37 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public long getRunningCount() {
         return jobs.stream().filter(t -> !t.f1.getJobState().isTerminalState()).count();
+    }
+
+    @Override
+    public Set<JobID> cancelRunningJobs(String jobName, Configuration conf) {
+        cancelRunningJobsCallCount++;
+        var cancelledJobIds = new HashSet<JobID>();
+        for (var job : jobs) {
+            var status = job.f1;
+            if (!jobName.equals(status.getJobName())
+                    || status.getJobState().isGloballyTerminalState()) {
+                continue;
+            }
+            job.f1 =
+                    new JobStatusMessage(
+                            status.getJobId(),
+                            status.getJobName(),
+                            JobStatus.CANCELED,
+                            status.getStartTime());
+            cancelledJobIds.add(status.getJobId());
+        }
+        return cancelledJobIds;
+    }
+
+    @VisibleForTesting
+    public void addRunningJob(JobID jobId, String jobName) {
+        jobs.add(
+                Tuple3.of(
+                        null,
+                        new JobStatusMessage(
+                                jobId, jobName, JobStatus.RUNNING, System.currentTimeMillis()),
+                        new Configuration()));
     }
 
     public void triggerSavepointLegacy(
