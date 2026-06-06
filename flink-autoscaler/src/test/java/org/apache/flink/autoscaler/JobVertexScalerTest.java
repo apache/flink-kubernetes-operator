@@ -869,7 +869,7 @@ public class JobVertexScalerTest {
         // Source-partition count caps raw target parallelism 200 to 150
         conf.set(UTILIZATION_TARGET, 1.0);
         evaluated = evaluated(10, 200, 100);
-        evaluated.put(ScalingMetric.NUM_SOURCE_PARTITIONS. EvaluatedScalingMetric.of(15));
+        evaluated.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(15));
         assertEquals(
                 ParallelismChange.build(15, 10, true),
                 vertexScaler.computeScaleTargetParallelism(
