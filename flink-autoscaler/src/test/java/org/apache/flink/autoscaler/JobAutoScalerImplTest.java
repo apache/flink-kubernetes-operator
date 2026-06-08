@@ -48,8 +48,10 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nullable;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -114,9 +116,12 @@ public class JobAutoScalerImplTest {
                         scalingRealizer,
                         stateStore);
 
+        var now = Instant.now();
+        autoscaler.setClock(Clock.fixed(now, ZoneId.systemDefault()));
         autoscaler.scale(context);
 
         metricsCollector.updateMetrics(jobVertexID, m -> m.setNumRecordsIn(100));
+        autoscaler.setClock(Clock.fixed(now.plus(Duration.ofSeconds(10)), ZoneId.systemDefault()));
         autoscaler.scale(context);
 
         MetricGroup metricGroup = autoscaler.flinkMetrics.get(context.getJobKey()).getMetricGroup();

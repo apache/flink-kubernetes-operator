@@ -40,6 +40,7 @@ public enum FlinkMetric {
     SOURCE_TASK_NUM_RECORDS_IN(s -> s.startsWith("Source__") && s.endsWith(".numRecordsIn")),
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
     BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond")),
+    NUM_RECORDS_IN_PER_SEC(s -> s.equals("numRecordsInPerSecond")),
 
     HEAP_MEMORY_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
     HEAP_MEMORY_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
