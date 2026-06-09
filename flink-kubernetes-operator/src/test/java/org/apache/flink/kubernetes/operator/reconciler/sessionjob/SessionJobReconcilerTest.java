@@ -211,6 +211,47 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testCancelsOrphanedJobWithSameNameOnSubmit() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_SESSION_JOB_CANCEL_EXISTING_ON_SUBMIT
+                                .key(),
+                        "true");
+        var jobName = sessionJob.getMetadata().getName();
+        var orphanedJobId = JobID.generate();
+        flinkService.addRunningJob(orphanedJobId, jobName);
+
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+
+        assertEquals(1, flinkService.getCancelRunningJobsCallCount());
+        assertEquals(1, flinkService.getRunningCount());
+        var orphaned =
+                flinkService.listJobs().stream()
+                        .filter(job -> job.f1.getJobId().equals(orphanedJobId))
+                        .findAny()
+                        .orElseThrow();
+        assertEquals(CANCELED, orphaned.f1.getJobState());
+    }
+
+    @Test
+    public void testKeepsExistingJobWithSameNameWhenCancelOnSubmitDisabled() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        var jobName = sessionJob.getMetadata().getName();
+        flinkService.addRunningJob(JobID.generate(), jobName);
+
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+
+        assertEquals(0, flinkService.getCancelRunningJobsCallCount());
+        assertEquals(2, flinkService.getRunningCount());
+    }
+
+    @Test
     public void testCancelJobRescheduled() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 

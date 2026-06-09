@@ -180,6 +180,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable inplace scaling for Flink 1.18+ using the resource requirements API. On failure or earlier Flink versions it falls back to regular full redeployment.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_SESSION_JOB_CANCEL_EXISTING_ON_SUBMIT =
+            operatorConfig("session-job.cancel-existing-on-submit")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "When enabled, before submitting a FlinkSessionJob the operator cancels"
+                                    + " any non-terminal job already running on the session cluster"
+                                    + " that has the same Flink job name (pipeline.name, which"
+                                    + " defaults to the resource name). This prevents duplicate jobs"
+                                    + " when a previous job was orphaned on the session cluster (for"
+                                    + " example its FlinkSessionJob was deleted while the cluster was"
+                                    + " unreachable) and the resource is later recreated. Applies"
+                                    + " only to new submissions, not to deployment retries.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
             operatorConfig("dynamic.config.enabled")
