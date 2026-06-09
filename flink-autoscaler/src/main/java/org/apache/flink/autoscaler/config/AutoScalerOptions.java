@@ -21,6 +21,7 @@ import org.apache.flink.autoscaler.JobVertexScaler;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
@@ -31,6 +32,7 @@ public class AutoScalerOptions {
 
     public static final String OLD_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+    public static final String SCALING_CUSTOM_EXECUTOR_CONF_PREFIX = "scaling.custom-executor.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -418,4 +420,113 @@ public class AutoScalerOptions {
                             "Minimum allowed value for the observed scalability coefficient. "
                                     + "Prevents aggressive scaling by clamping low coefficient estimates. "
                                     + "If the estimated coefficient falls below this value, it is capped at the configured minimum.");
+
+    public static final ConfigOption<List<String>> SCALING_CUSTOM_EXECUTORS =
+            autoScalerConfig("scaling.custom-executors")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.custom-executors"))
+                    .withDescription(
+                            "List of named custom scaling executors instances to register with the autoscaler. "
+                                    + "For each <name> entry, the implementation class to instantiate must be set via "
+                                    + "'job.autoscaler.scaling.custom-executor.<name>.class', and additional per-instance "
+                                    + "options live under 'job.autoscaler.scaling.custom-executor.<name>.<parameter>'. "
+                                    + "Custom executors are executed in ascending order of their ScalingExecutorPlugin#priority() value, "
+                                    + "regardless of the order in which they appear in this list.");
+
+    /**
+     * Documentation-only template option describing the per-instance class FQN key. Not read at
+     * runtime. The {@link #customScalingExecutorClassKey(String)} is used to derive the actual key
+     * for a given scaling executor instance.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> SCALING_CUSTOM_EXECUTOR_CLASS_TEMPLATE =
+            autoScalerConfig(SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.class"))
+                    .withDescription(
+                            "Fully-qualified class name of the implementation to instantiate for the custom scaling executor "
+                                    + "instance <name> declared in 'job.autoscaler.scaling.custom-executors'. "
+                                    + "The class must be discovered via the Plugin / ServiceLoader mechanism and registered "
+                                    + "under META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin.");
+
+    /**
+     * Documentation-only template option describing the per-instance free-form parameter keys. Not
+     * read at runtime. The actual scaling executor parameters are surfaced to the scaling executor
+     * via {@link #customScalingExecutorConfiguration(Configuration, String)}.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> SCALING_CUSTOM_EXECUTOR_PARAMETER_TEMPLATE =
+            autoScalerConfig(SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.<parameter>")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.<parameter>"))
+                    .withDescription(
+                            "Free-form, plugin-specific options for the scaling custom executor instance "
+                                    + "referenced by '<name>' in 'job.autoscaler.scaling.custom-executors'. All keys with "
+                                    + "this prefix are passed to the plugin at runtime with the "
+                                    + "'job.autoscaler.scaling.custom-executor.<name>.' prefix stripped.");
+
+    public static String customScalingExecutorClassKey(String instanceName) {
+        return AUTOSCALER_CONF_PREFIX
+                + SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                + instanceName
+                + ".class";
+    }
+
+    public static String customScalingExecutorClassFallbackKey(String instanceName) {
+        return OLD_K8S_OP_CONF_PREFIX + customScalingExecutorClassKey(instanceName);
+    }
+
+    /**
+     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
+     * custom scaling executor instance, including the legacy {@code kubernetes.operator.} prefix as
+     * a fallback key (canonical key takes precedence on overlap).
+     */
+    public static ConfigOption<String> customScalingExecutorClassOption(String instanceName) {
+        return ConfigOptions.key(customScalingExecutorClassKey(instanceName))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(customScalingExecutorClassFallbackKey(instanceName));
+    }
+
+    /**
+     * Builds a fresh, prefix-stripped {@link Configuration} that exposes the per-instance options
+     * configured for the scaling custom executor instance identified by {@code instanceName} under
+     * both the canonical ({@code job.autoscaler.scaling.custom-executor.<name>.}) and the legacy
+     * ({@code kubernetes.operator.job.autoscaler.scaling.custom-executor.<name>.}) namespaces. The
+     * legacy prefix is applied first so that, on overlap, values written under the canonical prefix
+     * take precedence, matching the semantics of {@link
+     * org.apache.flink.configuration.ConfigOption#withFallbackKeys} used elsewhere in this class.
+     */
+    public static Configuration customScalingExecutorConfiguration(
+            Configuration configuration, String instanceName) {
+        String canonicalPrefix =
+                AUTOSCALER_CONF_PREFIX + SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + instanceName + ".";
+        String legacyPrefix = OLD_K8S_OP_CONF_PREFIX + canonicalPrefix;
+        Configuration merged = new Configuration();
+        configuration
+                .toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (k.startsWith(legacyPrefix)) {
+                                merged.setString(k.substring(legacyPrefix.length()), v);
+                            }
+                        });
+        configuration
+                .toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (k.startsWith(canonicalPrefix)) {
+                                merged.setString(k.substring(canonicalPrefix.length()), v);
+                            }
+                        });
+        return merged;
+    }
 }

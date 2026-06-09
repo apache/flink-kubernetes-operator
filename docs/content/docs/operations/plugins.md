@@ -185,3 +185,107 @@ The following steps demonstrate how to develop and use a custom mutator.
     ```text
     2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
     ```
+
+## Custom Scaling Executors
+
+`ScalingExecutorPlugin` is a pluggable component that allows users to intercept, modify, or veto computed scaling decisions before they are applied. Custom scaling executors are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+
+For each scaling cycle, the autoscaler invokes every custom scaling executor selected via the `job.autoscaler.scaling.custom-executors` configuration option. Plugins are chained in priority order (lower `priority()` values execute first) and each plugin receives the (possibly modified) output of the previous one. A plugin can approve the decision unchanged, modify the per-vertex `ScalingSummary` map, or veto the entire scaling operation by returning an empty map. Approve and veto outcomes are surfaced as `ScalingApproved` / `ScalingVetoed` Kubernetes events keyed by the plugin instance name.
+
+All `job.autoscaler.*` keys related to custom scaling executors also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.custom-executors`). The canonical key takes precedence on overlap.
+
+The following steps demonstrate how to develop and use a custom scaling executor.
+
+1. Implement the `ScalingExecutorPlugin` interface:
+    ```java
+    package org.apache.flink.autoscaler.custom;
+
+    import org.apache.flink.autoscaler.JobAutoScalerContext;
+    import org.apache.flink.autoscaler.ScalingExecutorPlugin;
+    import org.apache.flink.autoscaler.ScalingSummary;
+    import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+    import java.util.Collections;
+    import java.util.Map;
+
+    /** Custom implementation of {@link ScalingExecutorPlugin} that caps parallelism. */
+    public class CustomScalingExecutor<KEY, CTX extends JobAutoScalerContext<KEY>>
+            implements ScalingExecutorPlugin<KEY, CTX> {
+
+        @Override
+        public int priority() {
+            // Lower values execute earlier in the chain. Default is 0.
+            return 0;
+        }
+
+        @Override
+        public Map<JobVertexID, ScalingSummary> apply(
+                Context<KEY, CTX> context, Map<JobVertexID, ScalingSummary> scalingSummaries) {
+            // Read plugin-specific options from the prefix-stripped scoped Configuration.
+            int maxParallelism =
+                    context.getConfiguration().getInteger("max-parallelism", Integer.MAX_VALUE);
+
+            // Example: veto the scaling operation if any vertex would exceed the cap.
+            for (var summary : scalingSummaries.values()) {
+                if (summary.getNewParallelism() > maxParallelism) {
+                    return Collections.emptyMap();
+                }
+            }
+            // Approve the decision unchanged.
+            return scalingSummaries;
+        }
+    }
+    ```
+
+   The `Context` object exposes the autoscaler context for the current job, the evaluated scaling metrics, the job topology, and the prefix-stripped per-instance `Configuration`.
+
+2. Create the service definition file `org.apache.flink.autoscaler.ScalingExecutorPlugin` in `META-INF/services` with the fully-qualified class name of your implementation:
+    ```text
+    org.apache.flink.autoscaler.custom.CustomScalingExecutor
+    ```
+
+3. Use the Maven tool to package the project and generate the custom scaling executor JAR.
+
+4. Select one or more custom scaling executors via configuration. Each instance whose implementation class FQN matches the configured `job.autoscaler.scaling.custom-executor.<name>.class` value will be invoked, and any other `job.autoscaler.scaling.custom-executor.<name>.*` entries are passed to the plugin as plugin-specific configuration with the `job.autoscaler.scaling.custom-executor.<instance>.` prefix stripped. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN, and multiple instances of the same plugin class can be registered under different `<name>`s, each receiving its own scoped configuration. The chain executes in `priority()` order.
+    ```yaml
+    job.autoscaler.scaling.custom-executors: cap,audit
+    job.autoscaler.scaling.custom-executor.cap.class: org.apache.flink.autoscaler.custom.CustomScalingExecutor
+    job.autoscaler.scaling.custom-executor.cap.max-parallelism: 64
+    job.autoscaler.scaling.custom-executor.audit.class: org.apache.flink.autoscaler.custom.AuditScalingExecutor
+    ```
+
+5. Deploy the custom scaling executor.
+
+    - **Operator deployment** - create a Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to a custom scaling executor plugin directory under `/opt/flink/plugins` (the value of the `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart). The structure of the custom scaling executor directory under `/opt/flink/plugins` is as follows:
+        ```text
+        /opt/flink/plugins
+            ├── custom-scaling-executor
+            │   ├── custom-scaling-executor.jar
+            └── ...
+        ```
+
+      With the custom scaling executor directory location, the Dockerfile is defined as follows:
+        ```shell script
+        FROM apache/flink-kubernetes-operator
+        ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+        ENV CUSTOM_SCALING_EXECUTOR_DIR=custom-scaling-executor
+        RUN mkdir $FLINK_PLUGINS_DIR/$CUSTOM_SCALING_EXECUTOR_DIR
+        COPY custom-scaling-executor.jar $FLINK_PLUGINS_DIR/$CUSTOM_SCALING_EXECUTOR_DIR/
+        ```
+
+      Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
+        ```text
+        o.a.f.k.o.u.AutoscalerUtils [INFO ] Discovered ScalingExecutorPlugin from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.custom.CustomScalingExecutor.
+        ```
+
+    - **Standalone autoscaler** - simply place the custom scaling executor JAR on the classpath of the `flink-autoscaler-standalone` process. It will be picked up automatically via Java's `ServiceLoader` and discovery will be logged:
+        ```text
+        o.a.f.a.s.u.AutoscalerUtils [INFO ] Discovered custom scaling executor via ServiceLoader: org.apache.flink.autoscaler.custom.CustomScalingExecutor.
+        ```
+
+   {{< hint info >}}
+   Once configured, on every reconciliation `ScalingExecutor` resolves the chain against the per-job `Configuration`, sorts it by ascending `priority()`, and emits an INFO log line listing the executor plugins that will be applied in order. This is useful for verifying that all expected instances were picked up and chained correctly:
+   ```text
+   o.a.f.a.ScalingExecutor [INFO ] Custom scaling executors resolved and sorted by priority: [[name=cap, class=org.apache.flink.autoscaler.custom.CustomScalingExecutor, priority=0], [name=audit, class=org.apache.flink.autoscaler.custom.AuditScalingExecutor, priority=100]]
+   ```
+   {{< /hint >}}

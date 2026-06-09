@@ -21,7 +21,9 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
@@ -30,21 +32,33 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
+import java.util.Collection;
+
+import static org.apache.flink.kubernetes.operator.utils.AutoscalerUtils.discoverCustomScalingExecutors;
+
 /** The factory of {@link JobAutoScaler}. */
 public class AutoscalerFactory {
 
     public static JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> create(
             KubernetesClient client,
             EventRecorder eventRecorder,
-            ClusterResourceManager clusterResourceManager) {
+            ClusterResourceManager clusterResourceManager,
+            Configuration conf) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
 
+        Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
+                discoveredScalingCustomExecutors = discoverCustomScalingExecutors(conf);
+
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore, clusterResourceManager),
+                new ScalingExecutor<>(
+                        eventHandler,
+                        stateStore,
+                        clusterResourceManager,
+                        discoveredScalingCustomExecutors),
                 eventHandler,
                 new KubernetesScalingRealizer(),
                 stateStore);
