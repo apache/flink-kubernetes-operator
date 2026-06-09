@@ -24,7 +24,9 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
@@ -33,6 +35,8 @@ import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.Gauge;
@@ -55,7 +59,9 @@ import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static java.util.Map.entry;
@@ -66,6 +72,9 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_SCALIN
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for JobAutoScalerImpl. */
@@ -114,7 +123,8 @@ public class JobAutoScalerImplTest {
                         scalingExecutor,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyList());
 
         var now = Instant.now();
         autoscaler.setClock(Clock.fixed(now, ZoneId.systemDefault()));
@@ -153,7 +163,13 @@ public class JobAutoScalerImplTest {
     void testErrorReporting() throws Exception {
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyList());
 
         autoscaler.scale(context);
         Assertions.assertEquals(
@@ -188,7 +204,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyList());
 
         // Should not produce an error
         autoscaler.scale(context);
@@ -227,7 +244,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         realizeParallelismOverridesWithExceptionsScalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyList());
 
         // Should produce an error
         autoscaler.scale(context);
@@ -244,7 +262,8 @@ public class JobAutoScalerImplTest {
                         null,
                         eventCollector,
                         scalingRealizer,
-                        stateStore);
+                        stateStore,
+                        Collections.emptyList());
 
         // Initially we should return empty overrides, do not crate any state
         assertThat(autoscaler.getParallelismOverrides(context)).isEmpty();
@@ -318,7 +337,13 @@ public class JobAutoScalerImplTest {
         var overrides = new HashMap<String, String>();
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore) {
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyList()) {
                     public Map<String, String> getParallelismOverrides(
                             JobAutoScalerContext<JobID> ctx) {
                         return new HashMap<>(overrides);
@@ -417,7 +442,13 @@ public class JobAutoScalerImplTest {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyList());
 
         // Initially we should return empty overrides, do not crate any state
         assertThat(stateStore.getConfigChanges(context).getOverrides()).isEmpty();
@@ -465,7 +496,13 @@ public class JobAutoScalerImplTest {
 
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        null, null, null, eventCollector, scalingRealizer, stateStore);
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyList());
         autoscaler.scale(context);
 
         assertTrue(stateStore.getScalingHistory(context).isEmpty());
@@ -489,5 +526,138 @@ public class JobAutoScalerImplTest {
     @Nullable
     private TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> getEvent() {
         return scalingRealizer.events.poll();
+    }
+
+    @Test
+    void testGetCustomEvaluatorIfRequired() {
+        FlinkAutoscalerEvaluator testCustomEvaluator = new TestCustomEvaluator();
+        var testCustomEvaluators = List.of(testCustomEvaluator);
+
+        var autoscalerWithCustomEvaluator =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        testCustomEvaluators);
+
+        String testCustomEvaluatorName = "test-custom-evaluator";
+        String testCustomEvaluatorClassName = TestCustomEvaluator.class.getName();
+        ConfigOption<String> classOpt =
+                ConfigOptions.key(
+                                AutoScalerOptions.customEvaluatorClassKey(testCustomEvaluatorName))
+                        .stringType()
+                        .noDefaultValue();
+
+        var defaultConf = context.getConfiguration();
+
+        // Case 1: Single custom evaluator instance configured with its FQN class.
+        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
+        defaultConf.set(classOpt, testCustomEvaluatorClassName);
+
+        var customEvaluatorWithConfig =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNotNull(customEvaluatorWithConfig);
+        assertInstanceOf(FlinkAutoscalerEvaluator.class, customEvaluatorWithConfig.f0);
+        assertEquals(
+                testCustomEvaluatorClassName, customEvaluatorWithConfig.f0.getClass().getName());
+        var customEvaluatorConfig = customEvaluatorWithConfig.f1;
+        assertNotNull(customEvaluatorConfig);
+        // Only the .class key lives under the instance namespace at this point.
+        assertEquals(Set.of("class"), customEvaluatorConfig.keySet());
+
+        // Case 2: Custom evaluator with additional per-instance options.
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                                        + testCustomEvaluatorName
+                                        + ".k1")
+                        .stringType()
+                        .noDefaultValue(),
+                "v1");
+
+        defaultConf.set(
+                ConfigOptions.key(
+                                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                                        + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
+                                        + testCustomEvaluatorName
+                                        + ".k2")
+                        .stringType()
+                        .noDefaultValue(),
+                "v2");
+
+        var customEvaluatorWithConfigContainingAdditionalKeys =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNotNull(customEvaluatorWithConfigContainingAdditionalKeys);
+        assertInstanceOf(
+                FlinkAutoscalerEvaluator.class,
+                customEvaluatorWithConfigContainingAdditionalKeys.f0);
+        var customEvaluatorConfigContainingAdditionalKeys =
+                customEvaluatorWithConfigContainingAdditionalKeys.f1;
+        assertNotNull(customEvaluatorConfigContainingAdditionalKeys);
+        assertEquals(
+                Set.of("class", "k1", "k2"),
+                customEvaluatorConfigContainingAdditionalKeys.keySet());
+
+        // Case 3: Configured class FQN does not match any registered evaluator -> null + warn.
+        defaultConf.set(classOpt, "org.apache.flink.autoscaler.metrics.UnknownEvaluator");
+
+        var customEvaluatorWithConfigNoMatch =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNull(customEvaluatorWithConfigNoMatch);
+
+        // Case 4: Instance listed but no .class option set -> null + warn.
+        defaultConf.removeConfig(classOpt);
+
+        var customEvaluatorMissingClass =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNull(customEvaluatorMissingClass);
+
+        // Case 5: Custom evaluators list not configured at all.
+        defaultConf.removeConfig(AutoScalerOptions.CUSTOM_EVALUATORS);
+
+        var customEvaluatorNotConfigured =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNull(customEvaluatorNotConfigured);
+
+        // Case 6: More than one instance configured -> warn + first-wins (single-instance
+        // constraint).
+        defaultConf.set(
+                AutoScalerOptions.CUSTOM_EVALUATORS,
+                List.of(testCustomEvaluatorName, "another-instance"));
+        defaultConf.set(classOpt, testCustomEvaluatorClassName);
+        var firstWinsResult =
+                autoscalerWithCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNotNull(firstWinsResult);
+        assertEquals(testCustomEvaluatorClassName, firstWinsResult.f0.getClass().getName());
+        defaultConf.removeConfig(AutoScalerOptions.CUSTOM_EVALUATORS);
+        defaultConf.removeConfig(classOpt);
+
+        // Case 7: No custom evaluators registered at all -> null even when configured.
+        var autoscalerWithoutCustomEvaluator =
+                new JobAutoScalerImpl<>(
+                        null,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore,
+                        Collections.emptyList());
+
+        defaultConf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
+        defaultConf.set(classOpt, testCustomEvaluatorClassName);
+        var customEvaluatorConfigNoCustomEvaluators =
+                autoscalerWithoutCustomEvaluator.getCustomEvaluatorIfRequired(
+                        context.getConfiguration());
+        assertNull(customEvaluatorConfigNoCustomEvaluators);
     }
 }

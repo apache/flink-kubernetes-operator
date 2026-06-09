@@ -21,6 +21,7 @@ import org.apache.flink.autoscaler.JobVertexScaler;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
@@ -31,6 +32,8 @@ public class AutoScalerOptions {
 
     public static final String OLD_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+    public static final String CUSTOM_EVALUATOR_CONF_PREFIX = "metrics.custom-evaluator.";
+    public static final String CUSTOM_EVALUATOR_CLASS_SUFFIX = "class";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -418,4 +421,117 @@ public class AutoScalerOptions {
                             "Minimum allowed value for the observed scalability coefficient. "
                                     + "Prevents aggressive scaling by clamping low coefficient estimates. "
                                     + "If the estimated coefficient falls below this value, it is capped at the configured minimum.");
+
+    public static final ConfigOption<List<String>> CUSTOM_EVALUATORS =
+            autoScalerConfig("metrics.custom-evaluators")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withFallbackKeys(oldOperatorConfigKey("metrics.custom-evaluators"))
+                    .withDescription(
+                            "List of named custom metric evaluator instances to register with the autoscaler. "
+                                    + "For each <name> entry, the implementation class to instantiate must be set via "
+                                    + "'job.autoscaler.metrics.custom-evaluator.<name>.class', and additional per-instance "
+                                    + "options live under 'job.autoscaler.metrics.custom-evaluator.<name>.<option>'. "
+                                    + "Only a single instance is honored for now: if more than one is configured, the autoscaler "
+                                    + "logs a warning and uses the first entry, ignoring the rest. "
+                                    + "Multi-instance support, including a priority/ordering contract, will be added as a follow-up.");
+
+    /**
+     * Documentation-only template option describing the per-instance class FQN key. Not read at
+     * runtime. The {@link #customEvaluatorClassKey(String)} is used to derive the actual key for a
+     * given evaluator instance.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> CUSTOM_EVALUATOR_CLASS_TEMPLATE =
+            autoScalerConfig("metrics.custom-evaluator.<name>.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(oldOperatorConfigKey("metrics.custom-evaluator.<name>.class"))
+                    .withDescription(
+                            "Fully-qualified class name of the implementation to instantiate for the custom metric evaluator "
+                                    + "instance <name> declared in 'job.autoscaler.metrics.custom-evaluators'. "
+                                    + "The class must be discovered via the Plugin / ServiceLoader mechanism and registered "
+                                    + "under META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator.");
+
+    /**
+     * Documentation-only template option describing the per-instance free-form parameter keys. Not
+     * read at runtime. The actual evaluator parameters are surfaced to the evaluator via {@link
+     * #customEvaluatorConfiguration(Configuration, String)}.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> CUSTOM_EVALUATOR_PARAMETER_TEMPLATE =
+            autoScalerConfig("metrics.custom-evaluator.<name>.<parameter>")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("metrics.custom-evaluator.<name>.<parameter>"))
+                    .withDescription(
+                            "Free-form, evaluator-specific options for the custom metric evaluator instance <name>. "
+                                    + "All keys with this prefix are passed to the evaluator at runtime with the "
+                                    + "'job.autoscaler.metrics.custom-evaluator.<name>.' prefix stripped.");
+
+    public static String customEvaluatorClassKey(String instanceName) {
+        return AUTOSCALER_CONF_PREFIX
+                + CUSTOM_EVALUATOR_CONF_PREFIX
+                + instanceName
+                + "."
+                + CUSTOM_EVALUATOR_CLASS_SUFFIX;
+    }
+
+    public static String customEvaluatorClassFallbackKey(String instanceName) {
+        return OLD_K8S_OP_CONF_PREFIX + customEvaluatorClassKey(instanceName);
+    }
+
+    /**
+     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
+     * custom metric evaluator instance, including the legacy {@code kubernetes.operator.} prefix as
+     * a fallback key (canonical key takes precedence on overlap).
+     */
+    public static ConfigOption<String> customEvaluatorClassOption(String instanceName) {
+        return ConfigOptions.key(customEvaluatorClassKey(instanceName))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(customEvaluatorClassFallbackKey(instanceName));
+    }
+
+    /**
+     * Builds a fresh, prefix-stripped {@link Configuration} that exposes the per-instance options
+     * configured for the scaling custom metric evaluator instance identified by {@code
+     * instanceName} under both the canonical ({@code
+     * job.autoscaler.metrics.custom-evaluator.<name>.}) and the legacy ({@code
+     * kubernetes.operator.job.autoscaler.metrics.custom-evaluator.<name>.}) namespaces. The legacy
+     * prefix is applied first so that, on overlap, values written under the canonical prefix take
+     * precedence, matching the semantics of {@link
+     * org.apache.flink.configuration.ConfigOption#withFallbackKeys} used elsewhere in this class.
+     */
+    public static Configuration customEvaluatorConfiguration(
+            Configuration configuration, String customEvaluatorName) {
+        String canonicalPrefix =
+                AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + customEvaluatorName + ".";
+        String legacyPrefix =
+                OLD_K8S_OP_CONF_PREFIX
+                        + AUTOSCALER_CONF_PREFIX
+                        + CUSTOM_EVALUATOR_CONF_PREFIX
+                        + customEvaluatorName
+                        + ".";
+        Configuration merged = new Configuration();
+        configuration
+                .toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (k.startsWith(legacyPrefix)) {
+                                merged.setString(k.substring(legacyPrefix.length()), v);
+                            }
+                        });
+        configuration
+                .toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (k.startsWith(canonicalPrefix)) {
+                                merged.setString(k.substring(canonicalPrefix.length()), v);
+                            }
+                        });
+        return merged;
+    }
 }

@@ -93,6 +93,24 @@
             <td>Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.<br /><br />Possible values:<ul><li>"AVG"</li><li>"MAX"</li><li>"MIN"</li></ul></td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.&lt;parameter&gt;</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>Free-form, evaluator-specific options for the custom metric evaluator instance &lt;name&gt;. All keys with this prefix are passed to the evaluator at runtime with the 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.' prefix stripped.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.class</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>Fully-qualified class name of the implementation to instantiate for the custom metric evaluator instance &lt;name&gt; declared in 'job.autoscaler.metrics.custom-evaluators'. The class must be discovered via the Plugin / ServiceLoader mechanism and registered under META-INF/services/org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.metrics.custom-evaluators</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>List&lt;String&gt;</td>
+            <td>List of named custom metric evaluator instances to register with the autoscaler. For each &lt;name&gt; entry, the implementation class to instantiate must be set via 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.class', and additional per-instance options live under 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.&lt;option&gt;'. Only a single instance is honored for now: if more than one is configured, the autoscaler logs a warning and uses the first entry, ignoring the rest. Multi-instance support, including a priority/ordering contract, will be added as a follow-up.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.metrics.window</h5></td>
             <td style="word-wrap: break-word;">15 min</td>
             <td>Duration</td>
