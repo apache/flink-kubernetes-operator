@@ -23,7 +23,7 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.util.List;
 
@@ -37,11 +37,11 @@ class PostgreSQLExtension implements BeforeAllCallback, AfterAllCallback, AfterE
     private static final List<String> TABLES =
             List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
 
-    private final PostgreSQLContainer<?> container;
+    private final PostgreSQLContainer container;
 
     public PostgreSQLExtension(String postgresqlVersion) {
         this.container =
-                new PostgreSQLContainer<>(String.format("postgres:%s", postgresqlVersion))
+                new PostgreSQLContainer(String.format("postgres:%s", postgresqlVersion))
                         .withDatabaseName(DATABASE_NAME)
                         .withUsername(USER_NAME)
                         .withPassword(PASSWORD)
