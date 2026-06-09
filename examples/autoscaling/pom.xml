@@ -106,7 +106,7 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.0.0</version>
+                <!-- Version inherited from the parent pom.xml. -->
                 <executions>
                     <!-- Run shade goal on package phase -->
                     <execution>
@@ -125,13 +125,41 @@ under the License.
                             </artifactSet>
                             <filters>
                                 <filter>
-                                    <!-- Do not copy the signatures in the META-INF folder.
-                                    Otherwise, this might cause SecurityExceptions when using the JAR. -->
                                     <artifact>*:*</artifact>
                                     <excludes>
+                                        <!-- JPMS module descriptors: the uber-JAR is not modular. -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/**/module-info.class</exclude>
+                                        <!-- Signature files of signed input jars. -->
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!-- Per-dependency Maven build metadata. -->
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <!-- Per-dependency LICENSE/NOTICE/DEPENDENCIES files. -->
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                        <exclude>META-INF/LICENSE.txt</exclude>
+                                        <exclude>META-INF/license.txt</exclude>
+                                        <exclude>META-INF/NOTICE</exclude>
+                                        <exclude>META-INF/NOTICE.txt</exclude>
+                                        <exclude>META-INF/licenses/**</exclude>
+                                        <!-- Kotlin compilation metadata. -->
+                                        <exclude>META-INF/*.kotlin_module</exclude>
+                                        <!-- ProGuard rules and GraalVM native-image hints. -->
+                                        <exclude>META-INF/proguard/**</exclude>
+                                        <exclude>META-INF/native-image/**</exclude>
+                                        <!-- A fresh manifest is produced by the
+                                        ManifestResourceTransformer below. -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- okio and okio-jvm ship the same Kotlin module descriptor;
+                                    keep okio-jvm's. -->
+                                    <artifact>com.squareup.okio:okio</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/okio.kotlin_module</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
