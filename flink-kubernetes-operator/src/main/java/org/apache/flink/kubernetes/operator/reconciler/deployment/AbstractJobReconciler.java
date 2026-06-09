@@ -599,6 +599,10 @@ public abstract class AbstractJobReconciler<
     protected void resubmitJob(FlinkResourceContext<CR> ctx, boolean requireHaMetadata)
             throws Exception {
         LOG.info("Resubmitting Flink job...");
+        ctx.getConfigManager()
+                .invalidateRuntimeConfig(
+                        ctx.getResource().getMetadata().getNamespace(),
+                        ctx.getResource().getMetadata().getName());
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
 
         var upgradeStatePath =

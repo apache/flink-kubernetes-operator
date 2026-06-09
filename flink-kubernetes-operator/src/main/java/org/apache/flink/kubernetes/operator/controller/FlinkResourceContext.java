@@ -101,7 +101,18 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
         if (observeConfig != null) {
             return observeConfig;
         }
-        return observeConfig = createObserveConfig();
+        observeConfig = createObserveConfig();
+        if (observeConfig != null) {
+            configManager.applyCachedRuntimeConfig(getResource(), observeConfig);
+        }
+        return observeConfig;
+    }
+
+    /**
+     * @return The config manager for this context.
+     */
+    public FlinkConfigManager getConfigManager() {
+        return configManager;
     }
 
     /**
