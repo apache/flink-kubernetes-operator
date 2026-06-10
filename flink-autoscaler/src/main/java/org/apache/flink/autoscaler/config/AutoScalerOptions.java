@@ -17,10 +17,12 @@
 
 package org.apache.flink.autoscaler.config;
 
-import org.apache.flink.autoscaler.JobVertexScaler;
+import org.apache.flink.autoscaler.alignment.BuiltInAlignmentMode;
+import org.apache.flink.autoscaler.alignment.KeyGroupOrPartitionsAdjustMode;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
@@ -31,6 +33,7 @@ public class AutoScalerOptions {
 
     public static final String OLD_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+    public static final String ALIGNMENT_MODE_CONF_PREFIX = "scaling.alignment.mode.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -371,17 +374,63 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.");
 
-    public static final ConfigOption<JobVertexScaler.KeyGroupOrPartitionsAdjustMode>
+    @Deprecated
+    public static final ConfigOption<KeyGroupOrPartitionsAdjustMode>
             SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE =
                     autoScalerConfig("scaling.key-group.partitions.adjust.mode")
-                            .enumType(JobVertexScaler.KeyGroupOrPartitionsAdjustMode.class)
-                            .defaultValue(
-                                    JobVertexScaler.KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
+                            .enumType(KeyGroupOrPartitionsAdjustMode.class)
+                            .defaultValue(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
                             .withFallbackKeys(
                                     oldOperatorConfigKey(
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
-                                    "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
+                                    "Deprecated, use scaling.alignment.mode instead. How to adjust "
+                                            + "the parallelism of Source vertex or upstream partitioning is keyBy");
+
+    public static final ConfigOption<String> ALIGNMENT_MODE =
+            autoScalerConfig("scaling.alignment.mode")
+                    .stringType()
+                    .defaultValue(BuiltInAlignmentMode.BALANCED.name())
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.alignment.mode"))
+                    .withDescription(
+                            "How the autoscaler aligns the parallelism of source vertices and keyBy "
+                                    + "(hash) vertices to the number of key groups or source "
+                                    + "partitions. One of the built-in modes (BALANCED reduces "
+                                    + "per-subtask load above the target, EVENLY_SPREAD aligns to an "
+                                    + "exact divisor for even data distribution, OFF disables "
+                                    + "alignment), or the name of a custom alignment mode whose "
+                                    + "class is configured via '"
+                                    + AUTOSCALER_CONF_PREFIX
+                                    + ALIGNMENT_MODE_CONF_PREFIX
+                                    + "<name>.class'. Supersedes the deprecated "
+                                    + "scaling.key-group.partitions.adjust.mode.");
+
+    /** Documentation-only template for the custom alignment mode class option. */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> ALIGNMENT_MODE_CLASS_TEMPLATE =
+            autoScalerConfig(ALIGNMENT_MODE_CONF_PREFIX + "<name>.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(ALIGNMENT_MODE_CONF_PREFIX + "<name>.class"))
+                    .withDescription(
+                            "The fully-qualified class name of the custom alignment mode named "
+                                    + "<name>, discovered as a plugin and selectable via "
+                                    + "scaling.alignment.mode=<name>.");
+
+    /** Documentation-only template for the custom alignment mode parameters. */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> ALIGNMENT_MODE_PARAMETER_TEMPLATE =
+            autoScalerConfig(ALIGNMENT_MODE_CONF_PREFIX + "<name>.<parameter>")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(ALIGNMENT_MODE_CONF_PREFIX + "<name>.<parameter>"))
+                    .withDescription(
+                            "An arbitrary parameter passed to the custom alignment mode named "
+                                    + "<name>. All such parameters are made available to the mode "
+                                    + "(with the prefix stripped) through "
+                                    + "AlignmentContext.getModeConfiguration().");
 
     public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
             autoScalerConfig("observed-scalability.enabled")
@@ -418,4 +467,35 @@ public class AutoScalerOptions {
                             "Minimum allowed value for the observed scalability coefficient. "
                                     + "Prevents aggressive scaling by clamping low coefficient estimates. "
                                     + "If the estimated coefficient falls below this value, it is capped at the configured minimum.");
+
+    /** Runtime config key holding the class of the custom alignment mode {@code name}. */
+    public static String alignmentModeClassKey(String name) {
+        return autoScalerConfigKey(ALIGNMENT_MODE_CONF_PREFIX + name + ".class");
+    }
+
+    /** Runtime option resolving the class of the custom alignment mode {@code name}. */
+    public static ConfigOption<String> alignmentModeClassOption(String name) {
+        return ConfigOptions.key(alignmentModeClassKey(name))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(
+                        oldOperatorConfigKey(ALIGNMENT_MODE_CONF_PREFIX + name + ".class"));
+    }
+
+    /**
+     * The prefix-stripped configuration for the custom alignment mode {@code name}, i.e. all keys
+     * under {@code job.autoscaler.scaling.alignment-mode.<name>.} with that prefix removed.
+     */
+    public static Configuration alignmentModeConfiguration(Configuration conf, String name) {
+        String prefix = autoScalerConfigKey(ALIGNMENT_MODE_CONF_PREFIX + name + ".");
+        Configuration result = new Configuration();
+        conf.toMap()
+                .forEach(
+                        (key, value) -> {
+                            if (key.startsWith(prefix)) {
+                                result.setString(key.substring(prefix.length()), value);
+                            }
+                        });
+        return result;
+    }
 }

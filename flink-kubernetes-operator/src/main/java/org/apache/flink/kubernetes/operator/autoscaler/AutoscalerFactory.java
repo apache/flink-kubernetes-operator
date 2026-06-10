@@ -22,9 +22,11 @@ import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
+import org.apache.flink.kubernetes.operator.utils.AutoscalerUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -34,17 +36,20 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 public class AutoscalerFactory {
 
     public static JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> create(
+            Configuration conf,
             KubernetesClient client,
             EventRecorder eventRecorder,
             ClusterResourceManager clusterResourceManager) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
+        var alignmentModes = AutoscalerUtils.discoverAlignmentModes(conf);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore, clusterResourceManager),
+                new ScalingExecutor<>(
+                        eventHandler, stateStore, clusterResourceManager, alignmentModes),
                 eventHandler,
                 new KubernetesScalingRealizer(),
                 stateStore);

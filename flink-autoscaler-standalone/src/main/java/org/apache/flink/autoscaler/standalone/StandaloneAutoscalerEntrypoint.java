@@ -29,6 +29,7 @@ import org.apache.flink.autoscaler.ScalingMetricEvaluator;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
 import org.apache.flink.autoscaler.standalone.realizer.RescaleApiScalingRealizer;
+import org.apache.flink.autoscaler.standalone.utils.AutoscalerUtils;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
@@ -88,10 +89,11 @@ public class StandaloneAutoscalerEntrypoint {
             JobAutoScaler<KEY, Context> createJobAutoscaler(
                     AutoScalerEventHandler<KEY, Context> eventHandler,
                     AutoScalerStateStore<KEY, Context> stateStore) {
+        var alignmentModes = AutoscalerUtils.discoverAlignmentModes();
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor<>(eventHandler, stateStore),
+                new ScalingExecutor<>(eventHandler, stateStore, null, alignmentModes),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);

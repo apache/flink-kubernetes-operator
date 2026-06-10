@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.alignment.AlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
@@ -44,8 +45,10 @@ import javax.annotation.Nullable;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,7 +90,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck) {
-        this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
+        this(autoScalerEventHandler, autoScalerStateStore, resourceCheck, List.of());
+    }
+
+    public ScalingExecutor(
+            AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
+            AutoScalerStateStore<KEY, Context> autoScalerStateStore,
+            @Nullable ResourceCheck resourceCheck,
+            Collection<AlignmentMode> alignmentModes) {
+        this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler, alignmentModes);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
@@ -212,6 +223,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                 context,
                                                 v,
                                                 jobTopology.get(v).getInputs().values(),
+                                                jobTopology,
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),
