@@ -98,6 +98,7 @@ public class TestingFlinkDeploymentController
                         eventRecorder,
                         statusRecorder,
                         AutoscalerFactory.create(
+                                configManager.getDefaultConfig(),
                                 flinkService.getKubernetesClient(),
                                 eventRecorder,
                                 new ClusterResourceManager(
