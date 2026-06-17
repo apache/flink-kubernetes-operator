@@ -555,17 +555,23 @@ public class ScalingMetricEvaluator {
 
         double inputRate = getRate(ScalingMetric.NUM_RECORDS_IN, from, metricsHistory);
 
-        double outputRatio = 0;
+        // If inputRate is NaN, metrics are temporarily unavailable.
+        // Return NaN so the autoscaler skips scaling decisions instead of
+        // acting on bad data and triggering incorrect scale down.
+        if (Double.isNaN(inputRate)) {
+            return Double.NaN;
+        }
         // If the input rate is zero, we also need to flatten the output rate.
         // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
         // a rapid scale up.
-        if (inputRate > 0) {
-            double outputRate = computeEdgeDataRate(topology, metricsHistory, from, to);
-            if (outputRate > 0) {
-                outputRatio = outputRate / inputRate;
-            }
+        if (inputRate == 0) {
+            return 0.0;
         }
-        return outputRatio;
+        double outputRate = computeEdgeDataRate(topology, metricsHistory, from, to);
+        if (Double.isNaN(outputRate)) {
+            return Double.NaN;
+        }
+        return outputRate / inputRate;
     }
 
     /**
