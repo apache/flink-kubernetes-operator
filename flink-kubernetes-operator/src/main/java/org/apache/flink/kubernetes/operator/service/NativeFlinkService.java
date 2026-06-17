@@ -56,6 +56,7 @@ import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.dsl.EditReplacePatchable;
 import io.fabric8.kubernetes.client.dsl.base.PatchContext;
 import io.fabric8.kubernetes.client.dsl.base.PatchType;
@@ -323,23 +324,30 @@ public class NativeFlinkService extends AbstractFlinkService {
         // here is to initiate JM shutdown before the TMs
         var jmShutdownTimeout =
                 ObjectUtils.min(JM_SHUTDOWN_MAX_WAIT, remainingTimeout.dividedBy(2));
-        var remaining =
-                deleteBlocking(
-                        "Scaling JobManager Deployment to zero",
-                        () -> {
-                            try {
-                                jmDeployment.patch(
-                                        PatchContext.of(PatchType.JSON_MERGE), SCALE_TO_ZERO);
-                            } catch (Exception ignore) {
-                                // Ignore all errors here as this is an optional step
-                                return null;
-                            }
-                            return kubernetesClient
-                                    .pods()
-                                    .inNamespace(namespace)
-                                    .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId));
-                        },
-                        jmShutdownTimeout);
+        Duration remaining;
+        try {
+            remaining =
+                    deleteBlocking(
+                            "Scaling JobManager Deployment to zero",
+                            () -> {
+                                try {
+                                    jmDeployment.patch(
+                                            PatchContext.of(PatchType.JSON_MERGE), SCALE_TO_ZERO);
+                                } catch (Exception ignore) {
+                                    // Ignore all errors here as this is an optional step
+                                    return null;
+                                }
+                                return kubernetesClient
+                                        .pods()
+                                        .inNamespace(namespace)
+                                        .withLabels(
+                                                KubernetesUtils.getJobManagerSelectors(clusterId));
+                            },
+                            jmShutdownTimeout);
+        } catch (KubernetesClientTimeoutException e) {
+            LOG.warn("Timed out waiting for JobManager scale-to-zero (optional step), proceeding");
+            remaining = Duration.ZERO;
+        }
         return remainingTimeout.minus(jmShutdownTimeout).plus(remaining);
     }
 }

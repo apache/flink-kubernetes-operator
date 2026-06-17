@@ -49,9 +49,14 @@ import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders
 import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.WatchEvent;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +80,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -193,6 +199,64 @@ public class NativeFlinkServiceTest {
                         .inNamespace(TestUtils.TEST_NAMESPACE)
                         .withName(TestUtils.TEST_DEPLOYMENT_NAME)
                         .get());
+    }
+
+    @Test
+    public void testDeleteClusterInternalThrowsOnDeploymentDeletionTimeout() {
+        var timeout = Duration.ofMillis(200);
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT, timeout);
+        var flinkService =
+                new NativeFlinkService(
+                        client,
+                        null,
+                        executorService,
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
+                        eventRecorder);
+
+        var dep =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(TestUtils.TEST_DEPLOYMENT_NAME)
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .endMetadata()
+                        .build();
+        DeploymentList deploymentList =
+                new DeploymentListBuilder().withMetadata(new ListMeta()).withItems(dep).build();
+
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+
+        // GET always returns the deployment; watch never emits DELETED within timeout
+        mockServer.expect().get().withPath(getUrl).andReturn(200, deploymentList).always();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(dep, "DELETED"))
+                .done()
+                .always();
+
+        var deployment = TestUtils.buildApplicationCluster();
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        assertThrows(
+                KubernetesClientTimeoutException.class,
+                () ->
+                        flinkService.deleteClusterInternal(
+                                TestUtils.TEST_NAMESPACE,
+                                TestUtils.TEST_DEPLOYMENT_NAME,
+                                configManager.getObserveConfig(deployment),
+                                DeletionPropagation.BACKGROUND));
     }
 
     @ParameterizedTest
