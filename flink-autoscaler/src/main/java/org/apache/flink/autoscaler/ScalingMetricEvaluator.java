@@ -24,9 +24,9 @@ import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
-import org.apache.flink.autoscaler.metrics.FlinkAutoscalerEvaluator;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
@@ -41,13 +41,17 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATORS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
@@ -75,13 +79,14 @@ public class ScalingMetricEvaluator {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
+    private final Collection<ScalingMetricsEvaluatorPlugin> customEvaluators;
+
+    public ScalingMetricEvaluator(Collection<ScalingMetricsEvaluatorPlugin> customEvaluators) {
+        this.customEvaluators = customEvaluators;
+    }
+
     public EvaluatedMetrics evaluate(
-            Configuration conf,
-            CollectedMetricHistory collectedMetrics,
-            Duration restartTime,
-            @Nullable
-                    Tuple2<FlinkAutoscalerEvaluator, Configuration>
-                            customEvaluatorWithConfig) {
+            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -89,21 +94,21 @@ public class ScalingMetricEvaluator {
 
         boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
 
+        var customEvaluatorWithConfig = getCustomEvaluatorIfRequired(conf);
         var customEvaluationSession =
                 Optional.ofNullable(customEvaluatorWithConfig)
                         .map(
                                 info ->
                                         Tuple2.of(
                                                 info.f0,
-                                                new FlinkAutoscalerEvaluator.Context(
-                                                        new UnmodifiableConfiguration(conf),
+                                                new ScalingMetricsEvaluatorPlugin.Context(
+                                                        mergeEvaluatorConfig(conf, info.f1),
                                                         Collections.unmodifiableSortedMap(
                                                                 metricsHistory),
                                                         Collections.unmodifiableMap(scalingOutput),
                                                         topology,
                                                         processingBacklog,
-                                                        restartTime,
-                                                        info.f1)))
+                                                        restartTime)))
                         .orElse(null);
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
@@ -161,7 +166,7 @@ public class ScalingMetricEvaluator {
             boolean processingBacklog,
             Duration restartTime,
             @Nullable
-                    Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+                    Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context>
                             customEvaluationSession) {
 
         var latestVertexMetrics =
@@ -679,12 +684,12 @@ public class ScalingMetricEvaluator {
     }
 
     /**
-     * Executes the provided custom evaluator for the given job vertex. Calls {@link
-     * FlinkAutoscalerEvaluator#evaluateVertexMetrics} to evaluate scaling metrics.
+     * Executes the provided custom metric evaluator for the given job vertex. Calls {@link
+     * ScalingMetricsEvaluatorPlugin#evaluateVertexMetrics} to evaluate scaling metrics.
      *
      * @param vertex The job vertex being evaluated.
      * @param evaluatedMetrics Current evaluated metrics.
-     * @param customEvaluationSession A tuple containing the custom evaluator and evaluation
+     * @param customEvaluationSession A tuple containing the custom metric evaluator and evaluation
      *     context.
      * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
      */
@@ -692,19 +697,14 @@ public class ScalingMetricEvaluator {
     protected static Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Tuple2<FlinkAutoscalerEvaluator, FlinkAutoscalerEvaluator.Context>
+            Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context>
                     customEvaluationSession) {
         try {
             return customEvaluationSession.f0.evaluateVertexMetrics(
                     vertex, evaluatedMetrics, customEvaluationSession.f1);
-        } catch (UnsupportedOperationException e) {
-            LOG.warn(
-                    "Custom evaluator {} tried accessing an un-modifiable view.",
-                    customEvaluationSession.f0.getClass(),
-                    e);
         } catch (Exception e) {
             LOG.warn(
-                    "Custom evaluator {} threw an exception.",
+                    "Custom metric evaluator {} threw an exception.",
                     customEvaluationSession.f0.getClass(),
                     e);
         }
@@ -713,12 +713,82 @@ public class ScalingMetricEvaluator {
     }
 
     /**
-     * Merges the incoming evaluated metrics into actual evaluated metrics.
+     * Builds the configuration handed to a custom evaluator: the full job configuration with the
+     * evaluator-specific options (prefix already stripped) merged on top, so an evaluator-specific
+     * key takes precedence over the job-level value of the same key. The result is an un-modifiable
+     * view.
      *
-     * @param actual The target evaluated metrics map to merge into.
-     * @param incoming The incoming map containing new evaluated metrics map to be merged
-     *     (nullable).
+     * @param jobConf The full job configuration.
+     * @param evaluatorConf The evaluator-specific options with their prefix already stripped.
+     * @return An un-modifiable merged configuration.
      */
+    @VisibleForTesting
+    protected static Configuration mergeEvaluatorConfig(
+            Configuration jobConf, Configuration evaluatorConf) {
+        Configuration merged = new Configuration(jobConf);
+        merged.addAll(evaluatorConf);
+        return new UnmodifiableConfiguration(merged);
+    }
+
+    /**
+     * Resolves the configured custom metric evaluator (if any) from the registered evaluators.
+     *
+     * @param conf The job configuration.
+     * @return A tuple of the resolved {@link ScalingMetricsEvaluatorPlugin} and its
+     *     evaluator-specific configuration, or {@code null} if no custom evaluator is configured or
+     *     resolvable.
+     */
+    @VisibleForTesting
+    protected Tuple2<ScalingMetricsEvaluatorPlugin, Configuration> getCustomEvaluatorIfRequired(
+            Configuration conf) {
+        List<String> instances = conf.get(CUSTOM_EVALUATORS);
+        if (instances == null || instances.isEmpty()) {
+            return null;
+        }
+        if (instances.size() > 1) {
+            LOG.warn(
+                    "Only a single custom metric evaluator is currently supported, but {} were configured via '{}': {}. "
+                            + "Falling back to the first entry ('{}'); the remaining entries will be ignored. "
+                            + "Multi-instance support (with a priority/ordering contract) will be added as a follow-up.",
+                    instances.size(),
+                    CUSTOM_EVALUATORS.key(),
+                    instances,
+                    instances.get(0));
+        }
+        String instance = instances.get(0);
+        String classKey = AutoScalerOptions.customEvaluatorClassKey(instance);
+        String configuredClassName =
+                conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
+        if (configuredClassName == null || configuredClassName.isBlank()) {
+            LOG.warn(
+                    "Custom metric evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
+                            + "No custom metric evaluator will be applied.",
+                    instance,
+                    CUSTOM_EVALUATORS.key(),
+                    classKey);
+            return null;
+        }
+        ScalingMetricsEvaluatorPlugin match = null;
+        for (ScalingMetricsEvaluatorPlugin evaluator : customEvaluators) {
+            if (evaluator.getClass().getName().equals(configuredClassName)) {
+                match = evaluator;
+                break;
+            }
+        }
+        if (match == null) {
+            LOG.warn(
+                    "No registered custom metric evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
+                    configuredClassName,
+                    instance,
+                    classKey,
+                    customEvaluators.stream()
+                            .map(e -> e.getClass().getName())
+                            .collect(Collectors.toList()));
+            return null;
+        }
+        return new Tuple2<>(match, AutoScalerOptions.customEvaluatorConfiguration(conf, instance));
+    }
+
     @VisibleForTesting
     protected static void mergeEvaluatedMetricsMaps(
             Map<ScalingMetric, EvaluatedScalingMetric> actual,
@@ -735,13 +805,6 @@ public class ScalingMetricEvaluator {
                                                                 ::mergeEvaluatedScalingMetric)));
     }
 
-    /**
-     * Merges two {@link EvaluatedScalingMetric} instances.
-     *
-     * @param actual The existing evaluated scaling metric.
-     * @param incoming The incoming evaluated scaling metric.
-     * @return A new {@link EvaluatedScalingMetric} instance with merged values.
-     */
     @VisibleForTesting
     protected static EvaluatedScalingMetric mergeEvaluatedScalingMetric(
             EvaluatedScalingMetric actual, EvaluatedScalingMetric incoming) {
