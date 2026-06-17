@@ -118,12 +118,11 @@ public class DelayedScaleDownEndToEndTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(),
+                        new ScalingMetricEvaluator(List.of()),
                         new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         scalingRealizer,
-                        stateStore,
-                        Collections.emptyMap());
+                        stateStore);
 
         // initially the last evaluated metrics are empty
         assertThat(autoscaler.lastEvaluatedMetrics.get(context.getJobKey())).isNull();

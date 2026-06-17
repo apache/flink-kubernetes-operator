@@ -40,7 +40,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 
@@ -105,12 +105,11 @@ public class BacklogBasedScalingTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(),
+                        new ScalingMetricEvaluator(List.of()),
                         scalingExecutor,
                         eventCollector,
                         new TestingScalingRealizer<>(),
-                        stateStore,
-                        Collections.emptyMap());
+                        stateStore);
 
         // Reset custom window size to default
         metricsCollector.setTestMetricWindowSize(null);

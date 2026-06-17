@@ -25,14 +25,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A test implementation of the {@link FlinkAutoscalerEvaluator} interface that provides
- * custom scaling metric evaluations for job vertices in a Flink job.
+ * A test implementation of the {@link ScalingMetricsEvaluatorPlugin} interface that provides custom
+ * scaling metric evaluations for job vertices in a Flink job.
  */
-public class TestCustomEvaluator implements FlinkAutoscalerEvaluator {
-    @Override
-    public String getName() {
-        return "test-custom-evaluator";
-    }
+public class TestCustomEvaluator implements ScalingMetricsEvaluatorPlugin {
 
     @Override
     public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
