@@ -724,7 +724,7 @@ public class ScalingExecutorTest {
                                         1,
                                         2,
                                         100.0,
-                                        157.0,
+                                        200.0,
                                         110.0)));
         assertTrue(
                 event.getMessage()
