@@ -219,6 +219,24 @@
             <td>List of named custom scaling executors instances to register with the autoscaler. For each &lt;name&gt; entry, the implementation class to instantiate must be set via 'job.autoscaler.scaling.custom-executor.&lt;name&gt;.class', and additional per-instance options live under 'job.autoscaler.scaling.custom-executor.&lt;name&gt;.&lt;parameter&gt;'. Custom executors are executed in ascending order of their ScalingExecutorPlugin#priority() value, regardless of the order in which they appear in this list.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scaling.alignment.mode</h5></td>
+            <td style="word-wrap: break-word;">"BALANCED"</td>
+            <td>String</td>
+            <td>How the autoscaler aligns the parallelism of source vertices and keyBy (hash) vertices to the number of key groups or source partitions. One of the built-in modes (BALANCED reduces per-subtask load above the target, EVENLY_SPREAD aligns to an exact divisor for even data distribution, OFF disables alignment), or the name of a custom alignment mode whose class is configured via 'job.autoscaler.scaling.alignment.mode.&lt;name&gt;.class'. Supersedes the deprecated scaling.key-group.partitions.adjust.mode.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.scaling.alignment.mode.&lt;name&gt;.&lt;parameter&gt;</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>An arbitrary parameter passed to the custom alignment mode named &lt;name&gt;. All such parameters are made available to the mode (with the prefix stripped) through Context.getModeConfiguration().</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.scaling.alignment.mode.&lt;name&gt;.class</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>The fully-qualified class name of the custom alignment mode named &lt;name&gt;, discovered as a plugin and selectable via scaling.alignment.mode=&lt;name&gt;.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.scaling.effectiveness.detection.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
@@ -241,12 +259,6 @@
             <td style="word-wrap: break-word;">30 min</td>
             <td>Duration</td>
             <td>Time interval to resend the identical event</td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.scaling.key-group.partitions.adjust.mode</h5></td>
-            <td style="word-wrap: break-word;">EVENLY_SPREAD</td>
-            <td><p>Enum</p></td>
-            <td>How to adjust the parallelism of Source vertex or upstream shuffle is keyBy<br /><br />Possible values:<ul><li>"EVENLY_SPREAD": This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks. It is particularly effective for source vertices that are aware of partition counts or vertices after 'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew.</li><li>"MAXIMIZE_UTILISATION": This model is to maximize resource utilization. In this mode, an attempt is made to set the parallelism that meets the current consumption rate requirements. It is not enforced that the number of key groups or partitions is divisible by the parallelism.</li></ul></td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.stabilization.interval</h5></td>

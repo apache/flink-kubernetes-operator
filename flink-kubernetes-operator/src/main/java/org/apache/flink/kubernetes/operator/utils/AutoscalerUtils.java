@@ -19,10 +19,10 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
+import org.apache.flink.autoscaler.alignment.AlignmentMode;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.configuration.ConfigConstants;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.core.plugin.PluginManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,13 +38,13 @@ public class AutoscalerUtils {
     /**
      * Discovers custom metric evaluators for autoscaler.
      *
-     * @param conf Base FlinkConfigManager configuration
+     * @param pluginManager The shared operator plugin manager used for discovery.
      * @return The list of discovered custom metric evaluators.
      */
     public static Collection<ScalingMetricsEvaluatorPlugin> discoverCustomEvaluators(
-            Configuration conf) {
+            PluginManager pluginManager) {
         List<ScalingMetricsEvaluatorPlugin> customEvaluators = new ArrayList<>();
-        PluginUtils.createPluginManagerFromRootFolder(conf)
+        pluginManager
                 .load(ScalingMetricsEvaluatorPlugin.class)
                 .forEachRemaining(
                         customEvaluator -> {
@@ -63,15 +63,15 @@ public class AutoscalerUtils {
     /**
      * Discovers custom scaling executors for autoscaler.
      *
-     * @param conf Base FlinkConfigManager configuration
+     * @param pluginManager The shared operator plugin manager used for discovery.
      * @return The list of discovered custom scaling executors.
      */
     @SuppressWarnings("unchecked")
     public static <KEY, Context extends JobAutoScalerContext<KEY>>
             Collection<ScalingExecutorPlugin<KEY, Context>> discoverCustomScalingExecutors(
-                    Configuration conf) {
+                    PluginManager pluginManager) {
         List<ScalingExecutorPlugin<KEY, Context>> customScalingExecutors = new ArrayList<>();
-        PluginUtils.createPluginManagerFromRootFolder(conf)
+        pluginManager
                 .load(ScalingExecutorPlugin.class)
                 .forEachRemaining(
                         customScalingExecutor -> {
@@ -86,5 +86,31 @@ public class AutoscalerUtils {
                                     (ScalingExecutorPlugin<KEY, Context>) customScalingExecutor);
                         });
         return customScalingExecutors;
+    }
+
+    /**
+     * Discovers custom alignment modes for autoscaler. Built-in modes are not plugins and are
+     * resolved by name, so they are not returned here.
+     *
+     * @param pluginManager The shared operator plugin manager used for discovery.
+     * @return The list of discovered custom alignment modes.
+     */
+    public static Collection<AlignmentMode> discoverCustomAlignmentModes(
+            PluginManager pluginManager) {
+        List<AlignmentMode> customAlignmentModes = new ArrayList<>();
+        pluginManager
+                .load(AlignmentMode.class)
+                .forEachRemaining(
+                        customAlignmentMode -> {
+                            LOG.info(
+                                    "Discovered custom alignment mode for autoscaler from plugin directory[{}]: {}.",
+                                    System.getenv()
+                                            .getOrDefault(
+                                                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                                                    ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
+                                    customAlignmentMode.getClass().getName());
+                            customAlignmentModes.add(customAlignmentMode);
+                        });
+        return customAlignmentModes;
     }
 }

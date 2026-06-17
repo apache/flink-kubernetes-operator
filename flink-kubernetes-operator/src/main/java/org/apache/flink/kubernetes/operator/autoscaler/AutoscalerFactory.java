@@ -23,7 +23,9 @@ import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
@@ -42,19 +44,28 @@ public class AutoscalerFactory {
             KubernetesClient client,
             EventRecorder eventRecorder,
             ClusterResourceManager clusterResourceManager,
-            Configuration conf) {
+            PluginManager pluginManager) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
-        var customEvaluators = AutoscalerUtils.discoverCustomEvaluators(conf);
+
+        // Autoscaler SPI integrations sharing the operator's process-wide plugin manager.
+        Collection<ScalingMetricsEvaluatorPlugin> customEvaluators =
+                AutoscalerUtils.discoverCustomEvaluators(pluginManager);
         Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
-                customExecutors = AutoscalerUtils.discoverCustomScalingExecutors(conf);
+                customExecutors = AutoscalerUtils.discoverCustomScalingExecutors(pluginManager);
+        Collection<AlignmentMode> customAlignmentModes =
+                AutoscalerUtils.discoverCustomAlignmentModes(pluginManager);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(customEvaluators),
                 new ScalingExecutor<>(
-                        eventHandler, stateStore, clusterResourceManager, customExecutors),
+                        eventHandler,
+                        stateStore,
+                        clusterResourceManager,
+                        customExecutors,
+                        customAlignmentModes),
                 eventHandler,
                 new KubernetesScalingRealizer(),
                 stateStore);

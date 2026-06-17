@@ -559,6 +559,7 @@ public class ScalingExecutorTest {
                         stateStore,
                         (currentInstances, newInstances, cpuPerInstance, memoryPerInstance) ->
                                 false,
+                        Collections.emptyList(),
                         Collections.emptyList());
 
         // Scaling blocked due to unavailable resources
@@ -1102,7 +1103,7 @@ public class ScalingExecutorTest {
             }
             conf.set(AutoScalerOptions.SCALING_CUSTOM_EXECUTORS, instances);
             return new ScalingExecutor<JobID, JobAutoScalerContext<JobID>>(
-                    eventCollector, stateStore, null, List.of(plugins));
+                    eventCollector, stateStore, null, List.of(plugins), Collections.emptyList());
         }
 
         @Test
@@ -1255,7 +1256,11 @@ public class ScalingExecutorTest {
             // Empty filter collection (default behavior)
             var executorNoFilters =
                     new ScalingExecutor<>(
-                            eventCollector, stateStore, null, Collections.emptyList());
+                            eventCollector,
+                            stateStore,
+                            null,
+                            Collections.emptyList(),
+                            Collections.emptyList());
 
             var now = Instant.now();
             assertTrue(
@@ -1460,7 +1465,11 @@ public class ScalingExecutorTest {
         void testNoPluginEventsEmittedWhenNoPluginsRegistered() throws Exception {
             var executorNoFilters =
                     new ScalingExecutor<>(
-                            eventCollector, stateStore, null, Collections.emptyList());
+                            eventCollector,
+                            stateStore,
+                            null,
+                            Collections.emptyList(),
+                            Collections.emptyList());
 
             assertTrue(
                     executorNoFilters.scaleResource(
@@ -1484,7 +1493,12 @@ public class ScalingExecutorTest {
             conf.setString(AutoScalerOptions.customScalingExecutorClassFallbackKey(name), name);
 
             var executorWithFilter =
-                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(vetoFilter));
+                    new ScalingExecutor<>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            List.of(vetoFilter),
+                            Collections.emptyList());
 
             assertFalse(
                     executorWithFilter.scaleResource(
@@ -1521,7 +1535,11 @@ public class ScalingExecutorTest {
 
             var executorWithFilter =
                     new ScalingExecutor<JobID, JobAutoScalerContext<JobID>>(
-                            eventCollector, stateStore, null, List.of(vetoFilter));
+                            eventCollector,
+                            stateStore,
+                            null,
+                            List.of(vetoFilter),
+                            Collections.emptyList());
 
             assertFalse(
                     executorWithFilter.scaleResource(

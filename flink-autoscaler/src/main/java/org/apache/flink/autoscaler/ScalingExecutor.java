@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.alignment.AlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
@@ -91,22 +92,33 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore) {
-        this(autoScalerEventHandler, autoScalerStateStore, null, Collections.emptyList());
+        this(
+                autoScalerEventHandler,
+                autoScalerStateStore,
+                null,
+                Collections.emptyList(),
+                Collections.emptyList());
     }
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck) {
-        this(autoScalerEventHandler, autoScalerStateStore, resourceCheck, Collections.emptyList());
+        this(
+                autoScalerEventHandler,
+                autoScalerStateStore,
+                resourceCheck,
+                Collections.emptyList(),
+                Collections.emptyList());
     }
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck,
-            Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors) {
-        this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
+            Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors,
+            Collection<AlignmentMode> customAlignmentModes) {
+        this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler, customAlignmentModes);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
@@ -252,6 +264,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                 context,
                                                 v,
                                                 jobTopology.get(v).getInputs().values(),
+                                                jobTopology,
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),

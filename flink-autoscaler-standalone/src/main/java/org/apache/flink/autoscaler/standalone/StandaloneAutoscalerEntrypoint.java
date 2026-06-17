@@ -27,6 +27,7 @@ import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.autoscaler.alignment.AlignmentMode;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.autoscaler.standalone.flinkcluster.FlinkClusterJobListFetcher;
@@ -97,11 +98,14 @@ public class StandaloneAutoscalerEntrypoint {
                 AutoscalerUtils.discoverCustomEvaluators();
         Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors =
                 AutoscalerUtils.discoverCustomScalingExecutors();
+        Collection<AlignmentMode> customAlignmentModes =
+                AutoscalerUtils.discoverCustomAlignmentModes();
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
                 new ScalingMetricEvaluator(customEvaluators),
-                new ScalingExecutor<>(eventHandler, stateStore, null, customExecutors),
+                new ScalingExecutor<>(
+                        eventHandler, stateStore, null, customExecutors, customAlignmentModes),
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);
