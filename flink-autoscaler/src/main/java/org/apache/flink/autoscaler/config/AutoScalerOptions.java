@@ -34,6 +34,7 @@ public class AutoScalerOptions {
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
     public static final String CUSTOM_EVALUATOR_CONF_PREFIX = "metrics.custom-evaluator.";
     public static final String CUSTOM_EVALUATOR_CLASS_SUFFIX = "class";
+    public static final String SCALING_CUSTOM_EXECUTOR_CONF_PREFIX = "scaling.custom-executor.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -496,25 +497,117 @@ public class AutoScalerOptions {
     }
 
     /**
-     * Builds a fresh, prefix-stripped {@link Configuration} that exposes the per-instance options
-     * configured for the scaling custom metric evaluator instance identified by {@code
-     * instanceName} under both the canonical ({@code
-     * job.autoscaler.metrics.custom-evaluator.<name>.}) and the legacy ({@code
-     * kubernetes.operator.job.autoscaler.metrics.custom-evaluator.<name>.}) namespaces. The legacy
-     * prefix is applied first so that, on overlap, values written under the canonical prefix take
-     * precedence, matching the semantics of {@link
-     * org.apache.flink.configuration.ConfigOption#withFallbackKeys} used elsewhere in this class.
+     * The per-instance options configured for the custom metric evaluator {@code
+     * customEvaluatorName}, prefix-stripped from the {@code
+     * job.autoscaler.metrics.custom-evaluator.<name>.} namespace. See {@link
+     * #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy merge
+     * semantics.
      */
     public static Configuration customEvaluatorConfiguration(
             Configuration configuration, String customEvaluatorName) {
-        String canonicalPrefix =
-                AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + customEvaluatorName + ".";
-        String legacyPrefix =
-                OLD_K8S_OP_CONF_PREFIX
-                        + AUTOSCALER_CONF_PREFIX
-                        + CUSTOM_EVALUATOR_CONF_PREFIX
-                        + customEvaluatorName
-                        + ".";
+        return prefixStrippedConfiguration(
+                configuration, CUSTOM_EVALUATOR_CONF_PREFIX, customEvaluatorName);
+    }
+
+    public static final ConfigOption<List<String>> SCALING_CUSTOM_EXECUTORS =
+            autoScalerConfig("scaling.custom-executors")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.custom-executors"))
+                    .withDescription(
+                            "List of named custom scaling executors instances to register with the autoscaler. "
+                                    + "For each <name> entry, the implementation class to instantiate must be set via "
+                                    + "'job.autoscaler.scaling.custom-executor.<name>.class', and additional per-instance "
+                                    + "options live under 'job.autoscaler.scaling.custom-executor.<name>.<parameter>'. "
+                                    + "Custom executors are executed in ascending order of their ScalingExecutorPlugin#priority() value, "
+                                    + "regardless of the order in which they appear in this list.");
+
+    /**
+     * Documentation-only template option describing the per-instance class FQN key. Not read at
+     * runtime. The {@link #customScalingExecutorClassKey(String)} is used to derive the actual key
+     * for a given scaling executor instance.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> SCALING_CUSTOM_EXECUTOR_CLASS_TEMPLATE =
+            autoScalerConfig(SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.class"))
+                    .withDescription(
+                            "Fully-qualified class name of the implementation to instantiate for the custom scaling executor "
+                                    + "instance <name> declared in 'job.autoscaler.scaling.custom-executors'. "
+                                    + "The class must be discovered via the Plugin / ServiceLoader mechanism and registered "
+                                    + "under META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin.");
+
+    /**
+     * Documentation-only template option describing the per-instance free-form parameter keys. Not
+     * read at runtime. The actual scaling executor parameters are surfaced to the scaling executor
+     * via {@link #customScalingExecutorConfiguration(Configuration, String)}.
+     */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> SCALING_CUSTOM_EXECUTOR_PARAMETER_TEMPLATE =
+            autoScalerConfig(SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.<parameter>")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_CUSTOM_EXECUTOR_CONF_PREFIX + "<name>.<parameter>"))
+                    .withDescription(
+                            "Free-form, plugin-specific options for the scaling custom executor instance "
+                                    + "referenced by '<name>' in 'job.autoscaler.scaling.custom-executors'. All keys with "
+                                    + "this prefix are passed to the plugin at runtime with the "
+                                    + "'job.autoscaler.scaling.custom-executor.<name>.' prefix stripped.");
+
+    public static String customScalingExecutorClassKey(String instanceName) {
+        return AUTOSCALER_CONF_PREFIX
+                + SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                + instanceName
+                + ".class";
+    }
+
+    public static String customScalingExecutorClassFallbackKey(String instanceName) {
+        return OLD_K8S_OP_CONF_PREFIX + customScalingExecutorClassKey(instanceName);
+    }
+
+    /**
+     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
+     * custom scaling executor instance, including the legacy {@code kubernetes.operator.} prefix as
+     * a fallback key (canonical key takes precedence on overlap).
+     */
+    public static ConfigOption<String> customScalingExecutorClassOption(String instanceName) {
+        return ConfigOptions.key(customScalingExecutorClassKey(instanceName))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(customScalingExecutorClassFallbackKey(instanceName));
+    }
+
+    /**
+     * The per-instance options configured for the custom scaling executor {@code instanceName},
+     * prefix-stripped from the {@code job.autoscaler.scaling.custom-executor.<name>.} namespace.
+     * See {@link #prefixStrippedConfiguration(Configuration, String, String)} for the
+     * canonical/legacy merge semantics.
+     */
+    public static Configuration customScalingExecutorConfiguration(
+            Configuration configuration, String instanceName) {
+        return prefixStrippedConfiguration(
+                configuration, SCALING_CUSTOM_EXECUTOR_CONF_PREFIX, instanceName);
+    }
+
+    /**
+     * Builds a fresh {@link Configuration} exposing the per-instance options configured under
+     * {@code job.autoscaler.<confPrefix><name>.} (canonical) and {@code
+     * kubernetes.operator.job.autoscaler.<confPrefix><name>.} (legacy), with that prefix stripped.
+     * The legacy prefix is applied first so that, on overlap, values written under the canonical
+     * prefix take precedence, matching the semantics of {@link
+     * org.apache.flink.configuration.ConfigOption#withFallbackKeys} used elsewhere in this class.
+     */
+    private static Configuration prefixStrippedConfiguration(
+            Configuration configuration, String confPrefix, String name) {
+        String canonicalPrefix = AUTOSCALER_CONF_PREFIX + confPrefix + name + ".";
+        String legacyPrefix = OLD_K8S_OP_CONF_PREFIX + canonicalPrefix;
         Configuration merged = new Configuration();
         configuration
                 .toMap()

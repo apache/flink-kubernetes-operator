@@ -17,6 +17,8 @@
 
 package org.apache.flink.autoscaler.standalone.utils;
 
+import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 
 import org.slf4j.Logger;
@@ -51,5 +53,28 @@ public class AutoscalerUtils {
                             customEvaluators.add(customEvaluator);
                         });
         return customEvaluators;
+    }
+
+    /**
+     * Discovers custom scaling executors for the standalone autoscaler via Java's {@link
+     * ServiceLoader} mechanism. Implementations must be registered under {@code
+     * META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin} on the classpath.
+     *
+     * @return The list of discovered custom scaling executors.
+     */
+    @SuppressWarnings("unchecked")
+    public static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingExecutorPlugin<KEY, Context>> discoverCustomScalingExecutors() {
+        List<ScalingExecutorPlugin<KEY, Context>> customScalingExecutors = new ArrayList<>();
+        ServiceLoader.load(ScalingExecutorPlugin.class)
+                .forEach(
+                        plugin -> {
+                            LOG.info(
+                                    "Discovered custom scaling executor via ServiceLoader: {}.",
+                                    plugin.getClass().getName());
+                            customScalingExecutors.add(
+                                    (ScalingExecutorPlugin<KEY, Context>) plugin);
+                        });
+        return customScalingExecutors;
     }
 }

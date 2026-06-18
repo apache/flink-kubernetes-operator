@@ -1,11 +1,10 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -18,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
@@ -57,5 +58,33 @@ public class AutoscalerUtils {
                             customEvaluators.add(customEvaluator);
                         });
         return customEvaluators;
+    }
+
+    /**
+     * Discovers custom scaling executors for autoscaler.
+     *
+     * @param conf Base FlinkConfigManager configuration
+     * @return The list of discovered custom scaling executors.
+     */
+    @SuppressWarnings("unchecked")
+    public static <KEY, Context extends JobAutoScalerContext<KEY>>
+            Collection<ScalingExecutorPlugin<KEY, Context>> discoverCustomScalingExecutors(
+                    Configuration conf) {
+        List<ScalingExecutorPlugin<KEY, Context>> customScalingExecutors = new ArrayList<>();
+        PluginUtils.createPluginManagerFromRootFolder(conf)
+                .load(ScalingExecutorPlugin.class)
+                .forEachRemaining(
+                        customScalingExecutor -> {
+                            LOG.info(
+                                    "Discovered custom scaling executor for autoscaler from plugin directory[{}]: {}.",
+                                    System.getenv()
+                                            .getOrDefault(
+                                                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                                                    ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
+                                    customScalingExecutor.getClass().getName());
+                            customScalingExecutors.add(
+                                    (ScalingExecutorPlugin<KEY, Context>) customScalingExecutor);
+                        });
+        return customScalingExecutors;
     }
 }

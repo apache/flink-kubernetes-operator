@@ -17,6 +17,9 @@
 
 package org.apache.flink.autoscaler.standalone.utils;
 
+import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingExecutorPlugin;
+import org.apache.flink.autoscaler.TestScalingExecutor;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 
@@ -39,5 +42,17 @@ class AutoscalerUtilsTest {
                         "Expected to discover the TestCustomEvaluator registered under META-INF/services")
                 .hasSize(1)
                 .hasOnlyElementsOfType(TestCustomEvaluator.class);
+    }
+
+    @Test
+    void testDiscoverCustomScalingExecutors() {
+        Collection<ScalingExecutorPlugin<Object, JobAutoScalerContext<Object>>> scalingExecutors =
+                AutoscalerUtils.discoverCustomScalingExecutors();
+
+        assertThat(scalingExecutors)
+                .as(
+                        "Expected to discover the TestScalingExecutor registered under META-INF/services")
+                .hasSize(1)
+                .hasOnlyElementsOfType(TestScalingExecutor.class);
     }
 }
