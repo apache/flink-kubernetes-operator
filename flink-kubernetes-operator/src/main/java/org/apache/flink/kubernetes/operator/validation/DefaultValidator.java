@@ -27,6 +27,7 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -54,6 +55,7 @@ import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +65,9 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -120,7 +124,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager(), effectiveConfig),
-                validateSpecChange(deployment, effectiveConfig),
+                validateSpecChange(deployment),
                 validateServiceAccount(spec.getServiceAccount()),
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
@@ -299,6 +303,21 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
+    private static boolean isMemoryDefined(Resource resource) {
+        return resource != null && !StringUtils.isNullOrWhitespaceOnly(resource.getMemory());
+    }
+
+    private static boolean isMemoryDefined(ResourceRequirements resources) {
+        if (resources == null) {
+            return false;
+        }
+        // Kubernetes defaults requests to limits, so memory defined via either is sufficient.
+        return (resources.getRequests() != null
+                        && resources.getRequests().get(CrdConstants.MEMORY) != null)
+                || (resources.getLimits() != null
+                        && resources.getLimits().get(CrdConstants.MEMORY) != null);
+    }
+
     @VisibleForTesting
     static Optional<String> validateJarURI(
             String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
@@ -368,10 +387,11 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
         Configuration conf = Configuration.fromMap(confMap);
-        var jmMemoryDefined =
+        // Either the resource memory or the resource requirements memory must be defined.
+        boolean jmMemoryDefined =
                 jmSpec != null
-                        && jmSpec.getResource() != null
-                        && !StringUtils.isNullOrWhitespaceOnly(jmSpec.getResource().getMemory());
+                        && (isMemoryDefined(jmSpec.getResource())
+                                || isMemoryDefined(jmSpec.getResources()));
         Optional<String> jmMemoryValidation =
                 jmMemoryDefined ? Optional.empty() : validateJmMemoryConfig(conf);
 
@@ -382,6 +402,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 jmMemoryValidation,
                 validateResources("JobManager", jmSpec.getResource()),
+                validateResourceRequirements("JobManager", jmSpec.getResources()),
                 validateJmReplicas(jmSpec.getReplicas(), confMap));
     }
 
@@ -414,8 +435,8 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         var tmMemoryDefined =
                 tmSpec != null
-                        && tmSpec.getResource() != null
-                        && !StringUtils.isNullOrWhitespaceOnly(tmSpec.getResource().getMemory());
+                        && (isMemoryDefined(tmSpec.getResource())
+                                || isMemoryDefined(tmSpec.getResources()));
         Optional<String> tmMemoryConfigValidation =
                 tmMemoryDefined ? Optional.empty() : validateTmMemoryConfig(conf);
 
@@ -426,6 +447,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 tmMemoryConfigValidation,
                 validateResources("TaskManager", tmSpec.getResource()),
+                validateResourceRequirements("TaskManager", tmSpec.getResources()),
                 validateTmReplicas(tmSpec));
     }
 
@@ -482,8 +504,55 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateSpecChange(
-            FlinkDeployment deployment, Map<String, String> effectiveConfig) {
+    private Optional<String> validateResourceRequirements(
+            String component, ResourceRequirements resourceRequirements) {
+        if (resourceRequirements == null) {
+            return Optional.empty();
+        }
+
+        List<String> errors = new ArrayList<>();
+        validateQuantities(component, "requests", resourceRequirements.getRequests(), errors);
+        validateQuantities(component, "limits", resourceRequirements.getLimits(), errors);
+
+        if (errors.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(String.join("; ", errors));
+    }
+
+    private void validateQuantities(
+            String component,
+            String section,
+            Map<String, Quantity> quantities,
+            List<String> errors) {
+        if (quantities == null) {
+            return;
+        }
+        for (Map.Entry<String, Quantity> entry : quantities.entrySet()) {
+            String key = entry.getKey();
+            Quantity quantity = entry.getValue();
+            if (quantity == null) {
+                continue;
+            }
+            try {
+                if (CrdConstants.MEMORY.equals(key)) {
+                    // Validate the full quantity including its unit (e.g. "2Gi"); getAmount()
+                    // would drop the unit.
+                    MemorySize.parse(
+                            FlinkConfigBuilder.parseResourceMemoryString(quantity.toString()));
+                } else {
+                    Quantity.getAmountInBytes(quantity);
+                }
+            } catch (IllegalArgumentException iae) {
+                errors.add(
+                        String.format(
+                                "%s resource requirements %s %s parse error: %s",
+                                component, section, key, iae.getMessage()));
+            }
+        }
+    }
+
+    private Optional<String> validateSpecChange(FlinkDeployment deployment) {
         FlinkDeploymentSpec newSpec = deployment.getSpec();
 
         if (deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {

@@ -189,6 +189,7 @@ jobs:
           - test_autoscaler.sh
           - test_dynamic_config.sh
           - test_dynamic_flink_conf.sh
+          - test_resource_requirements.sh
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
