@@ -220,12 +220,37 @@ under the License.
     </profiles>
     <build>
         <plugins>
+            <!--
+              Declared before maven-resources-plugin so that crd-generator:generate runs before the
+              copy-resources execution: both are bound to process-classes and Maven orders same-phase
+              executions by plugin declaration order. This ensures the generated CRDs exist in the
+              target dir before they are copied into the helm chart.
+            -->
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>crd-generator-maven-plugin</artifactId>
+                <version>${fabric8.version}</version>
+                <executions>
+                    <execution>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
                 <version>${maven-resources-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>copy-resources</id>
+                        <!--
+                          Runs in process-classes, after crd-generator:generate (same phase, but the
+                          crd-generator-maven-plugin is declared earlier so it executes first). This
+                          copies the freshly generated CRDs into the helm chart before the test phase
+                          (some tests read the chart CRDs) and the package-phase compatibility checks.
+                        -->
                         <phase>process-classes</phase>
                         <goals>
                             <goal>copy-resources</goal>
@@ -342,18 +367,6 @@ under the License.
                     <execution>
                         <goals>
                             <goal>test-jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>io.fabric8</groupId>
-                <artifactId>crd-generator-maven-plugin</artifactId>
-                <version>${fabric8.version}</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>generate</goal>
                         </goals>
                     </execution>
                 </executions>
