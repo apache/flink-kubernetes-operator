@@ -119,7 +119,9 @@ jobs:
         run: |
           mvn -B clean install javadoc:javadoc -Pgenerate-docs
           if [[ $(git diff HEAD | wc -l) -gt 0 ]]; then
-            echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
+            echo "Generated files (CRDs under helm/flink-kubernetes-operator/crds and docs) are out of date."
+            echo "Please regenerate them via 'mvn clean install -DskipTests -Pgenerate-docs' and commit the result."
+            git diff HEAD
             exit 1
           fi
       - name: Tests in flink-kubernetes-operator
