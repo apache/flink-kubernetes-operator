@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
-import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -39,7 +38,7 @@ import java.util.Map;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
+public abstract class AbstractFlinkSpec {
 
     /** Job specification for application deployments/session job. Null for session clusters. */
     private JobSpec job;
