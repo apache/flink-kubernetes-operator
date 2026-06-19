@@ -1022,7 +1022,6 @@ public class ScalingExecutorTest {
                         jobTopology,
                         new DelayedScaleDown()));
         if (quotaReached) {
-            assertEquals("ScalingReport", eventCollector.events.poll().getReason());
             assertEquals("ResourceQuotaReached", eventCollector.events.poll().getReason());
             assertTrue(eventCollector.events.isEmpty());
         }
@@ -1389,7 +1388,7 @@ public class ScalingExecutorTest {
         }
 
         @Test
-        void testApproveEventEmittedWhenPluginApproves() throws Exception {
+        void testApprovingPluginAllowsScalingWithoutVetoEvent() throws Exception {
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
                     (ctx, summaries) -> summaries;
 
@@ -1405,14 +1404,6 @@ public class ScalingExecutorTest {
                             jobTopology,
                             new DelayedScaleDown()));
 
-            var approveEvent =
-                    findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON).orElseThrow();
-            assertThat(approveEvent.getMessage()).contains(approveFilter.getClass().getName());
-            assertThat(approveEvent.getMessageKey())
-                    .isEqualTo(
-                            ScalingExecutor.SCALING_APPROVED_REASON
-                                    + ":"
-                                    + approveFilter.getClass().getName());
             assertThat(findEventByReason(ScalingExecutor.SCALING_VETOED_REASON)).isEmpty();
         }
 
@@ -1440,11 +1431,10 @@ public class ScalingExecutorTest {
                             ScalingExecutor.SCALING_VETOED_REASON
                                     + ":"
                                     + vetoFilter.getClass().getName());
-            assertThat(findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON)).isEmpty();
         }
 
         @Test
-        void testApproveThenVetoEmitsBothEvents() throws Exception {
+        void testVetoAfterApproveEmitsVetoEvent() throws Exception {
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
                     (ctx, summaries) -> summaries;
             ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
@@ -1461,10 +1451,6 @@ public class ScalingExecutorTest {
                             Instant.now(),
                             jobTopology,
                             new DelayedScaleDown()));
-
-            var approveEvent =
-                    findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON).orElseThrow();
-            assertThat(approveEvent.getMessage()).contains(approveFilter.getClass().getName());
 
             var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
             assertThat(vetoEvent.getMessage()).contains(vetoFilter.getClass().getName());
@@ -1486,22 +1472,21 @@ public class ScalingExecutorTest {
                             jobTopology,
                             new DelayedScaleDown()));
 
-            assertThat(findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON)).isEmpty();
             assertThat(findEventByReason(ScalingExecutor.SCALING_VETOED_REASON)).isEmpty();
         }
 
         @Test
         void testLegacyFallbackClassKeyResolvesPlugin() throws Exception {
-            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
-                    (ctx, summaries) -> summaries;
-            var name = approveFilter.getClass().getName();
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+            var name = vetoFilter.getClass().getName();
             conf.set(AutoScalerOptions.SCALING_CUSTOM_EXECUTORS, List.of(name));
             conf.setString(AutoScalerOptions.customScalingExecutorClassFallbackKey(name), name);
 
             var executorWithFilter =
-                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(approveFilter));
+                    new ScalingExecutor<>(eventCollector, stateStore, null, List.of(vetoFilter));
 
-            assertTrue(
+            assertFalse(
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1511,11 +1496,10 @@ public class ScalingExecutorTest {
                             jobTopology,
                             new DelayedScaleDown()));
 
-            // Plugin actually ran -> approve event was emitted with the configured instance name.
-            var approveEvent =
-                    findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON).orElseThrow();
-            assertThat(approveEvent.getMessageKey())
-                    .isEqualTo(ScalingExecutor.SCALING_APPROVED_REASON + ":" + name);
+            // Plugin actually ran -> veto event was emitted with the configured instance name.
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessageKey())
+                    .isEqualTo(ScalingExecutor.SCALING_VETOED_REASON + ":" + name);
         }
 
         @Test
@@ -1523,9 +1507,9 @@ public class ScalingExecutorTest {
             // The 'scaling.custom-executors' LIST itself is registered ONLY via the legacy
             // 'kubernetes.operator.'-prefixed key — the canonical key is intentionally not set.
             // The resolver must still pick up the configured instance via the fallback.
-            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> approveFilter =
-                    (ctx, summaries) -> summaries;
-            var name = approveFilter.getClass().getName();
+            ScalingExecutorPlugin<JobID, JobAutoScalerContext<JobID>> vetoFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+            var name = vetoFilter.getClass().getName();
             // Set ONLY the legacy form of 'scaling.custom-executors'.
             conf.setString(
                     AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
@@ -1537,9 +1521,9 @@ public class ScalingExecutorTest {
 
             var executorWithFilter =
                     new ScalingExecutor<JobID, JobAutoScalerContext<JobID>>(
-                            eventCollector, stateStore, null, List.of(approveFilter));
+                            eventCollector, stateStore, null, List.of(vetoFilter));
 
-            assertTrue(
+            assertFalse(
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1549,11 +1533,10 @@ public class ScalingExecutorTest {
                             jobTopology,
                             new DelayedScaleDown()));
 
-            // Plugin actually ran -> approve event was emitted with the configured instance name.
-            var approveEvent =
-                    findEventByReason(ScalingExecutor.SCALING_APPROVED_REASON).orElseThrow();
-            assertThat(approveEvent.getMessageKey())
-                    .isEqualTo(ScalingExecutor.SCALING_APPROVED_REASON + ":" + name);
+            // Plugin actually ran -> veto event was emitted with the configured instance name.
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessageKey())
+                    .isEqualTo(ScalingExecutor.SCALING_VETOED_REASON + ":" + name);
         }
 
         @Test

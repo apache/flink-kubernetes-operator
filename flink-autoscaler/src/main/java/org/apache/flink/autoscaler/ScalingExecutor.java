@@ -64,6 +64,7 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_E
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.copyScalingSummaries;
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -78,7 +79,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             "Resource usage is above the allowed limit for scaling operations. Please adjust the resource quota manually.";
 
     public static final String SCALING_VETOED_REASON = "ScalingVetoed";
-    public static final String SCALING_APPROVED_REASON = "ScalingApproved";
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
@@ -86,7 +86,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
     private final ResourceCheck resourceCheck;
-    private final Collection<ScalingExecutorPlugin<KEY, Context>> discoveredScalingCustomExecutors;
+    private final Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
@@ -105,15 +105,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck,
-            Collection<ScalingExecutorPlugin<KEY, Context>> discoveredScalingCustomExecutors) {
+            Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
         this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
-        this.discoveredScalingCustomExecutors =
-                discoveredScalingCustomExecutors == null
+        this.customExecutors =
+                customExecutors == null
                         ? Collections.emptyList()
-                        : Collections.unmodifiableCollection(discoveredScalingCustomExecutors);
+                        : Collections.unmodifiableCollection(customExecutors);
     }
 
     public boolean scaleResource(
@@ -167,7 +167,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         scalingSummaries =
-                applyScalingExecutorPlugins(
+                applyCustomExecutors(
                         context,
                         memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
                         evaluatedMetrics,
@@ -176,6 +176,12 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         if (scalingSummaries == null || scalingSummaries.isEmpty()) {
             return false;
         }
+
+        autoScalerEventHandler.handleScalingEvent(
+                context,
+                scalingSummaries,
+                SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED,
+                conf.get(SCALING_EVENT_INTERVAL));
 
         addToScalingHistoryAndStore(
                 autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
@@ -469,6 +475,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Instant now) {
         var scaleEnabled = conf.get(SCALING_ENABLED);
         var isExcluded = CalendarUtils.inExcludedPeriods(conf, now);
+        if (scaleEnabled && !isExcluded) {
+            // Not blocked. The scaling report is emitted later, once the decision is final
+            // (after memory tuning, the max-resource check, and the custom scaling executors).
+            return false;
+        }
         String message;
         if (!scaleEnabled) {
             message =
@@ -477,20 +488,17 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                     SCALING_EXECUTION_DISABLED_REASON,
                                     SCALING_ENABLED.key(),
                                     false);
-        } else if (isExcluded) {
+        } else {
             message =
                     SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
                             + String.format(
                                     SCALING_EXECUTION_DISABLED_REASON,
                                     EXCLUDED_PERIODS.key(),
                                     conf.get(EXCLUDED_PERIODS));
-        } else {
-            message = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
         }
         autoScalerEventHandler.handleScalingEvent(
                 context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
-
-        return !scaleEnabled || isExcluded;
+        return true;
     }
 
     /**
@@ -499,7 +507,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
      * <p>The chain to apply is resolved per reconciliation against the per-job Configuration,
      * mirroring custom metric evaluator plugin flow.
      */
-    private Map<JobVertexID, ScalingSummary> applyScalingExecutorPlugins(
+    private Map<JobVertexID, ScalingSummary> applyCustomExecutors(
             Context context,
             Configuration conf,
             EvaluatedMetrics evaluatedMetrics,
@@ -519,6 +527,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             var pluginContext =
                     new ScalingExecutorPlugin.Context<>(
                             context, pluginConfiguration, evaluatedMetrics, jobTopology);
+            var previousSummaries = copyScalingSummaries(scalingSummaries);
             scalingSummaries = plugin.apply(pluginContext, scalingSummaries);
             if (scalingSummaries == null || scalingSummaries.isEmpty()) {
                 LOG.info(
@@ -536,20 +545,14 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         conf.get(SCALING_EVENT_INTERVAL));
                 return null;
             }
-            LOG.info(
-                    "Scaling decision approved by scaling custom executor instance '{}' (class={}) with summaries: {}",
-                    instanceName,
-                    pluginClassName,
-                    scalingSummaries.values());
-            autoScalerEventHandler.handleEvent(
-                    context,
-                    AutoScalerEventHandler.Type.Normal,
-                    SCALING_APPROVED_REASON,
-                    String.format(
-                            "Scaling decision approved by scaling custom executor instance '%s' (class=%s).",
-                            instanceName, pluginClassName),
-                    SCALING_APPROVED_REASON + ":" + instanceName,
-                    conf.get(SCALING_EVENT_INTERVAL));
+            if (!scalingSummaries.equals(previousSummaries)) {
+                LOG.info(
+                        "Scaling summaries modified by scaling custom executor instance '{}' (class={}): {} -> {}",
+                        instanceName,
+                        pluginClassName,
+                        previousSummaries.values(),
+                        scalingSummaries.values());
+            }
         }
         return scalingSummaries;
     }
@@ -592,7 +595,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 continue;
             }
             ScalingExecutorPlugin<KEY, Context> match = null;
-            for (ScalingExecutorPlugin<KEY, Context> plugin : discoveredScalingCustomExecutors) {
+            for (ScalingExecutorPlugin<KEY, Context> plugin : customExecutors) {
                 if (plugin.getClass().getName().equals(configuredClassName)) {
                     match = plugin;
                     break;
@@ -604,7 +607,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         configuredClassName,
                         instance,
                         classKey,
-                        discoveredScalingCustomExecutors.stream()
+                        customExecutors.stream()
                                 .map(p -> p.getClass().getName())
                                 .collect(Collectors.toList()));
                 continue;
