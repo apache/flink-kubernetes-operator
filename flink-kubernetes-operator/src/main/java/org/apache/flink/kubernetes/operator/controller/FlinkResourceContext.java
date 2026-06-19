@@ -72,9 +72,11 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
         if (deployConf != null) {
             conf.addAll(deployConf);
         }
-        conf.set(
-                AutoScalerOptions.FLINK_CLIENT_TIMEOUT,
-                getOperatorConfig().getFlinkClientTimeout());
+        if (!conf.contains(AutoScalerOptions.FLINK_CLIENT_TIMEOUT)) {
+            conf.set(
+                    AutoScalerOptions.FLINK_CLIENT_TIMEOUT,
+                    getOperatorConfig().getFlinkClientTimeout());
+        }
 
         CommonStatus<?> status = getResource().getStatus();
         String jobId = status.getJobStatus().getJobId();

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -148,6 +149,45 @@ public class FlinkResourceContextTest {
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertEquals(2, counter.get());
+    }
+
+    @Test
+    void testAutoscalerFlinkClientTimeoutDefaultsToOperatorTimeout() {
+        var conf = new Configuration();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_TIMEOUT,
+                Duration.ofSeconds(60));
+        configManager = new FlinkConfigManager(conf);
+
+        // No explicit autoscaler client timeout -> falls back to the operator timeout.
+        var ctx = getContext(TestUtils.buildApplicationCluster());
+        assertEquals(
+                Duration.ofSeconds(60),
+                ctx.getJobAutoScalerContext()
+                        .getConfiguration()
+                        .get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT));
+    }
+
+    @Test
+    void testExplicitAutoscalerFlinkClientTimeoutIsRespected() {
+        var conf = new Configuration();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_TIMEOUT,
+                Duration.ofSeconds(60));
+        configManager = new FlinkConfigManager(conf);
+
+        var dep = TestUtils.buildApplicationCluster();
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(AutoScalerOptions.FLINK_CLIENT_TIMEOUT.key(), "30 s");
+
+        // An explicit autoscaler timeout must not be silently overridden by the operator timeout.
+        var ctx = getContext(dep);
+        assertEquals(
+                Duration.ofSeconds(30),
+                ctx.getJobAutoScalerContext()
+                        .getConfiguration()
+                        .get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT));
     }
 
     FlinkResourceContext getContext(AbstractFlinkResource<?, ?> cr) {
