@@ -27,13 +27,15 @@ spec:
     taskmanager.numberOfTaskSlots: 1
   serviceAccount: flink
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   job:
     jarURI: local:///opt/flink/opt/flink-python-2.2.0.jar # Note, this jarURI is actually a placeholder
     entryClass: "org.apache.flink.client.python.PythonDriver"

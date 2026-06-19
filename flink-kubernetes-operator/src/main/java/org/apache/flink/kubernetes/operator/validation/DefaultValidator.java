@@ -412,7 +412,8 @@ public class DefaultValidator implements FlinkResourceValidator {
                     conf, JobManagerOptions.JVM_HEAP_MEMORY);
         } catch (Exception e) {
             return Optional.of(
-                    "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
+                    "JobManager resource memory must be defined using `spec.jobManager.resource.memory`"
+                            + " or `spec.jobManager.resources.requests.memory`");
         }
 
         return Optional.empty();
@@ -456,7 +457,8 @@ public class DefaultValidator implements FlinkResourceValidator {
             TaskExecutorProcessUtils.processSpecFromConfig(conf);
         } catch (Exception e) {
             return Optional.of(
-                    "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
+                    "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`"
+                            + " or `spec.taskManager.resources.requests.memory`");
         }
         return Optional.empty();
     }
@@ -537,11 +539,16 @@ public class DefaultValidator implements FlinkResourceValidator {
             try {
                 if (CrdConstants.MEMORY.equals(key)) {
                     // Validate the full quantity including its unit (e.g. "2Gi"); getAmount()
-                    // would drop the unit.
+                    // would drop the unit. A negative memory value also fails to parse here.
                     MemorySize.parse(
                             FlinkConfigBuilder.parseResourceMemoryString(quantity.toString()));
-                } else {
-                    Quantity.getAmountInBytes(quantity);
+                } else if (Quantity.getAmountInBytes(quantity).signum() < 0) {
+                    // cpu and ephemeral-storage parse fine as negative numbers, so reject them
+                    // explicitly (Kubernetes would otherwise reject the pod downstream).
+                    errors.add(
+                            String.format(
+                                    "%s resource requirements %s %s must not be negative: %s",
+                                    component, section, key, quantity.toString()));
                 }
             } catch (IllegalArgumentException iae) {
                 errors.add(

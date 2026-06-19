@@ -90,6 +90,9 @@ public class FlinkConfigBuilderTest {
     @BeforeEach
     public void prepareFlinkDeployment() {
         flinkDeployment = TestUtils.buildApplicationCluster();
+        // This suite exercises the deprecated Resource path explicitly; the new resources path is
+        // covered by the dedicated testResourceRequirements* tests, which set up their own spec.
+        TestUtils.useDeprecatedResource(flinkDeployment);
         flinkDeployment.getSpec().setIngress(IngressSpec.builder().template("test.com").build());
         flinkDeployment.getSpec().getJobManager().setReplicas(2);
         flinkDeployment.getSpec().getJob().setParallelism(2);
@@ -818,6 +821,87 @@ public class FlinkConfigBuilderTest {
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
         assertEquals(
                 Double.valueOf(1.5), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Test
+    public void testEmptyResourceRequirementsFallsBackToDeprecatedResource() {
+        // An empty resources block (e.g. "resources: {}") deserializes to a non-null
+        // ResourceRequirements with empty maps; it must not suppress the deprecated resource field.
+        flinkDeployment
+                .getSpec()
+                .getJobManager()
+                .setResources(new ResourceRequirementsBuilder().build());
+        flinkDeployment.getSpec().getJobManager().setResource(new Resource(2.0, "4096m", "2G"));
+        flinkDeployment
+                .getSpec()
+                .getTaskManager()
+                .setResources(new ResourceRequirementsBuilder().build());
+        flinkDeployment.getSpec().getTaskManager().setResource(new Resource(1.5, "2048m", "2G"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("4096 mb"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(2.0), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+        assertEquals(
+                MemorySize.parse("2048 mb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(1.5), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Test
+    public void testResourceRequirementsRequestsOnlyLeavesLimitFactorsUnset() {
+        // With only requests set (no limits), the limit factors must remain unset (they are only
+        // meaningful when both requests and limits are explicitly provided).
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        requests.put("cpu", new Quantity("1"));
+        flinkDeployment
+                .getSpec()
+                .getTaskManager()
+                .setResources(new ResourceRequirementsBuilder().withRequests(requests).build());
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+        assertEquals(
+                Double.valueOf(1.0), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+        assertFalse(configuration.contains(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR));
+        assertFalse(
+                configuration.contains(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR));
+    }
+
+    @Test
+    public void testResourceRequirementsZeroCpuRequestLeavesCpuLimitFactorUnset() {
+        // A zero cpu request must not produce an Infinity limit factor (divide-by-zero guard in
+        // setLimitFactor).
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("cpu", new Quantity("0"));
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("cpu", new Quantity("2"));
+        flinkDeployment
+                .getSpec()
+                .getTaskManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(requests)
+                                .withLimits(limits)
+                                .build());
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertFalse(configuration.contains(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR));
     }
 
     @Test

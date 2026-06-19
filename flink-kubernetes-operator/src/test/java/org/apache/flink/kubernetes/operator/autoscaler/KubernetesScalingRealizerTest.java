@@ -22,10 +22,15 @@ import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -133,6 +138,8 @@ public class KubernetesScalingRealizerTest {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
         FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+        // This test exercises the deprecated resource.memory path.
+        TestUtils.useDeprecatedResource(resource.getSpec());
 
         // Pre-populate the spec so the override is already present and the removal target
         // is already absent.
@@ -188,6 +195,8 @@ public class KubernetesScalingRealizerTest {
     public void testApplyMemoryOverrides() {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
+        // This test exercises the deprecated resource.memory path.
+        TestUtils.useDeprecatedResource((FlinkDeployment) ctx.getResource());
 
         ConfigChanges overrides = new ConfigChanges();
         MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
@@ -202,6 +211,100 @@ public class KubernetesScalingRealizerTest {
                                 .getResource()
                                 .getMemory())
                 .isEqualTo(String.valueOf(memoryOverride.getBytes()));
+    }
+
+    @Test
+    public void testApplyMemoryOverridesWithResourceRequirements() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+        // Configure memory exclusively via the new resources field with the deprecated resource
+        // field left null. This is the migration the realizer must handle without NPEing.
+        resource.getSpec().getTaskManager().setResource(null);
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        resource.getSpec()
+                .getTaskManager()
+                .setResources(new ResourceRequirementsBuilder().withRequests(requests).build());
+
+        ConfigChanges overrides = new ConfigChanges();
+        MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
+        overrides.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
+        new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
+
+        // Tuned memory must be written back to resources.requests.memory, which is what
+        // FlinkConfigBuilder reads to derive the total process memory on the next deploy.
+        assertThat(
+                        resource.getSpec()
+                                .getTaskManager()
+                                .getResources()
+                                .getRequests()
+                                .get("memory")
+                                .toString())
+                .isEqualTo(String.valueOf(memoryOverride.getBytes()));
+    }
+
+    @Test
+    public void testApplyMemoryOverridesPreservesMemoryLimitFactor() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+        // resources with both requests and limits (memory limit factor 2.0), no deprecated field.
+        resource.getSpec().getTaskManager().setResource(null);
+        Map<String, Quantity> requests = new HashMap<>();
+        requests.put("memory", new Quantity("2Gi"));
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("memory", new Quantity("4Gi"));
+        resource.getSpec()
+                .getTaskManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(requests)
+                                .withLimits(limits)
+                                .build());
+
+        ConfigChanges overrides = new ConfigChanges();
+        MemorySize memoryOverride = MemorySize.ofMebiBytes(4096); // 4Gi, i.e. 2x the request
+        overrides.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
+        new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
+
+        ResourceRequirements tuned = resource.getSpec().getTaskManager().getResources();
+        long requestBytes = Long.parseLong(tuned.getRequests().get("memory").toString());
+        long limitBytes = Long.parseLong(tuned.getLimits().get("memory").toString());
+        // Request tuned to the override; limit scaled by the same 2x ratio so the limit factor
+        // (2.0) is preserved.
+        assertThat(requestBytes).isEqualTo(memoryOverride.getBytes());
+        assertThat((double) limitBytes / requestBytes).isEqualTo(2.0);
+    }
+
+    @Test
+    public void testApplyMemoryOverridesWithLimitsOnlyResourceRequirements() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+        // Memory configured only via resources.limits (Kubernetes defaults requests to limits),
+        // with the deprecated resource field left null.
+        resource.getSpec().getTaskManager().setResource(null);
+        Map<String, Quantity> limits = new HashMap<>();
+        limits.put("memory", new Quantity("2Gi"));
+        resource.getSpec()
+                .getTaskManager()
+                .setResources(new ResourceRequirementsBuilder().withLimits(limits).build());
+
+        ConfigChanges overrides = new ConfigChanges();
+        MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
+        overrides.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
+        new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
+
+        ResourceRequirements tuned = resource.getSpec().getTaskManager().getResources();
+        // The tuned value is written to the limit (the field that drove the total memory) and no
+        // spurious requests entry is introduced.
+        assertThat(tuned.getLimits().get("memory").toString())
+                .isEqualTo(String.valueOf(memoryOverride.getBytes()));
+        assertThat(tuned.getRequests()).isNullOrEmpty();
     }
 
     private void assertOverridesDoNotChange(

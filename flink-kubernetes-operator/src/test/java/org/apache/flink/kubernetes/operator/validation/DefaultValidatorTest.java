@@ -284,43 +284,47 @@ public class DefaultValidatorTest {
                 "JobManager replicas should not be configured less than one.");
 
         // Test resource validation
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
 
         // Test resource validation with k8s specification
-        testSuccess(dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory("invalid"),
                 "TaskManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory("invalid"),
                 "JobManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory(null),
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory(null),
                 "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
                 },
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
 
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getJobManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec()
@@ -603,11 +607,11 @@ public class DefaultValidatorTest {
                                     "kubernetes");
                 });
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc"),
                 "JobManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc"),
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
     }
@@ -875,6 +879,67 @@ public class DefaultValidatorTest {
         };
     }
 
+    @Test
+    public void testNegativeCpuResourceRequirementIsRejected() {
+        // A negative cpu request parses via Quantity.getAmountInBytes, so DefaultValidator must
+        // reject it explicitly (Kubernetes would otherwise reject the pod downstream).
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("-1")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests cpu must not be negative");
+    }
+
+    @Test
+    public void testNegativeEphemeralStorageResourceRequirementIsRejected() {
+        // Same as negative cpu: getAmountInBytes accepts a negative ephemeral-storage value, so it
+        // must be rejected explicitly.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "ephemeral-storage",
+                                                            new Quantity("-5Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests ephemeral-storage must not be negative");
+    }
+
+    @Test
+    public void testNegativeMemoryResourceRequirementIsRejected() {
+        // Negative memory IS rejected today, but only incidentally: "-2Gi" fails to parse as a
+        // MemorySize ("text does not start with a number") rather than via an explicit sign check.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("-2Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests memory parse error");
+    }
+
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
         testSuccess(deploymentModifier, validator);
     }
@@ -895,6 +960,29 @@ public class DefaultValidatorTest {
         } else {
             fail("Did not get expected error: " + expectedErr);
         }
+    }
+
+    /**
+     * Like {@link #testSuccess(Consumer)} but first switches the deployment to the deprecated
+     * {@code resource} field, for tests that specifically exercise that path.
+     */
+    private void testSuccessDeprecatedResource(Consumer<FlinkDeployment> deploymentModifier) {
+        testSuccess(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                });
+    }
+
+    /** See {@link #testSuccessDeprecatedResource(Consumer)}; error-expecting variant. */
+    private void testErrorDeprecatedResource(
+            Consumer<FlinkDeployment> deploymentModifier, String expectedErr) {
+        testError(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                },
+                expectedErr);
     }
 
     @Test

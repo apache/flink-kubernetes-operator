@@ -24,13 +24,15 @@ spec:
   image: flink:2.2
   flinkVersion: v2_2
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   serviceAccount: flink
 ---
 apiVersion: flink.apache.org/v1beta1

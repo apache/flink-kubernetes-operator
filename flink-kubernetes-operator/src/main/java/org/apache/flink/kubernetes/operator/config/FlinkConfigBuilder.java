@@ -291,7 +291,7 @@ public class FlinkConfigBuilder {
                             commonPodTemplate, spec.getJobManager().getPodTemplate(), mergeByName);
 
             // Use the new resources field when set; otherwise the deprecated resource field.
-            if (spec.getJobManager().getResources() != null) {
+            if (hasResourceRequirements(spec.getJobManager().getResources())) {
                 jmPodTemplate =
                         applyResourceRequirementsToPodTemplate(
                                 jmPodTemplate, spec.getJobManager().getResources());
@@ -325,7 +325,7 @@ public class FlinkConfigBuilder {
                             commonPodTemplate, spec.getTaskManager().getPodTemplate(), mergeByName);
 
             // Use the new resources field when set; otherwise the deprecated resource field.
-            if (spec.getTaskManager().getResources() != null) {
+            if (hasResourceRequirements(spec.getTaskManager().getResources())) {
                 tmPodTemplate =
                         applyResourceRequirementsToPodTemplate(
                                 tmPodTemplate, spec.getTaskManager().getResources());
@@ -360,7 +360,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyJobManagerSpec() {
         if (spec.getJobManager() != null) {
             // Use the new resources field when set; otherwise the deprecated resource field.
-            if (spec.getJobManager().getResources() != null) {
+            if (hasResourceRequirements(spec.getJobManager().getResources())) {
                 setResourceRequirements(spec.getJobManager().getResources(), effectiveConfig, true);
             } else if (spec.getJobManager().getResource() != null) {
                 setResource(spec.getJobManager().getResource(), effectiveConfig, true);
@@ -434,6 +434,35 @@ public class FlinkConfigBuilder {
                 effectiveConfig);
     }
 
+    /**
+     * Returns true only when the given resource requirements actually carry usable requests or
+     * limits. A non-null but empty {@link ResourceRequirements} (e.g. an empty {@code resources:
+     * {}} block in the spec) must not suppress the deprecated {@code resource} field, so callers
+     * gate on this rather than a plain null check.
+     */
+    public static boolean hasResourceRequirements(ResourceRequirements resourceRequirements) {
+        if (resourceRequirements == null) {
+            return false;
+        }
+        Map<String, Quantity> requests = resourceRequirements.getRequests();
+        Map<String, Quantity> limits = resourceRequirements.getLimits();
+        return (requests != null && !requests.isEmpty()) || (limits != null && !limits.isEmpty());
+    }
+
+    /**
+     * Returns the requested value for the given key, falling back to the limit when no request is
+     * set (mirroring how Kubernetes defaults requests to limits). Returns null when neither is set
+     * or the requirements are null.
+     */
+    public static Quantity getRequestOrLimit(
+            ResourceRequirements resourceRequirements, String key) {
+        if (resourceRequirements == null) {
+            return null;
+        }
+        return getRequestOrLimit(
+                resourceRequirements.getRequests(), resourceRequirements.getLimits(), key);
+    }
+
     private static Quantity getRequestOrLimit(
             Map<String, Quantity> requests, Map<String, Quantity> limits, String key) {
         if (requests != null && requests.get(key) != null) {
@@ -467,7 +496,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyTaskManagerSpec() {
         if (spec.getTaskManager() != null) {
             // Use the new resources field when set; otherwise the deprecated resource field.
-            if (spec.getTaskManager().getResources() != null) {
+            if (hasResourceRequirements(spec.getTaskManager().getResources())) {
                 setResourceRequirements(
                         spec.getTaskManager().getResources(), effectiveConfig, false);
             } else if (spec.getTaskManager().getResource() != null) {

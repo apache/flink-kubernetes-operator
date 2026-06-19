@@ -56,13 +56,15 @@ spec:
           persistentVolumeClaim:
             claimName: session-cluster-1-pvc
   jobManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.25
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.25"
   taskManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.25
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.25"
   mode: native
 
 ---
@@ -104,13 +106,15 @@ spec:
           persistentVolumeClaim:
             claimName: session-cluster-1-pvc
   jobManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.25
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.25"
   taskManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.25
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.25"
   mode: native
 
 ---

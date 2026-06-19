@@ -50,6 +50,9 @@ import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -193,14 +196,43 @@ public class BaseTestUtils {
                 .flinkConfiguration(conf)
                 .jobManager(
                         JobManagerSpec.builder()
-                                .resource(new Resource(1.0, "2048m", "2G"))
+                                .resources(getTestResourceRequirements())
                                 .replicas(1)
                                 .build())
                 .taskManager(
-                        TaskManagerSpec.builder()
-                                .resource(new Resource(1.0, "2048m", "2G"))
-                                .build())
+                        TaskManagerSpec.builder().resources(getTestResourceRequirements()).build())
                 .build();
+    }
+
+    /**
+     * Builds the default resource requirements used across tests, mirroring the legacy {@code new
+     * Resource(1.0, "2048m", "2G")}: cpu/memory are requested (routed to Flink config) and
+     * ephemeral-storage is set on both requests and limits (carried in the pod template).
+     */
+    private static ResourceRequirements getTestResourceRequirements() {
+        return new ResourceRequirementsBuilder()
+                .addToRequests("cpu", new Quantity("1"))
+                .addToRequests("memory", new Quantity("2048m"))
+                .addToRequests("ephemeral-storage", new Quantity("2G"))
+                .addToLimits("ephemeral-storage", new Quantity("2G"))
+                .build();
+    }
+
+    /**
+     * Switches the given spec from the default (new) {@code resources} field to the deprecated
+     * {@code resource} field, reproducing the legacy {@code new Resource(1.0, "2048m", "2G")}
+     * fixture. Used by tests that specifically exercise the deprecated resource path.
+     */
+    public static void useDeprecatedResource(FlinkDeploymentSpec spec) {
+        spec.getJobManager().setResources(null);
+        spec.getJobManager().setResource(new Resource(1.0, "2048m", "2G"));
+        spec.getTaskManager().setResources(null);
+        spec.getTaskManager().setResource(new Resource(1.0, "2048m", "2G"));
+    }
+
+    /** See {@link #useDeprecatedResource(FlinkDeploymentSpec)}. */
+    public static void useDeprecatedResource(FlinkDeployment deployment) {
+        useDeprecatedResource(deployment.getSpec());
     }
 
     public static PodTemplateSpec getTestPodTemplate(String hostname, List<Container> containers) {

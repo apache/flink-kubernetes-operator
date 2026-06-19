@@ -40,8 +40,7 @@ public class JobManagerSpec {
     /**
      * Resource specification for the JobManager pods.
      *
-     * @deprecated Use the resources field instead, which conforms to the standard Kubernetes
-     *     ResourceRequirements schema (separate requests and limits).
+     * @deprecated use the new resources field (Kubernetes ResourceRequirements) instead
      */
     @Deprecated private Resource resource;
 
