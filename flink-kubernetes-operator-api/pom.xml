@@ -322,7 +322,17 @@ under the License.
                     </execution>
                     <execution>
                         <id>flinkbgdeployments-remove-scale-subresource</id>
-                        <phase>package</phase>
+                        <!--
+                          Runs in process-classes, after crd-generator:generate and
+                          maven-resources:copy-resources (both bound to process-classes, but declared
+                          on plugins earlier in this POM so they execute first). Binding the strip
+                          here rather than to package keeps it aligned with the auto-copy of generated
+                          CRDs into the helm chart, so any build that regenerates the CRDs (e.g. mvn
+                          compile/test-compile, not just a full package) also strips the invalid B/G
+                          scale subresource. Otherwise a partial build can leave an un-stripped,
+                          invalid scale block in the committed CRD.
+                        -->
+                        <phase>process-classes</phase>
                         <goals>
                             <goal>run</goal>
                         </goals>
