@@ -33,6 +33,7 @@ under the License.
                 <include>org/apache/flink/kubernetes/operator/autoscaler/TestingAutoscaler.class</include>
                 <include>org/apache/flink/kubernetes/operator/mutator/TestMutator.java</include>
                 <include>org/apache/flink/autoscaler/metrics/TestCustomEvaluator.java</include>
+                <include>org/apache/flink/autoscaler/TestScalingExecutor.class</include>
             </includes>
         </fileSet>
         <fileSet>

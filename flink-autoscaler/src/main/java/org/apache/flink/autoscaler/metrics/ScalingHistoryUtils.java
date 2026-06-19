@@ -28,6 +28,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import javax.annotation.Nonnull;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -128,5 +129,19 @@ public class ScalingHistoryUtils {
                 conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE),
                 conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT));
         return scalingTracking;
+    }
+
+    public static Map<JobVertexID, ScalingSummary> copyScalingSummaries(
+            Map<JobVertexID, ScalingSummary> summaries) {
+        var copy = new HashMap<JobVertexID, ScalingSummary>(summaries.size());
+        summaries.forEach(
+                (vertex, summary) -> {
+                    var snapshot = new ScalingSummary();
+                    snapshot.setCurrentParallelism(summary.getCurrentParallelism());
+                    snapshot.setNewParallelism(summary.getNewParallelism());
+                    snapshot.setMetrics(summary.getMetrics());
+                    copy.put(vertex, snapshot);
+                });
+        return copy;
     }
 }
