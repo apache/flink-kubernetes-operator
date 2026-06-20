@@ -77,7 +77,8 @@ change the checkbox below to `[X]` followed by the name of the tool, and uncomme
 https://www.apache.org/legal/generative-tooling.html
 
 You are responsible for the quality and correctness of every change in this PR
-regardless of the tooling used. Low-effort AI-generated PRs will be closed.
+regardless of the tooling used. Low-effort AI-generated PRs will be closed. See
+AGENTS.md for the full guidance.
 -->
 
 - [ ] Yes (please specify the tool below)
