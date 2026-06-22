@@ -70,13 +70,15 @@ spec:
           persistentVolumeClaim:
             claimName: flink-autoscaler-e2e
   jobManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.5
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.5"
   taskManager:
-    resource:
-      memory: "1024m"
-      cpu: 0.5
+    resources:
+      requests:
+        memory: "1024m"
+        cpu: "0.5"
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2

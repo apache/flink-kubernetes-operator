@@ -170,7 +170,9 @@ public class CrdReferenceDoclet implements Doclet {
     }
 
     private String cleanDoc(String doc) {
-        return doc.replaceAll("[\\t]+", " ").replaceAll("[\\n\\r]+", "");
+        // Collapse all whitespace (tabs and newlines, e.g. between a description and its
+        // @deprecated tag) into single spaces so block tags do not run into the preceding text.
+        return doc.replaceAll("\\s+", " ").trim();
     }
 
     private Set<? extends Element> sortedByName(Set<? extends Element> elements) {

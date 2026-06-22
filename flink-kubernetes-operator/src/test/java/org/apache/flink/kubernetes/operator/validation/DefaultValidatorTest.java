@@ -51,6 +51,8 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -282,43 +284,47 @@ public class DefaultValidatorTest {
                 "JobManager replicas should not be configured less than one.");
 
         // Test resource validation
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
 
         // Test resource validation with k8s specification
-        testSuccess(dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory("invalid"),
                 "TaskManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory("invalid"),
                 "JobManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory(null),
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory(null),
                 "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
                 },
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
 
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getJobManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec()
@@ -329,6 +335,121 @@ public class DefaultValidatorTest {
                                             MANAGED_MEMORY_SIZE.key(),
                                             "1024m"));
                 });
+
+        // Test ResourceRequirements validation
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("500m")))
+                                            .build());
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                });
+
+        // limits-only must be accepted: Kubernetes defaults requests to limits, so memory
+        // defined via limits is sufficient.
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withLimits(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("2")))
+                                            .build());
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withLimits(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("2")))
+                                            .build());
+                });
+
+        // Negative ResourceRequirements validation cases
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("abc")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests memory parse error");
+        testError(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("notacpu")))
+                                            .build());
+                },
+                "JobManager resource requirements requests cpu parse error");
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .withLimits(Map.of("memory", new Quantity("xyz")))
+                                            .build());
+                },
+                "TaskManager resource requirements limits memory parse error");
 
         // Test savepoint restore validation
         testSuccess(
@@ -486,11 +607,11 @@ public class DefaultValidatorTest {
                                     "kubernetes");
                 });
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc"),
                 "JobManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc"),
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
     }
@@ -758,6 +879,160 @@ public class DefaultValidatorTest {
         };
     }
 
+    @Test
+    public void testNegativeCpuResourceRequirementIsRejected() {
+        // A negative cpu request parses via Quantity.getAmountInBytes, so DefaultValidator must
+        // reject it explicitly (cpu must be strictly positive; Kubernetes would otherwise reject
+        // the pod downstream).
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("-1")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests cpu must be positive");
+    }
+
+    @Test
+    public void testNegativeEphemeralStorageResourceRequirementIsRejected() {
+        // Same as negative cpu: getAmountInBytes accepts a negative ephemeral-storage value, so it
+        // must be rejected explicitly.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "ephemeral-storage",
+                                                            new Quantity("-5Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests ephemeral-storage must not be negative");
+    }
+
+    @Test
+    public void testNegativeMemoryResourceRequirementIsRejected() {
+        // Negative memory IS rejected today, but only incidentally: "-2Gi" fails to parse as a
+        // MemorySize ("text does not start with a number") rather than via an explicit sign check.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("-2Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests memory parse error");
+    }
+
+    @Test
+    public void testZeroCpuResourceRequirementIsRejected() {
+        // A zero cpu request parses fine but is not a usable value, so it must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests cpu must be positive");
+    }
+
+    @Test
+    public void testZeroMemoryResourceRequirementIsRejected() {
+        // Zero memory would become TOTAL_PROCESS_MEMORY=0 and fail at deploy, so reject it here.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests memory must be positive");
+    }
+
+    @Test
+    public void testMemoryRequestExceedingLimitIsRejected() {
+        // Kubernetes rejects a request larger than its limit; the validator should catch it first.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("4Gi")))
+                                                .withLimits(Map.of("memory", new Quantity("2Gi")))
+                                                .build()),
+                "TaskManager resource requirements memory request");
+    }
+
+    @Test
+    public void testCpuRequestExceedingLimitIsRejected() {
+        // Mixed-unit comparison: 1000m request vs 500m limit must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1000m")))
+                                                .withLimits(Map.of("cpu", new Quantity("500m")))
+                                                .build()),
+                "TaskManager resource requirements cpu request");
+    }
+
+    @Test
+    public void testRequestsBelowLimitsPasses() {
+        // requests <= limits for both cpu and memory must validate cleanly.
+        testSuccess(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1")))
+                                                .withLimits(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("4Gi"),
+                                                                "cpu",
+                                                                new Quantity("2")))
+                                                .build()));
+    }
+
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
         testSuccess(deploymentModifier, validator);
     }
@@ -778,6 +1053,29 @@ public class DefaultValidatorTest {
         } else {
             fail("Did not get expected error: " + expectedErr);
         }
+    }
+
+    /**
+     * Like {@link #testSuccess(Consumer)} but first switches the deployment to the deprecated
+     * {@code resource} field, for tests that specifically exercise that path.
+     */
+    private void testSuccessDeprecatedResource(Consumer<FlinkDeployment> deploymentModifier) {
+        testSuccess(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                });
+    }
+
+    /** See {@link #testSuccessDeprecatedResource(Consumer)}; error-expecting variant. */
+    private void testErrorDeprecatedResource(
+            Consumer<FlinkDeployment> deploymentModifier, String expectedErr) {
+        testError(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                },
+                expectedErr);
     }
 
     @Test

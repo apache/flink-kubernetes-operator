@@ -28,6 +28,8 @@ public class CrdConstants {
     public static final String LABEL_TARGET_SESSION = "target.session";
 
     public static final String EPHEMERAL_STORAGE = "ephemeral-storage";
+    public static final String MEMORY = "memory";
+    public static final String CPU = "cpu";
 
     public static final String LABEL_SNAPSHOT_TYPE = "snapshot.type";
     public static final String LABEL_SNAPSHOT_TRIGGER_TYPE = "snapshot.trigger-type";
