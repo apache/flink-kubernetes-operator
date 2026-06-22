@@ -54,6 +54,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkRuntimeConfigurationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -66,10 +67,14 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobConfigHeaders;
+import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
+import org.apache.flink.runtime.rest.messages.JobMessageParameters;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatisticDetailsHeaders;
@@ -81,6 +86,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerReque
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -904,6 +910,111 @@ public abstract class AbstractFlinkService implements FlinkService {
                             "Failed to fetch job exceptions from REST API for jobId %s", jobId),
                     e);
             return null;
+        }
+    }
+
+    @Override
+    public Map<String, String> getRuntimeConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching runtime configuration");
+        Map<String, String> runtimeConfig = new HashMap<>();
+        boolean fetchFailed = false;
+
+        try {
+            runtimeConfig.putAll(getJobManagerConfiguration(conf, jobId));
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.error("Failed to fetch JobManager configuration", e);
+        }
+
+        try {
+            runtimeConfig.putAll(getJobConfiguration(conf, jobId));
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.error("Failed to fetch job configuration", e);
+        }
+
+        try {
+            runtimeConfig.putAll(getJobCheckpointConfiguration(conf, jobId));
+        } catch (Exception e) {
+            fetchFailed = true;
+            LOG.error("Failed to fetch checkpoint configuration", e);
+        }
+
+        if (runtimeConfig.isEmpty() && fetchFailed) {
+            throw new RuntimeException("All runtime config REST fetches failed for job " + jobId);
+        }
+
+        LOG.debug("Fetched merged runtime configuration with {} entries", runtimeConfig.size());
+        return runtimeConfig;
+    }
+
+    private Map<String, String> getJobManagerConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching JobManager configuration");
+        try (var clusterClient = getClusterClient(conf)) {
+            var parameters = new JobMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            var configurationInfo =
+                    clusterClient
+                            .sendRequest(
+                                    JobManagerJobConfigurationHeaders.getInstance(),
+                                    parameters,
+                                    EmptyRequestBody.getInstance())
+                            .get(
+                                    operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                    TimeUnit.SECONDS);
+
+            Map<String, String> jmConfig = new HashMap<>();
+            configurationInfo.forEach(entry -> jmConfig.put(entry.getKey(), entry.getValue()));
+            LOG.debug("Fetched {} JobManager configuration entries", jmConfig.size());
+            return jmConfig;
+        }
+    }
+
+    private Map<String, String> getJobConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching job configuration");
+        try (var clusterClient = getClusterClient(conf)) {
+            var jobConfigHeaders = JobConfigHeaders.getInstance();
+            var parameters = new JobMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            JobConfigInfo configurationInfo =
+                    clusterClient
+                            .sendRequest(
+                                    jobConfigHeaders, parameters, EmptyRequestBody.getInstance())
+                            .get(
+                                    operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                    TimeUnit.SECONDS);
+
+            Map<String, String> jobConfig =
+                    FlinkRuntimeConfigurationUtils.mapJobConfiguration(configurationInfo);
+            LOG.debug("Fetched {} job configuration entries", jobConfig.size());
+            return jobConfig;
+        }
+    }
+
+    private Map<String, String> getJobCheckpointConfiguration(Configuration conf, JobID jobId)
+            throws Exception {
+        LOG.debug("Fetching checkpoint configuration");
+        try (var clusterClient = getClusterClient(conf)) {
+            var checkpointConfigHeaders = CheckpointConfigHeaders.getInstance();
+            var parameters = new JobMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            var checkpointConfigInfo =
+                    clusterClient
+                            .sendRequest(
+                                    checkpointConfigHeaders,
+                                    parameters,
+                                    EmptyRequestBody.getInstance())
+                            .get(
+                                    operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                    TimeUnit.SECONDS);
+
+            return FlinkRuntimeConfigurationUtils.mapCheckpointConfiguration(checkpointConfigInfo);
         }
     }
 
