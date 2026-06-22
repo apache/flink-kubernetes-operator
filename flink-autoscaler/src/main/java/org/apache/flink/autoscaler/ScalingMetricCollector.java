@@ -249,16 +249,24 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         var metrics = new HashMap<JobVertexID, IOMetrics>();
         var finished = new HashSet<JobVertexID>();
-        jobDetailsInfo
-                .getJobVertexInfos()
-                .forEach(
-                        d -> {
-                            if (d.getExecutionState() == ExecutionState.FINISHED) {
-                                finished.add(d.getJobVertexID());
-                            }
-                            metrics.put(
-                                    d.getJobVertexID(), IOMetrics.from(d.getJobVertexMetrics()));
-                        });
+        for (var d : jobDetailsInfo.getJobVertexInfos()) {
+            if (d.getExecutionState() == ExecutionState.FINISHED) {
+                finished.add(d.getJobVertexID());
+            }
+            var ioMetricsInfo = d.getJobVertexMetrics();
+            if (!ioMetricsInfo.isRecordsReadComplete()
+                    || !ioMetricsInfo.isRecordsWrittenComplete()) {
+                throw new NotReadyException(
+                        String.format(
+                                "Vertex %s has incomplete IO metrics (read-records-complete=%s,"
+                                        + " write-records-complete=%s). Skipping metric"
+                                        + " collection until metrics are complete.",
+                                d.getJobVertexID(),
+                                ioMetricsInfo.isRecordsReadComplete(),
+                                ioMetricsInfo.isRecordsWrittenComplete()));
+            }
+            metrics.put(d.getJobVertexID(), IOMetrics.from(ioMetricsInfo));
+        }
 
         return JobTopology.fromJsonPlan(
                 json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
