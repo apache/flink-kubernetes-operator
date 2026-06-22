@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
@@ -101,6 +102,13 @@ public class SessionJobReconciler
             statusRecorder.patchAndCacheStatus(ctx.getResource(), ctx.getKubernetesClient());
         }
 
+        if (!reuseJobId
+                && deployConfig.get(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_SESSION_JOB_CANCEL_EXISTING_ON_SUBMIT)) {
+            cancelExistingJobsWithSameName(ctx, deployConfig);
+        }
+
         ctx.getFlinkService()
                 .submitJobToSessionCluster(
                         ctx.getResource().getMetadata(),
@@ -108,6 +116,23 @@ public class SessionJobReconciler
                         jobId,
                         deployConfig,
                         savepoint.orElse(null));
+    }
+
+    private void cancelExistingJobsWithSameName(
+            FlinkResourceContext<FlinkSessionJob> ctx, Configuration deployConfig)
+            throws Exception {
+        var jobName =
+                deployConfig
+                        .getOptional(PipelineOptions.NAME)
+                        .orElseGet(() -> ctx.getResource().getMetadata().getName());
+        var cancelledJobIds = ctx.getFlinkService().cancelRunningJobs(jobName, deployConfig);
+        if (!cancelledJobIds.isEmpty()) {
+            LOG.warn(
+                    "Cancelled {} orphaned job(s) named '{}' on the session cluster before submission: {}",
+                    cancelledJobIds.size(),
+                    jobName,
+                    cancelledJobIds);
+        }
     }
 
     @Override
