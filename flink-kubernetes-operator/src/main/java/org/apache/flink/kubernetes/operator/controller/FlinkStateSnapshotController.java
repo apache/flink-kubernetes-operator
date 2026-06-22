@@ -128,7 +128,8 @@ public class FlinkStateSnapshotController
                 resource.getStatus().getError(),
                 ctx.getKubernetesClient());
 
-        if (resource.getStatus().getFailures() > resource.getSpec().getBackoffLimit()) {
+        var backoffLimit = resource.getSpec().getBackoffLimit();
+        if (backoffLimit >= 0 && resource.getStatus().getFailures() > backoffLimit) {
             LOG.info(
                     "Snapshot {} failed and won't be retried as failure count exceeded the backoff limit",
                     resource.getMetadata().getName());
