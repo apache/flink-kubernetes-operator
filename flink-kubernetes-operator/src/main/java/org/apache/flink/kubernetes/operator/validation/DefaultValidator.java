@@ -154,7 +154,9 @@ public class DefaultValidator implements FlinkResourceValidator {
         var spec = deployment.getSpec();
         var version = spec.getFlinkVersion();
         if (version == null) {
-            return Optional.of("Flink Version must be defined.");
+            // Presence is enforced by the CRD schema (@Required on
+            // FlinkDeploymentSpec.flinkVersion); nothing further to validate here.
+            return Optional.empty();
         }
 
         if (!FlinkVersion.isSupported(version)) {
@@ -182,11 +184,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateIngress(IngressSpec ingress, String name, String namespace) {
-        if (ingress == null) {
+        if (ingress == null || ingress.getTemplate() == null) {
+            // Template presence (when an ingress is configured) is enforced by the CRD schema
+            // (@Required on IngressSpec.template).
             return Optional.empty();
-        }
-        if (ingress.getTemplate() == null) {
-            return Optional.of("Ingress template must be defined");
         }
         try {
             IngressUtils.getIngressUrl(ingress.getTemplate(), name, namespace);
@@ -294,9 +295,10 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         var tmReplicasDefined = tm != null && tm.getReplicas() != null;
 
-        if (tmReplicasDefined && tm.getReplicas() < 1) {
-            return Optional.of("TaskManager replicas must be larger than 0");
-        } else if (!tmReplicasDefined && job.getParallelism() < 1) {
+        // TaskManager replicas >= 1 is enforced by the CRD schema (@Min(1) on
+        // TaskManagerSpec.replicas). Only the parallelism fallback (used when replicas are not
+        // set) needs checking here, since parallelism defaults to 0 and is otherwise unconstrained.
+        if (!tmReplicasDefined && job.getParallelism() < 1) {
             return Optional.of("Job parallelism must be larger than 0");
         }
 
@@ -414,9 +416,8 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJmReplicas(int replicas, Map<String, String> confMap) {
-        if (replicas < 1) {
-            return Optional.of("JobManager replicas should not be configured less than one.");
-        } else if (replicas > 1
+        // replicas >= 1 is enforced by the CRD schema (@Min(1) on JobManagerSpec.replicas).
+        if (replicas > 1
                 && !HighAvailabilityMode.isHighAvailabilityModeActivated(
                         Configuration.fromMap(confMap))) {
             return Optional.of(
@@ -442,8 +443,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 tmMemoryConfigValidation,
                 validateResources("TaskManager", tmSpec.getResource()),
-                validateResourceRequirements("TaskManager", tmSpec.getResources()),
-                validateTmReplicas(tmSpec));
+                validateResourceRequirements("TaskManager", tmSpec.getResources()));
     }
 
     private Optional<String> validateTmMemoryConfig(Configuration conf) {
@@ -453,13 +453,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of(
                     "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`"
                             + " or `spec.taskManager.resources.requests.memory`");
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> validateTmReplicas(TaskManagerSpec tmSpec) {
-        if (tmSpec.getReplicas() != null && tmSpec.getReplicas() < 1) {
-            return Optional.of("TaskManager replicas should not be configured less than one.");
         }
         return Optional.empty();
     }

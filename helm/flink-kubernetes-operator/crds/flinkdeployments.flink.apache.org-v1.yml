@@ -75,6 +75,8 @@ spec:
                           type: "string"
                       type: "object"
                     type: "array"
+                required:
+                - "template"
                 type: "object"
               job:
                 properties:
@@ -3623,6 +3625,7 @@ spec:
                         type: "object"
                     type: "object"
                   replicas:
+                    minimum: 1.0
                     type: "integer"
                   resource:
                     properties:
@@ -10692,6 +10695,7 @@ spec:
                         type: "object"
                     type: "object"
                   replicas:
+                    minimum: 1.0
                     type: "integer"
                   resource:
                     properties:
@@ -10729,6 +10733,8 @@ spec:
                         type: "object"
                     type: "object"
                 type: "object"
+            required:
+            - "flinkVersion"
             type: "object"
           status:
             properties:

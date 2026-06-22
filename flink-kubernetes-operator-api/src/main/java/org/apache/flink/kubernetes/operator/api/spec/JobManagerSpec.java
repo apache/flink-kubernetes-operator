@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.SchemaFrom;
+import io.fabric8.generator.annotation.Min;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -51,6 +52,7 @@ public class JobManagerSpec {
     private ResourceRequirements resources;
 
     /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
+    @Min(1)
     private int replicas = 1;
 
     /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
