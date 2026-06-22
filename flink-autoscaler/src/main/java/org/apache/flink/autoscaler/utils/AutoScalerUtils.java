@@ -135,11 +135,12 @@ public class AutoScalerUtils {
             squaredSum += parallelism * parallelism;
         }
 
-        if (squaredSum == 0.0) {
+        double denominator = squaredSum * baselineProcessingRate;
+        if (denominator == 0.0) {
             return 1.0; // Fallback to linear scaling if denominator is zero
         }
 
-        double alpha = sum / (squaredSum * baselineProcessingRate);
+        double alpha = sum / denominator;
 
         return Math.max(lowerBound, Math.min(upperBound, alpha));
     }
