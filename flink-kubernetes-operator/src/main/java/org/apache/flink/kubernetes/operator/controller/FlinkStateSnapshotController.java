@@ -89,6 +89,12 @@ public class FlinkStateSnapshotController
     @Override
     public DeleteControl cleanup(
             FlinkStateSnapshot flinkStateSnapshot, Context<FlinkStateSnapshot> josdkContext) {
+        if (flinkStateSnapshot.getStatus() == null) {
+            LOG.info(
+                    "Snapshot {} has no status, was never reconciled. Removing finalizer.",
+                    flinkStateSnapshot.getMetadata().getName());
+            return DeleteControl.defaultDelete();
+        }
         var ctx = ctxFactory.getFlinkStateSnapshotContext(flinkStateSnapshot, josdkContext);
         try {
             metricManager.onRemove(flinkStateSnapshot);
