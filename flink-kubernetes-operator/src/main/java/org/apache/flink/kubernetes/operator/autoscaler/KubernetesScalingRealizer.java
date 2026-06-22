@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
+import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -90,7 +90,8 @@ public class KubernetesScalingRealizer
         }
         // Make sure to parse in the same way as the original deploy code path.
         var currentMemory =
-                MemorySize.parse(FlinkConfigBuilder.parseResourceMemoryString(currentMemoryString));
+                MemorySize.parse(
+                        ResourceConfigUtils.parseResourceMemoryString(currentMemoryString));
         if (!totalMemoryOverride.equals(currentMemory)) {
             // Adjust the resource memory to change the total TM memory
             setTaskManagerMemory(taskManager, currentMemory, totalMemoryOverride);
@@ -104,9 +105,9 @@ public class KubernetesScalingRealizer
      */
     @Nullable
     private static String getTaskManagerMemory(TaskManagerSpec taskManager) {
-        if (FlinkConfigBuilder.hasResourceRequirements(taskManager.getResources())) {
+        if (ResourceConfigUtils.hasResourceRequirements(taskManager.getResources())) {
             Quantity memory =
-                    FlinkConfigBuilder.getRequestOrLimit(
+                    ResourceConfigUtils.getRequestOrLimit(
                             taskManager.getResources(), CrdConstants.MEMORY);
             return memory != null ? memory.toString() : null;
         }
@@ -123,7 +124,7 @@ public class KubernetesScalingRealizer
      */
     private static void setTaskManagerMemory(
             TaskManagerSpec taskManager, MemorySize currentMemory, MemorySize tunedMemory) {
-        if (!FlinkConfigBuilder.hasResourceRequirements(taskManager.getResources())) {
+        if (!ResourceConfigUtils.hasResourceRequirements(taskManager.getResources())) {
             taskManager.getResource().setMemory(String.valueOf(tunedMemory.getBytes()));
             return;
         }
@@ -157,7 +158,7 @@ public class KubernetesScalingRealizer
             return new Quantity(String.valueOf(tunedMemory.getBytes()));
         }
         long limitBytes =
-                MemorySize.parse(FlinkConfigBuilder.parseResourceMemoryString(limit.toString()))
+                MemorySize.parse(ResourceConfigUtils.parseResourceMemoryString(limit.toString()))
                         .getBytes();
         double ratio = (double) tunedMemory.getBytes() / currentMemory.getBytes();
         return new Quantity(String.valueOf(Math.round(limitBytes * ratio)));

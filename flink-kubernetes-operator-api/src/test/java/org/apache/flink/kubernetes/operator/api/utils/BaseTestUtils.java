@@ -22,6 +22,7 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
@@ -211,10 +212,10 @@ public class BaseTestUtils {
      */
     private static ResourceRequirements getTestResourceRequirements() {
         return new ResourceRequirementsBuilder()
-                .addToRequests("cpu", new Quantity("1"))
-                .addToRequests("memory", new Quantity("2048m"))
-                .addToRequests("ephemeral-storage", new Quantity("2G"))
-                .addToLimits("ephemeral-storage", new Quantity("2G"))
+                .addToRequests(CrdConstants.CPU, new Quantity("1"))
+                .addToRequests(CrdConstants.MEMORY, new Quantity("2048m"))
+                .addToRequests(CrdConstants.EPHEMERAL_STORAGE, new Quantity("2G"))
+                .addToLimits(CrdConstants.EPHEMERAL_STORAGE, new Quantity("2G"))
                 .build();
     }
 

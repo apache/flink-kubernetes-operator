@@ -200,7 +200,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the JobManager pods.@deprecated use the new resources field (Kubernetes ResourceRequirements) instead |
+| resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the JobManager pods. @deprecated use the new resources field (Kubernetes ResourceRequirements) instead |
 | resources | io.fabric8.kubernetes.api.model.ResourceRequirements | Resource requirements for the JobManager pods following Kubernetes ResourceRequirements schema. This field supports both requests and limits for CPU, memory, and other resources. |
 | replicas | int | Number of JobManager replicas. Must be 1 for non-HA deployments. |
 | podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
@@ -285,7 +285,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the TaskManager pods.@deprecated use the new resources field (Kubernetes ResourceRequirements) instead |
+| resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the TaskManager pods. @deprecated use the new resources field (Kubernetes ResourceRequirements) instead |
 | resources | io.fabric8.kubernetes.api.model.ResourceRequirements | Resource requirements for the TaskManager pods following Kubernetes ResourceRequirements schema. This field supports both requests and limits for CPU, memory, and other resources. |
 | replicas | java.lang.Integer | Number of TaskManager replicas. If defined, takes precedence over parallelism |
 | podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |

@@ -724,6 +724,69 @@ public class FlinkConfigBuilderTest {
     }
 
     @Test
+    public void testApplyPodTemplateWithResourceRequirementsEphemeralStorage() throws Exception {
+        // Exercises the full applyPodTemplate() wiring for the new `resources` field on both JM and
+        // TM: ephemeral-storage must reach the main container while cpu/memory go to Flink config.
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+
+        Map<String, Quantity> jmRequests = new HashMap<>();
+        jmRequests.put("memory", new Quantity("2Gi"));
+        jmRequests.put("cpu", new Quantity("1"));
+        jmRequests.put("ephemeral-storage", new Quantity("2G"));
+        flinkDeployment
+                .getSpec()
+                .getJobManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(jmRequests)
+                                .addToLimits("ephemeral-storage", new Quantity("2G"))
+                                .build());
+
+        Map<String, Quantity> tmRequests = new HashMap<>();
+        tmRequests.put("memory", new Quantity("2Gi"));
+        tmRequests.put("cpu", new Quantity("1"));
+        tmRequests.put("ephemeral-storage", new Quantity("3G"));
+        flinkDeployment
+                .getSpec()
+                .getTaskManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(tmRequests)
+                                .addToLimits("ephemeral-storage", new Quantity("3G"))
+                                .build());
+
+        var container0 = new Container();
+        container0.setName("c0");
+        flinkDeployment
+                .getSpec()
+                .setPodTemplate(TestUtils.getTestPodTemplate("", List.of(container0)));
+
+        var inConfig = new Configuration();
+        inConfig.set(KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED, false);
+
+        var configuration =
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
+
+        var jmMain = getJmPod(configuration).getSpec().getContainers().get(1);
+        var tmMain = getTmPod(configuration).getSpec().getContainers().get(1);
+
+        // ephemeral-storage lands on the (added) main container ...
+        assertMainContainerEphemeralStorage(jmMain, "2G");
+        assertMainContainerEphemeralStorage(tmMain, "3G");
+        // ... while cpu/memory are not duplicated into the pod template.
+        assertNull(jmMain.getResources().getRequests().get("memory"));
+        assertNull(jmMain.getResources().getRequests().get("cpu"));
+        assertNull(tmMain.getResources().getRequests().get("memory"));
+        assertNull(tmMain.getResources().getRequests().get("cpu"));
+        // the user-provided container is preserved.
+        assertEquals(container0, getJmPod(configuration).getSpec().getContainers().get(0));
+        assertEquals(container0, getTmPod(configuration).getSpec().getContainers().get(0));
+    }
+
+    @Test
     public void testResourceRequirementsLimitFactorWithMixedUnits() {
         // Requests and limits expressed in different units must still produce correct ratios:
         // 2048Mi / 1Gi = 2.0 and 1 / 500m = 2.0.

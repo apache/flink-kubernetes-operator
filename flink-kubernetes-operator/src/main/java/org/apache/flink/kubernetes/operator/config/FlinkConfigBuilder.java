@@ -27,7 +27,6 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -43,6 +42,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -290,16 +290,11 @@ public class FlinkConfigBuilder {
                     mergePodTemplates(
                             commonPodTemplate, spec.getJobManager().getPodTemplate(), mergeByName);
 
-            // Use the new resources field when set; otherwise the deprecated resource field.
-            if (hasResourceRequirements(spec.getJobManager().getResources())) {
-                jmPodTemplate =
-                        applyResourceRequirementsToPodTemplate(
-                                jmPodTemplate, spec.getJobManager().getResources());
-            } else {
-                jmPodTemplate =
-                        applyResourceToPodTemplate(
-                                jmPodTemplate, spec.getJobManager().getResource());
-            }
+            jmPodTemplate =
+                    applyResourcesToPodTemplate(
+                            jmPodTemplate,
+                            spec.getJobManager().getResources(),
+                            spec.getJobManager().getResource());
         } else {
             jmPodTemplate = ReconciliationUtils.clone(commonPodTemplate);
         }
@@ -324,16 +319,11 @@ public class FlinkConfigBuilder {
                     mergePodTemplates(
                             commonPodTemplate, spec.getTaskManager().getPodTemplate(), mergeByName);
 
-            // Use the new resources field when set; otherwise the deprecated resource field.
-            if (hasResourceRequirements(spec.getTaskManager().getResources())) {
-                tmPodTemplate =
-                        applyResourceRequirementsToPodTemplate(
-                                tmPodTemplate, spec.getTaskManager().getResources());
-            } else {
-                tmPodTemplate =
-                        applyResourceToPodTemplate(
-                                tmPodTemplate, spec.getTaskManager().getResource());
-            }
+            tmPodTemplate =
+                    applyResourcesToPodTemplate(
+                            tmPodTemplate,
+                            spec.getTaskManager().getResources(),
+                            spec.getTaskManager().getResource());
         } else {
             tmPodTemplate = ReconciliationUtils.clone(commonPodTemplate);
         }
@@ -359,12 +349,8 @@ public class FlinkConfigBuilder {
 
     protected FlinkConfigBuilder applyJobManagerSpec() {
         if (spec.getJobManager() != null) {
-            // Use the new resources field when set; otherwise the deprecated resource field.
-            if (hasResourceRequirements(spec.getJobManager().getResources())) {
-                setResourceRequirements(spec.getJobManager().getResources(), effectiveConfig, true);
-            } else if (spec.getJobManager().getResource() != null) {
-                setResource(spec.getJobManager().getResource(), effectiveConfig, true);
-            }
+            applyResourceConfig(
+                    spec.getJobManager().getResources(), spec.getJobManager().getResource(), true);
             if (spec.getJobManager().getReplicas() > 0) {
                 effectiveConfig.set(
                         KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
@@ -372,6 +358,41 @@ public class FlinkConfigBuilder {
             }
         }
         return this;
+    }
+
+    /**
+     * Routes a JobManager/TaskManager resource definition into the Flink configuration, preferring
+     * the new {@code resources} field and falling back to the deprecated {@code resource} field.
+     * When both are set the deprecated field is ignored, matching {@link
+     * #applyResourcesToPodTemplate}.
+     */
+    private void applyResourceConfig(
+            ResourceRequirements resources, Resource resource, boolean isJM) {
+        if (ResourceConfigUtils.hasResourceRequirements(resources)) {
+            if (resource != null) {
+                LOG.warn(
+                        "Both the deprecated 'resource' and the new 'resources' fields are set for "
+                                + "the {}; the deprecated 'resource' field is ignored in favor of "
+                                + "'resources'.",
+                        isJM ? "JobManager" : "TaskManager");
+            }
+            setResourceRequirements(resources, effectiveConfig, isJM);
+        } else if (resource != null) {
+            setResource(resource, effectiveConfig, isJM);
+        }
+    }
+
+    /**
+     * Applies a JobManager/TaskManager resource definition to its pod template, preferring the new
+     * {@code resources} field and falling back to the deprecated {@code resource} field. Mirrors
+     * the precedence in {@link #applyResourceConfig}.
+     */
+    private PodTemplateSpec applyResourcesToPodTemplate(
+            PodTemplateSpec podTemplate, ResourceRequirements resources, Resource resource) {
+        if (ResourceConfigUtils.hasResourceRequirements(resources)) {
+            return applyResourceRequirementsToPodTemplate(podTemplate, resources);
+        }
+        return applyResourceToPodTemplate(podTemplate, resource);
     }
 
     /**
@@ -386,14 +407,7 @@ public class FlinkConfigBuilder {
             ResourceRequirements resourceRequirements,
             Configuration effectiveConfig,
             boolean isJM) {
-        if (resourceRequirements == null) {
-            return;
-        }
-
-        Map<String, Quantity> requests = resourceRequirements.getRequests();
-        Map<String, Quantity> limits = resourceRequirements.getLimits();
-
-        if ((requests == null || requests.isEmpty()) && (limits == null || limits.isEmpty())) {
+        if (!ResourceConfigUtils.hasResourceRequirements(resourceRequirements)) {
             return;
         }
 
@@ -404,104 +418,49 @@ public class FlinkConfigBuilder {
 
         // Kubernetes defaults requests to limits when requests are omitted, so derive the Flink
         // configuration values from requests and fall back to limits when a request is absent.
-        Quantity memory = getRequestOrLimit(requests, limits, CrdConstants.MEMORY);
+        Quantity memory =
+                ResourceConfigUtils.getRequestOrLimit(resourceRequirements, CrdConstants.MEMORY);
         if (memory != null) {
             effectiveConfig.setString(
-                    memoryConfigOption.key(), parseResourceMemoryString(memory.toString()));
+                    memoryConfigOption.key(),
+                    ResourceConfigUtils.parseResourceMemoryString(memory.toString()));
         }
 
-        Quantity cpu = getRequestOrLimit(requests, limits, CrdConstants.CPU);
+        Quantity cpu =
+                ResourceConfigUtils.getRequestOrLimit(resourceRequirements, CrdConstants.CPU);
         if (cpu != null) {
             configureCpu(cpu.getNumericalAmount().doubleValue(), effectiveConfig, isJM);
         }
 
         // Limit factors (limits / requests) are only meaningful when both are explicitly set.
-        setLimitFactor(
-                requests,
-                limits,
-                CrdConstants.CPU,
-                isJM
-                        ? KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR
-                        : KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR,
-                effectiveConfig);
-        setLimitFactor(
-                requests,
-                limits,
-                CrdConstants.MEMORY,
-                isJM
-                        ? KubernetesConfigOptions.JOB_MANAGER_MEMORY_LIMIT_FACTOR
-                        : KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR,
-                effectiveConfig);
-    }
-
-    /**
-     * Returns true only when the given resource requirements actually carry usable requests or
-     * limits. A non-null but empty {@link ResourceRequirements} (e.g. an empty {@code resources:
-     * {}} block in the spec) must not suppress the deprecated {@code resource} field, so callers
-     * gate on this rather than a plain null check.
-     */
-    public static boolean hasResourceRequirements(ResourceRequirements resourceRequirements) {
-        if (resourceRequirements == null) {
-            return false;
-        }
-        Map<String, Quantity> requests = resourceRequirements.getRequests();
-        Map<String, Quantity> limits = resourceRequirements.getLimits();
-        return (requests != null && !requests.isEmpty()) || (limits != null && !limits.isEmpty());
-    }
-
-    /**
-     * Returns the requested value for the given key, falling back to the limit when no request is
-     * set (mirroring how Kubernetes defaults requests to limits). Returns null when neither is set
-     * or the requirements are null.
-     */
-    public static Quantity getRequestOrLimit(
-            ResourceRequirements resourceRequirements, String key) {
-        if (resourceRequirements == null) {
-            return null;
-        }
-        return getRequestOrLimit(
-                resourceRequirements.getRequests(), resourceRequirements.getLimits(), key);
-    }
-
-    private static Quantity getRequestOrLimit(
-            Map<String, Quantity> requests, Map<String, Quantity> limits, String key) {
-        if (requests != null && requests.get(key) != null) {
-            return requests.get(key);
-        }
-        if (limits != null && limits.get(key) != null) {
-            return limits.get(key);
-        }
-        return null;
-    }
-
-    private static void setLimitFactor(
-            Map<String, Quantity> requests,
-            Map<String, Quantity> limits,
-            String key,
-            ConfigOption<Double> limitFactorOption,
-            Configuration effectiveConfig) {
-        if (requests == null
-                || requests.get(key) == null
-                || limits == null
-                || limits.get(key) == null) {
-            return;
-        }
-        double request = requests.get(key).getNumericalAmount().doubleValue();
-        double limit = limits.get(key).getNumericalAmount().doubleValue();
-        if (request > 0) {
-            effectiveConfig.set(limitFactorOption, limit / request);
-        }
+        ResourceConfigUtils.computeLimitFactor(resourceRequirements, CrdConstants.CPU)
+                .ifPresent(
+                        factor ->
+                                effectiveConfig.set(
+                                        isJM
+                                                ? KubernetesConfigOptions
+                                                        .JOB_MANAGER_CPU_LIMIT_FACTOR
+                                                : KubernetesConfigOptions
+                                                        .TASK_MANAGER_CPU_LIMIT_FACTOR,
+                                        factor));
+        ResourceConfigUtils.computeLimitFactor(resourceRequirements, CrdConstants.MEMORY)
+                .ifPresent(
+                        factor ->
+                                effectiveConfig.set(
+                                        isJM
+                                                ? KubernetesConfigOptions
+                                                        .JOB_MANAGER_MEMORY_LIMIT_FACTOR
+                                                : KubernetesConfigOptions
+                                                        .TASK_MANAGER_MEMORY_LIMIT_FACTOR,
+                                        factor));
     }
 
     protected FlinkConfigBuilder applyTaskManagerSpec() {
         if (spec.getTaskManager() != null) {
-            // Use the new resources field when set; otherwise the deprecated resource field.
-            if (hasResourceRequirements(spec.getTaskManager().getResources())) {
-                setResourceRequirements(
-                        spec.getTaskManager().getResources(), effectiveConfig, false);
-            } else if (spec.getTaskManager().getResource() != null) {
-                setResource(spec.getTaskManager().getResource(), effectiveConfig, false);
-            }
+            applyResourceConfig(
+                    spec.getTaskManager().getResources(),
+                    spec.getTaskManager().getResource(),
+                    false);
             if (spec.getTaskManager().getReplicas() != null
                     && spec.getTaskManager().getReplicas() > 0) {
                 effectiveConfig.set(
@@ -658,31 +617,12 @@ public class FlinkConfigBuilder {
                             : TaskManagerOptions.TOTAL_PROCESS_MEMORY;
             if (resource.getMemory() != null) {
                 effectiveConfig.setString(
-                        memoryConfigOption.key(), parseResourceMemoryString(resource.getMemory()));
+                        memoryConfigOption.key(),
+                        ResourceConfigUtils.parseResourceMemoryString(resource.getMemory()));
             }
 
             configureCpu(resource, effectiveConfig, isJM);
         }
-    }
-
-    public static String parseResourceMemoryString(String memory) {
-        try {
-            return MemorySize.parse(memory).toString();
-        } catch (IllegalArgumentException e) {
-            var memoryQuantity = formatMemoryStringForK8sSpec(memory);
-            return Quantity.parse(memoryQuantity).getNumericalAmount() + "";
-        }
-    }
-
-    private static String formatMemoryStringForK8sSpec(String memory) {
-        var memoryQuantity = memory.trim().replaceAll("\\s", "").toUpperCase();
-        if (memoryQuantity.endsWith("B")) {
-            memoryQuantity = memoryQuantity.substring(0, memoryQuantity.length() - 1);
-        }
-        if (memoryQuantity.endsWith("I")) {
-            memoryQuantity = memoryQuantity.substring(0, memoryQuantity.length() - 1) + "i";
-        }
-        return memoryQuantity;
     }
 
     private void configureCpu(Resource resource, Configuration conf, boolean isJM) {

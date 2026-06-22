@@ -882,7 +882,8 @@ public class DefaultValidatorTest {
     @Test
     public void testNegativeCpuResourceRequirementIsRejected() {
         // A negative cpu request parses via Quantity.getAmountInBytes, so DefaultValidator must
-        // reject it explicitly (Kubernetes would otherwise reject the pod downstream).
+        // reject it explicitly (cpu must be strictly positive; Kubernetes would otherwise reject
+        // the pod downstream).
         testError(
                 dep -> {
                     dep.getSpec().getTaskManager().setResource(null);
@@ -898,7 +899,7 @@ public class DefaultValidatorTest {
                                                             new Quantity("-1")))
                                             .build());
                 },
-                "TaskManager resource requirements requests cpu must not be negative");
+                "TaskManager resource requirements requests cpu must be positive");
     }
 
     @Test
@@ -938,6 +939,98 @@ public class DefaultValidatorTest {
                                             .build());
                 },
                 "TaskManager resource requirements requests memory parse error");
+    }
+
+    @Test
+    public void testZeroCpuResourceRequirementIsRejected() {
+        // A zero cpu request parses fine but is not a usable value, so it must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests cpu must be positive");
+    }
+
+    @Test
+    public void testZeroMemoryResourceRequirementIsRejected() {
+        // Zero memory would become TOTAL_PROCESS_MEMORY=0 and fail at deploy, so reject it here.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests memory must be positive");
+    }
+
+    @Test
+    public void testMemoryRequestExceedingLimitIsRejected() {
+        // Kubernetes rejects a request larger than its limit; the validator should catch it first.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("4Gi")))
+                                                .withLimits(Map.of("memory", new Quantity("2Gi")))
+                                                .build()),
+                "TaskManager resource requirements memory request");
+    }
+
+    @Test
+    public void testCpuRequestExceedingLimitIsRejected() {
+        // Mixed-unit comparison: 1000m request vs 500m limit must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1000m")))
+                                                .withLimits(Map.of("cpu", new Quantity("500m")))
+                                                .build()),
+                "TaskManager resource requirements cpu request");
+    }
+
+    @Test
+    public void testRequestsBelowLimitsPasses() {
+        // requests <= limits for both cpu and memory must validate cleanly.
+        testSuccess(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1")))
+                                                .withLimits(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("4Gi"),
+                                                                "cpu",
+                                                                new Quantity("2")))
+                                                .build()));
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {

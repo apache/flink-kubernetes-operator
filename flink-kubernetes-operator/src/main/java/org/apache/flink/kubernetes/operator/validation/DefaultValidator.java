@@ -42,12 +42,12 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -308,14 +308,8 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private static boolean isMemoryDefined(ResourceRequirements resources) {
-        if (resources == null) {
-            return false;
-        }
         // Kubernetes defaults requests to limits, so memory defined via either is sufficient.
-        return (resources.getRequests() != null
-                        && resources.getRequests().get(CrdConstants.MEMORY) != null)
-                || (resources.getLimits() != null
-                        && resources.getLimits().get(CrdConstants.MEMORY) != null);
+        return ResourceConfigUtils.isMemoryDefined(resources);
     }
 
     @VisibleForTesting
@@ -482,7 +476,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         if (memory != null) {
             try {
                 MemorySize.parse(
-                        FlinkConfigBuilder.parseResourceMemoryString(resource.getMemory()));
+                        ResourceConfigUtils.parseResourceMemoryString(resource.getMemory()));
             } catch (IllegalArgumentException iae) {
                 builder.append(component + " resource memory parse error: " + iae.getMessage());
             }
@@ -515,11 +509,54 @@ public class DefaultValidator implements FlinkResourceValidator {
         List<String> errors = new ArrayList<>();
         validateQuantities(component, "requests", resourceRequirements.getRequests(), errors);
         validateQuantities(component, "limits", resourceRequirements.getLimits(), errors);
+        validateRequestNotAboveLimit(component, resourceRequirements, CrdConstants.CPU, errors);
+        validateRequestNotAboveLimit(component, resourceRequirements, CrdConstants.MEMORY, errors);
 
         if (errors.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(String.join("; ", errors));
+    }
+
+    /**
+     * Rejects a request that exceeds its corresponding limit for the given resource key (Kubernetes
+     * itself rejects such a pod). Quantities that fail to parse are skipped here since {@link
+     * #validateQuantities} already reports them.
+     */
+    private void validateRequestNotAboveLimit(
+            String component, ResourceRequirements resources, String key, List<String> errors) {
+        Map<String, Quantity> requests = resources.getRequests();
+        Map<String, Quantity> limits = resources.getLimits();
+        if (requests == null
+                || requests.get(key) == null
+                || limits == null
+                || limits.get(key) == null) {
+            return;
+        }
+        try {
+            if (toComparableAmount(key, requests.get(key))
+                    > toComparableAmount(key, limits.get(key))) {
+                errors.add(
+                        String.format(
+                                "%s resource requirements %s request (%s) must not exceed its"
+                                        + " limit (%s)",
+                                component,
+                                key,
+                                requests.get(key).toString(),
+                                limits.get(key).toString()));
+            }
+        } catch (IllegalArgumentException iae) {
+            // Unparseable quantities are already reported by validateQuantities.
+        }
+    }
+
+    private static double toComparableAmount(String key, Quantity quantity) {
+        if (CrdConstants.MEMORY.equals(key)) {
+            return MemorySize.parse(
+                            ResourceConfigUtils.parseResourceMemoryString(quantity.toString()))
+                    .getBytes();
+        }
+        return quantity.getNumericalAmount().doubleValue();
     }
 
     private void validateQuantities(
@@ -540,11 +577,28 @@ public class DefaultValidator implements FlinkResourceValidator {
                 if (CrdConstants.MEMORY.equals(key)) {
                     // Validate the full quantity including its unit (e.g. "2Gi"); getAmount()
                     // would drop the unit. A negative memory value also fails to parse here.
-                    MemorySize.parse(
-                            FlinkConfigBuilder.parseResourceMemoryString(quantity.toString()));
+                    var memory =
+                            MemorySize.parse(
+                                    ResourceConfigUtils.parseResourceMemoryString(
+                                            quantity.toString()));
+                    if (memory.getBytes() <= 0) {
+                        errors.add(
+                                String.format(
+                                        "%s resource requirements %s %s must be positive: %s",
+                                        component, section, key, quantity.toString()));
+                    }
+                } else if (CrdConstants.CPU.equals(key)) {
+                    // cpu parses fine as zero/negative, but neither is a usable request/limit.
+                    if (Quantity.getAmountInBytes(quantity).signum() <= 0) {
+                        errors.add(
+                                String.format(
+                                        "%s resource requirements %s %s must be positive: %s",
+                                        component, section, key, quantity.toString()));
+                    }
                 } else if (Quantity.getAmountInBytes(quantity).signum() < 0) {
-                    // cpu and ephemeral-storage parse fine as negative numbers, so reject them
-                    // explicitly (Kubernetes would otherwise reject the pod downstream).
+                    // Other resources (e.g. ephemeral-storage) parse fine as negative numbers, so
+                    // reject them explicitly (Kubernetes would otherwise reject the pod
+                    // downstream).
                     errors.add(
                             String.format(
                                     "%s resource requirements %s %s must not be negative: %s",
