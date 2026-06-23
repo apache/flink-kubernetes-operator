@@ -793,7 +793,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
         populateFlinkVersion(conf, clusterInfo);
 
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        var taskManagerReplicas = getTaskManagerReplicas(conf);
         clusterInfo.put(
                 FIELD_NAME_TOTAL_CPU,
                 String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
@@ -1114,6 +1114,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                             EmptyRequestBody.getInstance())
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public int getTaskManagerReplicas(Configuration conf) throws Exception {
+        return getTaskManagersInfo(conf).getTaskManagerInfos().size();
     }
 
     @Override

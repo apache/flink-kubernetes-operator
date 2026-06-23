@@ -51,6 +51,7 @@ import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.DuplicateJobSubmissionException;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
@@ -155,6 +156,10 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
+
+    // Simulates the actual number of TaskManagers registered with the cluster. When null, a
+    // converged cluster is assumed and the count is derived from the spec.
+    @Setter private Integer taskManagerReplicas = null;
 
     @Getter private Configuration submittedConf;
 
@@ -723,6 +728,15 @@ public class TestingFlinkService extends AbstractFlinkService {
             throw new TimeoutException("JM port is unavailable");
         }
         return CLUSTER_INFO;
+    }
+
+    @Override
+    public int getTaskManagerReplicas(Configuration conf) {
+        if (taskManagerReplicas != null) {
+            return taskManagerReplicas;
+        }
+        // Assume a converged cluster where the registered TaskManagers match the spec.
+        return FlinkUtils.getNumTaskManagers(conf);
     }
 
     @Override

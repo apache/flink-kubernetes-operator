@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
@@ -87,6 +88,14 @@ public abstract class AbstractFlinkDeploymentObserver
                                     flinkApp.getStatus().getJobStatus().getJobId());
             flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
+
+            // Report the actual number of TaskManagers registered with the running cluster rather
+            // than a value derived from the spec, so the status reflects dynamically changing
+            // deployments (e.g. standalone reactive mode). See FLINK-37448.
+            var replicas = ctx.getFlinkService().getTaskManagerReplicas(ctx.getObserveConfig());
+            var labelSelector =
+                    FlinkUtils.getTaskManagerLabelSelector(flinkApp.getMetadata().getName());
+            flinkApp.getStatus().setTaskManager(new TaskManagerInfo(labelSelector, replicas));
         } catch (Exception e) {
             logger.warn("Exception while fetching cluster info", e);
         }

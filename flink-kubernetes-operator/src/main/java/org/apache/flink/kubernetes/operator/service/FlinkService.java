@@ -119,6 +119,15 @@ public interface FlinkService {
 
     Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
 
+    /**
+     * Returns the actual number of TaskManagers currently registered with the running Flink
+     * cluster, as reported by the Flink REST API. Unlike the value derived from the spec
+     * (parallelism / slots), this reflects the real cluster state, which is important for
+     * deployments where the TaskManager count fluctuates dynamically (e.g. standalone reactive
+     * mode).
+     */
+    int getTaskManagerReplicas(Configuration conf) throws Exception;
+
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 
     boolean scale(FlinkResourceContext<?> resourceContext, Configuration deployConfig)
