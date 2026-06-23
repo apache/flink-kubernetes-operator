@@ -317,9 +317,11 @@ public class FlinkDeploymentControllerTest {
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
+        // The actual replica count is populated during observation from the running cluster; right
+        // after reconciliation (cluster not yet observed) it stays 0 (FLINK-37448).
         assertEquals(
                 new TaskManagerInfo(
-                        "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
+                        "component=taskmanager,app=" + appCluster.getMetadata().getName(), 0),
                 appCluster.getStatus().getTaskManager());
         assertEquals("s0", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 
