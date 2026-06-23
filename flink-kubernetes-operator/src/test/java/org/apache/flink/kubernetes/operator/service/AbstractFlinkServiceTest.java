@@ -1319,19 +1319,18 @@ public class AbstractFlinkServiceTest {
         assertTrue(remainingMillis > 0);
         assertTrue(remainingMillis < 10000 - deleteDelay / 2);
 
-        // Test actual timeout
-        remainingMillis =
-                flinkService
-                        .deleteDeploymentBlocking(
+        // A timeout must abort reconciliation so a replacement is not created before deletion.
+        assertThrows(
+                KubernetesClientException.class,
+                () ->
+                        flinkService.deleteDeploymentBlocking(
                                 "Test",
                                 client.apps()
                                         .deployments()
                                         .inNamespace(namespace)
                                         .withName(deploymentName),
                                 DeletionPropagation.BACKGROUND,
-                                Duration.ofMillis(10))
-                        .toMillis();
-        assertEquals(0, remainingMillis);
+                                Duration.ofMillis(10)));
     }
 
     @ParameterizedTest
@@ -1362,18 +1361,32 @@ public class AbstractFlinkServiceTest {
                         })
                 .always();
 
-        var remaining =
-                AbstractFlinkService.deleteBlocking(
-                        "Test",
-                        () ->
-                                client.apps()
-                                        .deployments()
-                                        .inNamespace(namespace)
-                                        .withName(deploymentName),
-                        Duration.ofMillis(1000));
+        if (errorCode == HttpURLConnection.HTTP_NOT_FOUND) {
+            var remaining =
+                    AbstractFlinkService.deleteBlocking(
+                            "Test",
+                            () ->
+                                    client.apps()
+                                            .deployments()
+                                            .inNamespace(namespace)
+                                            .withName(deploymentName),
+                            Duration.ofMillis(1000));
+            assertTrue(remaining.toMillis() < 1000);
+        } else {
+            assertThrows(
+                    KubernetesClientException.class,
+                    () ->
+                            AbstractFlinkService.deleteBlocking(
+                                    "Test",
+                                    () ->
+                                            client.apps()
+                                                    .deployments()
+                                                    .inNamespace(namespace)
+                                                    .withName(deploymentName),
+                                    Duration.ofMillis(1000)));
+        }
 
         assertEquals(1, mockServer.getRequestCount() - reqCount);
-        assertTrue(remaining.toMillis() < 1000);
     }
 
     @Test
