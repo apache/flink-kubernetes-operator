@@ -29,23 +29,34 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.util.concurrent.Executors;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.WatchEvent;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,10 +70,10 @@ public class StandaloneFlinkServiceTest {
     StandaloneFlinkService flinkStandaloneService;
     FlinkConfigManager configManager;
     FlinkDeployment flinkDeployment;
+    private final Configuration configuration = new Configuration();
 
     @BeforeEach
     public void setup() {
-        var configuration = new Configuration();
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(OPERATOR_HEALTH_PROBE_PORT, 80);
@@ -259,6 +270,122 @@ public class StandaloneFlinkServiceTest {
                 configManager.getDeployConfig(
                         flinkDeployment.getMetadata(), flinkDeployment.getSpec()));
         assertFalse(service.getRuntimeConfig().containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
+    }
+
+    @Test
+    public void testDeleteClusterInternalThrowsOnDeploymentDeletionTimeout() {
+        var timeout = Duration.ofMillis(200);
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT, timeout);
+        var service =
+                new StandaloneFlinkService(
+                        kubernetesClient,
+                        new ArtifactManager(configManager),
+                        Executors.newDirectExecutorService(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration));
+
+        String jmDeploymentName =
+                StandaloneKubernetesUtils.getJobManagerDeploymentName(
+                        TestUtils.TEST_DEPLOYMENT_NAME);
+
+        var dep =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(jmDeploymentName)
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .endMetadata()
+                        .build();
+        DeploymentList deploymentList =
+                new DeploymentListBuilder().withMetadata(new ListMeta()).withItems(dep).build();
+
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        TestUtils.TEST_NAMESPACE, jmDeploymentName);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        TestUtils.TEST_NAMESPACE, jmDeploymentName);
+
+        // GET always returns the deployment; watch never emits DELETED within timeout
+        mockServer.expect().get().withPath(getUrl).andReturn(200, deploymentList).always();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(dep, "DELETED"))
+                .done()
+                .always();
+
+        assertThrows(
+                KubernetesClientTimeoutException.class,
+                () ->
+                        service.deleteClusterInternal(
+                                TestUtils.TEST_NAMESPACE,
+                                TestUtils.TEST_DEPLOYMENT_NAME,
+                                new Configuration(),
+                                DeletionPropagation.BACKGROUND));
+    }
+
+    @Test
+    public void testDeleteClusterInternalThrowsOnTaskManagerDeletionTimeout() {
+        var timeout = Duration.ofMillis(200);
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT, timeout);
+        var service =
+                new StandaloneFlinkService(
+                        kubernetesClient,
+                        new ArtifactManager(configManager),
+                        Executors.newDirectExecutorService(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration));
+
+        String tmDeploymentName =
+                StandaloneKubernetesUtils.getTaskManagerDeploymentName(
+                        TestUtils.TEST_DEPLOYMENT_NAME);
+
+        var dep =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(tmDeploymentName)
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .endMetadata()
+                        .build();
+        DeploymentList deploymentList =
+                new DeploymentListBuilder().withMetadata(new ListMeta()).withItems(dep).build();
+
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        TestUtils.TEST_NAMESPACE, tmDeploymentName);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        TestUtils.TEST_NAMESPACE, tmDeploymentName);
+
+        // GET always returns the deployment; watch never emits DELETED within timeout
+        mockServer.expect().get().withPath(getUrl).andReturn(200, deploymentList).always();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(dep, "DELETED"))
+                .done()
+                .always();
+
+        assertThrows(
+                KubernetesClientTimeoutException.class,
+                () ->
+                        service.deleteClusterInternal(
+                                TestUtils.TEST_NAMESPACE,
+                                TestUtils.TEST_DEPLOYMENT_NAME,
+                                new Configuration(),
+                                DeletionPropagation.BACKGROUND));
     }
 
     class TestingStandaloneFlinkService extends StandaloneFlinkService {
