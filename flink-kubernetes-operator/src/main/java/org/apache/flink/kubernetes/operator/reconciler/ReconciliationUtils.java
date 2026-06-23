@@ -172,9 +172,7 @@ public class ReconciliationUtils {
                     ((FlinkDeploymentStatus) status)
                             .setTaskManager(
                                     getTaskManagerInfo(
-                                            target.getMetadata().getName(),
-                                            conf,
-                                            stateAfterReconcile));
+                                            target.getMetadata().getName(), stateAfterReconcile));
                 }
                 reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec, target);
                 if (spec.getJob().getState() == JobState.SUSPENDED) {
@@ -239,11 +237,13 @@ public class ReconciliationUtils {
         }
     }
 
-    private static TaskManagerInfo getTaskManagerInfo(
-            String name, Configuration conf, JobState jobState) {
-        var labelSelector = "component=taskmanager,app=" + name;
+    private static TaskManagerInfo getTaskManagerInfo(String name, JobState jobState) {
         if (jobState == JobState.RUNNING) {
-            return new TaskManagerInfo(labelSelector, FlinkUtils.getNumTaskManagers(conf));
+            // The actual replica count is populated during observation from the running cluster
+            // (see AbstractFlinkDeploymentObserver#observeClusterInfo). Here we only set the label
+            // selector; the replica count stays 0 until the running cluster is observed (which only
+            // happens once the JobManager deployment is ready).
+            return new TaskManagerInfo(FlinkUtils.getTaskManagerLabelSelector(name), 0);
         } else {
             return new TaskManagerInfo("", 0);
         }

@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.util.SerializedThrowable;
@@ -211,13 +212,18 @@ public class FlinkDeploymentControllerTest {
         }
 
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
+        // Simulate a cluster whose actual registered TaskManager count differs from the
+        // spec-derived count (parallelism 1), so the assertion below verifies the value observed
+        // from the running cluster rather than a spec-derived one.
+        flinkService.setTaskManagerReplicas(3);
         verifyReconcileNormalLifecycle(appCluster);
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
         assertEquals(
                 new TaskManagerInfo(
-                        "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
+                        FlinkUtils.getTaskManagerLabelSelector(appCluster.getMetadata().getName()),
+                        3),
                 appCluster.getStatus().getTaskManager());
     }
 
@@ -317,9 +323,12 @@ public class FlinkDeploymentControllerTest {
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
+        // The actual replica count is populated during observation from the running cluster; right
+        // after reconciliation (cluster not yet observed) it stays 0.
         assertEquals(
                 new TaskManagerInfo(
-                        "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
+                        FlinkUtils.getTaskManagerLabelSelector(appCluster.getMetadata().getName()),
+                        0),
                 appCluster.getStatus().getTaskManager());
         assertEquals("s0", appCluster.getStatus().getJobStatus().getUpgradeSavepointPath());
 

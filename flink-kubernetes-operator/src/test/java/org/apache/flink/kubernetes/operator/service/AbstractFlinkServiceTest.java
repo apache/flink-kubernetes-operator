@@ -1195,14 +1195,19 @@ public class AbstractFlinkServiceTest {
                         AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
                         "" + MemorySize.ofMebiBytes(1000).getBytes() * 2);
 
-        assertEquals(expectedEntries, flinkService.getClusterInfo(conf, null));
+        // The REST API reports a single registered TaskManager (tmsInfo above), which
+        // getTaskManagerReplicas surfaces and the caller passes into getClusterInfo for the
+        // resource totals.
+        assertEquals(1, flinkService.getTaskManagerReplicas(conf));
+
+        assertEquals(expectedEntries, flinkService.getClusterInfo(conf, null, 1));
 
         assertEquals(
                 ImmutableMap.<String, String>builder()
                         .putAll(expectedEntries)
                         .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
                         .build(),
-                flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
+                flinkService.getClusterInfo(conf, JobID.generate().toHexString(), 1));
     }
 
     @Test

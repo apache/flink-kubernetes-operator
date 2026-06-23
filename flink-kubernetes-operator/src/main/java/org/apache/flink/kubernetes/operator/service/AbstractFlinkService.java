@@ -787,13 +787,12 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId)
-            throws Exception {
+    public Map<String, String> getClusterInfo(
+            Configuration conf, @Nullable String jobId, int taskManagerReplicas) throws Exception {
         Map<String, String> clusterInfo = new HashMap<>();
 
         populateFlinkVersion(conf, clusterInfo);
 
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
         clusterInfo.put(
                 FIELD_NAME_TOTAL_CPU,
                 String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
@@ -1114,6 +1113,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                             EmptyRequestBody.getInstance())
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public int getTaskManagerReplicas(Configuration conf) throws Exception {
+        return getTaskManagersInfo(conf).getTaskManagerInfos().size();
     }
 
     @Override

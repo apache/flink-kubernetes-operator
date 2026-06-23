@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
@@ -80,13 +81,26 @@ public abstract class AbstractFlinkDeploymentObserver
     private void observeClusterInfo(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkApp = ctx.getResource();
         try {
+            var observeConfig = ctx.getObserveConfig();
+            // Fetch the actual number of registered TaskManagers once and reuse it both for the
+            // cluster resource totals and the reported replica count, so a single /taskmanagers
+            // call backs a consistent snapshot.
+            var replicas = ctx.getFlinkService().getTaskManagerReplicas(observeConfig);
             Map<String, String> clusterInfo =
                     ctx.getFlinkService()
                             .getClusterInfo(
-                                    ctx.getObserveConfig(),
-                                    flinkApp.getStatus().getJobStatus().getJobId());
+                                    observeConfig,
+                                    flinkApp.getStatus().getJobStatus().getJobId(),
+                                    replicas);
             flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
+
+            // Report the actual number of TaskManagers registered with the running cluster rather
+            // than a value derived from the spec, so the status reflects dynamically changing
+            // deployments (e.g. standalone reactive mode).
+            var labelSelector =
+                    FlinkUtils.getTaskManagerLabelSelector(flinkApp.getMetadata().getName());
+            flinkApp.getStatus().setTaskManager(new TaskManagerInfo(labelSelector, replicas));
         } catch (Exception e) {
             logger.warn("Exception while fetching cluster info", e);
         }
