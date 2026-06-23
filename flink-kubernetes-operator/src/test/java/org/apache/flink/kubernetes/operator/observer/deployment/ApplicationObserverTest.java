@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -87,6 +88,65 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 .getFlinkConfiguration()
                 .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
         deployment.getStatus().getJobStatus().setJobId(jobId);
+    }
+
+    @Test
+    public void observeReportsActualTaskManagerReplicas() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        // The actual number of TaskManagers registered with the cluster (e.g. fluctuating in
+        // reactive mode), independent of the spec-derived count.
+        flinkService.setTaskManagerReplicas(5);
+
+        // Drive the deployment to a ready state so cluster info gets observed.
+        observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        var labelSelector =
+                FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
+
+        // The status reflects the actual count from the cluster, not ceil(parallelism / slots).
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 5), deployment.getStatus().getTaskManager());
+
+        // The reported count tracks the actual cluster state across observations.
+        flinkService.setTaskManagerReplicas(3);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 3), deployment.getStatus().getTaskManager());
+    }
+
+    @Test
+    public void observePreservesTaskManagerOnFetchFailure() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        flinkService.setTaskManagerReplicas(4);
+        observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+
+        var labelSelector =
+                FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 4), deployment.getStatus().getTaskManager());
+
+        // A failure while fetching the cluster info must not overwrite the last known good value.
+        flinkService.setTaskManagerReplicasError(true);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 4), deployment.getStatus().getTaskManager());
     }
 
     @Test
