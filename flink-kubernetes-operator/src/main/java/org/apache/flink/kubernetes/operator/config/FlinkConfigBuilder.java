@@ -528,7 +528,7 @@ public class FlinkConfigBuilder {
 
         // Running an application job through standalone mode doesn't requires file uri scheme and
         // doesn't accept
-        // local scheme which is used for native so convert here to improve compatibilty at the
+        // local scheme which is used for native so convert here to improve compatibility at the
         // operator layer
         if (uri.getScheme().equals("local")) {
             uri =

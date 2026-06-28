@@ -125,7 +125,7 @@ If an UPGRADE type change is detected in the spec we execute the job upgrade flo
 
 #### UpgradeMode and suspend/cancel behaviour
 
-The operator must always respect the upgrade mode setting when it comes to stateful upgrades to avoid data loss. There is however some flexibility in the mechanism to account for unhealthy jobs and to provide extra safeguards during version upgrades. The **getAvailableUpgradeMode** method is an important corner stone in the upgrade logic, and it is used to decide what actualy upgrade mode should be used given the request from the user and current cluster state.
+The operator must always respect the upgrade mode setting when it comes to stateful upgrades to avoid data loss. There is however some flexibility in the mechanism to account for unhealthy jobs and to provide extra safeguards during version upgrades. The **getAvailableUpgradeMode** method is an important corner stone in the upgrade logic, and it is used to decide what actual upgrade mode should be used given the request from the user and current cluster state.
 
 In normal healthy cases, the available upgrade mode will be the same as what the user has in the spec. However, there are some cases where we have to change between savepoint and last-state upgrade mode. Savepoint upgrade mode can only be used if the job is healthy and running, for failing, restarting or otherwise unhealthy deployments, we are allowed to use last-state upgrade mode as long as HA metadata is available (and not explicitly configured otherwise). This allows us to have a robust upgrade flow even if a job failed, while keeping state consistency.
 
