@@ -314,7 +314,7 @@ public class KubernetesAutoScalerEventHandlerTest {
         assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
-        // Get recommendation event even parallelism map doesn't change and within supression
+        // Get recommendation event even parallelism map doesn't change and within suppression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
         assertEquals(1, flinkResourceEventCollector.events.size());
@@ -334,7 +334,7 @@ public class KubernetesAutoScalerEventHandlerTest {
         assertEquals("1286380436", event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(2, event.getCount());
 
-        // Get recommendation event even parallelism map doesn't change and within supression
+        // Get recommendation event even parallelism map doesn't change and within suppression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
         assertEquals(1, flinkResourceEventCollector.events.size());
@@ -388,7 +388,7 @@ public class KubernetesAutoScalerEventHandlerTest {
         assertNull(event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
-        // Get recommendation event even parallelism map doesn't change and within supression
+        // Get recommendation event even parallelism map doesn't change and within suppression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
         assertEquals(1, flinkResourceEventCollector.events.size());
@@ -408,7 +408,7 @@ public class KubernetesAutoScalerEventHandlerTest {
         assertEquals("1286380436", event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(2, event.getCount());
 
-        // Get recommendation event even parallelism map doesn't change and within supression
+        // Get recommendation event even parallelism map doesn't change and within suppression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
         assertEquals(1, flinkResourceEventCollector.events.size());

@@ -59,10 +59,10 @@ build_push_catalog(){
 
 # Simplest way to build local index(catalog) image without any upgrade path
 # opm index add --bundles "${BUNDLE_IMG}" --tag "${CATALOG_IMG}" -c docker
-# But we also want to test upgrade from the previus version
-# Therefor, building local catalog image using latest file-based-catalog format
+# But we also want to test upgrade from the previous version
+# Therefore, building local catalog image using latest file-based-catalog format
 # https://olm.operatorframework.io/docs/reference/file-based-catalogs/#opm-generate-dockerfile
-# We assume someone runing an older olm bundle.
+# We assume someone running an older olm bundle.
 # This enables testing upgrade from the previous version using startingCSV in Subscription
 generate_fbc_config() {
 rm -rf "${CATDIR}"

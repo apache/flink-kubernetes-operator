@@ -22,7 +22,7 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Custom Resource Defintion Reference
+# Custom Resource Definition Reference
 
 This serves as a full reference for FlinkDeployment and FlinkSessionJob custom resource definitions, including all possible configuration parameters.
 

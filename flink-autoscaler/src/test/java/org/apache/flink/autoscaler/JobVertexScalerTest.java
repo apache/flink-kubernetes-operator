@@ -769,7 +769,7 @@ public class JobVertexScalerTest {
                         restartTime,
                         delayedScaleDown));
 
-        // Allow scale up if current parallelism doesnt match last (user rescaled manually)
+        // Allow scale up if current parallelism doesn't match last (user rescaled manually)
         evaluated = evaluated(10, 180, 90);
         assertEquals(
                 ParallelismChange.build(20, 10, true),
@@ -967,7 +967,7 @@ public class JobVertexScalerTest {
         // reset tpr
         evaluated.put(ScalingMetric.TRUE_PROCESSING_RATE, tpr);
 
-        // Repeat ineffective scale with postive interval, no event is triggered
+        // Repeat ineffective scale with positive interval, no event is triggered
         conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ofSeconds(1800));
         assertEquals(
                 ParallelismChange.noChange(20),

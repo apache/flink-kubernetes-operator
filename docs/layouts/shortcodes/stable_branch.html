@@ -18,5 +18,5 @@ under the License.
 */}}{{/*
     Shortcode that interpolates the stable version title
 
-    Parmeters: None
+    Parameters: None
 */}}{{ if $.Site.Params.IsStable }}{{- $.Site.Params.Branch -}}{{else}}release-{{- index (index $.Site.Params.PreviousDocs 0) 0 -}}{{ end }}
