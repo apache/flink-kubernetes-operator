@@ -19,7 +19,7 @@ package org.apache.flink.autoscaler.standalone.utils;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 
 import org.slf4j.Logger;
@@ -82,14 +82,15 @@ public class AutoscalerUtils {
     /**
      * Discovers custom alignment modes for the standalone autoscaler via Java's {@link
      * ServiceLoader} mechanism. Implementations must be registered under {@code
-     * META-INF/services/org.apache.flink.autoscaler.alignment.AlignmentMode} on the classpath.
-     * Built-in modes are not plugins and are resolved by name, so they are not returned here.
+     * META-INF/services/org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode} on the
+     * classpath. Built-in modes are not plugins and are resolved by name, so they are not returned
+     * here.
      *
      * @return The list of discovered custom alignment modes.
      */
-    public static Collection<AlignmentMode> discoverCustomAlignmentModes() {
-        List<AlignmentMode> customAlignmentModes = new ArrayList<>();
-        ServiceLoader.load(AlignmentMode.class)
+    public static Collection<ParallelismAlignmentMode> discoverCustomAlignmentModes() {
+        List<ParallelismAlignmentMode> customAlignmentModes = new ArrayList<>();
+        ServiceLoader.load(ParallelismAlignmentMode.class)
                 .forEach(
                         customAlignmentMode -> {
                             LOG.info(

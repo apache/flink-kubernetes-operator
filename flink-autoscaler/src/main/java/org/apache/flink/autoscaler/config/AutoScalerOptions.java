@@ -35,7 +35,8 @@ public class AutoScalerOptions {
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
     public static final String CUSTOM_EVALUATOR_CONF_PREFIX = "metrics.custom-evaluator.";
     public static final String SCALING_CUSTOM_EXECUTOR_CONF_PREFIX = "scaling.custom-executor.";
-    public static final String SCALING_ALIGNMENT_MODE_CONF_PREFIX = "scaling.alignment.mode.";
+    public static final String SCALING_ALIGNMENT_MODE_CONF_PREFIX =
+            "scaling.parallelism-alignment.mode.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -386,14 +387,14 @@ public class AutoScalerOptions {
                                     oldOperatorConfigKey(
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
-                                    "Deprecated, use scaling.alignment.mode instead. How to adjust "
+                                    "Deprecated, use scaling.parallelism-alignment.mode instead. How to adjust "
                                             + "the parallelism of Source vertex or upstream partitioning is keyBy");
 
     public static final ConfigOption<String> ALIGNMENT_MODE =
-            autoScalerConfig("scaling.alignment.mode")
+            autoScalerConfig("scaling.parallelism-alignment.mode")
                     .stringType()
                     .defaultValue(BuiltInAlignmentMode.BALANCED.name())
-                    .withFallbackKeys(oldOperatorConfigKey("scaling.alignment.mode"))
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.parallelism-alignment.mode"))
                     .withDescription(
                             "How the autoscaler aligns the parallelism of source vertices and keyBy "
                                     + "(hash) vertices to the number of key groups or source "
@@ -419,7 +420,7 @@ public class AutoScalerOptions {
                     .withDescription(
                             "The fully-qualified class name of the custom alignment mode named "
                                     + "<name>, discovered as a plugin and selectable via "
-                                    + "scaling.alignment.mode=<name>.");
+                                    + "scaling.parallelism-alignment.mode=<name>.");
 
     /** Documentation-only template for the custom alignment mode parameters. */
     @SuppressWarnings("unused")
@@ -663,9 +664,9 @@ public class AutoScalerOptions {
 
     /**
      * The per-mode options configured for the custom alignment mode {@code name}, prefix-stripped
-     * from the {@code job.autoscaler.scaling.alignment.mode.<name>.} namespace. See {@link
-     * #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy merge
-     * semantics.
+     * from the {@code job.autoscaler.scaling.parallelism-alignment.mode.<name>.} namespace. See
+     * {@link #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy
+     * merge semantics.
      */
     public static Configuration customAlignmentModeConfiguration(Configuration conf, String name) {
         return prefixStrippedConfiguration(conf, SCALING_ALIGNMENT_MODE_CONF_PREFIX, name);

@@ -280,18 +280,18 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
 ## Custom Parallelism Alignment Modes
 
-The autoscaler aligns a vertex's computed target parallelism to the number of key groups (keyBy) or source partitions to reduce data skew. The built-in modes (`BALANCED`, `EVENLY_SPREAD`, `OFF`) are selected by name through `job.autoscaler.scaling.alignment.mode`. A custom alignment mode can also be provided as a plugin by implementing the `AlignmentMode` SPI. Custom modes are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+The autoscaler aligns a vertex's computed target parallelism to the number of key groups (keyBy) or source partitions to reduce data skew. The built-in modes (`BALANCED`, `EVENLY_SPREAD`, `OFF`) are selected by name through `job.autoscaler.scaling.parallelism-alignment.mode`. A custom alignment mode can also be provided as a plugin by implementing the `ParallelismAlignmentMode` SPI. Custom modes are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
 
-All `job.autoscaler.*` keys related to custom alignment modes also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.alignment.mode`). The canonical key takes precedence on overlap.
+All `job.autoscaler.*` keys related to custom alignment modes also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.parallelism-alignment.mode`). The canonical key takes precedence on overlap.
 
 The following steps demonstrate how to develop and use a custom alignment mode.
 
-1. Implement `org.apache.flink.autoscaler.alignment.AlignmentMode`:
+1. Implement `org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode`:
     ```java
     package org.apache.flink.autoscaler.alignment;
 
     /** Custom alignment mode snapping the computed parallelism down to the nearest divisor. */
-    public class CustomAlignmentMode implements AlignmentMode {
+    public class CustomAlignmentMode implements ParallelismAlignmentMode {
 
         /** Apply to every vertex, not only the source and keyBy vertices the built-ins handle. */
         @Override
@@ -318,21 +318,21 @@ The following steps demonstrate how to develop and use a custom alignment mode.
     ```
    The `Context` exposes the current and computed target parallelism, the number of key groups or source partitions, the input ship strategies, the `JobAutoScalerContext`, the per-vertex evaluated metrics, the job topology, and the prefix-stripped per-mode `Configuration` (`getModeConfiguration()`). The autoscaler calls `align` only when `isApplicable(Context)` returns true. That method defaults to keyBy (hash) vertices and to partitioned sources that report a partition count (Kafka and Pulsar do by default), and a custom mode can override it to widen the scope, for example to align custom partitioned vertices.
 
-2. Create the service definition file `org.apache.flink.autoscaler.alignment.AlignmentMode` in `META-INF/services`:
+2. Create the service definition file `org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode` in `META-INF/services`:
     ```text
     org.apache.flink.autoscaler.alignment.CustomAlignmentMode
     ```
 
 3. Use the Maven tool to package the project and generate the custom alignment mode JAR.
 
-4. Select the custom mode by name and point it at your implementation class. Any other `job.autoscaler.scaling.alignment.mode.<name>.*` entries are passed to the mode (prefix-stripped) through `Context#getModeConfiguration()`:
+4. Select the custom mode by name and point it at your implementation class. Any other `job.autoscaler.scaling.parallelism-alignment.mode.<name>.*` entries are passed to the mode (prefix-stripped) through `Context#getModeConfiguration()`:
     ```yaml
-    job.autoscaler.scaling.alignment.mode: custom-mode
-    job.autoscaler.scaling.alignment.mode.custom-mode.class: org.apache.flink.autoscaler.alignment.CustomAlignmentMode
-    job.autoscaler.scaling.alignment.mode.custom-mode.min-parallelism: 4
+    job.autoscaler.scaling.parallelism-alignment.mode: custom-mode
+    job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.class: org.apache.flink.autoscaler.alignment.CustomAlignmentMode
+    job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.min-parallelism: 4
     ```
    {{< hint info >}}
-   The `<name>` is any identifier you choose. `custom-mode` is used here, but `CUSTOM_MODE` or any other style works just as well. It is matched exactly, including case, so the value of `scaling.alignment.mode` and the `<name>` in `scaling.alignment.mode.<name>.class` must be identical. As a result, `CUSTOM_MODE` and `custom-mode` are two different modes, not aliases. The only reserved names are the built-ins (`BALANCED`, `EVENLY_SPREAD`, `OFF`), which always resolve to the built-in modes regardless of any configured class.
+   The `<name>` is any identifier you choose. `custom-mode` is used here, but `CUSTOM_MODE` or any other style works just as well. It is matched exactly, including case, so the value of `scaling.parallelism-alignment.mode` and the `<name>` in `scaling.parallelism-alignment.mode.<name>.class` must be identical. As a result, `CUSTOM_MODE` and `custom-mode` are two different modes, not aliases. The only reserved names are the built-ins (`BALANCED`, `EVENLY_SPREAD`, `OFF`), which always resolve to the built-in modes regardless of any configured class.
    {{< /hint >}}
 
 5. Deploy the mode.

@@ -28,14 +28,14 @@ import static org.apache.flink.configuration.description.TextElement.text;
  * <p>Unlike {@link BuiltInAlignmentMode}, these preserve the original <b>blocking</b> behavior:
  * when no aligned value can preserve the scaling direction they return the current parallelism and
  * emit a {@code SCALING_LIMITED} event, and they also emit when the aligned value deviates from the
- * computed target. New configurations should use {@code scaling.alignment.mode}.
+ * computed target. New configurations should use {@code scaling.parallelism-alignment.mode}.
  *
  * @deprecated Superseded by {@link BuiltInAlignmentMode} (config key {@code
- *     scaling.alignment.mode}). Retained only so the deprecated {@code
+ *     scaling.parallelism-alignment.mode}). Retained only so the deprecated {@code
  *     scaling.key-group.partitions.adjust.mode} key still parses and behaves exactly as before.
  */
 @Deprecated
-public enum KeyGroupOrPartitionsAdjustMode implements AlignmentMode, DescribedEnum {
+public enum KeyGroupOrPartitionsAdjustMode implements ParallelismAlignmentMode, DescribedEnum {
     EVENLY_SPREAD(
             "This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks"
                     + ". It is particularly effective for source vertices that are aware of partition counts or vertices after "
@@ -59,13 +59,13 @@ public enum KeyGroupOrPartitionsAdjustMode implements AlignmentMode, DescribedEn
     }
 
     @Override
-    public int align(Context ctx) {
+    public int alignParallelism(Context ctx) {
         // Called directly (without an emitter) the SCALING_LIMITED event is suppressed; the
         // autoscaler path goes through the emitter overload below via ParallelismAligner.
-        return align(ctx, (expected, actual) -> {});
+        return alignParallelism(ctx, (expected, actual) -> {});
     }
 
-    int align(Context ctx, ParallelismAligner.ScalingLimitedEmitter emitter) {
+    int alignParallelism(Context ctx, ParallelismAligner.ScalingLimitedEmitter emitter) {
         int aligned = ParallelismAligner.firstAlignedInRegion(ctx, maximize);
         if (aligned > 0) {
             return aligned;

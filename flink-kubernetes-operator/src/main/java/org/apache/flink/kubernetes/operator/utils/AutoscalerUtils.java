@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginManager;
@@ -95,11 +95,11 @@ public class AutoscalerUtils {
      * @param pluginManager The shared operator plugin manager used for discovery.
      * @return The list of discovered custom alignment modes.
      */
-    public static Collection<AlignmentMode> discoverCustomAlignmentModes(
+    public static Collection<ParallelismAlignmentMode> discoverCustomAlignmentModes(
             PluginManager pluginManager) {
-        List<AlignmentMode> customAlignmentModes = new ArrayList<>();
+        List<ParallelismAlignmentMode> customAlignmentModes = new ArrayList<>();
         pluginManager
-                .load(AlignmentMode.class)
+                .load(ParallelismAlignmentMode.class)
                 .forEachRemaining(
                         customAlignmentMode -> {
                             LOG.info(

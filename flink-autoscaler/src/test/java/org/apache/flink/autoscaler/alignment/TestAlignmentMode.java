@@ -18,15 +18,15 @@
 package org.apache.flink.autoscaler.alignment;
 
 /**
- * A custom {@link AlignmentMode} used to exercise plugin discovery and selection. Aligns by
- * snapping the computed target down to the nearest exact divisor of the key groups or source
+ * A custom {@link ParallelismAlignmentMode} used to exercise plugin discovery and selection. Aligns
+ * by snapping the computed target down to the nearest exact divisor of the key groups or source
  * partitions, regardless of ship strategy, so it also demonstrates a mode that applies beyond
  * source / hash vertices.
  */
-public class TestAlignmentMode implements AlignmentMode {
+public class TestAlignmentMode implements ParallelismAlignmentMode {
 
     @Override
-    public int align(Context ctx) {
+    public int alignParallelism(Context ctx) {
         int n = ParallelismAligner.numKeyGroupsOrPartitions(ctx);
         for (int p = ctx.getNewParallelism(); p >= 1; p--) {
             if (n % p == 0) {

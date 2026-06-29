@@ -18,8 +18,8 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
 import org.apache.flink.autoscaler.alignment.ParallelismAligner;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
@@ -92,7 +92,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     public JobVertexScaler(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
-            Collection<AlignmentMode> alignmentModes) {
+            Collection<ParallelismAlignmentMode> alignmentModes) {
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.parallelismAligner = new ParallelismAligner(alignmentModes);
     }
@@ -520,9 +520,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      *
      * <p>For source vertices (with known partition counts) and keyed vertices (with HASH inputs),
      * the parallelism is further aligned to the number of key groups or source partitions by the
-     * configured {@link org.apache.flink.autoscaler.alignment.AlignmentMode}. The alignment can
-     * adjust the computed target but never vetoes a scale: when no aligned value preserves the
-     * scaling direction, the computed target is used unchanged.
+     * configured {@link org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode}. The
+     * alignment can adjust the computed target but never vetoes a scale: when no aligned value
+     * preserves the scaling direction, the computed target is used unchanged.
      */
     @VisibleForTesting
     protected int scale(

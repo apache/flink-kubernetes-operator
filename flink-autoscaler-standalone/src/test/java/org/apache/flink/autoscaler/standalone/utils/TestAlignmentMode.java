@@ -17,13 +17,16 @@
 
 package org.apache.flink.autoscaler.standalone.utils;
 
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 
-/** A custom {@link AlignmentMode} registered via ServiceLoader to exercise plugin discovery. */
-public class TestAlignmentMode implements AlignmentMode {
+/**
+ * A custom {@link ParallelismAlignmentMode} registered via ServiceLoader to exercise plugin
+ * discovery.
+ */
+public class TestAlignmentMode implements ParallelismAlignmentMode {
 
     @Override
-    public int align(Context ctx) {
+    public int alignParallelism(Context ctx) {
         return ctx.getNewParallelism();
     }
 }

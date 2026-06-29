@@ -23,25 +23,26 @@ import org.apache.flink.configuration.description.InlineElement;
 import static org.apache.flink.configuration.description.TextElement.text;
 
 /**
- * The built-in {@link AlignmentMode}s selectable through the {@code scaling.alignment.mode} option.
- * They align a computed target parallelism to the number of key groups (keyBy) or source partitions
- * to reduce data skew, searching one of the regions illustrated on {@link AlignmentMode}.
+ * The built-in {@link ParallelismAlignmentMode}s selectable through the {@code
+ * scaling.parallelism-alignment.mode} option. They align a computed target parallelism to the
+ * number of key groups (keyBy) or source partitions to reduce data skew, searching one of the
+ * regions illustrated on {@link ParallelismAlignmentMode}.
  *
  * <p>{@code BALANCED} and {@code EVENLY_SPREAD} scan a single region for the scaling direction (the
  * above-target region for a scale-up, the within-range region between the target and the current
  * parallelism for a scale-down) and differ only in what they accept. When no aligned value is found
  * in that region they use the computed target unchanged rather than blocking the scale. All three
  * apply only to source / keyBy (hash) vertices, via the default {@link
- * AlignmentMode#isApplicable(Context)}.
+ * ParallelismAlignmentMode#isApplicable(Context)}.
  */
-public enum BuiltInAlignmentMode implements AlignmentMode, DescribedEnum {
+public enum BuiltInAlignmentMode implements ParallelismAlignmentMode, DescribedEnum {
     BALANCED(
             "Default. Aligns to the first parallelism in the search region that reduces per-subtask "
                     + "load, snapping to an exact divisor of the key groups or source partitions "
                     + "when one is within reach. Balances even data distribution against resource "
                     + "usage, tolerating mild skew to avoid over-provisioning.") {
         @Override
-        public int align(Context ctx) {
+        public int alignParallelism(Context ctx) {
             return alignOrKeepTarget(ctx, true);
         }
     },
@@ -50,14 +51,14 @@ public enum BuiltInAlignmentMode implements AlignmentMode, DescribedEnum {
             "Aligns to a parallelism that evenly divides the number of key groups or source "
                     + "partitions, spreading data evenly across subtasks to reduce skew.") {
         @Override
-        public int align(Context ctx) {
+        public int alignParallelism(Context ctx) {
             return alignOrKeepTarget(ctx, false);
         }
     },
 
     OFF("Disables alignment. The autoscaler's computed target parallelism is used as-is.") {
         @Override
-        public int align(Context ctx) {
+        public int alignParallelism(Context ctx) {
             return ctx.getNewParallelism();
         }
     };

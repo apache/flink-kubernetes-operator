@@ -23,7 +23,7 @@ import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
@@ -54,7 +54,7 @@ public class AutoscalerFactory {
                 AutoscalerUtils.discoverCustomEvaluators(pluginManager);
         Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
                 customExecutors = AutoscalerUtils.discoverCustomScalingExecutors(pluginManager);
-        Collection<AlignmentMode> customAlignmentModes =
+        Collection<ParallelismAlignmentMode> customAlignmentModes =
                 AutoscalerUtils.discoverCustomAlignmentModes(pluginManager);
 
         return new JobAutoScalerImpl<>(

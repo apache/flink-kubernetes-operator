@@ -20,7 +20,7 @@ package org.apache.flink.autoscaler.standalone.utils;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.TestScalingExecutor;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 
@@ -59,7 +59,8 @@ class AutoscalerUtilsTest {
 
     @Test
     void testDiscoverCustomAlignmentModes() {
-        Collection<AlignmentMode> alignmentModes = AutoscalerUtils.discoverCustomAlignmentModes();
+        Collection<ParallelismAlignmentMode> alignmentModes =
+                AutoscalerUtils.discoverCustomAlignmentModes();
 
         assertThat(alignmentModes)
                 .as("Expected to discover the TestAlignmentMode registered under META-INF/services")

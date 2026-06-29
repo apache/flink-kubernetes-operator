@@ -48,21 +48,21 @@ import java.util.Map;
  * <p>This is the extension seam for tuning how the computed parallelism is adjusted. The built-in
  * behaviors are provided by {@link BuiltInAlignmentMode}. Custom implementations are discovered as
  * plugins (via {@code ServiceLoader} in the standalone autoscaler, or Flink's {@code PluginManager}
- * in the operator) and selected by name through {@code scaling.alignment.mode} plus {@code
- * scaling.alignment.mode.<name>.class}.
+ * in the operator) and selected by name through {@code scaling.parallelism-alignment.mode} plus
+ * {@code scaling.parallelism-alignment.mode.<name>.class}.
  *
  * <p>An implementation may keep the computed target unchanged or adjust it, and decides for itself
  * whether it applies to a given vertex (see {@link #isApplicable(Context)}).
  */
 @Experimental
-public interface AlignmentMode {
+public interface ParallelismAlignmentMode {
 
     /**
      * Whether this mode applies to the vertex described by {@code ctx}. When it returns {@code
-     * false} the autoscaler keeps the computed target parallelism and {@link #align(Context)} is
-     * not called. Defaults to keyBy (hash) vertices and to partitioned sources that report a
-     * partition count (Kafka and Pulsar do by default). A custom mode can widen this, for example
-     * to align custom partitioned vertices.
+     * false} the autoscaler keeps the computed target parallelism and {@link
+     * #alignParallelism(Context)} is not called. Defaults to keyBy (hash) vertices and to
+     * partitioned sources that report a partition count (Kafka and Pulsar do by default). A custom
+     * mode can widen this, for example to align custom partitioned vertices.
      */
     default boolean isApplicable(Context ctx) {
         return ctx.getNumSourcePartitions() > 0
@@ -73,13 +73,13 @@ public interface AlignmentMode {
      * Returns the parallelism to apply for the vertex described by {@code ctx}. Called only when
      * {@link #isApplicable(Context)} returned {@code true}.
      */
-    int align(Context ctx);
+    int alignParallelism(Context ctx);
 
     /**
      * Immutable inputs to a single per-vertex parallelism alignment, handed to {@link
-     * AlignmentMode#align(Context)}. Besides the parallelism inputs it exposes the full autoscaler
-     * context, the per-vertex evaluated metrics, the job topology, and a prefix-stripped
-     * configuration for the selected mode, so custom modes have what they need.
+     * ParallelismAlignmentMode#alignParallelism(Context)}. Besides the parallelism inputs it
+     * exposes the full autoscaler context, the per-vertex evaluated metrics, the job topology, and
+     * a prefix-stripped configuration for the selected mode, so custom modes have what they need.
      */
     @Value
     class Context {

@@ -42,12 +42,13 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_G
 /**
  * Aligns a computed target parallelism to the number of key groups or source partitions. Holds the
  * custom alignment modes discovered as plugins, resolves the configured mode (built-in by name,
- * custom by class, or the deprecated legacy mode), builds the {@link AlignmentMode.Context}, and
- * emits the {@code SCALING_LIMITED} event used by the legacy modes. The per-direction region
- * search, the legacy relaxed/blocking fallbacks, and the derived alignment quantities are stateless
- * and exposed as static helpers for the {@link AlignmentMode} implementations. This keeps all the
- * alignment logic out of {@link org.apache.flink.autoscaler.JobVertexScaler}, which only computes
- * the clamped target and delegates here.
+ * custom by class, or the deprecated legacy mode), builds the {@link
+ * ParallelismAlignmentMode.Context}, and emits the {@code SCALING_LIMITED} event used by the legacy
+ * modes. The per-direction region search, the legacy relaxed/blocking fallbacks, and the derived
+ * alignment quantities are stateless and exposed as static helpers for the {@link
+ * ParallelismAlignmentMode} implementations. This keeps all the alignment logic out of {@link
+ * org.apache.flink.autoscaler.JobVertexScaler}, which only computes the clamped target and
+ * delegates here.
  */
 public final class ParallelismAligner {
 
@@ -68,15 +69,15 @@ public final class ParallelismAligner {
     }
 
     /** Custom modes discovered as plugins; built-ins and the legacy modes are resolved by name. */
-    private final Collection<AlignmentMode> discoveredModes;
+    private final Collection<ParallelismAlignmentMode> discoveredModes;
 
-    public ParallelismAligner(Collection<AlignmentMode> discoveredModes) {
+    public ParallelismAligner(Collection<ParallelismAlignmentMode> discoveredModes) {
         this.discoveredModes = discoveredModes;
     }
 
     /**
-     * Resolves the configured alignment mode, builds the {@link AlignmentMode.Context} for the
-     * vertex, and applies the mode to the clamped {@code newParallelism}.
+     * Resolves the configured alignment mode, builds the {@link ParallelismAlignmentMode.Context}
+     * for the vertex, and applies the mode to the clamped {@code newParallelism}.
      */
     @SuppressWarnings("deprecation")
     public <KEY, Context extends JobAutoScalerContext<KEY>> int align(
@@ -95,8 +96,8 @@ public final class ParallelismAligner {
         Configuration conf = context.getConfiguration();
         String modeName = conf.get(ALIGNMENT_MODE);
 
-        AlignmentMode.Context alignmentContext =
-                new AlignmentMode.Context(
+        ParallelismAlignmentMode.Context alignmentContext =
+                new ParallelismAlignmentMode.Context(
                         vertex,
                         currentParallelism,
                         newParallelism,
@@ -110,7 +111,7 @@ public final class ParallelismAligner {
                         jobTopology,
                         AutoScalerOptions.customAlignmentModeConfiguration(conf, modeName));
 
-        AlignmentMode mode = resolve(conf);
+        ParallelismAlignmentMode mode = resolve(conf);
         if (!mode.isApplicable(alignmentContext)) {
             return alignmentContext.getNewParallelism();
         }
@@ -126,23 +127,24 @@ public final class ParallelismAligner {
                                     parallelismLowerLimit,
                                     eventHandler,
                                     context);
-            return ((KeyGroupOrPartitionsAdjustMode) mode).align(alignmentContext, emitter);
+            return ((KeyGroupOrPartitionsAdjustMode) mode)
+                    .alignParallelism(alignmentContext, emitter);
         }
-        return mode.align(alignmentContext);
+        return mode.alignParallelism(alignmentContext);
     }
 
     /**
-     * Resolves the effective alignment mode from configuration. The {@code scaling.alignment.mode}
-     * key is read first: a value matching a {@link BuiltInAlignmentMode} name selects that
-     * built-in, otherwise it is treated as a custom mode {@code <name>} whose class ({@code
-     * scaling.alignment.mode.<name>.class}) is matched against the discovered plugins. If that key
-     * is unset, the deprecated {@code scaling.key-group.partitions.adjust.mode} key is honored with
-     * its original blocking behavior. If neither is set, {@link BuiltInAlignmentMode#BALANCED}
-     * applies.
+     * Resolves the effective alignment mode from configuration. The {@code
+     * scaling.parallelism-alignment.mode} key is read first: a value matching a {@link
+     * BuiltInAlignmentMode} name selects that built-in, otherwise it is treated as a custom mode
+     * {@code <name>} whose class ({@code scaling.parallelism-alignment.mode.<name>.class}) is
+     * matched against the discovered plugins. If that key is unset, the deprecated {@code
+     * scaling.key-group.partitions.adjust.mode} key is honored with its original blocking behavior.
+     * If neither is set, {@link BuiltInAlignmentMode#BALANCED} applies.
      */
     @VisibleForTesting
     @SuppressWarnings("deprecation")
-    public AlignmentMode resolve(Configuration conf) {
+    public ParallelismAlignmentMode resolve(Configuration conf) {
         Optional<String> selected = conf.getOptional(ALIGNMENT_MODE);
         if (selected.isPresent()) {
             return resolveByName(selected.get(), conf);
@@ -157,7 +159,7 @@ public final class ParallelismAligner {
         return BuiltInAlignmentMode.BALANCED;
     }
 
-    private AlignmentMode resolveByName(String name, Configuration conf) {
+    private ParallelismAlignmentMode resolveByName(String name, Configuration conf) {
         for (BuiltInAlignmentMode builtIn : BuiltInAlignmentMode.values()) {
             if (builtIn.name().equals(name)) {
                 return builtIn;
@@ -175,7 +177,7 @@ public final class ParallelismAligner {
             return BuiltInAlignmentMode.BALANCED;
         }
 
-        for (AlignmentMode mode : discoveredModes) {
+        for (ParallelismAlignmentMode mode : discoveredModes) {
             if (mode.getClass().getName().equals(className)) {
                 return mode;
             }
@@ -191,19 +193,19 @@ public final class ParallelismAligner {
     }
 
     /** Whether the computed target is above the current parallelism. */
-    public static boolean isScaleUp(AlignmentMode.Context ctx) {
+    public static boolean isScaleUp(ParallelismAlignmentMode.Context ctx) {
         return ctx.getNewParallelism() > ctx.getCurrentParallelism();
     }
 
     /** {@code N}: the number of key groups or source partitions to align to. */
-    public static int numKeyGroupsOrPartitions(AlignmentMode.Context ctx) {
+    public static int numKeyGroupsOrPartitions(ParallelismAlignmentMode.Context ctx) {
         return ctx.getNumSourcePartitions() <= 0
                 ? ctx.getMaxParallelism()
                 : ctx.getNumSourcePartitions();
     }
 
     /** The alignment cap: {@code min(N, min(maxParallelism, parallelismUpperLimit))}. */
-    public static int upperBoundForAlignment(AlignmentMode.Context ctx) {
+    public static int upperBoundForAlignment(ParallelismAlignmentMode.Context ctx) {
         return Math.min(
                 numKeyGroupsOrPartitions(ctx),
                 Math.min(ctx.getMaxParallelism(), ctx.getParallelismUpperLimit()));
@@ -222,7 +224,8 @@ public final class ParallelismAligner {
      *     per-subtask load (not only an exact divisor)
      * @return the first accepted parallelism, or {@code 0} when none is found in the region
      */
-    public static int firstAlignedInRegion(AlignmentMode.Context ctx, boolean acceptLoadReducing) {
+    public static int firstAlignedInRegion(
+            ParallelismAlignmentMode.Context ctx, boolean acceptLoadReducing) {
         int n = numKeyGroupsOrPartitions(ctx);
         int target = ctx.getNewParallelism();
         int regionEnd =
@@ -244,7 +247,7 @@ public final class ParallelismAligner {
      * where per-subtask load increases, snapping up to the nearest divisor, then clamps to the
      * parallelism lower limit.
      */
-    public static int relaxedDownwardFallback(AlignmentMode.Context ctx) {
+    public static int relaxedDownwardFallback(ParallelismAlignmentMode.Context ctx) {
         int n = numKeyGroupsOrPartitions(ctx);
         int target = ctx.getNewParallelism();
 
@@ -267,7 +270,7 @@ public final class ParallelismAligner {
      * the aligned value deviates from the computed target. Matches the historical behavior.
      */
     public static int applyBlockingFallback(
-            AlignmentMode.Context ctx, int candidate, ScalingLimitedEmitter emitter) {
+            ParallelismAlignmentMode.Context ctx, int candidate, ScalingLimitedEmitter emitter) {
         if (invertsDirection(ctx, candidate)) {
             emitter.emit(ctx.getNewParallelism(), ctx.getCurrentParallelism());
             return ctx.getCurrentParallelism();
@@ -278,7 +281,7 @@ public final class ParallelismAligner {
         return candidate;
     }
 
-    private static boolean invertsDirection(AlignmentMode.Context ctx, int candidate) {
+    private static boolean invertsDirection(ParallelismAlignmentMode.Context ctx, int candidate) {
         return (isScaleUp(ctx) && candidate <= ctx.getCurrentParallelism())
                 || (!isScaleUp(ctx) && candidate >= ctx.getCurrentParallelism());
     }

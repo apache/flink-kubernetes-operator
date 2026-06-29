@@ -17,13 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 
-/** A custom {@link AlignmentMode} packaged as a plugin to exercise PluginManager discovery. */
-public class TestAlignmentMode implements AlignmentMode {
+/**
+ * A custom {@link ParallelismAlignmentMode} packaged as a plugin to exercise PluginManager
+ * discovery.
+ */
+public class TestAlignmentMode implements ParallelismAlignmentMode {
 
     @Override
-    public int align(Context ctx) {
+    public int alignParallelism(Context ctx) {
         return ctx.getNewParallelism();
     }
 }

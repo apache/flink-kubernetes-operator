@@ -18,7 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.autoscaler.alignment.AlignmentMode;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
@@ -117,7 +117,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck,
             Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors,
-            Collection<AlignmentMode> customAlignmentModes) {
+            Collection<ParallelismAlignmentMode> customAlignmentModes) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler, customAlignmentModes);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
