@@ -17,7 +17,8 @@
 
 package org.apache.flink.autoscaler.config;
 
-import org.apache.flink.autoscaler.JobVertexScaler;
+import org.apache.flink.autoscaler.alignment.BuiltInAlignmentMode;
+import org.apache.flink.autoscaler.alignment.KeyGroupOrPartitionsAdjustMode;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -33,8 +34,9 @@ public class AutoScalerOptions {
     public static final String OLD_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
     public static final String CUSTOM_EVALUATOR_CONF_PREFIX = "metrics.custom-evaluator.";
-    public static final String CUSTOM_EVALUATOR_CLASS_SUFFIX = "class";
     public static final String SCALING_CUSTOM_EXECUTOR_CONF_PREFIX = "scaling.custom-executor.";
+    public static final String SCALING_ALIGNMENT_MODE_CONF_PREFIX =
+            "scaling.parallelism-alignment.mode.";
 
     private static String oldOperatorConfigKey(String key) {
         return OLD_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
@@ -375,17 +377,65 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.");
 
-    public static final ConfigOption<JobVertexScaler.KeyGroupOrPartitionsAdjustMode>
+    @Deprecated
+    public static final ConfigOption<KeyGroupOrPartitionsAdjustMode>
             SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE =
                     autoScalerConfig("scaling.key-group.partitions.adjust.mode")
-                            .enumType(JobVertexScaler.KeyGroupOrPartitionsAdjustMode.class)
-                            .defaultValue(
-                                    JobVertexScaler.KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
+                            .enumType(KeyGroupOrPartitionsAdjustMode.class)
+                            .defaultValue(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD)
                             .withFallbackKeys(
                                     oldOperatorConfigKey(
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
-                                    "How to adjust the parallelism of Source vertex or upstream shuffle is keyBy");
+                                    "Deprecated, use scaling.parallelism-alignment.mode instead. How to adjust "
+                                            + "the parallelism of Source vertex or upstream partitioning is keyBy");
+
+    public static final ConfigOption<String> ALIGNMENT_MODE =
+            autoScalerConfig("scaling.parallelism-alignment.mode")
+                    .stringType()
+                    .defaultValue(BuiltInAlignmentMode.BALANCED.name())
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.parallelism-alignment.mode"))
+                    .withDescription(
+                            "How the autoscaler aligns the parallelism of source vertices and keyBy "
+                                    + "(hash) vertices to the number of key groups or source "
+                                    + "partitions. One of the built-in modes (BALANCED reduces "
+                                    + "per-subtask load above the target, EVENLY_SPREAD aligns to an "
+                                    + "exact divisor for even data distribution, OFF disables "
+                                    + "alignment), or the name of a custom alignment mode whose "
+                                    + "class is configured via '"
+                                    + AUTOSCALER_CONF_PREFIX
+                                    + SCALING_ALIGNMENT_MODE_CONF_PREFIX
+                                    + "<name>.class'. Supersedes the deprecated "
+                                    + "scaling.key-group.partitions.adjust.mode.");
+
+    /** Documentation-only template for the custom alignment mode class option. */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> ALIGNMENT_MODE_CLASS_TEMPLATE =
+            autoScalerConfig(SCALING_ALIGNMENT_MODE_CONF_PREFIX + "<name>.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_ALIGNMENT_MODE_CONF_PREFIX + "<name>.class"))
+                    .withDescription(
+                            "The fully-qualified class name of the custom alignment mode named "
+                                    + "<name>, discovered as a plugin and selectable via "
+                                    + "scaling.parallelism-alignment.mode=<name>.");
+
+    /** Documentation-only template for the custom alignment mode parameters. */
+    @SuppressWarnings("unused")
+    public static final ConfigOption<String> ALIGNMENT_MODE_PARAMETER_TEMPLATE =
+            autoScalerConfig(SCALING_ALIGNMENT_MODE_CONF_PREFIX + "<name>.<parameter>")
+                    .stringType()
+                    .noDefaultValue()
+                    .withFallbackKeys(
+                            oldOperatorConfigKey(
+                                    SCALING_ALIGNMENT_MODE_CONF_PREFIX + "<name>.<parameter>"))
+                    .withDescription(
+                            "An arbitrary parameter passed to the custom alignment mode named "
+                                    + "<name>. All such parameters are made available to the mode "
+                                    + "(with the prefix stripped) through "
+                                    + "Context.getModeConfiguration().");
 
     public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
             autoScalerConfig("observed-scalability.enabled")
@@ -472,43 +522,6 @@ public class AutoScalerOptions {
                                     + "All keys with this prefix are passed to the evaluator at runtime with the "
                                     + "'job.autoscaler.metrics.custom-evaluator.<name>.' prefix stripped.");
 
-    public static String customEvaluatorClassKey(String instanceName) {
-        return AUTOSCALER_CONF_PREFIX
-                + CUSTOM_EVALUATOR_CONF_PREFIX
-                + instanceName
-                + "."
-                + CUSTOM_EVALUATOR_CLASS_SUFFIX;
-    }
-
-    public static String customEvaluatorClassFallbackKey(String instanceName) {
-        return OLD_K8S_OP_CONF_PREFIX + customEvaluatorClassKey(instanceName);
-    }
-
-    /**
-     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
-     * custom metric evaluator instance, including the legacy {@code kubernetes.operator.} prefix as
-     * a fallback key (canonical key takes precedence on overlap).
-     */
-    public static ConfigOption<String> customEvaluatorClassOption(String instanceName) {
-        return ConfigOptions.key(customEvaluatorClassKey(instanceName))
-                .stringType()
-                .noDefaultValue()
-                .withFallbackKeys(customEvaluatorClassFallbackKey(instanceName));
-    }
-
-    /**
-     * The per-instance options configured for the custom metric evaluator {@code
-     * customEvaluatorName}, prefix-stripped from the {@code
-     * job.autoscaler.metrics.custom-evaluator.<name>.} namespace. See {@link
-     * #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy merge
-     * semantics.
-     */
-    public static Configuration customEvaluatorConfiguration(
-            Configuration configuration, String customEvaluatorName) {
-        return prefixStrippedConfiguration(
-                configuration, CUSTOM_EVALUATOR_CONF_PREFIX, customEvaluatorName);
-    }
-
     public static final ConfigOption<List<String>> SCALING_CUSTOM_EXECUTORS =
             autoScalerConfig("scaling.custom-executors")
                     .stringType()
@@ -561,6 +574,39 @@ public class AutoScalerOptions {
                                     + "this prefix are passed to the plugin at runtime with the "
                                     + "'job.autoscaler.scaling.custom-executor.<name>.' prefix stripped.");
 
+    public static String customEvaluatorClassKey(String instanceName) {
+        return AUTOSCALER_CONF_PREFIX + CUSTOM_EVALUATOR_CONF_PREFIX + instanceName + ".class";
+    }
+
+    public static String customEvaluatorClassFallbackKey(String instanceName) {
+        return OLD_K8S_OP_CONF_PREFIX + customEvaluatorClassKey(instanceName);
+    }
+
+    /**
+     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
+     * custom metric evaluator instance, including the legacy {@code kubernetes.operator.} prefix as
+     * a fallback key (canonical key takes precedence on overlap).
+     */
+    public static ConfigOption<String> customEvaluatorClassOption(String instanceName) {
+        return ConfigOptions.key(customEvaluatorClassKey(instanceName))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(customEvaluatorClassFallbackKey(instanceName));
+    }
+
+    /**
+     * The per-instance options configured for the custom metric evaluator {@code
+     * customEvaluatorName}, prefix-stripped from the {@code
+     * job.autoscaler.metrics.custom-evaluator.<name>.} namespace. See {@link
+     * #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy merge
+     * semantics.
+     */
+    public static Configuration customEvaluatorConfiguration(
+            Configuration configuration, String customEvaluatorName) {
+        return prefixStrippedConfiguration(
+                configuration, CUSTOM_EVALUATOR_CONF_PREFIX, customEvaluatorName);
+    }
+
     public static String customScalingExecutorClassKey(String instanceName) {
         return AUTOSCALER_CONF_PREFIX
                 + SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
@@ -594,6 +640,36 @@ public class AutoScalerOptions {
             Configuration configuration, String instanceName) {
         return prefixStrippedConfiguration(
                 configuration, SCALING_CUSTOM_EXECUTOR_CONF_PREFIX, instanceName);
+    }
+
+    public static String customAlignmentModeClassKey(String name) {
+        return autoScalerConfigKey(SCALING_ALIGNMENT_MODE_CONF_PREFIX + name + ".class");
+    }
+
+    public static String customAlignmentModeClassFallbackKey(String name) {
+        return OLD_K8S_OP_CONF_PREFIX + customAlignmentModeClassKey(name);
+    }
+
+    /**
+     * Builds the {@link ConfigOption} used to read the implementation class FQN for the given
+     * custom alignment mode, including the legacy {@code kubernetes.operator.} prefix as a fallback
+     * key (canonical key takes precedence on overlap).
+     */
+    public static ConfigOption<String> customAlignmentModeClassOption(String name) {
+        return ConfigOptions.key(customAlignmentModeClassKey(name))
+                .stringType()
+                .noDefaultValue()
+                .withFallbackKeys(customAlignmentModeClassFallbackKey(name));
+    }
+
+    /**
+     * The per-mode options configured for the custom alignment mode {@code name}, prefix-stripped
+     * from the {@code job.autoscaler.scaling.parallelism-alignment.mode.<name>.} namespace. See
+     * {@link #prefixStrippedConfiguration(Configuration, String, String)} for the canonical/legacy
+     * merge semantics.
+     */
+    public static Configuration customAlignmentModeConfiguration(Configuration conf, String name) {
+        return prefixStrippedConfiguration(conf, SCALING_ALIGNMENT_MODE_CONF_PREFIX, name);
     }
 
     /**

@@ -90,6 +90,7 @@ public class FlinkOperator {
 
     private final EventRecorder eventRecorder;
     private final Configuration baseConfig;
+    private final PluginManager pluginManager;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this(conf, null);
@@ -105,7 +106,7 @@ public class FlinkOperator {
                                 KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
 
         baseConfig = configManager.getDefaultConfig();
-        PluginManager pluginManager = OperatorPluginUtils.createPluginManager(baseConfig);
+        this.pluginManager = OperatorPluginUtils.createPluginManager(baseConfig);
         this.metricGroup = OperatorMetricUtils.initOperatorMetrics(baseConfig, pluginManager);
         if (client == null) {
             this.client =
@@ -188,7 +189,8 @@ public class FlinkOperator {
         var clusterResourceManager =
                 ClusterResourceManager.of(configManager.getDefaultConfig(), client);
         var autoscaler =
-                AutoscalerFactory.create(client, eventRecorder, clusterResourceManager, baseConfig);
+                AutoscalerFactory.create(
+                        client, eventRecorder, clusterResourceManager, pluginManager);
         var reconcilerFactory = new ReconcilerFactory(eventRecorder, statusRecorder, autoscaler);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
@@ -212,7 +214,7 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var autoscaler = AutoscalerFactory.create(client, eventRecorder, null, baseConfig);
+        var autoscaler = AutoscalerFactory.create(client, eventRecorder, null, pluginManager);
         var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder, autoscaler);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
