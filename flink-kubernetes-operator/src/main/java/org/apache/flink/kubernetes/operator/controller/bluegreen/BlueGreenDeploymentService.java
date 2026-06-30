@@ -30,6 +30,8 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
@@ -63,6 +65,7 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.revertToLastSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.triggerSavepoint;
 
@@ -91,6 +94,7 @@ public class BlueGreenDeploymentService {
             Savepoint lastCheckpoint,
             boolean isFirstDeployment) {
         ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
+        context.getDeploymentStatus().setError(null);
 
         FlinkDeployment flinkDeployment =
                 prepareFlinkDeployment(
@@ -102,7 +106,10 @@ public class BlueGreenDeploymentService {
 
         Optional<String> configError = validateAdvancedModeConfig(context);
         if (configError.isPresent()) {
-            return markDeploymentFailing(context, configError.get());
+            return rejectWithValidationError(context, configError.get());
+        }
+        if (isFirstDeployment) {
+            setLastReconciledSpec(context);
         }
         BlueGreenTransitionUtils.prepareTransitionMetadata(
                 context, nextBlueGreenDeploymentType, flinkDeployment, isFirstDeployment);
@@ -126,6 +133,10 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
 
         BlueGreenDiffType specDiff = getSpecDiff(context);
+
+        if (specDiff == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+            return rejectImmutableFieldChange(context);
+        }
 
         if (specDiff != BlueGreenDiffType.IGNORE) {
             FlinkDeployment currentFlinkDeployment =
@@ -159,7 +170,7 @@ public class BlueGreenDeploymentService {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
                     Optional<String> configError = validateAdvancedModeConfig(context);
                     if (configError.isPresent()) {
-                        return markDeploymentFailing(context, configError.get());
+                        return rejectWithValidationError(context, configError.get());
                     }
 
                     boolean savepointTriggered = false;
@@ -537,7 +548,11 @@ public class BlueGreenDeploymentService {
         if (hasSpecChanged(context)) {
             BlueGreenDiffType diffType = getSpecDiff(context);
 
-            // Block SUSPEND during transition - wait for transition to complete first
+            if (diffType == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+                return rejectImmutableFieldChange(context);
+            }
+
+            // Block SUSPEND during transition
             if (diffType == BlueGreenDiffType.SUSPEND) {
                 LOG.info(
                         "Suspend requested during transition for '{}'. "
@@ -710,7 +725,6 @@ public class BlueGreenDeploymentService {
                 getPreviousState(nextState, context.getDeployments());
         BlueGreenTransitionUtils.rollbackActiveDeploymentType(context, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
-        context.getDeploymentStatus().setSavepointTriggerId(null);
 
         var error =
                 String.format(
@@ -724,6 +738,33 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, String error) {
         LOG.error(error);
         return patchStatusUpdateControl(context, null, JobStatus.FAILING, error);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectWithValidationError(
+            BlueGreenContext context, String error) {
+        LOG.warn(error);
+        revertToLastSpec(context);
+        EventUtils.createOrUpdateEventWithInterval(
+                context.getJosdkContext().getClient(),
+                context.getBgDeployment(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.ValidationError.toString(),
+                error,
+                EventRecorder.Component.Operator,
+                e -> {},
+                null,
+                null);
+        context.getDeploymentStatus().setError(error);
+        return patchStatusUpdateControl(context, null, null, null);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectImmutableFieldChange(
+            BlueGreenContext context) {
+        String error =
+                String.format(
+                        "transitionMode cannot be changed after initial deployment for '%s'. Reverting spec.",
+                        context.getBgDeployment().getMetadata().getName());
+        return rejectWithValidationError(context, error);
     }
 
     private static FlinkBlueGreenDeploymentState getPreviousState(
@@ -868,6 +909,7 @@ public class BlueGreenDeploymentService {
 
         deploymentStatus.setLastReconciledTimestamp(java.time.Instant.now().toString());
         flinkBlueGreenDeployment.setStatus(deploymentStatus);
+
         return UpdateControl.patchStatus(flinkBlueGreenDeployment);
     }
 

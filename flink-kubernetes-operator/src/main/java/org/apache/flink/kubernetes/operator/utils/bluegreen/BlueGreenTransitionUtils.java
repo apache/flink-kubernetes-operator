@@ -80,14 +80,11 @@ public class BlueGreenTransitionUtils {
 
         var transitionDefaultMetadata =
                 Map.of(
-                        IS_FIRST_DEPLOYMENT.getLabel(),
-                        isFirstDeployment ? "true" : "false",
+                        IS_FIRST_DEPLOYMENT.getLabel(), isFirstDeployment ? "true" : "false",
                         GateContextOptions.DEPLOYMENT_DELETION_DELAY.getLabel(),
-                        String.valueOf(getDeploymentDeletionDelay(context)),
-                        ACTIVE_DEPLOYMENT_TYPE.getLabel(),
-                        blueGreenDeploymentType.toString(),
-                        TRANSITION_STAGE.getLabel(),
-                        TransitionStage.INITIALIZING.toString());
+                                String.valueOf(getDeploymentDeletionDelay(context)),
+                        ACTIVE_DEPLOYMENT_TYPE.getLabel(), blueGreenDeploymentType.toString(),
+                        TRANSITION_STAGE.getLabel(), TransitionStage.INITIALIZING.toString());
 
         upsertConfigMap(context, transitionDefaultMetadata);
 
@@ -195,13 +192,15 @@ public class BlueGreenTransitionUtils {
         }
 
         // ConfigMap may not exist yet if validation failed before prepareTransitionMetadata ran
+        var secondaryConfigMaps = context.getJosdkContext().getSecondaryResources(ConfigMap.class);
         boolean configMapPresent =
-                context.getJosdkContext().getSecondaryResources(ConfigMap.class).stream()
-                        .anyMatch(
-                                cm ->
-                                        cm.getMetadata()
-                                                .getName()
-                                                .equals(context.getConfigMapName()));
+                secondaryConfigMaps != null
+                        && secondaryConfigMaps.stream()
+                                .anyMatch(
+                                        cm ->
+                                                cm.getMetadata()
+                                                        .getName()
+                                                        .equals(context.getConfigMapName()));
         if (!configMapPresent) {
             return;
         }
@@ -237,7 +236,8 @@ public class BlueGreenTransitionUtils {
      *
      * <ul>
      *   <li>{@code bluegreen.gate.strategy} — must be set to a supported value (e.g. WATERMARK)
-     *   <li>{@code bluegreen.gate.watermark.extractor-class} — required when strategy is WATERMARK
+     *   <li>{@code bluegreen.gate.watermark.field-path} or {@code
+     *       bluegreen.gate.watermark.extractor-class} — required when strategy is WATERMARK
      * </ul>
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
@@ -256,11 +256,13 @@ public class BlueGreenTransitionUtils {
 
         String strategy = flinkConfig.get("bluegreen.gate.strategy").asText();
         if ("WATERMARK".equals(strategy)) {
-            if (!flinkConfig.has("bluegreen.gate.watermark.extractor-class")) {
+            if (!flinkConfig.has("bluegreen.gate.watermark.field-path")
+                    && !flinkConfig.has("bluegreen.gate.watermark.extractor-class")) {
                 return Optional.of(
-                        "[BlueGreen] Gate strategy WATERMARK requires "
-                                + "'bluegreen.gate.watermark.extractor-class' to be set "
-                                + "in flinkConfiguration.");
+                        "[BlueGreen] Gate strategy WATERMARK requires either "
+                                + "'bluegreen.gate.watermark.field-path' (dot-notation POJO field, no app code needed) "
+                                + "or 'bluegreen.gate.watermark.extractor-class' (custom class) "
+                                + "to be set in flinkConfiguration.");
             }
         } else {
             return Optional.of(

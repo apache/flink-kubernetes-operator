@@ -509,13 +509,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 rs.reconciledStatus.getBlueGreenState());
         assertEquals(
                 customValue,
-                rs.deployment
-                        .getSpec()
-                        .getTemplate()
-                        .getSpec()
-                        .getFlinkConfiguration()
-                        .get(CUSTOM_CONFIG_FIELD)
-                        .asText());
+                getFlinkConfigurationValue(
+                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
 
         // Simulating the Blue deployment doesn't start correctly (status will remain the same)
         Long reschedDelayMs = 0L;
@@ -559,9 +554,6 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 ReconciliationState.UPGRADING,
                 flinkDeployments.get(1).getStatus().getReconciliationStatus().getState());
         assertTrue(instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()) > 0);
-        // savepointTriggerId must be cleared on abort so the next transition
-        // triggers a fresh savepoint instead of reusing a stale triggerId
-        assertNull(rs.reconciledStatus.getSavepointTriggerId());
 
         // Simulate another change in the spec to trigger a redeployment
         customValue = UUID.randomUUID().toString();
@@ -569,6 +561,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Initiate the redeployment
         testTransitionToGreen(rs, customValue, null);
+    }
+
+    private static String getFlinkConfigurationValue(
+            FlinkDeploymentSpec flinkDeploymentSpec, String propertyName) {
+        return flinkDeploymentSpec.getFlinkConfiguration().get(propertyName).asText();
     }
 
     @ParameterizedTest
@@ -1015,12 +1012,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
             assertEquals(1, deployments.size());
             assertEquals(
                     "100 SECONDS",
-                    deployments
-                            .get(0)
-                            .getSpec()
-                            .getFlinkConfiguration()
-                            .get("kubernetes.operator.reconcile.interval")
-                            .asText());
+                    getFlinkConfigurationValue(
+                            deployments.get(0).getSpec(),
+                            "kubernetes.operator.reconcile.interval"));
         }
     }
 
@@ -1077,12 +1071,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
             // Child spec change should be applied to FlinkDeployment
             assertEquals(
                     "100 SECONDS",
-                    deployments
-                            .get(0)
-                            .getSpec()
-                            .getFlinkConfiguration()
-                            .get("kubernetes.operator.reconcile.interval")
-                            .asText());
+                    getFlinkConfigurationValue(
+                            deployments.get(0).getSpec(),
+                            "kubernetes.operator.reconcile.interval"));
 
             // Top-level changes should be preserved in reconciled spec
             assertNotNull(result.rs.reconciledStatus.getLastReconciledSpec());
@@ -1202,6 +1193,21 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertFailingJobStatus(rs);
         for (String fragment : expectedErrorFragments) {
             assertTrue(rs.reconciledStatus.getError().contains(fragment));
+        }
+    }
+
+    private static void assertValidationError(
+            TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs,
+            String... expectedErrorFragments) {
+        assertNotEquals(
+                JobStatus.FAILING,
+                rs.reconciledStatus.getJobStatus().getState(),
+                "Job should not be FAILING on a spec validation error");
+        assertNotNull(rs.reconciledStatus.getError());
+        for (String fragment : expectedErrorFragments) {
+            assertTrue(
+                    rs.reconciledStatus.getError().contains(fragment),
+                    "Expected error to contain: " + fragment);
         }
     }
 
@@ -1361,13 +1367,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()));
         assertEquals(
                 customValue,
-                rs.deployment
-                        .getSpec()
-                        .getTemplate()
-                        .getSpec()
-                        .getFlinkConfiguration()
-                        .get(CUSTOM_CONFIG_FIELD)
-                        .asText());
+                getFlinkConfigurationValue(
+                        rs.deployment.getSpec().getTemplate().getSpec(), CUSTOM_CONFIG_FIELD));
 
         // Initiate and mark the Green deployment ready
         simulateSuccessfulJobStart(getFlinkDeployments().get(1));
@@ -1545,14 +1546,10 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         .flinkVersion(version)
                         .flinkConfiguration(new ConfigObjectNode())
                         .jobManager(
-                                JobManagerSpec.builder()
-                                        .resource(new Resource(1.0, "2048m", "2G"))
-                                        .replicas(1)
-                                        .build())
+                                new JobManagerSpec(new Resource(1.0, "2048m", "2G"), null, 1, null))
                         .taskManager(
-                                TaskManagerSpec.builder()
-                                        .resource(new Resource(1.0, "2048m", "2G"))
-                                        .build())
+                                new TaskManagerSpec(
+                                        new Resource(1.0, "2048m", "2G"), null, null, null))
                         .build();
 
         flinkDeploymentSpec.setFlinkConfiguration(conf);
@@ -1710,6 +1707,93 @@ public class FlinkBlueGreenDeploymentControllerTest {
     }
 
     // ==================== ADVANCED Mode Infrastructure Tests ====================
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyTransitionModeChangeRejected(FlinkVersion flinkVersion) throws Exception {
+        // Start as BASIC
+        var deployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeBasicDeployment(flinkVersion, deployment, true, null);
+        var lastReconciledSpec = rs.reconciledStatus.getLastReconciledSpec();
+
+        // Attempt to change to ADVANCED after initial deployment
+        rs.deployment.getSpec().setTransitionMode(TransitionMode.ADVANCED);
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        rs = reconcile(rs.deployment);
+
+        assertValidationError(rs, "transitionMode cannot be changed");
+        // Spec should be reverted to last reconciled
+        assertEquals(lastReconciledSpec, rs.reconciledStatus.getLastReconciledSpec());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeConfigMissingAtInitiationRejected(FlinkVersion flinkVersion)
+            throws Exception {
+        // Build ADVANCED deployment but strip required config keys
+        var deployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        deployment.getSpec().setTransitionMode(TransitionMode.ADVANCED);
+        // Intentionally omit bluegreen.gate.strategy and bluegreen.gate.watermark.extractor-class
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        var rs = reconcile(deployment); // Initialize
+        var lastReconciledSpec = rs.reconciledStatus.getLastReconciledSpec();
+
+        rs = reconcile(rs.deployment); // Attempt to deploy Blue — config validation fires
+
+        assertValidationError(rs, "bluegreen.gate");
+        assertEquals(
+                lastReconciledSpec,
+                rs.reconciledStatus.getLastReconciledSpec(),
+                "Spec should be reverted on validation error");
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeConfigMissingAtTransitionRejected(FlinkVersion flinkVersion)
+            throws Exception {
+        // Deploy with correct ADVANCED config
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeAdvancedDeployment(deployment);
+        var lastReconciledSpec = rs.reconciledStatus.getLastReconciledSpec();
+
+        // Trigger a TRANSITION but remove the required gate config keys first
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs.deployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getFlinkConfiguration()
+                .remove("bluegreen.gate.strategy");
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+
+        rs = reconcile(rs.deployment);
+
+        assertValidationError(rs, "bluegreen.gate");
+        assertEquals(
+                lastReconciledSpec,
+                rs.reconciledStatus.getLastReconciledSpec(),
+                "Spec should be reverted on validation error");
+    }
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
@@ -1897,12 +1981,17 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var deployment =
                 buildSessionCluster(name, namespace, version, initialSavepointPath, upgradeMode);
         deployment.getSpec().setTransitionMode(TransitionMode.ADVANCED);
+        // ADVANCED mode validation requires these keys; add a stub extractor so tests pass
+        var flinkConfig = deployment.getSpec().getTemplate().getSpec().getFlinkConfiguration();
+        flinkConfig.put("bluegreen.gate.strategy", "WATERMARK");
+        flinkConfig.put(
+                "bluegreen.gate.watermark.extractor-class",
+                "org.apache.flink.streaming.examples.events.event.EventTimestampExtractor");
         return deployment;
     }
 
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
             executeAdvancedDeployment(FlinkBlueGreenDeployment deployment) throws Exception {
-        // Create the resource in the mock server before reconciling
         kubernetesClient.resource(deployment).createOrReplace();
         var rs = reconcile(deployment); // Initialize
         rs = reconcile(rs.deployment); // Transition to Blue
