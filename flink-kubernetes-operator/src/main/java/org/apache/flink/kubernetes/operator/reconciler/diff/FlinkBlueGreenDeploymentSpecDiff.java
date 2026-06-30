@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -57,6 +58,19 @@ public class FlinkBlueGreenDeploymentSpecDiff {
      * @return BlueGreenDiffType indicating the type of difference found
      */
     public BlueGreenDiffType compare() {
+        // transitionMode is immutable after initial deployment. Treat null as BASIC (the default)
+        // so that explicitly setting transitionMode: BASIC on an existing deployment is not
+        // rejected.
+        TransitionMode leftMode =
+                left.getTransitionMode() != null ? left.getTransitionMode() : TransitionMode.BASIC;
+        TransitionMode rightMode =
+                right.getTransitionMode() != null
+                        ? right.getTransitionMode()
+                        : TransitionMode.BASIC;
+        if (leftMode != rightMode) {
+            return BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED;
+        }
+
         FlinkDeploymentSpec leftSpec = left.getTemplate().getSpec();
         FlinkDeploymentSpec rightSpec = right.getTemplate().getSpec();
 

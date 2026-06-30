@@ -137,10 +137,17 @@ public class BlueGreenKubernetesService {
     }
 
     public static ConfigMap getConfigMap(BlueGreenContext context) {
+        var secondaryConfigMaps = context.getJosdkContext().getSecondaryResources(ConfigMap.class);
         Optional<ConfigMap> configMapOpt =
-                context.getJosdkContext().getSecondaryResources(ConfigMap.class).stream()
-                        .filter(cm -> cm.getMetadata().getName().equals(context.getConfigMapName()))
-                        .findFirst();
+                secondaryConfigMaps == null
+                        ? Optional.empty()
+                        : secondaryConfigMaps.stream()
+                                .filter(
+                                        cm ->
+                                                cm.getMetadata()
+                                                        .getName()
+                                                        .equals(context.getConfigMapName()))
+                                .findFirst();
 
         if (configMapOpt.isEmpty()) {
             throw new RuntimeException(

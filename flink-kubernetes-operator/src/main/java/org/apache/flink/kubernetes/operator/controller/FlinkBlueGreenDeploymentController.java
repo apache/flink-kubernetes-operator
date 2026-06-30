@@ -159,4 +159,8 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
             return updateControl;
         }
     }
+
+    public static void logAndThrow(String message) {
+        throw new RuntimeException(message);
+    }
 }

@@ -22,7 +22,6 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
-import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
@@ -145,10 +144,11 @@ public class BlueGreenTestUtils {
                         .imagePullPolicy(IMAGE_POLICY)
                         .serviceAccount(SERVICE_ACCOUNT)
                         .flinkVersion(version)
-                        .flinkConfiguration(new ConfigObjectNode())
-                        .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
+                        .jobManager(
+                                new JobManagerSpec(new Resource(1.0, "2048m", "2G"), null, 1, null))
                         .taskManager(
-                                new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
+                                new TaskManagerSpec(
+                                        new Resource(1.0, "2048m", "2G"), null, null, null))
                         .build();
 
         flinkDeploymentSpec.setFlinkConfiguration(conf);
