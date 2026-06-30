@@ -48,8 +48,7 @@ import java.util.Map;
  * plugin JAR with a {@code META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin}
  * file.
  */
-public class TestScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
-        implements ScalingExecutorPlugin<KEY, Context> {
+public class TestScalingExecutor<KEY> implements ScalingExecutorPlugin<KEY> {
 
     private static final Logger LOG = LoggerFactory.getLogger(TestScalingExecutor.class);
 
@@ -71,13 +70,13 @@ public class TestScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
 
     @Override
     public Map<JobVertexID, ScalingSummary> apply(
-            ScalingExecutorPlugin.Context<KEY, Context> context,
+            ScalingExecutorPlugin.Context<KEY> context,
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
 
         // Step 1: Query the avg JVM CPU load across all TaskManagers via REST API.
         double avgCpuLoad;
         try {
-            avgCpuLoad = queryAverageTmCpuLoad(context.getAutoScalerContext());
+            avgCpuLoad = queryAverageTmCpuLoad(context);
         } catch (Exception e) {
             LOG.warn(
                     "Failed to query TaskManager CPU load via REST API. Vetoing scaling as a"
@@ -179,7 +178,7 @@ public class TestScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
      *
      * @return the average CPU load across all TaskManagers, or 0.0 if not available.
      */
-    private double queryAverageTmCpuLoad(Context context) throws Exception {
+    private double queryAverageTmCpuLoad(JobAutoScalerContext<?> context) throws Exception {
         try (var restClient = context.getRestClusterClient()) {
             var parameters = new AggregateTaskManagerMetricsParameters();
             var queryParamIt = parameters.getQueryParameters().iterator();

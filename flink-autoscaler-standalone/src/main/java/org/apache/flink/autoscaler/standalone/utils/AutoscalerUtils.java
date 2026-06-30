@@ -64,16 +64,15 @@ public class AutoscalerUtils {
      */
     @SuppressWarnings("unchecked")
     public static <KEY, Context extends JobAutoScalerContext<KEY>>
-            Collection<ScalingExecutorPlugin<KEY, Context>> discoverCustomScalingExecutors() {
-        List<ScalingExecutorPlugin<KEY, Context>> customScalingExecutors = new ArrayList<>();
+            Collection<ScalingExecutorPlugin<KEY>> discoverCustomScalingExecutors() {
+        List<ScalingExecutorPlugin<KEY>> customScalingExecutors = new ArrayList<>();
         ServiceLoader.load(ScalingExecutorPlugin.class)
                 .forEach(
                         plugin -> {
                             LOG.info(
                                     "Discovered custom scaling executor via ServiceLoader: {}.",
                                     plugin.getClass().getName());
-                            customScalingExecutors.add(
-                                    (ScalingExecutorPlugin<KEY, Context>) plugin);
+                            customScalingExecutors.add((ScalingExecutorPlugin<KEY>) plugin);
                         });
         return customScalingExecutors;
     }

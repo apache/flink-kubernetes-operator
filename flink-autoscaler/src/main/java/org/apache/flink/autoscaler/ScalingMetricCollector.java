@@ -70,6 +70,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingTracking;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
 import static org.apache.flink.autoscaler.utils.AutoScalerUtils.excludeVerticesFromScaling;
 import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
@@ -85,15 +87,30 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             new ConcurrentHashMap<>();
     protected final Map<KEY, Boolean> jobsWithGcMetrics = new ConcurrentHashMap<KEY, Boolean>();
 
+    private final AutoScalerStateStore<KEY, Context> stateStore;
+
     private Clock clock = Clock.systemDefaultZone();
 
-    public CollectedMetricHistory updateMetrics(
-            Context ctx, AutoScalerStateStore<KEY, Context> stateStore) throws Exception {
+    protected ScalingMetricCollector(AutoScalerStateStore<KEY, Context> stateStore) {
+        this.stateStore = stateStore;
+    }
+
+    /**
+     * Collects the latest metrics for the job and records them in the scaling cycle state of the
+     * given context (collected metrics, scaling tracking and history, and the restart time).
+     *
+     * @return {@code true} if enough metric samples have been collected for evaluation, {@code
+     *     false} if the caller should stop the current scaling cycle early.
+     */
+    public boolean collect(Context ctx) throws Exception {
+        var cycleState = ctx.getScalingCycleState();
+        if (cycleState.getNow() == null) {
+            cycleState.setNow(clock.instant());
+        }
+        var now = cycleState.getNow();
 
         var jobKey = ctx.getJobKey();
         var conf = ctx.getConfiguration();
-
-        var now = clock.instant();
 
         var metricHistory =
                 histories.computeIfAbsent(
@@ -118,7 +135,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             cleanup(ctx.getJobKey());
             metricHistory.clear();
         }
-        var topology = getJobTopology(ctx, stateStore, jobDetailsInfo);
+        var topology = getJobTopology(ctx, jobDetailsInfo);
         var stableTime = jobRunningTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         final boolean isStabilizing = now.isBefore(stableTime);
 
@@ -171,7 +188,32 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     metricHistory.size());
         }
         stateStore.storeCollectedMetrics(ctx, metricHistory);
-        return collectedMetrics;
+        cycleState.setCollectedMetrics(collectedMetrics);
+
+        // Scaling tracking and history are loaded here so the rest of the pipeline (evaluation and
+        // execution) can read them from the cycle state.
+        var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
+        var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
+        cycleState.setScalingTracking(scalingTracking);
+        cycleState.setScalingHistory(scalingHistory);
+        // A scaling tracking without an end time gets created whenever a scaling decision is
+        // applied. Here, we record the end time for it (collect is only called when the job
+        // transitions back into the RUNNING state).
+        if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
+                jobRunningTs, topology, scalingHistory)) {
+            stateStore.storeScalingTracking(ctx, scalingTracking);
+        }
+
+        // We require at least 2 metric collections for evaluation as required by rate computations
+        // from accumulated metrics.
+        if (metricHistory.size() < 2) {
+            return false;
+        }
+        LOG.debug("Collected metrics: {}", collectedMetrics);
+
+        // Scaling tracking data contains previous restart times that are taken into account.
+        cycleState.setRestartTime(scalingTracking.getMaxRestartTimeOrDefault(conf));
+        return true;
     }
 
     private int removeMetricsBefore(
@@ -209,10 +251,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         return Instant.ofEpochMilli(runningTs);
     }
 
-    protected JobTopology getJobTopology(
-            Context ctx,
-            AutoScalerStateStore<KEY, Context> stateStore,
-            JobDetailsInfo jobDetailsInfo)
+    protected JobTopology getJobTopology(Context ctx, JobDetailsInfo jobDetailsInfo)
             throws Exception {
 
         var t = getJobTopology(jobDetailsInfo);

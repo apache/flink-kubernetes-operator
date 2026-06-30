@@ -68,9 +68,9 @@ public class AutoscalerUtils {
      */
     @SuppressWarnings("unchecked")
     public static <KEY, Context extends JobAutoScalerContext<KEY>>
-            Collection<ScalingExecutorPlugin<KEY, Context>> discoverCustomScalingExecutors(
+            Collection<ScalingExecutorPlugin<KEY>> discoverCustomScalingExecutors(
                     Configuration conf) {
-        List<ScalingExecutorPlugin<KEY, Context>> customScalingExecutors = new ArrayList<>();
+        List<ScalingExecutorPlugin<KEY>> customScalingExecutors = new ArrayList<>();
         PluginUtils.createPluginManagerFromRootFolder(conf)
                 .load(ScalingExecutorPlugin.class)
                 .forEachRemaining(
@@ -83,7 +83,7 @@ public class AutoscalerUtils {
                                                     ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
                                     customScalingExecutor.getClass().getName());
                             customScalingExecutors.add(
-                                    (ScalingExecutorPlugin<KEY, Context>) customScalingExecutor);
+                                    (ScalingExecutorPlugin<KEY>) customScalingExecutor);
                         });
         return customScalingExecutors;
     }

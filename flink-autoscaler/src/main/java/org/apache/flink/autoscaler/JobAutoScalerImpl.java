@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
-import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
@@ -39,10 +38,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
-import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
-import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
-import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
-import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingTracking;
 
 /** The default implementation of {@link JobAutoScaler}. */
 public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -53,7 +48,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @VisibleForTesting protected static final String AUTOSCALER_ERROR = "AutoscalerError";
 
     private final ScalingMetricCollector<KEY, Context> metricsCollector;
-    private final ScalingMetricEvaluator evaluator;
+    @VisibleForTesting final ScalingMetricEvaluator<KEY, Context> metricsEvaluator;
     private final ScalingExecutor<KEY, Context> scalingExecutor;
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final ScalingRealizer<KEY, Context> scalingRealizer;
@@ -62,20 +57,17 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private Clock clock = Clock.systemDefaultZone();
 
     @VisibleForTesting
-    final Map<KEY, EvaluatedMetrics> lastEvaluatedMetrics = new ConcurrentHashMap<>();
-
-    @VisibleForTesting
     final Map<KEY, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
     public JobAutoScalerImpl(
             ScalingMetricCollector<KEY, Context> metricsCollector,
-            ScalingMetricEvaluator evaluator,
+            ScalingMetricEvaluator<KEY, Context> metricsEvaluator,
             ScalingExecutor<KEY, Context> scalingExecutor,
             AutoScalerEventHandler<KEY, Context> eventHandler,
             ScalingRealizer<KEY, Context> scalingRealizer,
             AutoScalerStateStore<KEY, Context> stateStore) {
         this.metricsCollector = metricsCollector;
-        this.evaluator = evaluator;
+        this.metricsEvaluator = metricsEvaluator;
         this.scalingExecutor = scalingExecutor;
         this.eventHandler = eventHandler;
         this.scalingRealizer = scalingRealizer;
@@ -87,7 +79,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         var autoscalerMetrics = getOrInitAutoscalerFlinkMetrics(ctx);
 
         try {
-            if (!ctx.getConfiguration().getBoolean(AUTOSCALER_ENABLED)) {
+            if (!ctx.getConfiguration().get(AUTOSCALER_ENABLED)) {
                 LOG.debug("Autoscaler is disabled");
                 stateStore.clearAll(ctx);
                 stateStore.flush(ctx);
@@ -96,7 +88,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
             if (ctx.getJobStatus() != JobStatus.RUNNING) {
                 LOG.debug("Autoscaler is waiting for stable, running state");
-                lastEvaluatedMetrics.remove(ctx.getJobKey());
+                metricsEvaluator.cleanup(ctx.getJobKey());
                 return;
             }
 
@@ -121,7 +113,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     public void cleanup(Context ctx) {
         LOG.info("Cleaning up autoscaling meta data");
         metricsCollector.cleanup(ctx.getJobKey());
-        lastEvaluatedMetrics.remove(ctx.getJobKey());
+        metricsEvaluator.cleanup(ctx.getJobKey());
         flinkMetrics.remove(ctx.getJobKey());
         try {
             stateStore.clearAll(ctx);
@@ -179,63 +171,17 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)
             throws Exception {
+        var cycleState = ctx.getScalingCycleState();
+        cycleState.setNow(clock.instant());
+        cycleState.setAutoscalerMetrics(autoscalerMetrics);
 
-        var collectedMetrics = metricsCollector.updateMetrics(ctx, stateStore);
-        var jobTopology = collectedMetrics.getJobTopology();
-
-        var now = clock.instant();
-        var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
-        var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
-        // A scaling tracking without an end time gets created whenever a scaling decision is
-        // applied. Here, we record the end time for it (runScalingLogic is only called when the job
-        // transitions back into the RUNNING state).
-        if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
-                collectedMetrics.getJobRunningTs(), jobTopology, scalingHistory)) {
-            stateStore.storeScalingTracking(ctx, scalingTracking);
-        }
-
-        // We require at least 2 metric collections for evaluation as required by rate computations
-        // from accumulated metrics
-        if (collectedMetrics.getMetricHistory().size() < 2) {
+        if (!metricsCollector.collect(ctx)) {
             return;
         }
-        LOG.debug("Collected metrics: {}", collectedMetrics);
-
-        // Scaling tracking data contains previous restart times that are taken into account
-        var restartTime = scalingTracking.getMaxRestartTimeOrDefault(ctx.getConfiguration());
-
-        var evaluatedMetrics =
-                evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
-        LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
-        lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
-
-        initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
-        autoscalerMetrics.registerScalingMetrics(
-                jobTopology.getVerticesInTopologicalOrder(),
-                () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
-
-        if (!collectedMetrics.isFullyCollected()) {
-            // We have done an upfront evaluation, but we are not ready for scaling.
-            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+        if (!metricsEvaluator.evaluate(ctx)) {
             return;
         }
-
-        var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
-        var parallelismChanged =
-                scalingExecutor.scaleResource(
-                        ctx,
-                        evaluatedMetrics,
-                        scalingHistory,
-                        scalingTracking,
-                        now,
-                        jobTopology,
-                        delayedScaleDown);
-
-        if (delayedScaleDown.isUpdated()) {
-            stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
-        }
-
-        if (parallelismChanged) {
+        if (scalingExecutor.execute(ctx)) {
             autoscalerMetrics.incrementScaling();
         } else {
             autoscalerMetrics.incrementBalanced();

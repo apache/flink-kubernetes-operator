@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -43,9 +44,11 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedTaskManagerM
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
@@ -70,16 +73,19 @@ class TestScalingExecutorTest {
                         new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
     }
 
-    private ScalingExecutorPlugin.Context<JobID, JobAutoScalerContext<JobID>> createPluginContext(
+    private ScalingExecutorPlugin.Context<JobID> createPluginContext(
             JobAutoScalerContext<JobID> autoScalerContext) {
-        return new ScalingExecutorPlugin.Context<>(
-                autoScalerContext, conf, createMetrics(), jobTopology);
+        var cycleState = autoScalerContext.getScalingCycleState();
+        cycleState.setCollectedMetrics(
+                new CollectedMetricHistory(jobTopology, new TreeMap<>(), Instant.EPOCH));
+        cycleState.setEvaluatedMetrics(createMetrics());
+        return new ScalingExecutorPlugin.Context<>(autoScalerContext, conf);
     }
 
     @Test
     void testCpuThresholdBoundary() {
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.9);
+        var plugin = new TestScalingExecutor<JobID>(0.9);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
@@ -92,7 +98,7 @@ class TestScalingExecutorTest {
     void testDefaultThreshold() {
         // Uses default threshold (0.8), CPU 0.7 -> below
         var context = createContextWithCpuLoad(0.7);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>();
+        var plugin = new TestScalingExecutor<JobID>();
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
@@ -105,7 +111,7 @@ class TestScalingExecutorTest {
     void testVetoWhenRestClientFails() {
         // REST client that throws an exception
         var context = createContextWithFailingRestClient();
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutor<JobID>(0.5);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
@@ -119,7 +125,7 @@ class TestScalingExecutorTest {
     void testVetoWhenAvgCpuBelowThreshold() {
         // CPU 0.5 < threshold 0.8
         var context = createContextWithCpuLoad(0.5);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.8);
+        var plugin = new TestScalingExecutor<JobID>(0.8);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 20);
 
@@ -132,7 +138,7 @@ class TestScalingExecutorTest {
     void testAllowWhenAvgCpuAboveThreshold() {
         // CPU 0.9 > threshold 0.8; source scales up
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.8);
+        var plugin = new TestScalingExecutor<JobID>(0.8);
 
         var summaries = createSummaries(source, 10, 20, sink, 10, 15);
 
@@ -148,7 +154,7 @@ class TestScalingExecutorTest {
     void testVetoWhenSourceNotScalingUp() {
         // CPU is high but source scales DOWN (20 -> 10)
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutor<JobID>(0.5);
 
         var summaries = createSummaries(source, 20, 10, sink, 10, 20);
 
@@ -162,7 +168,7 @@ class TestScalingExecutorTest {
     void testVetoWhenSourceNotInSummaries() {
         // CPU is high but source is not in summaries
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutor<JobID>(0.5);
 
         var summaries = new HashMap<JobVertexID, ScalingSummary>();
         summaries.put(sink, new ScalingSummary(10, 20, createVertexMetrics()));
@@ -177,7 +183,7 @@ class TestScalingExecutorTest {
     void testAlignSinkToSourceParallelism() {
         // Source: 10 -> 30, Sink: 10 -> 15 (autoscaler computed differently)
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutor<JobID>(0.5);
 
         var summaries = createSummaries(source, 10, 30, sink, 10, 15);
 
@@ -194,7 +200,7 @@ class TestScalingExecutorTest {
     void testSkipVertexAlreadyAtSourceParallelism() {
         // Source: 10 -> 20, Sink: current=20, computed new=25
         var context = createContextWithCpuLoad(0.9);
-        var plugin = new TestScalingExecutor<JobID, JobAutoScalerContext<JobID>>(0.5);
+        var plugin = new TestScalingExecutor<JobID>(0.5);
 
         var summaries = createSummaries(source, 10, 20, sink, 20, 25);
 

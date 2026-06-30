@@ -47,12 +47,12 @@ public class AutoscalerFactory {
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
         var customEvaluators = AutoscalerUtils.discoverCustomEvaluators(conf);
-        Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
-                customExecutors = AutoscalerUtils.discoverCustomScalingExecutors(conf);
+        Collection<ScalingExecutorPlugin<ResourceID>> customExecutors =
+                AutoscalerUtils.discoverCustomScalingExecutors(conf);
 
         return new JobAutoScalerImpl<>(
-                new RestApiMetricsCollector<>(),
-                new ScalingMetricEvaluator(customEvaluators),
+                new RestApiMetricsCollector<>(stateStore),
+                new ScalingMetricEvaluator<>(customEvaluators),
                 new ScalingExecutor<>(
                         eventHandler, stateStore, clusterResourceManager, customExecutors),
                 eventHandler,
