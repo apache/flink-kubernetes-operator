@@ -152,10 +152,12 @@ public class GateInjectorExecutor implements PipelineExecutor {
 
                     // Only single-sink DAGs are supported. Fan-out (1 source → N sinks) is safe in
                     // principle — all branches share the same event-time domain and W is consistent
-                    // — but distinguishing it from independent source-per-sink chains requires a
-                    // full reachability traversal. For now we keep the invariant simple: exactly 1
-                    // sink. For fan-out DAGs, prefer AFTER_SOURCE instead, which naturally places a
-                    // single gate before all branches.
+                    // —
+                    // but distinguishing it from independent source-per-sink chains requires a full
+                    // reachability traversal. For now we keep the invariant simple: exactly 1 sink.
+                    // For fan-out DAGs, prefer AFTER_SOURCE instead, which naturally places a
+                    // single
+                    // gate before all branches.
                     // TODO: consider adding reachability-based fan-out detection to lift this
                     // restriction.
                     if (sinks.size() != 1) {
@@ -281,6 +283,11 @@ public class GateInjectorExecutor implements PipelineExecutor {
                             (fieldIdx < 0 || ((RowData) record).isNullAt(fieldIdx))
                                     ? Long.MIN_VALUE
                                     : ((RowData) record).getLong(fieldIdx);
+        }
+
+        String fieldPath = config.getString("bluegreen.gate.watermark.field-path", null);
+        if (fieldPath != null) {
+            return new FieldPathWatermarkExtractor(fieldPath);
         }
 
         String extractorClass = config.getString("bluegreen.gate.watermark.extractor-class", null);

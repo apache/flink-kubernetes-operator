@@ -95,12 +95,14 @@ public class BlueGreenUtils {
     }
 
     public static void revertToLastSpec(BlueGreenContext context) {
+        String lastReconciledSpec = context.getDeploymentStatus().getLastReconciledSpec();
+        if (lastReconciledSpec == null) {
+            return;
+        }
         context.getBgDeployment()
                 .setSpec(
                         SpecUtils.readSpecFromJSON(
-                                context.getDeploymentStatus().getLastReconciledSpec(),
-                                "spec",
-                                FlinkBlueGreenDeploymentSpec.class));
+                                lastReconciledSpec, "spec", FlinkBlueGreenDeploymentSpec.class));
         replaceFlinkBlueGreenDeployment(context);
     }
 

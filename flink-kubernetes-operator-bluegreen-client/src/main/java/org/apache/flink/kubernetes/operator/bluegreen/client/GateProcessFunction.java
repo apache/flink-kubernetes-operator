@@ -87,6 +87,14 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         processConfigMap(gateKubernetesService.parseConfigMap());
     }
 
+    @Override
+    public void close() throws Exception {
+        if (gateKubernetesService != null) {
+            gateKubernetesService.getKubernetesClient().close();
+        }
+        super.close();
+    }
+
     /**
      * Records the current processing time as the start of a pending write window. No-op if a write
      * is already pending. The actual write is performed by {@link #maybePerformPendingWrite} on the
