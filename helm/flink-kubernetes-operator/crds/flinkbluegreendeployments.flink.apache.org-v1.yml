@@ -10832,6 +10832,11 @@ spec:
                         type: "object"
                     type: "object"
                 type: "object"
+              transitionMode:
+                enum:
+                - "ADVANCED"
+                - "BASIC"
+                type: "string"
             type: "object"
           status:
             properties:
