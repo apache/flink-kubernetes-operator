@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
@@ -56,6 +57,8 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZ
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
@@ -75,18 +78,75 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Job scaling evaluator for autoscaler. */
-public class ScalingMetricEvaluator {
+public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     private final Collection<ScalingMetricsEvaluatorPlugin> customEvaluators;
 
+    /**
+     * The most recently evaluated metrics per job. Retained across scaling cycles so the scaling
+     * metric gauges (which are registered only once) always report the latest values.
+     */
+    @VisibleForTesting
+    final Map<KEY, EvaluatedMetrics> lastEvaluatedMetrics = new ConcurrentHashMap<>();
+
     public ScalingMetricEvaluator(Collection<ScalingMetricsEvaluatorPlugin> customEvaluators) {
         this.customEvaluators = customEvaluators;
     }
 
-    public EvaluatedMetrics evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
+    /**
+     * The production evaluation entry point. Evaluates the metrics collected during the current
+     * cycle (running the configured custom evaluator plugin, if any), records the result in the
+     * scaling cycle state of the given context, and registers / updates the scaling metric gauges.
+     *
+     * @return {@code true} if the metrics are fully collected and the job is ready for scaling,
+     *     {@code false} if the caller should stop the current scaling cycle early. An upfront
+     *     evaluation is still performed and reported in the latter case.
+     */
+    public boolean evaluate(Context ctx) {
+        var cycleState = ctx.getScalingCycleState();
+        var collectedMetrics = cycleState.getCollectedMetrics();
+
+        var evaluatedMetrics =
+                computeEvaluatedMetrics(
+                        ctx, ctx.getConfiguration(), collectedMetrics, cycleState.getRestartTime());
+        LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
+        cycleState.setEvaluatedMetrics(evaluatedMetrics);
+        lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
+
+        initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+        cycleState
+                .getAutoscalerMetrics()
+                .registerScalingMetrics(
+                        collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                        () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
+
+        if (!collectedMetrics.isFullyCollected()) {
+            // We have done an upfront evaluation, but we are not ready for scaling.
+            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+            return false;
+        }
+        return true;
+    }
+
+    /** Removes any retained evaluation state for the given job. */
+    public void cleanup(KEY jobKey) {
+        lastEvaluatedMetrics.remove(jobKey);
+    }
+
+    /**
+     * Computes the evaluated scaling metrics for all vertices. The configured custom evaluator
+     * plugin is run only when a non-null context is supplied (the plugin's {@link
+     * ScalingMetricsEvaluatorPlugin.Context} is a thin extension of that canonical context, so it
+     * needs the context to exist). Pass {@code null} for plugin-free computation, as the tests do.
+     */
+    @VisibleForTesting
+    EvaluatedMetrics computeEvaluatedMetrics(
+            @Nullable Context autoScalerContext,
+            Configuration conf,
+            CollectedMetricHistory collectedMetrics,
+            Duration restartTime) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -94,22 +154,9 @@ public class ScalingMetricEvaluator {
 
         boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
 
-        var customEvaluatorWithConfig = getCustomEvaluatorIfRequired(conf);
         var customEvaluationSession =
-                Optional.ofNullable(customEvaluatorWithConfig)
-                        .map(
-                                info ->
-                                        Tuple2.of(
-                                                info.f0,
-                                                new ScalingMetricsEvaluatorPlugin.Context(
-                                                        mergeEvaluatorConfig(conf, info.f1),
-                                                        Collections.unmodifiableSortedMap(
-                                                                metricsHistory),
-                                                        Collections.unmodifiableMap(scalingOutput),
-                                                        topology,
-                                                        processingBacklog,
-                                                        restartTime)))
-                        .orElse(null);
+                buildCustomEvaluationSession(
+                        autoScalerContext, conf, scalingOutput, processingBacklog);
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
             scalingOutput.put(
@@ -127,6 +174,29 @@ public class ScalingMetricEvaluator {
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
         return new EvaluatedMetrics(scalingOutput, globalMetrics);
+    }
+
+    @Nullable
+    private Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>
+            buildCustomEvaluationSession(
+                    @Nullable Context autoScalerContext,
+                    Configuration conf,
+                    Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
+                    boolean processingBacklog) {
+        if (autoScalerContext == null) {
+            return null;
+        }
+        var customEvaluatorWithConfig = getCustomEvaluatorIfRequired(conf);
+        if (customEvaluatorWithConfig == null) {
+            return null;
+        }
+        var pluginContext =
+                new ScalingMetricsEvaluatorPlugin.Context<KEY>(
+                        autoScalerContext,
+                        mergeEvaluatorConfig(conf, customEvaluatorWithConfig.f1),
+                        Collections.unmodifiableMap(scalingOutput),
+                        processingBacklog);
+        return Tuple2.of(customEvaluatorWithConfig.f0, pluginContext);
     }
 
     @VisibleForTesting
@@ -166,7 +236,9 @@ public class ScalingMetricEvaluator {
             boolean processingBacklog,
             Duration restartTime,
             @Nullable
-                    Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context>
+                    Tuple2<
+                                    ScalingMetricsEvaluatorPlugin,
+                                    ScalingMetricsEvaluatorPlugin.Context<KEY>>
                             customEvaluationSession) {
 
         var latestVertexMetrics =
@@ -694,10 +766,10 @@ public class ScalingMetricEvaluator {
      * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
      */
     @VisibleForTesting
-    protected static Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
+    protected static <KEY> Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context>
+            Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>
                     customEvaluationSession) {
         try {
             return customEvaluationSession.f0.evaluateVertexMetrics(

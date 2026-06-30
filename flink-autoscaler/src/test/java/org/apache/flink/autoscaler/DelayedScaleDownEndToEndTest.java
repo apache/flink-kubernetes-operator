@@ -92,7 +92,8 @@ public class DelayedScaleDownEndToEndTest {
                                         sink,
                                         Map.of(source, REBALANCE),
                                         INITIAL_SINK_PARALLELISM,
-                                        4000)));
+                                        4000)),
+                        stateStore);
 
         var scaleDownInterval = Duration.ofMinutes(60).minus(Duration.ofSeconds(1));
         // The metric window size is 9:59 to avoid other metrics are mixed.
@@ -118,14 +119,15 @@ public class DelayedScaleDownEndToEndTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(List.of()),
+                        new ScalingMetricEvaluator<>(List.of()),
                         new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         scalingRealizer,
                         stateStore);
 
         // initially the last evaluated metrics are empty
-        assertThat(autoscaler.lastEvaluatedMetrics.get(context.getJobKey())).isNull();
+        assertThat(autoscaler.metricsEvaluator.lastEvaluatedMetrics.get(context.getJobKey()))
+                .isNull();
 
         now = Instant.ofEpochMilli(0);
         setClocksTo(now);
@@ -688,6 +690,7 @@ public class DelayedScaleDownEndToEndTest {
     private Double getCurrentMetricValue(JobVertexID jobVertexID, ScalingMetric scalingMetric) {
         var metric =
                 autoscaler
+                        .metricsEvaluator
                         .lastEvaluatedMetrics
                         .get(context.getJobKey())
                         .getVertexMetrics()

@@ -34,8 +34,8 @@ public class TestCustomEvaluator implements ScalingMetricsEvaluatorPlugin {
     public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Context evaluationContext) {
-        if (evaluationContext.getTopology().isSource(vertex)) {
+            Context<?> evaluationContext) {
+        if (evaluationContext.getJobTopology().isSource(vertex)) {
             var customEvaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
             customEvaluatedMetrics.put(
                     ScalingMetric.TARGET_DATA_RATE, EvaluatedScalingMetric.avg(100000.0));
