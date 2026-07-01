@@ -130,7 +130,7 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 decoratedPod.getMainContainer().getArgs(),
                 containsInAnyOrder(
                         CmdStandaloneJobManagerDecorator.JOBMANAGER_ENTRYPOINT_ARG,
-                        CmdStandaloneJobManagerDecorator.POD_IP_ARG));
+                        CmdStandaloneJobManagerDecorator.JOBMANAGER_RPC_ADDRESS_ARG));
     }
 
     @Test
@@ -148,8 +148,7 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 decoratedPod.getMainContainer().getArgs(),
                 contains(
                         CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
-                        "--host",
-                        CmdStandaloneJobManagerDecorator.POD_IP_ARG,
+                        CmdStandaloneJobManagerDecorator.JOBMANAGER_RPC_ADDRESS_ARG,
                         "--test",
                         "123"));
     }
