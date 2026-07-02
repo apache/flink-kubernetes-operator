@@ -60,9 +60,13 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
-        with:
-          version: v3.17.3
+        run: |
+          HELM_VERSION=v3.17.3
+          curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/helm
+          tar -xzf /tmp/helm.tar.gz -C /tmp/helm
+          sudo mv /tmp/helm/linux-amd64/helm /usr/local/bin/helm
 
       - name: Install Helm unittest plugin
         run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version 0.8.1
