@@ -18,15 +18,19 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.autoscaler.TestScalingExecutor;
+import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
+import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.autoscaler.TestAlignmentMode;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -34,7 +38,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Test class for {@link AutoscalerUtils}. */
 public class AutoscalerUtilsTest {
+
     @TempDir public Path temporaryFolder;
+
+    @Test
+    public void testDiscoverCustomEvaluators() throws IOException {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(
+                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                    TestUtils.getTestPluginsRootDir(temporaryFolder));
+            TestUtils.setEnv(systemEnv);
+
+            Collection<ScalingMetricsEvaluatorPlugin> discoveredEvaluators =
+                    AutoscalerUtils.discoverCustomEvaluators(
+                            OperatorPluginUtils.createPluginManager(new Configuration()));
+
+            assertThat(discoveredEvaluators)
+                    .hasSize(1)
+                    .hasOnlyElementsOfType(TestCustomEvaluator.class);
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
+    }
 
     @Test
     public void testDiscoverScalingExecutorPluginsLoadsRegisteredSpi() throws IOException {
@@ -46,12 +73,41 @@ public class AutoscalerUtilsTest {
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
 
-            var discovered = AutoscalerUtils.discoverCustomScalingExecutors(new Configuration());
+            var discovered =
+                    AutoscalerUtils.discoverCustomScalingExecutors(
+                            OperatorPluginUtils.createPluginManager(new Configuration()));
 
             assertThat(discovered)
                     .hasSize(1)
                     .extracting(p -> p.getClass().getName())
                     .contains(TestScalingExecutor.class.getName());
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
+    }
+
+    @Test
+    void testDiscoverCustomAlignmentModesReturnsEmptyWithoutPlugins() {
+        // With no plugins directory configured, discovery succeeds and returns no custom modes.
+        assertThat(
+                        AutoscalerUtils.discoverCustomAlignmentModes(
+                                OperatorPluginUtils.createPluginManager(new Configuration())))
+                .isEmpty();
+    }
+
+    @Test
+    public void testDiscoverCustomAlignmentModesFromPlugins() throws IOException {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(
+                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                    TestUtils.getTestPluginsRootDir(temporaryFolder));
+            TestUtils.setEnv(systemEnv);
+            assertThat(
+                            AutoscalerUtils.discoverCustomAlignmentModes(
+                                    OperatorPluginUtils.createPluginManager(new Configuration())))
+                    .anyMatch(mode -> mode instanceof TestAlignmentMode);
         } finally {
             TestUtils.setEnv(originalEnv);
         }

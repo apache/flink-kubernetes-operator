@@ -102,7 +102,7 @@ public class TestingFlinkDeploymentController
                                 eventRecorder,
                                 new ClusterResourceManager(
                                         Duration.ZERO, flinkService.getKubernetesClient()),
-                                new Configuration()));
+                                OperatorPluginUtils.createPluginManager(new Configuration())));
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(

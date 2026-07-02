@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobVertexScaler.ParallelismChange;
+import org.apache.flink.autoscaler.alignment.KeyGroupOrPartitionsAdjustMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
@@ -47,8 +48,8 @@ import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
-import static org.apache.flink.autoscaler.JobVertexScaler.SCALE_LIMITED_MESSAGE_FORMAT;
-import static org.apache.flink.autoscaler.JobVertexScaler.SCALING_LIMITED;
+import static org.apache.flink.autoscaler.alignment.ParallelismAligner.SCALE_LIMITED_MESSAGE_FORMAT;
+import static org.apache.flink.autoscaler.alignment.ParallelismAligner.SCALING_LIMITED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_MIN_OBSERVATIONS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
@@ -85,6 +86,14 @@ public class JobVertexScalerTest {
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
+        // These tests were written against the historical default alignment behavior, which is now
+        // the deprecated legacy mode (the new default MAXIMIZE never blocks). Pin it so the
+        // existing
+        // assertions keep verifying the exact, backward-compatible legacy behavior. New-mode tests
+        // override this via AutoScalerOptions.ALIGNMENT_MODE.
+        conf.set(
+                AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
+                KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD);
         JobID jobID = new JobID();
         context =
                 new JobAutoScalerContext<>(
@@ -111,6 +120,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 50, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -123,6 +133,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 50, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -135,6 +146,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 80, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -147,6 +159,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 60, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -158,6 +171,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 59, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -170,6 +184,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(2, 100, 40),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -182,6 +197,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(2, 100, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -195,6 +211,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 10, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -207,6 +224,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 10, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -220,6 +238,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 200, 10),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -232,6 +251,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(10, 200, 10),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -245,7 +265,7 @@ public class JobVertexScalerTest {
         final var vertex = new JobVertexID();
         assertEquals(
                 1,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         1,
                         NOT_ADJUST_INPUTS,
@@ -254,11 +274,12 @@ public class JobVertexScalerTest {
                         0.0001,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 1,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         2,
                         NOT_ADJUST_INPUTS,
@@ -267,11 +288,12 @@ public class JobVertexScalerTest {
                         0.1,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 5,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         6,
                         NOT_ADJUST_INPUTS,
@@ -280,11 +302,12 @@ public class JobVertexScalerTest {
                         0.8,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 24,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         16,
                         NOT_ADJUST_INPUTS,
@@ -293,11 +316,12 @@ public class JobVertexScalerTest {
                         1.5,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 400,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         NOT_ADJUST_INPUTS,
@@ -306,11 +330,12 @@ public class JobVertexScalerTest {
                         2,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 720,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         NOT_ADJUST_INPUTS,
@@ -319,7 +344,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         minParallelism,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
     }
 
@@ -333,7 +359,7 @@ public class JobVertexScalerTest {
 
         assertEquals(
                 6,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         6,
                         inputShipStrategies,
@@ -342,11 +368,12 @@ public class JobVertexScalerTest {
                         0.8,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 32,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         16,
                         inputShipStrategies,
@@ -355,11 +382,12 @@ public class JobVertexScalerTest {
                         1.5,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 360,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         inputShipStrategies,
@@ -368,11 +396,12 @@ public class JobVertexScalerTest {
                         1.3,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 720,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         inputShipStrategies,
@@ -381,7 +410,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         int maxParallelism = 128;
@@ -391,7 +421,7 @@ public class JobVertexScalerTest {
         int expectedMaximumUtilization = 26;
         assertEquals(
                 expectedEvenly,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         currentParallelism,
                         inputShipStrategies,
@@ -400,16 +430,17 @@ public class JobVertexScalerTest {
                         scaleFactor,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         Configuration conf = context.getConfiguration();
         conf.set(
                 AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
-                JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+                KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
         assertEquals(
                 expectedMaximumUtilization,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         currentParallelism,
                         inputShipStrategies,
@@ -418,7 +449,8 @@ public class JobVertexScalerTest {
                         scaleFactor,
                         parallelismLowerLimit,
                         maxParallelism,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
     }
 
@@ -429,7 +461,7 @@ public class JobVertexScalerTest {
 
         assertEquals(
                 5,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         6,
                         inputShipStrategies,
@@ -438,11 +470,12 @@ public class JobVertexScalerTest {
                         0.8,
                         1,
                         700,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 8,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         8,
                         inputShipStrategies,
@@ -451,12 +484,13 @@ public class JobVertexScalerTest {
                         0.8,
                         8,
                         700,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         assertEquals(
                 32,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         16,
                         inputShipStrategies,
@@ -465,11 +499,12 @@ public class JobVertexScalerTest {
                         1.5,
                         1,
                         Integer.MAX_VALUE,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 64,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         16,
                         inputShipStrategies,
@@ -478,11 +513,12 @@ public class JobVertexScalerTest {
                         1.5,
                         60,
                         Integer.MAX_VALUE,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 240,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         inputShipStrategies,
@@ -491,11 +527,12 @@ public class JobVertexScalerTest {
                         2,
                         1,
                         300,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 360,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         200,
                         inputShipStrategies,
@@ -504,7 +541,8 @@ public class JobVertexScalerTest {
                         Integer.MAX_VALUE,
                         1,
                         600,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
     }
 
@@ -515,7 +553,7 @@ public class JobVertexScalerTest {
                         () ->
                                 assertEquals(
                                         600,
-                                        JobVertexScaler.scale(
+                                        vertexScaler.scale(
                                                 new JobVertexID(),
                                                 200,
                                                 NOT_ADJUST_INPUTS,
@@ -524,7 +562,8 @@ public class JobVertexScalerTest {
                                                 Integer.MAX_VALUE,
                                                 500,
                                                 499,
-                                                eventCollector,
+                                                Map.of(),
+                                                null,
                                                 context)));
     }
 
@@ -540,6 +579,7 @@ public class JobVertexScalerTest {
                         context,
                         new JobVertexID(),
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated(10, 100, 500),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -552,6 +592,7 @@ public class JobVertexScalerTest {
                         context,
                         new JobVertexID(),
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated(4, 100, 500),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -570,6 +611,7 @@ public class JobVertexScalerTest {
                         context,
                         new JobVertexID(),
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated(10, 500, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -582,6 +624,7 @@ public class JobVertexScalerTest {
                         context,
                         new JobVertexID(),
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated(12, 500, 100),
                         Collections.emptySortedMap(),
                         restartTime,
@@ -697,6 +740,7 @@ public class JobVertexScalerTest {
                         context,
                         vertex,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated(parallelism, targetDataRate, trueProcessingRate),
                         new TreeMap<>(),
                         restartTime,
@@ -720,6 +764,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -735,6 +780,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -751,6 +797,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -764,6 +811,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -777,6 +825,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -790,6 +839,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -805,6 +855,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -820,6 +871,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -844,6 +896,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -860,6 +913,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -876,6 +930,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         NOT_ADJUST_INPUTS,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -901,6 +956,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -916,6 +972,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -932,6 +989,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -958,6 +1016,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -975,6 +1034,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -989,6 +1049,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -1011,6 +1072,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         inputShipStrategies,
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -1033,7 +1095,7 @@ public class JobVertexScalerTest {
 
         assertEquals(
                 3,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         6,
                         List.of(),
@@ -1042,11 +1104,12 @@ public class JobVertexScalerTest {
                         0.4,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 15,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         7,
                         List.of(),
@@ -1055,11 +1118,12 @@ public class JobVertexScalerTest {
                         1.2,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
         assertEquals(
                 18,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         20,
                         List.of(),
@@ -1068,12 +1132,13 @@ public class JobVertexScalerTest {
                         0.9,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         assertEquals(
                 22,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         22,
                         List.of(),
@@ -1082,12 +1147,13 @@ public class JobVertexScalerTest {
                         1.1,
                         20,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         assertEquals(
                 100,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         80,
                         List.of(),
@@ -1096,7 +1162,8 @@ public class JobVertexScalerTest {
                         1.4,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         int partition = 199;
@@ -1109,7 +1176,7 @@ public class JobVertexScalerTest {
 
         assertEquals(
                 expectedEvenly,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         currentParallelism,
                         List.of(),
@@ -1118,17 +1185,18 @@ public class JobVertexScalerTest {
                         scaleFactor,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
 
         Configuration conf = context.getConfiguration();
         conf.set(
                 AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
-                JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+                KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
 
         assertEquals(
                 expectedMaximumUtilization,
-                JobVertexScaler.scale(
+                vertexScaler.scale(
                         vertex,
                         currentParallelism,
                         List.of(),
@@ -1137,7 +1205,8 @@ public class JobVertexScalerTest {
                         scaleFactor,
                         parallelismLowerLimit,
                         parallelismUpperLimit,
-                        eventCollector,
+                        Map.of(),
+                        null,
                         context));
     }
 
@@ -1158,6 +1227,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         List.of(),
+                        null,
                         evaluated,
                         history,
                         restartTime,
@@ -1181,6 +1251,7 @@ public class JobVertexScalerTest {
                         context,
                         jobVertexID,
                         List.of(),
+                        null,
                         smallChangesForScaleFactor,
                         history,
                         restartTime,
@@ -1394,6 +1465,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(2, 100, 40),
                         linearScalingHistory,
                         restartTime,
@@ -1419,6 +1491,7 @@ public class JobVertexScalerTest {
                         context,
                         op,
                         inputShipStrategies,
+                        null,
                         evaluated(2, 100, 40),
                         diminishingReturnsScalingHistory,
                         restartTime,

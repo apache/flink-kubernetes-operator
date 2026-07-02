@@ -18,15 +18,16 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.alignment.ParallelismAligner;
+import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.DescribedEnum;
-import org.apache.flink.configuration.description.InlineElement;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -47,14 +48,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
 
-import static org.apache.flink.autoscaler.JobVertexScaler.KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_MIN_OBSERVATIONS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALE_DOWN_INTERVAL;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
@@ -65,8 +64,6 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
-import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
-import static org.apache.flink.configuration.description.TextElement.text;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /** Component responsible for computing vertex parallelism based on the scaling metrics. */
@@ -80,20 +77,24 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     protected static final String INEFFECTIVE_MESSAGE_FORMAT =
             "Ineffective scaling detected for %s (expected increase: %s, actual increase %s). Blocking of ineffective scaling decisions is %s";
 
-    @VisibleForTesting protected static final String SCALING_LIMITED = "ScalingLimited";
-
-    @VisibleForTesting
-    protected static final String SCALE_LIMITED_MESSAGE_FORMAT =
-            "Scaling limited detected for %s (expected parallelism: %s, actual parallelism %s). "
-                    + "Scaling limited due to numKeyGroupsOrPartitions : %s，"
-                    + "upperBoundForAlignment(maxParallelism or parallelismUpperLimit): %s, parallelismLowerLimit: %s.";
-
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
 
+    /**
+     * Aligns the computed parallelism, holding any custom alignment modes discovered as plugins.
+     */
+    private final ParallelismAligner parallelismAligner;
+
     public JobVertexScaler(AutoScalerEventHandler<KEY, Context> autoScalerEventHandler) {
+        this(autoScalerEventHandler, List.of());
+    }
+
+    public JobVertexScaler(
+            AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
+            Collection<ParallelismAlignmentMode> alignmentModes) {
         this.autoScalerEventHandler = autoScalerEventHandler;
+        this.parallelismAligner = new ParallelismAligner(alignmentModes);
     }
 
     /** The rescaling will be triggered if any vertex's {@link ParallelismChange} is changed. */
@@ -175,6 +176,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             Context context,
             JobVertexID vertex,
             Collection<ShipStrategy> inputShipStrategies,
+            JobTopology jobTopology,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime,
@@ -236,7 +238,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         scaleFactor,
                         Math.min(currentParallelism, conf.get(VERTEX_MIN_PARALLELISM)),
                         Math.max(currentParallelism, conf.get(VERTEX_MAX_PARALLELISM)),
-                        autoScalerEventHandler,
+                        evaluatedMetrics,
+                        jobTopology,
                         context);
 
         if (newParallelism == currentParallelism) {
@@ -516,26 +519,13 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * min(parallelismUpperLimit, maxParallelism)]}.
      *
      * <p>For source vertices (with known partition counts) and keyed vertices (with HASH inputs),
-     * the parallelism is further adjusted to align with the number of key groups or source
-     * partitions, according to the configured {@link KeyGroupOrPartitionsAdjustMode}.
-     *
-     * <p>The alignment uses a two-phase algorithm:
-     *
-     * <ol>
-     *   <li><b>Phase 1 (upward search):</b> searches from the computed {@code newParallelism}
-     *       upward for divisor-aligned values. For scale-down, the search is capped at {@code
-     *       currentParallelism} to prevent the alignment from crossing into the scale-up direction.
-     *       If the nearest divisor is {@code currentParallelism} itself, it is returned
-     *       (effectively blocking the scale-down).
-     *   <li><b>Phase 2 (downward fallback):</b> if Phase 1 finds no match, searches downward from
-     *       {@code newParallelism} for the boundary where per-subtask load increases. A
-     *       direction-safety guard ensures the result never inverts the intended scaling direction
-     *       (scale-up results stay above {@code currentParallelism}, scale-down results stay
-     *       below).
-     * </ol>
+     * the parallelism is further aligned to the number of key groups or source partitions by the
+     * configured {@link org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode}. The
+     * alignment can adjust the computed target but never vetoes a scale: when no aligned value
+     * preserves the scaling direction, the computed target is used unchanged.
      */
     @VisibleForTesting
-    protected static <KEY, Context extends JobAutoScalerContext<KEY>> int scale(
+    protected int scale(
             JobVertexID vertex,
             int currentParallelism,
             Collection<ShipStrategy> inputShipStrategies,
@@ -544,7 +534,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             double scaleFactor,
             int parallelismLowerLimit,
             int parallelismUpperLimit,
-            AutoScalerEventHandler<KEY, Context> eventHandler,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            JobTopology jobTopology,
             Context context) {
         checkArgument(
                 parallelismLowerLimit <= parallelismUpperLimit,
@@ -562,10 +553,9 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     maxParallelism);
         }
 
-        int newParallelism =
-                // Prevent integer overflow when converting from double to integer.
-                // We do not have to detect underflow because doubles cannot
-                // underflow.
+        // Prevent integer overflow when converting from double to integer.
+        // We do not have to detect underflow because doubles cannot underflow.
+        int rawParallelism =
                 (int) Math.min(Math.ceil(scaleFactor * currentParallelism), Integer.MAX_VALUE);
 
         // Cap parallelism at either maxParallelism(number of key groups or source partitions) or
@@ -573,161 +563,32 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         final int upperBound = Math.min(maxParallelism, parallelismUpperLimit);
 
         // Apply min/max parallelism
-        newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
-
-        var adjustByMaxParallelismOrPartitions =
-                numSourcePartitions > 0 || inputShipStrategies.contains(HASH);
-        if (!adjustByMaxParallelismOrPartitions) {
-            return newParallelism;
-        }
-
-        var numKeyGroupsOrPartitions =
-                numSourcePartitions <= 0 ? maxParallelism : numSourcePartitions;
-        var upperBoundForAlignment = Math.min(numKeyGroupsOrPartitions, upperBound);
-
-        KeyGroupOrPartitionsAdjustMode mode =
-                context.getConfiguration().get(SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE);
+        final int newParallelism =
+                Math.min(Math.max(parallelismLowerLimit, rawParallelism), upperBound);
 
         if (newParallelism == currentParallelism) {
             return newParallelism;
         }
 
-        boolean isScaleUp = newParallelism > currentParallelism;
-
-        // Phase 1: Upward search from newParallelism for divisor or approximate match.
-        // For scale-down, cap search at currentParallelism to prevent the alignment
-        // from crossing into the scale-up direction (direction-safety fix).
-        // Returning currentParallelism itself is allowed — it effectively blocks the
-        // scale-down since no aligned value was found strictly below it.
-        int phase1UpperBound =
-                isScaleUp
-                        ? upperBoundForAlignment
-                        : Math.min(currentParallelism, upperBoundForAlignment);
-
-        for (int p = newParallelism; p <= phase1UpperBound; p++) {
-            if (numKeyGroupsOrPartitions % p == 0
-                    ||
-                    // When Mode is MAXIMIZE_UTILISATION , Try to find the smallest parallelism
-                    // that can satisfy the current consumption rate.
-                    (mode == MAXIMIZE_UTILISATION
-                            && numKeyGroupsOrPartitions / p
-                                    < numKeyGroupsOrPartitions / newParallelism)) {
-                return p;
-            }
-        }
-
-        // When adjusting the parallelism after rounding up cannot
-        // find the parallelism to meet requirements.
-        // Try to find the smallest parallelism that can satisfy the current consumption rate.
-        int p = newParallelism;
-        for (; p > 0; p--) {
-            if (numKeyGroupsOrPartitions / p > numKeyGroupsOrPartitions / newParallelism) {
-                if (numKeyGroupsOrPartitions % p != 0) {
-                    p++;
-                }
-                break;
-            }
-        }
-        p = Math.max(p, parallelismLowerLimit);
-
-        // Direction-safety guard: prevent the alignment from inverting the scaling direction.
-        if ((isScaleUp && p <= currentParallelism) || (!isScaleUp && p >= currentParallelism)) {
-            LOG.warn(
-                    "Scaling of {} blocked: alignment could not find a value that preserves the "
-                            + "{} direction from current parallelism {} with mode {}. "
-                            + "Keeping current parallelism.",
-                    vertex,
-                    isScaleUp ? "scale-up" : "scale-down",
-                    currentParallelism,
-                    mode);
-            emitScalingLimitedEvent(
-                    vertex,
-                    newParallelism,
-                    currentParallelism,
-                    numKeyGroupsOrPartitions,
-                    upperBound,
-                    parallelismLowerLimit,
-                    eventHandler,
-                    context);
-            return currentParallelism;
-        }
-
-        if (p != newParallelism) {
-            emitScalingLimitedEvent(
-                    vertex,
-                    newParallelism,
-                    p,
-                    numKeyGroupsOrPartitions,
-                    upperBound,
-                    parallelismLowerLimit,
-                    eventHandler,
-                    context);
-        }
-        return p;
-    }
-
-    /**
-     * Emits a {@link #SCALING_LIMITED} warning event when the alignment logic had to deviate from
-     * the computed target parallelism, or when no aligned parallelism could be found and the
-     * scaling operation was blocked.
-     *
-     * @param expectedParallelism the originally computed target parallelism
-     * @param actualParallelism the parallelism that will actually be applied
-     */
-    private static <KEY, Context extends JobAutoScalerContext<KEY>> void emitScalingLimitedEvent(
-            JobVertexID vertex,
-            int expectedParallelism,
-            int actualParallelism,
-            int numKeyGroupsOrPartitions,
-            int upperBound,
-            int parallelismLowerLimit,
-            AutoScalerEventHandler<KEY, Context> eventHandler,
-            Context context) {
-        var message =
-                String.format(
-                        SCALE_LIMITED_MESSAGE_FORMAT,
-                        vertex,
-                        expectedParallelism,
-                        actualParallelism,
-                        numKeyGroupsOrPartitions,
-                        upperBound,
-                        parallelismLowerLimit);
-        eventHandler.handleEvent(
-                context,
-                AutoScalerEventHandler.Type.Warning,
-                SCALING_LIMITED,
-                message,
-                SCALING_LIMITED + vertex,
-                context.getConfiguration().get(SCALING_EVENT_INTERVAL));
+        // Alignment (mode resolution, context building, the search, and any SCALING_LIMITED event)
+        // is owned by the ParallelismAligner.
+        return parallelismAligner.align(
+                vertex,
+                currentParallelism,
+                newParallelism,
+                numSourcePartitions,
+                maxParallelism,
+                parallelismLowerLimit,
+                parallelismUpperLimit,
+                inputShipStrategies,
+                evaluatedMetrics,
+                jobTopology,
+                autoScalerEventHandler,
+                context);
     }
 
     @VisibleForTesting
     protected void setClock(Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
-    }
-
-    /** The mode of the key group or parallelism adjustment. */
-    public enum KeyGroupOrPartitionsAdjustMode implements DescribedEnum {
-        EVENLY_SPREAD(
-                "This mode ensures that the parallelism adjustment attempts to evenly distribute data across subtasks"
-                        + ". It is particularly effective for source vertices that are aware of partition counts or vertices after "
-                        + "'keyBy' operation. The goal is to have the number of key groups or partitions be divisible by the set parallelism, ensuring even data distribution and reducing data skew."),
-
-        MAXIMIZE_UTILISATION(
-                "This model is to maximize resource utilization. In this mode, an attempt is made to set"
-                        + " the parallelism that meets the current consumption rate requirements. It is not enforced "
-                        + "that the number of key groups or partitions is divisible by the parallelism."),
-        ;
-
-        private final InlineElement description;
-
-        KeyGroupOrPartitionsAdjustMode(String description) {
-            this.description = text(description);
-        }
-
-        @Override
-        public InlineElement getDescription() {
-            return description;
-        }
     }
 }
