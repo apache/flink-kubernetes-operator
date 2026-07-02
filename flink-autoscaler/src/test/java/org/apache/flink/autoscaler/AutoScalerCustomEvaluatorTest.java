@@ -90,7 +90,8 @@ public class AutoScalerCustomEvaluatorTest {
                                         Map.of(source1, REBALANCE),
                                         1,
                                         720,
-                                        new IOMetrics(0, 0, 0))));
+                                        new IOMetrics(0, 0, 0))),
+                        stateStore);
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -117,7 +118,7 @@ public class AutoScalerCustomEvaluatorTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(customEvaluators),
+                        new ScalingMetricEvaluator<>(customEvaluators),
                         scalingExecutor,
                         eventCollector,
                         new TestingScalingRealizer<>(),

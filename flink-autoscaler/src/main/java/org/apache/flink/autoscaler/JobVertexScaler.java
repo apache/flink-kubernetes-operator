@@ -582,7 +582,6 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 parallelismUpperLimit,
                 inputShipStrategies,
                 evaluatedMetrics,
-                jobTopology,
                 autoScalerEventHandler,
                 context);
     }

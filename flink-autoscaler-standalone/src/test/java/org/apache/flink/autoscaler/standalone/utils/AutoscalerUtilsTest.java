@@ -17,7 +17,6 @@
 
 package org.apache.flink.autoscaler.standalone.utils;
 
-import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.TestScalingExecutor;
 import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
@@ -47,7 +46,7 @@ class AutoscalerUtilsTest {
 
     @Test
     void testDiscoverCustomScalingExecutors() {
-        Collection<ScalingExecutorPlugin<Object, JobAutoScalerContext<Object>>> scalingExecutors =
+        Collection<ScalingExecutorPlugin<Object>> scalingExecutors =
                 AutoscalerUtils.discoverCustomScalingExecutors();
 
         assertThat(scalingExecutors)

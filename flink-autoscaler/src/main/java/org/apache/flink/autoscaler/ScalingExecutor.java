@@ -87,7 +87,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
     private final ResourceCheck resourceCheck;
-    private final Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors;
+    private final Collection<ScalingExecutorPlugin<KEY>> customExecutors;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
@@ -116,7 +116,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore,
             @Nullable ResourceCheck resourceCheck,
-            Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors,
+            Collection<ScalingExecutorPlugin<KEY>> customExecutors,
             Collection<ParallelismAlignmentMode> customAlignmentModes) {
         this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler, customAlignmentModes);
         this.autoScalerEventHandler = autoScalerEventHandler;
@@ -128,7 +128,36 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         : Collections.unmodifiableCollection(customExecutors);
     }
 
-    public boolean scaleResource(
+    /**
+     * Computes and applies the scaling decision for the current cycle based on the scaling cycle
+     * state of the given context. The delayed scale down state is loaded from and persisted to the
+     * {@link AutoScalerStateStore} owned by this executor.
+     *
+     * @return {@code true} if a parallelism change was applied, {@code false} otherwise.
+     */
+    public boolean execute(Context context) throws Exception {
+        var cycleState = context.getScalingCycleState();
+        var delayedScaleDown = autoScalerStateStore.getDelayedScaleDown(context);
+
+        var parallelismChanged =
+                scaleResource(
+                        context,
+                        cycleState.getEvaluatedMetrics(),
+                        cycleState.getScalingHistory(),
+                        cycleState.getScalingTracking(),
+                        cycleState.getNow(),
+                        cycleState.getCollectedMetrics().getJobTopology(),
+                        delayedScaleDown);
+
+        if (delayedScaleDown.isUpdated()) {
+            autoScalerStateStore.storeDelayedScaleDown(context, delayedScaleDown);
+        }
+
+        return parallelismChanged;
+    }
+
+    @VisibleForTesting
+    boolean scaleResource(
             Context context,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
@@ -182,8 +211,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 applyCustomExecutors(
                         context,
                         memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
-                        evaluatedMetrics,
-                        jobTopology,
                         scalingSummaries);
         if (scalingSummaries == null || scalingSummaries.isEmpty()) {
             return false;
@@ -523,23 +550,22 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private Map<JobVertexID, ScalingSummary> applyCustomExecutors(
             Context context,
             Configuration conf,
-            EvaluatedMetrics evaluatedMetrics,
-            JobTopology jobTopology,
             Map<JobVertexID, ScalingSummary> scalingSummaries) {
-        Collection<Map.Entry<String, ScalingExecutorPlugin<KEY, Context>>> chain =
+        Collection<Map.Entry<String, ScalingExecutorPlugin<KEY>>> chain =
                 resolveCustomScalingExecutors(conf);
         if (chain.isEmpty()) {
             return scalingSummaries;
         }
-        for (Map.Entry<String, ScalingExecutorPlugin<KEY, Context>> entry : chain) {
+        for (Map.Entry<String, ScalingExecutorPlugin<KEY>> entry : chain) {
             var instanceName = entry.getKey();
             var plugin = entry.getValue();
             var pluginClassName = plugin.getClass().getName();
-            var pluginConfiguration =
-                    AutoScalerOptions.customScalingExecutorConfiguration(conf, instanceName);
-            var pluginContext =
-                    new ScalingExecutorPlugin.Context<>(
-                            context, pluginConfiguration, evaluatedMetrics, jobTopology);
+            var configuration =
+                    AutoScalerOptions.overlayConfiguration(
+                            conf,
+                            AutoScalerOptions.customScalingExecutorConfiguration(
+                                    conf, instanceName));
+            var pluginContext = new ScalingExecutorPlugin.Context<>(context, configuration);
             var previousSummaries = copyScalingSummaries(scalingSummaries);
             scalingSummaries = plugin.apply(pluginContext, scalingSummaries);
             if (scalingSummaries == null || scalingSummaries.isEmpty()) {
@@ -580,13 +606,13 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
      * event {@code messageKey}, hence the {@code Map.Entry} pairing.
      */
     @VisibleForTesting
-    Collection<Map.Entry<String, ScalingExecutorPlugin<KEY, Context>>>
-            resolveCustomScalingExecutors(Configuration conf) {
+    Collection<Map.Entry<String, ScalingExecutorPlugin<KEY>>> resolveCustomScalingExecutors(
+            Configuration conf) {
         List<String> instances = conf.get(AutoScalerOptions.SCALING_CUSTOM_EXECUTORS);
         if (instances == null || instances.isEmpty()) {
             return Collections.emptyList();
         }
-        List<Map.Entry<String, ScalingExecutorPlugin<KEY, Context>>> resolved = new ArrayList<>();
+        List<Map.Entry<String, ScalingExecutorPlugin<KEY>>> resolved = new ArrayList<>();
         Set<String> seenInstanceNames = new HashSet<>();
         for (String instance : instances) {
             if (!seenInstanceNames.add(instance)) {
@@ -607,8 +633,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         classKey);
                 continue;
             }
-            ScalingExecutorPlugin<KEY, Context> match = null;
-            for (ScalingExecutorPlugin<KEY, Context> plugin : customExecutors) {
+            ScalingExecutorPlugin<KEY> match = null;
+            for (ScalingExecutorPlugin<KEY> plugin : customExecutors) {
                 if (plugin.getClass().getName().equals(configuredClassName)) {
                     match = plugin;
                     break;

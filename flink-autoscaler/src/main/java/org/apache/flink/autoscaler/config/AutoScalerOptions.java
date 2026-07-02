@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.UnmodifiableConfiguration;
 
 import java.time.Duration;
 import java.util.List;
@@ -670,6 +671,19 @@ public class AutoScalerOptions {
      */
     public static Configuration customAlignmentModeConfiguration(Configuration conf, String name) {
         return prefixStrippedConfiguration(conf, SCALING_ALIGNMENT_MODE_CONF_PREFIX, name);
+    }
+
+    /**
+     * Overlays the prefix-stripped per-instance plugin {@code overrides} onto {@code base} and
+     * returns an unmodifiable view. Values from {@code overrides} take precedence on overlap.
+     * Shared by the custom evaluator, scaling executor and parallelism alignment plugins so the
+     * merge semantics stay consistent across all three.
+     */
+    public static UnmodifiableConfiguration overlayConfiguration(
+            Configuration base, Configuration overrides) {
+        Configuration merged = new Configuration(base);
+        merged.addAll(overrides);
+        return new UnmodifiableConfiguration(merged);
     }
 
     /**
