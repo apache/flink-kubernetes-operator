@@ -278,6 +278,92 @@ The following steps demonstrate how to develop and use a custom metric evaluator
        o.a.f.a.s.AutoscalerUtils [INFO ] Discovered custom metric evaluator via ServiceLoader: org.apache.flink.autoscaler.custom.CustomEvaluator.
        ```
 
+## Custom Parallelism Alignment Modes
+
+The autoscaler aligns a vertex's computed target parallelism to the number of key groups (keyBy) or source partitions to reduce data skew. The built-in modes (`BALANCED`, `EVENLY_SPREAD`, `OFF`) are selected by name through `job.autoscaler.scaling.parallelism-alignment.mode`. A custom alignment mode can also be provided as a plugin by implementing the `ParallelismAlignmentMode` SPI. Custom modes are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+
+All `job.autoscaler.*` keys related to custom alignment modes also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.parallelism-alignment.mode`). The canonical key takes precedence on overlap.
+
+The following steps demonstrate how to develop and use a custom alignment mode.
+
+1. Implement `org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode`:
+    ```java
+    package org.apache.flink.autoscaler.alignment;
+
+    /** Custom alignment mode snapping the computed parallelism down to the nearest divisor. */
+    public class CustomAlignmentMode implements ParallelismAlignmentMode {
+
+        /** Apply to every vertex, not only the source and keyBy vertices the built-ins handle. */
+        @Override
+        public boolean isApplicable(Context ctx) {
+            return true;
+        }
+
+        @Override
+        public int align(Context ctx) {
+            // Number of key groups, or source partitions for a partitioned source.
+            int n = ctx.getNumSourcePartitions() > 0
+                    ? ctx.getNumSourcePartitions()
+                    : ctx.getMaxParallelism();
+            // Optional mode-specific parameter, read from the per-mode configuration.
+            int minParallelism = ctx.getModeConfiguration().getInteger("min-parallelism", 1);
+            for (int p = ctx.getNewParallelism(); p >= minParallelism; p--) {
+                if (n % p == 0) {
+                    return p;
+                }
+            }
+            return ctx.getNewParallelism();
+        }
+    }
+    ```
+   The `Context` exposes the current and computed target parallelism, the number of key groups or source partitions, the input ship strategies, the `JobAutoScalerContext`, the per-vertex evaluated metrics, the job topology, and the prefix-stripped per-mode `Configuration` (`getModeConfiguration()`). The autoscaler calls `align` only when `isApplicable(Context)` returns true. That method defaults to keyBy (hash) vertices and to partitioned sources that report a partition count (Kafka and Pulsar do by default), and a custom mode can override it to widen the scope, for example to align custom partitioned vertices.
+
+2. Create the service definition file `org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode` in `META-INF/services`:
+    ```text
+    org.apache.flink.autoscaler.alignment.CustomAlignmentMode
+    ```
+
+3. Use the Maven tool to package the project and generate the custom alignment mode JAR.
+
+4. Select the custom mode by name and point it at your implementation class. Any other `job.autoscaler.scaling.parallelism-alignment.mode.<name>.*` entries are passed to the mode (prefix-stripped) through `Context#getModeConfiguration()`:
+    ```yaml
+    job.autoscaler.scaling.parallelism-alignment.mode: custom-mode
+    job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.class: org.apache.flink.autoscaler.alignment.CustomAlignmentMode
+    job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.min-parallelism: 4
+    ```
+   {{< hint info >}}
+   The `<name>` is any identifier you choose. `custom-mode` is used here, but `CUSTOM_MODE` or any other style works just as well. It is matched exactly, including case, so the value of `scaling.parallelism-alignment.mode` and the `<name>` in `scaling.parallelism-alignment.mode.<name>.class` must be identical. As a result, `CUSTOM_MODE` and `custom-mode` are two different modes, not aliases. The only reserved names are the built-ins (`BALANCED`, `EVENLY_SPREAD`, `OFF`), which always resolve to the built-in modes regardless of any configured class.
+   {{< /hint >}}
+
+5. Deploy the mode.
+
+    - **Operator deployment** - create a Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to a custom alignment mode plugin directory under `/opt/flink/plugins` (the value of the `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart). The structure of the custom alignment mode directory under `/opt/flink/plugins` is as follows:
+        ```text
+        /opt/flink/plugins
+            ├── custom-alignment-mode
+            │   ├── custom-alignment-mode.jar
+            └── ...
+        ```
+
+        With the custom alignment mode directory location, the Dockerfile is defined as follows:
+        ```shell script
+        FROM apache/flink-kubernetes-operator
+        ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+        ENV CUSTOM_ALIGNMENT_MODE_DIR=custom-alignment-mode
+        RUN mkdir $FLINK_PLUGINS_DIR/$CUSTOM_ALIGNMENT_MODE_DIR
+        COPY custom-alignment-mode.jar $FLINK_PLUGINS_DIR/$CUSTOM_ALIGNMENT_MODE_DIR/
+        ```
+
+        Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
+        ```text
+        o.a.f.k.o.u.AutoscalerUtils [INFO ] Discovered custom alignment mode for autoscaler from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.alignment.CustomAlignmentMode.
+        ```
+
+    - **Standalone autoscaler** - simply place the custom alignment mode JAR on the classpath of the `flink-autoscaler-standalone` process. It will be picked up automatically via Java's `ServiceLoader` and discovery will be logged:
+        ```text
+        o.a.f.a.s.AutoscalerUtils [INFO ] Discovered custom alignment mode via ServiceLoader: org.apache.flink.autoscaler.alignment.CustomAlignmentMode.
+        ```
+
 ## Custom Scaling Executors
 
 `ScalingExecutorPlugin` is a pluggable component that allows users to intercept, modify, or veto computed scaling decisions before they are applied. Custom scaling executors are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
