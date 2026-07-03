@@ -31,6 +31,7 @@ import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.kubeclient.decorators.FlinkConfMountDecorator;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -937,7 +938,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     ? RestoreMode.DEFAULT
                                     : null,
                             conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
-                                    ? conf.toMap()
+                                    ? configToMapWithVersionDialect(conf, flinkVersion)
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
@@ -1043,17 +1044,33 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @VisibleForTesting
     protected static Configuration removeOperatorConfigs(Configuration config) {
-        Configuration newConfig = new Configuration();
-        config.toMap()
-                .forEach(
-                        (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
-                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
-                                newConfig.setString(k, v);
-                            }
-                        });
-
+        // Copy and remove keys directly: a toMap() round-trip would serialize values (e.g. the
+        // list-typed pipeline.jars) in the operator's own YAML dialect, which the target Flink
+        // version may not parse. Raw values let the write boundaries render per target version.
+        Configuration newConfig = new Configuration(config);
+        for (String key : config.keySet()) {
+            if (key.startsWith(K8S_OP_CONF_PREFIX)
+                    || key.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
+                newConfig.removeKey(key);
+            }
+        }
         return newConfig;
+    }
+
+    /**
+     * Serialize the config in the YAML dialect of the given Flink version so the receiving cluster
+     * can parse the values regardless of the operator's own config format.
+     *
+     * @param conf Config to serialize
+     * @param flinkVersion Flink version of the receiving cluster
+     * @return Map of config entries in the target version's string format
+     */
+    @VisibleForTesting
+    protected static Map<String, String> configToMapWithVersionDialect(
+            Configuration conf, FlinkVersion flinkVersion) {
+        var copy = new Configuration(FlinkConfMountDecorator.useStandardYamlConfig(flinkVersion));
+        copy.addAll(conf);
+        return copy.toMap();
     }
 
     private void validateHaMetadataExists(Configuration conf) {

@@ -25,8 +25,10 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -1086,6 +1088,34 @@ public class AbstractFlinkServiceTest {
         assertFalse(newConf.containsKey(opKey1));
         assertFalse(newConf.containsKey(opKey2));
         assertTrue(newConf.containsKey(regularKey));
+    }
+
+    @Test
+    public void removeOperatorConfigsKeepsTypedValuesTest() {
+        // Simulate an operator process running on standard config.yaml.
+        boolean previousDialect = GlobalConfiguration.isStandardYaml();
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            var jars = List.of("local:///opt/flink/job.jar");
+            var deployConfig = new Configuration(true);
+            deployConfig.set(PipelineOptions.JARS, jars);
+            deployConfig.setString("kubernetes.operator.myKey", "v");
+
+            var newConf = AbstractFlinkService.removeOperatorConfigs(deployConfig);
+
+            assertFalse(newConf.containsKey("kubernetes.operator.myKey"));
+            // Typed values must survive so write boundaries can render them per Flink version.
+            assertEquals(jars, newConf.get(PipelineOptions.JARS));
+            assertEquals(
+                    Map.of("pipeline.jars", "local:///opt/flink/job.jar"),
+                    AbstractFlinkService.configToMapWithVersionDialect(
+                            newConf, FlinkVersion.v1_20));
+            assertEquals(
+                    Map.of("pipeline.jars", "['local:///opt/flink/job.jar']"),
+                    AbstractFlinkService.configToMapWithVersionDialect(newConf, FlinkVersion.v2_0));
+        } finally {
+            GlobalConfiguration.setStandardYaml(previousDialect);
+        }
     }
 
     @Test

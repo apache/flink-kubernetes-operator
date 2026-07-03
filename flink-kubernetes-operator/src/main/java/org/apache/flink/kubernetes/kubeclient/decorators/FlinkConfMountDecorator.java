@@ -234,17 +234,20 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
         return useStandardYamlConfig() ? "config.yaml" : "flink-conf.yaml";
     }
 
+    boolean useStandardYamlConfig() {
+        return useStandardYamlConfig(
+                kubernetesComponentConf.getFlinkConfiguration().get(FLINK_VERSION));
+    }
+
     /**
      * Determine based on the Flink Version if we should use the new standard config.yaml vs the old
      * flink-conf.yaml. While technically 1.19+ could use this we don't want to change the behaviour
      * for already released Flink versions, so only switch to new yaml from Flink 2.0 onwards.
      *
+     * @param flinkVersion Flink version of the target deployment
      * @return True for Flink version 2.0 and above
      */
-    boolean useStandardYamlConfig() {
-        return kubernetesComponentConf
-                .getFlinkConfiguration()
-                .get(FLINK_VERSION)
-                .isEqualOrNewer(FlinkVersion.v2_0);
+    public static boolean useStandardYamlConfig(FlinkVersion flinkVersion) {
+        return flinkVersion != null && flinkVersion.isEqualOrNewer(FlinkVersion.v2_0);
     }
 }
