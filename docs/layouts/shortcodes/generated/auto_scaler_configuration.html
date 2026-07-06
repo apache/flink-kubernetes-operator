@@ -21,6 +21,12 @@
             <td>The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.dynamic-source.topology-correction.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Enables topology correction from the optional DynamicKafkaSource.activeSplitCount gauge. Missing or incomplete data falls back to legacy behavior. Valid data caps ordinary source scaling; persistently fewer active splits than parallelism bypasses the scale-down delay, while a persistent empty-reader hole may request one controlled same-parallelism recovery. The Kubernetes realizer supports LAST_STATE jobs only. This is disabled by default. Enable it only when the source/runtime restore semantics redistribute active splits after recovery for the configured source mode.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>

@@ -27,6 +27,8 @@ import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -38,6 +40,8 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalLong;
 
 /** The Kubernetes implementation for applying parallelism overrides. */
 public class KubernetesScalingRealizer
@@ -162,6 +166,50 @@ public class KubernetesScalingRealizer
                         .getBytes();
         double ratio = (double) tunedMemory.getBytes() / currentMemory.getBytes();
         return new Quantity(String.valueOf(Math.round(limitBytes * ratio)));
+    }
+
+    /**
+     * Trigger a stateful same-parallelism restart. When the deployed source/runtime and configured
+     * source mode support recovery-time active-split reassignment, DynamicKafkaSource recovery can
+     * then rebuild a balanced active assignment without retaining removed splits as live work.
+     * LAST_STATE alone does not establish that capability.
+     */
+    @Override
+    public OptionalLong realizeSourceAssignmentRebalance(
+            KubernetesJobAutoScalerContext context, long requestId) {
+        var resource = context.getResource();
+        var jobSpec = resource.getSpec().getJob();
+        if (jobSpec == null || jobSpec.getUpgradeMode() != UpgradeMode.LAST_STATE) {
+            LOG.warn(
+                    "Skipping source assignment rebalance for {} because it requires a "
+                            + "LAST_STATE application job.",
+                    context.getJobKey());
+            return OptionalLong.empty();
+        }
+
+        var currentRestartNonce = resource.getSpec().getRestartNonce();
+        var lastReconciledSpec =
+                resource.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        var lastReconciledRestartNonce =
+                lastReconciledSpec == null ? null : lastReconciledSpec.getRestartNonce();
+        if (currentRestartNonce != null
+                && !Objects.equals(currentRestartNonce, lastReconciledRestartNonce)
+                && currentRestartNonce != requestId) {
+            LOG.info(
+                    "Using pending restart nonce {} to cover source assignment rebalance for {}.",
+                    currentRestartNonce,
+                    context.getJobKey());
+            return OptionalLong.of(currentRestartNonce);
+        }
+
+        if (!Objects.equals(currentRestartNonce, requestId)) {
+            resource.getSpec().setRestartNonce(requestId);
+            LOG.info(
+                    "Requesting controlled source assignment rebalance for {} with restart nonce {}.",
+                    context.getJobKey(),
+                    requestId);
+        }
+        return OptionalLong.of(requestId);
     }
 
     @Nullable

@@ -38,6 +38,7 @@ public enum FlinkMetric {
     SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC(
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsOutPerSecond")),
     SOURCE_TASK_NUM_RECORDS_IN(s -> s.startsWith("Source__") && s.endsWith(".numRecordsIn")),
+    DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT(s -> s.endsWith(".DynamicKafkaSource.activeSplitCount")),
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
     BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond")),
     NUM_RECORDS_IN_PER_SEC(s -> s.equals("numRecordsInPerSecond")),

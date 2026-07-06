@@ -46,8 +46,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
@@ -57,6 +59,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_SOURCE_PARTITIONS;
@@ -183,6 +186,17 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             DelayedScaleDown delayedScaleDown) {
         var conf = context.getConfiguration();
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
+        var activeSplitCount = getActiveSplitCount(conf, evaluatedMetrics);
+        if (activeSplitCount.isPresent() && activeSplitCount.getAsInt() < currentParallelism) {
+            return computeSourcePartitionCap(
+                    vertex,
+                    conf,
+                    evaluatedMetrics,
+                    currentParallelism,
+                    activeSplitCount.getAsInt(),
+                    delayedScaleDown);
+        }
+
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
         if (Double.isNaN(averageTrueProcessingRate)) {
             LOG.warn(
@@ -228,16 +242,23 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             scaleFactor = maxScaleFactor;
         }
 
+        int parallelismUpperLimit =
+                Math.min(
+                        Math.max(currentParallelism, conf.get(VERTEX_MAX_PARALLELISM)),
+                        activeSplitCount.orElse(Integer.MAX_VALUE));
+        int sourcePartitionsForAlignment =
+                activeSplitCount.orElse(
+                        (int) evaluatedMetrics.get(NUM_SOURCE_PARTITIONS).getCurrent());
         int newParallelism =
                 scale(
                         vertex,
                         currentParallelism,
                         inputShipStrategies,
-                        (int) evaluatedMetrics.get(NUM_SOURCE_PARTITIONS).getCurrent(),
+                        sourcePartitionsForAlignment,
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.get(VERTEX_MIN_PARALLELISM)),
-                        Math.max(currentParallelism, conf.get(VERTEX_MAX_PARALLELISM)),
+                        parallelismUpperLimit,
                         evaluatedMetrics,
                         jobTopology,
                         context);
@@ -268,6 +289,78 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 currentParallelism,
                 newParallelism,
                 delayedScaleDown);
+    }
+
+    /**
+     * Apply a dynamic source's active split count as an explicit topology constraint.
+     *
+     * <p>This path is intentionally separate from {@link ScalingMetric#NUM_SOURCE_PARTITIONS}: the
+     * latter remains the legacy metric-name-derived value used by ordinary utilization scaling. A
+     * valid connector gauge also replaces that stale value for ordinary scaling alignment and
+     * bounds the scaling path, so stale legacy partition names cannot scale the source above its
+     * active split count or turn a bounded scale-up into a scale-down. The evaluator only exposes a
+     * positive {@code N < P} after it persists across the retained metrics window; once exposed,
+     * this path should not wait for the utilization scale-down interval. It also intentionally
+     * bypasses parallelism alignment because stale legacy partition names could raise the target
+     * above the active-split bound; the configured minimum parallelism is still honored.
+     */
+    private ParallelismChange computeSourcePartitionCap(
+            JobVertexID vertex,
+            Configuration conf,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            int currentParallelism,
+            int activeSplitCount,
+            DelayedScaleDown delayedScaleDown) {
+        int minParallelism = Math.min(currentParallelism, conf.get(VERTEX_MIN_PARALLELISM));
+        int targetParallelism = Math.max(minParallelism, activeSplitCount);
+        if (targetParallelism >= currentParallelism) {
+            LOG.warn(
+                    "Source {} has {} active splits below current parallelism {}, but configured "
+                            + "minimum parallelism {} prevents a topology correction.",
+                    vertex,
+                    activeSplitCount,
+                    currentParallelism,
+                    minParallelism);
+            return ParallelismChange.noChange(currentParallelism);
+        }
+
+        double trueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
+        double expectedProcessingRate =
+                Double.isNaN(trueProcessingRate)
+                        ? Double.NaN
+                        : trueProcessingRate * targetParallelism / currentParallelism;
+        evaluatedMetrics.put(
+                EXPECTED_PROCESSING_RATE, EvaluatedScalingMetric.of(expectedProcessingRate));
+        delayedScaleDown.clearVertex(vertex);
+
+        LOG.info(
+                "Scaling source {} from {} to {} because it reports {} active splits.",
+                vertex,
+                currentParallelism,
+                targetParallelism,
+                activeSplitCount);
+        // Treat the topology correction as an executable change even when utilization is in range.
+        return ParallelismChange.build(targetParallelism, currentParallelism, true);
+    }
+
+    private static OptionalInt getActiveSplitCount(
+            Configuration conf, Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics) {
+        if (!conf.get(DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED)) {
+            return OptionalInt.empty();
+        }
+
+        var activeSplitCountMetric = evaluatedMetrics.get(ACTIVE_SOURCE_SPLIT_COUNT);
+        if (activeSplitCountMetric == null
+                || !isPositiveWholeNumber(activeSplitCountMetric.getCurrent())
+                || activeSplitCountMetric.getCurrent() > Integer.MAX_VALUE) {
+            return OptionalInt.empty();
+        }
+
+        return OptionalInt.of((int) activeSplitCountMetric.getCurrent());
+    }
+
+    private static boolean isPositiveWholeNumber(double value) {
+        return Double.isFinite(value) && value > 0 && value == Math.rint(value);
     }
 
     /**

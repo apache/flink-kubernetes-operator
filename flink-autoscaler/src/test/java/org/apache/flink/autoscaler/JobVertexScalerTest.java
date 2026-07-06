@@ -1268,6 +1268,126 @@ public class JobVertexScalerTest {
                 .isEqualTo(smallChangesForScaleFactorLimitedEvent.getMessageKey());
     }
 
+    @Test
+    public void testDynamicSourcePartitionCapIsOptInAndSeparateFromLegacyScaling() {
+        conf.set(UTILIZATION_TARGET, 1.0);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofHours(1));
+        var metrics = evaluated(10, 100, 100);
+        metrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(100));
+        metrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, EvaluatedScalingMetric.of(5));
+
+        // Default-off behavior remains the legacy utilization decision.
+        assertEquals(
+                ParallelismChange.noChange(10),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        assertEquals(
+                ParallelismChange.build(5, 10, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+        assertEquals(50, metrics.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+    }
+
+    @Test
+    public void testDynamicSourcePartitionCapRemainsUpperBoundForUtilizationScaling() {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        conf.set(UTILIZATION_TARGET, 1.0);
+        var metrics = evaluated(5, 100, 50);
+        metrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(100));
+        metrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, EvaluatedScalingMetric.of(5));
+
+        // The stale legacy partition count must not scale the source back above its active splits.
+        assertEquals(
+                ParallelismChange.noChange(5),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+    }
+
+    @Test
+    public void testDynamicSourceActiveSplitCountDrivesUtilizationAlignment() {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        conf.set(UTILIZATION_TARGET, 1.0);
+        var metrics = evaluated(5, 60, 50);
+        metrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(7));
+        metrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, EvaluatedScalingMetric.of(6));
+
+        // Stale legacy partition names must not turn the bounded 5 -> 6 scale-up into 5 -> 4.
+        assertEquals(
+                ParallelismChange.build(6, 5, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+    }
+
+    @Test
+    public void testDynamicSourcePartitionCapFallsBackWhenGaugeIsMissing() {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        conf.set(UTILIZATION_TARGET, 1.0);
+        var metrics = evaluated(5, 100, 50);
+        metrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(100));
+
+        // Older jobs do not expose the connector gauge and keep the legacy scaling behavior.
+        assertEquals(
+                ParallelismChange.build(10, 5, true),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+    }
+
+    @Test
+    public void testDynamicSourcePartitionCapIgnoresZeroGauge() {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        conf.set(UTILIZATION_TARGET, 1.0);
+        var zero = evaluated(10, 100, 100);
+        zero.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, EvaluatedScalingMetric.of(0));
+        assertEquals(
+                ParallelismChange.noChange(10),
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        zero,
+                        Collections.emptySortedMap(),
+                        restartTime,
+                        new DelayedScaleDown()));
+    }
+
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double targetDataRate, double trueProcessingRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
