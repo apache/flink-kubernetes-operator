@@ -92,7 +92,7 @@ public interface ScalingExecutorPlugin<KEY> {
      * The scaling executor plugin context. It {@code extends} {@link JobAutoScalerContext}, sharing
      * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
      * cycle accessors (such as {@link #getEvaluatedMetrics()} and {@link #getJobTopology()}). Its
-     * {@link #getConfiguration()} returns the effective per-plugin configuration: the job
+     * {@code getConfiguration()} returns the effective per-plugin configuration: the job
      * configuration with this plugin's prefix-stripped {@code
      * job.autoscaler.scaling.custom-executor.<name>.<parameter>} overrides (the {@code
      * kubernetes.operator.} legacy fallback honored) merged on top, so plugin-specific keys take
@@ -102,8 +102,8 @@ public interface ScalingExecutorPlugin<KEY> {
      */
     class Context<KEY> extends JobAutoScalerContext<KEY> {
 
-        public Context(JobAutoScalerContext<KEY> autoScalerContext, Configuration configuration) {
-            super(autoScalerContext, configuration);
+        public Context(JobAutoScalerContext<KEY> autoScalerContext, Configuration overrides) {
+            super(autoScalerContext, overrides);
         }
     }
 }

@@ -94,14 +94,10 @@ public final class ParallelismAligner {
         Configuration conf = context.getConfiguration();
         String modeName = conf.get(ALIGNMENT_MODE);
 
-        var modeConfiguration =
-                AutoScalerOptions.overlayConfiguration(
-                        conf, AutoScalerOptions.customAlignmentModeConfiguration(conf, modeName));
-
         ParallelismAlignmentMode.Context<KEY> alignmentContext =
                 new ParallelismAlignmentMode.Context<>(
                         context,
-                        modeConfiguration,
+                        AutoScalerOptions.customAlignmentModeConfiguration(conf, modeName),
                         vertex,
                         currentParallelism,
                         newParallelism,

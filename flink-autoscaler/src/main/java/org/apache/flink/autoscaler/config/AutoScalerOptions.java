@@ -436,7 +436,7 @@ public class AutoScalerOptions {
                             "An arbitrary parameter passed to the custom alignment mode named "
                                     + "<name>. All such parameters are made available to the mode "
                                     + "(with the prefix stripped) through "
-                                    + "Context.getModeConfiguration().");
+                                    + "Context.getConfiguration().");
 
     public static final ConfigOption<Boolean> OBSERVED_SCALABILITY_ENABLED =
             autoScalerConfig("observed-scalability.enabled")

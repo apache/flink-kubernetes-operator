@@ -192,7 +192,7 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
         var pluginContext =
                 new ScalingMetricsEvaluatorPlugin.Context<KEY>(
                         autoScalerContext,
-                        AutoScalerOptions.overlayConfiguration(conf, customEvaluatorWithConfig.f1),
+                        customEvaluatorWithConfig.f1,
                         Collections.unmodifiableMap(scalingOutput),
                         processingBacklog);
         return Tuple2.of(customEvaluatorWithConfig.f0, pluginContext);

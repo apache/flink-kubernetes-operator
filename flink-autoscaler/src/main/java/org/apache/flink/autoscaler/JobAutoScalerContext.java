@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
@@ -106,18 +107,20 @@ public class JobAutoScalerContext<KEY> {
 
     /**
      * Copy constructor used by plugin context subclasses. It copies all fields from the given
-     * context except the configuration, which is replaced by the provided one, so a plugin context
-     * exposes its effective per-plugin configuration through {@link #getConfiguration()}. It also
-     * shares the {@link ScalingCycleState}, so the derived context exposes the same per-cycle data
-     * (collected / evaluated metrics, topology, restart time) through the inherited accessors
-     * rather than duplicating it.
+     * context, overlaying the plugin's prefix-stripped {@code overrides} on top of that context's
+     * configuration (via {@link AutoScalerOptions#overlayConfiguration}), so a plugin context
+     * exposes its effective per-plugin configuration through {@code getConfiguration()} without
+     * each caller having to merge it. It also shares the {@link ScalingCycleState}, so the derived
+     * context exposes the same per-cycle data (collected / evaluated metrics, topology, restart
+     * time) through the inherited accessors rather than duplicating it.
      */
     protected JobAutoScalerContext(
-            JobAutoScalerContext<KEY> autoScalerContext, Configuration configuration) {
+            JobAutoScalerContext<KEY> autoScalerContext, Configuration overrides) {
         this.jobKey = autoScalerContext.jobKey;
         this.jobID = autoScalerContext.jobID;
         this.jobStatus = autoScalerContext.jobStatus;
-        this.configuration = configuration;
+        this.configuration =
+                AutoScalerOptions.overlayConfiguration(autoScalerContext.configuration, overrides);
         this.metricGroup = autoScalerContext.metricGroup;
         this.restClientSupplier = autoScalerContext.restClientSupplier;
         this.scalingCycleState = autoScalerContext.getScalingCycleState();

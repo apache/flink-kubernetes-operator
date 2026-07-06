@@ -77,11 +77,11 @@ public interface ScalingMetricsEvaluatorPlugin {
     /**
      * The custom metric evaluator context. It {@code extends} {@link JobAutoScalerContext}, sharing
      * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
-     * cycle accessors (topology, metric history, restart time). Its {@link #getConfiguration()}
+     * cycle accessors (topology, metric history, restart time). Its {@code getConfiguration()}
      * returns the effective evaluator configuration (the job configuration with this evaluator's
      * {@code job.autoscaler.metrics.custom-evaluator.<name>.} overrides merged on top), enriched
-     * with the in-progress {@link #getEvaluatedVertexMetrics() evaluated vertex metrics} and the
-     * {@link #isProcessingBacklog() backlog} flag.
+     * with the in-progress evaluated vertex metrics ({@code getEvaluatedVertexMetrics()}) and the
+     * backlog flag ({@code isProcessingBacklog()}).
      */
     @Getter
     class Context<KEY> extends JobAutoScalerContext<KEY> {
@@ -98,10 +98,10 @@ public interface ScalingMetricsEvaluatorPlugin {
 
         public Context(
                 JobAutoScalerContext<KEY> autoScalerContext,
-                Configuration configuration,
+                Configuration overrides,
                 Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedVertexMetrics,
                 boolean processingBacklog) {
-            super(autoScalerContext, configuration);
+            super(autoScalerContext, overrides);
             this.evaluatedVertexMetrics = evaluatedVertexMetrics;
             this.processingBacklog = processingBacklog;
         }

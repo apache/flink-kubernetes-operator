@@ -560,12 +560,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             var instanceName = entry.getKey();
             var plugin = entry.getValue();
             var pluginClassName = plugin.getClass().getName();
-            var configuration =
-                    AutoScalerOptions.overlayConfiguration(
-                            conf,
+            var pluginContext =
+                    new ScalingExecutorPlugin.Context<>(
+                            context,
                             AutoScalerOptions.customScalingExecutorConfiguration(
                                     conf, instanceName));
-            var pluginContext = new ScalingExecutorPlugin.Context<>(context, configuration);
             var previousSummaries = copyScalingSummaries(scalingSummaries);
             scalingSummaries = plugin.apply(pluginContext, scalingSummaries);
             if (scalingSummaries == null || scalingSummaries.isEmpty()) {

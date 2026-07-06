@@ -387,15 +387,16 @@ public class ScalingMetricEvaluatorTest {
         var autoScalerContext = createDefaultJobAutoScalerContext();
         autoScalerContext.getScalingCycleState().setCollectedMetrics(collectedMetrics);
         autoScalerContext.getScalingCycleState().setRestartTime(Duration.ofSeconds(7));
+        autoScalerContext.getConfiguration().setString("job.key", "job-value");
 
-        var pluginConfig = new Configuration();
-        pluginConfig.setString("evaluator.key", "value");
+        var pluginOverrides = new Configuration();
+        pluginOverrides.setString("evaluator.key", "value");
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedVertexMetrics =
                 Map.of();
 
         var pluginContext =
                 new ScalingMetricsEvaluatorPlugin.Context<>(
-                        autoScalerContext, pluginConfig, evaluatedVertexMetrics, true);
+                        autoScalerContext, pluginOverrides, evaluatedVertexMetrics, true);
 
         // It is a JobAutoScalerContext sharing the canonical context's cycle state and metric
         // group.
@@ -403,8 +404,9 @@ public class ScalingMetricEvaluatorTest {
         assertSame(autoScalerContext.getScalingCycleState(), pluginContext.getScalingCycleState());
         assertSame(autoScalerContext.getMetricGroup(), pluginContext.getMetricGroup());
 
-        // getConfiguration() returns the provided (effective) config, not the raw job config.
-        assertSame(pluginConfig, pluginContext.getConfiguration());
+        // getConfiguration() overlays this plugin's overrides on top of the job configuration.
+        assertEquals("job-value", pluginContext.getConfiguration().getString("job.key", null));
+        assertEquals("value", pluginContext.getConfiguration().getString("evaluator.key", null));
 
         // Cycle-derived accessors read through the shared cycle state.
         assertSame(topology, pluginContext.getJobTopology());

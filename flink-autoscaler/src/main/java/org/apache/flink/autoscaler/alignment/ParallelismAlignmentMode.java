@@ -78,7 +78,7 @@ public interface ParallelismAlignmentMode {
      * The parallelism alignment context. It {@code extends} {@link JobAutoScalerContext}, sharing
      * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
      * cycle accessors (such as {@link #getJobTopology()} and {@link #getEvaluatedMetrics()}). Its
-     * {@link #getConfiguration()} returns the effective per-mode configuration: the job
+     * {@code getConfiguration()} returns the effective per-mode configuration: the job
      * configuration with this mode's prefix-stripped {@code
      * scaling.parallelism-alignment.mode.<name>.} overrides merged on top. It adds only the
      * per-vertex alignment inputs that are not already available on the canonical context.
@@ -117,7 +117,7 @@ public interface ParallelismAlignmentMode {
 
         public Context(
                 JobAutoScalerContext<KEY> autoScalerContext,
-                Configuration configuration,
+                Configuration overrides,
                 JobVertexID vertex,
                 int currentParallelism,
                 int newParallelism,
@@ -127,7 +127,7 @@ public interface ParallelismAlignmentMode {
                 int parallelismUpperLimit,
                 Collection<ShipStrategy> inputShipStrategies,
                 Map<ScalingMetric, EvaluatedScalingMetric> evaluatedVertexMetrics) {
-            super(autoScalerContext, configuration);
+            super(autoScalerContext, overrides);
             this.vertex = vertex;
             this.currentParallelism = currentParallelism;
             this.newParallelism = newParallelism;
