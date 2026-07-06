@@ -11445,6 +11445,7 @@ spec:
                     type: "object"
                 type: "object"
               transitionMode:
+                default: "BASIC"
                 enum:
                 - "ADVANCED"
                 - "BASIC"
