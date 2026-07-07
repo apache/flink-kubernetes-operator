@@ -52,14 +52,14 @@ public class AutoscalerFactory {
         // Autoscaler SPI integrations sharing the operator's process-wide plugin manager.
         Collection<ScalingMetricsEvaluatorPlugin> customEvaluators =
                 AutoscalerUtils.discoverCustomEvaluators(pluginManager);
-        Collection<ScalingExecutorPlugin<ResourceID, KubernetesJobAutoScalerContext>>
-                customExecutors = AutoscalerUtils.discoverCustomScalingExecutors(pluginManager);
+        Collection<ScalingExecutorPlugin<ResourceID>> customExecutors =
+                AutoscalerUtils.discoverCustomScalingExecutors(pluginManager);
         Collection<ParallelismAlignmentMode> customAlignmentModes =
                 AutoscalerUtils.discoverCustomAlignmentModes(pluginManager);
 
         return new JobAutoScalerImpl<>(
-                new RestApiMetricsCollector<>(),
-                new ScalingMetricEvaluator(customEvaluators),
+                new RestApiMetricsCollector<>(stateStore),
+                new ScalingMetricEvaluator<>(customEvaluators),
                 new ScalingExecutor<>(
                         eventHandler,
                         stateStore,

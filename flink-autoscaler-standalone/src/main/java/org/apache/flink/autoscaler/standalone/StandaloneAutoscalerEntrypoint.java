@@ -96,14 +96,14 @@ public class StandaloneAutoscalerEntrypoint {
                     AutoScalerStateStore<KEY, Context> stateStore) {
         Collection<ScalingMetricsEvaluatorPlugin> customEvaluators =
                 AutoscalerUtils.discoverCustomEvaluators();
-        Collection<ScalingExecutorPlugin<KEY, Context>> customExecutors =
+        Collection<ScalingExecutorPlugin<KEY>> customExecutors =
                 AutoscalerUtils.discoverCustomScalingExecutors();
         Collection<ParallelismAlignmentMode> customAlignmentModes =
                 AutoscalerUtils.discoverCustomAlignmentModes();
 
         return new JobAutoScalerImpl<>(
-                new RestApiMetricsCollector<>(),
-                new ScalingMetricEvaluator(customEvaluators),
+                new RestApiMetricsCollector<>(stateStore),
+                new ScalingMetricEvaluator<>(customEvaluators),
                 new ScalingExecutor<>(
                         eventHandler, stateStore, null, customExecutors, customAlignmentModes),
                 eventHandler,

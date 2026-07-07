@@ -92,7 +92,8 @@ public class JobAutoScalerImplTest {
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 10));
 
         var metricsCollector =
-                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        jobTopology, stateStore);
         metricsCollector.updateMetrics(
                 jobVertexID,
                 TestMetrics.builder()
@@ -103,7 +104,8 @@ public class JobAutoScalerImplTest {
                         .pendingRecords(0L)
                         .build());
 
-        ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator(Collections.emptyList());
+        ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>> evaluator =
+                new ScalingMetricEvaluator<>(Collections.emptyList());
         ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor =
                 new ScalingExecutor<>(eventCollector, stateStore);
 
@@ -170,7 +172,8 @@ public class JobAutoScalerImplTest {
     public void testTolerateRecoverableExceptions() throws Exception {
         TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>
                 collectorWhichThrowsRecoverableException =
-                        new TestingMetricsCollector<>(new JobTopology(Collections.emptySet())) {
+                        new TestingMetricsCollector<>(
+                                new JobTopology(Collections.emptySet()), stateStore) {
                             @Override
                             protected Collection<String> queryAggregatedMetricNames(
                                     RestClusterClient<?> restClient,
@@ -201,7 +204,8 @@ public class JobAutoScalerImplTest {
         JobVertexID jobVertexID = new JobVertexID();
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 20));
         var metricsCollector =
-                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        jobTopology, stateStore);
         ScalingRealizer<JobID, JobAutoScalerContext<JobID>>
                 realizeParallelismOverridesWithExceptionsScalingRealizer =
                         new ScalingRealizer<>() {
@@ -239,8 +243,8 @@ public class JobAutoScalerImplTest {
     void testParallelismOverrides() throws Exception {
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        new TestingMetricsCollector<>(new JobTopology()),
-                        null,
+                        new TestingMetricsCollector<>(new JobTopology(), stateStore),
+                        new ScalingMetricEvaluator<>(Collections.emptyList()),
                         null,
                         eventCollector,
                         scalingRealizer,
@@ -383,8 +387,8 @@ public class JobAutoScalerImplTest {
         var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        new TestingMetricsCollector<>(new JobTopology()),
-                        null,
+                        new TestingMetricsCollector<>(new JobTopology(), stateStore),
+                        new ScalingMetricEvaluator<>(Collections.emptyList()),
                         null,
                         eventCollector,
                         scalingRealizer,

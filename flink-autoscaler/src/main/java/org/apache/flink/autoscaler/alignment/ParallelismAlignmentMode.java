@@ -21,12 +21,11 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import lombok.Value;
+import lombok.Getter;
 
 import java.util.Collection;
 import java.util.Map;
@@ -64,7 +63,7 @@ public interface ParallelismAlignmentMode {
      * partitioned sources that report a partition count (Kafka and Pulsar do by default). A custom
      * mode can widen this, for example to align custom partitioned vertices.
      */
-    default boolean isApplicable(Context ctx) {
+    default boolean isApplicable(Context<?> ctx) {
         return ctx.getNumSourcePartitions() > 0
                 || ctx.getInputShipStrategies().contains(ShipStrategy.HASH);
     }
@@ -73,50 +72,71 @@ public interface ParallelismAlignmentMode {
      * Returns the parallelism to apply for the vertex described by {@code ctx}. Called only when
      * {@link #isApplicable(Context)} returned {@code true}.
      */
-    int alignParallelism(Context ctx);
+    int alignParallelism(Context<?> ctx);
 
     /**
-     * Immutable inputs to a single per-vertex parallelism alignment, handed to {@link
-     * ParallelismAlignmentMode#alignParallelism(Context)}. Besides the parallelism inputs it
-     * exposes the full autoscaler context, the per-vertex evaluated metrics, the job topology, and
-     * a prefix-stripped configuration for the selected mode, so custom modes have what they need.
+     * The parallelism alignment context. It {@code extends} {@link JobAutoScalerContext}, sharing
+     * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
+     * cycle accessors (such as {@link #getJobTopology()} and {@link #getEvaluatedMetrics()}). Its
+     * {@code getConfiguration()} returns the effective per-mode configuration: the job
+     * configuration with this mode's prefix-stripped {@code
+     * scaling.parallelism-alignment.mode.<name>.} overrides merged on top. It adds only the
+     * per-vertex alignment inputs that are not already available on the canonical context.
+     *
+     * @param <KEY> The job key.
      */
-    @Value
-    class Context {
+    @Getter
+    class Context<KEY> extends JobAutoScalerContext<KEY> {
+
         /** The vertex being aligned. */
-        JobVertexID vertex;
+        private final JobVertexID vertex;
 
         /** The current parallelism of the vertex. */
-        int currentParallelism;
+        private final int currentParallelism;
 
         /** The clamped computed target parallelism, before alignment. */
-        int newParallelism;
+        private final int newParallelism;
 
         /** The number of source partitions, or a non-positive value when not a source. */
-        int numSourcePartitions;
+        private final int numSourcePartitions;
 
         /** The vertex max parallelism (number of key groups). */
-        int maxParallelism;
+        private final int maxParallelism;
 
         /** The configured parallelism lower limit. */
-        int parallelismLowerLimit;
+        private final int parallelismLowerLimit;
 
         /** The configured parallelism upper limit. */
-        int parallelismUpperLimit;
+        private final int parallelismUpperLimit;
 
         /** The ship strategies of the vertex inputs. */
-        Collection<ShipStrategy> inputShipStrategies;
+        private final Collection<ShipStrategy> inputShipStrategies;
 
-        /** The full autoscaler context (cluster client, job configuration, etc.). */
-        JobAutoScalerContext<?> jobContext;
+        /** The evaluated metrics of the vertex being aligned. */
+        private final Map<ScalingMetric, EvaluatedScalingMetric> evaluatedVertexMetrics;
 
-        /** The per-vertex evaluated metrics. */
-        Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics;
-
-        /** The job topology. */
-        JobTopology jobTopology;
-
-        /** The prefix-stripped configuration for the selected (custom) mode. */
-        Configuration modeConfiguration;
+        public Context(
+                JobAutoScalerContext<KEY> autoScalerContext,
+                Configuration overrides,
+                JobVertexID vertex,
+                int currentParallelism,
+                int newParallelism,
+                int numSourcePartitions,
+                int maxParallelism,
+                int parallelismLowerLimit,
+                int parallelismUpperLimit,
+                Collection<ShipStrategy> inputShipStrategies,
+                Map<ScalingMetric, EvaluatedScalingMetric> evaluatedVertexMetrics) {
+            super(autoScalerContext, overrides);
+            this.vertex = vertex;
+            this.currentParallelism = currentParallelism;
+            this.newParallelism = newParallelism;
+            this.numSourcePartitions = numSourcePartitions;
+            this.maxParallelism = maxParallelism;
+            this.parallelismLowerLimit = parallelismLowerLimit;
+            this.parallelismUpperLimit = parallelismUpperLimit;
+            this.inputShipStrategies = inputShipStrategies;
+            this.evaluatedVertexMetrics = evaluatedVertexMetrics;
+        }
     }
 }

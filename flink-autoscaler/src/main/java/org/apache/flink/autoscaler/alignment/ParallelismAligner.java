@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -90,14 +89,15 @@ public final class ParallelismAligner {
             int parallelismUpperLimit,
             Collection<ShipStrategy> inputShipStrategies,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            JobTopology jobTopology,
             AutoScalerEventHandler<KEY, Context> eventHandler,
             Context context) {
         Configuration conf = context.getConfiguration();
         String modeName = conf.get(ALIGNMENT_MODE);
 
-        ParallelismAlignmentMode.Context alignmentContext =
-                new ParallelismAlignmentMode.Context(
+        ParallelismAlignmentMode.Context<KEY> alignmentContext =
+                new ParallelismAlignmentMode.Context<>(
+                        context,
+                        AutoScalerOptions.customAlignmentModeConfiguration(conf, modeName),
                         vertex,
                         currentParallelism,
                         newParallelism,
@@ -106,10 +106,7 @@ public final class ParallelismAligner {
                         parallelismLowerLimit,
                         parallelismUpperLimit,
                         inputShipStrategies,
-                        context,
-                        evaluatedMetrics,
-                        jobTopology,
-                        AutoScalerOptions.customAlignmentModeConfiguration(conf, modeName));
+                        evaluatedMetrics);
 
         ParallelismAlignmentMode mode = resolve(conf);
         if (!mode.isApplicable(alignmentContext)) {
@@ -193,19 +190,19 @@ public final class ParallelismAligner {
     }
 
     /** Whether the computed target is above the current parallelism. */
-    public static boolean isScaleUp(ParallelismAlignmentMode.Context ctx) {
+    public static boolean isScaleUp(ParallelismAlignmentMode.Context<?> ctx) {
         return ctx.getNewParallelism() > ctx.getCurrentParallelism();
     }
 
     /** {@code N}: the number of key groups or source partitions to align to. */
-    public static int numKeyGroupsOrPartitions(ParallelismAlignmentMode.Context ctx) {
+    public static int numKeyGroupsOrPartitions(ParallelismAlignmentMode.Context<?> ctx) {
         return ctx.getNumSourcePartitions() <= 0
                 ? ctx.getMaxParallelism()
                 : ctx.getNumSourcePartitions();
     }
 
     /** The alignment cap: {@code min(N, min(maxParallelism, parallelismUpperLimit))}. */
-    public static int upperBoundForAlignment(ParallelismAlignmentMode.Context ctx) {
+    public static int upperBoundForAlignment(ParallelismAlignmentMode.Context<?> ctx) {
         return Math.min(
                 numKeyGroupsOrPartitions(ctx),
                 Math.min(ctx.getMaxParallelism(), ctx.getParallelismUpperLimit()));
@@ -225,7 +222,7 @@ public final class ParallelismAligner {
      * @return the first accepted parallelism, or {@code 0} when none is found in the region
      */
     public static int firstAlignedInRegion(
-            ParallelismAlignmentMode.Context ctx, boolean acceptLoadReducing) {
+            ParallelismAlignmentMode.Context<?> ctx, boolean acceptLoadReducing) {
         int n = numKeyGroupsOrPartitions(ctx);
         int target = ctx.getNewParallelism();
         int regionEnd =
@@ -247,7 +244,7 @@ public final class ParallelismAligner {
      * where per-subtask load increases, snapping up to the nearest divisor, then clamps to the
      * parallelism lower limit.
      */
-    public static int relaxedDownwardFallback(ParallelismAlignmentMode.Context ctx) {
+    public static int relaxedDownwardFallback(ParallelismAlignmentMode.Context<?> ctx) {
         int n = numKeyGroupsOrPartitions(ctx);
         int target = ctx.getNewParallelism();
 
@@ -270,7 +267,7 @@ public final class ParallelismAligner {
      * the aligned value deviates from the computed target. Matches the historical behavior.
      */
     public static int applyBlockingFallback(
-            ParallelismAlignmentMode.Context ctx, int candidate, ScalingLimitedEmitter emitter) {
+            ParallelismAlignmentMode.Context<?> ctx, int candidate, ScalingLimitedEmitter emitter) {
         if (invertsDirection(ctx, candidate)) {
             emitter.emit(ctx.getNewParallelism(), ctx.getCurrentParallelism());
             return ctx.getCurrentParallelism();
@@ -281,7 +278,8 @@ public final class ParallelismAligner {
         return candidate;
     }
 
-    private static boolean invertsDirection(ParallelismAlignmentMode.Context ctx, int candidate) {
+    private static boolean invertsDirection(
+            ParallelismAlignmentMode.Context<?> ctx, int candidate) {
         return (isScaleUp(ctx) && candidate <= ctx.getCurrentParallelism())
                 || (!isScaleUp(ctx) && candidate >= ctx.getCurrentParallelism());
     }

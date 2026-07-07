@@ -17,12 +17,9 @@
 
 package org.apache.flink.autoscaler;
 
-import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
-import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.annotation.Experimental;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-
-import lombok.Value;
 
 import java.util.Collections;
 import java.util.Map;
@@ -49,9 +46,9 @@ import java.util.Map;
  * META-INF/services/org.apache.flink.autoscaler.ScalingExecutorPlugin}.
  *
  * @param <KEY> The job key.
- * @param <CTX> Instance of {@link JobAutoScalerContext}.
  */
-public interface ScalingExecutorPlugin<KEY, CTX extends JobAutoScalerContext<KEY>> {
+@Experimental
+public interface ScalingExecutorPlugin<KEY> {
 
     /**
      * Returns the priority of this plugin in the chain. Plugins with lower priority values are
@@ -80,41 +77,33 @@ public interface ScalingExecutorPlugin<KEY, CTX extends JobAutoScalerContext<KEY
      *       operation entirely.
      * </ul>
      *
-     * @param context The plugin context wrapping the autoscaler context, configuration, evaluated
-     *     metrics, and job topology.
+     * @param context The plugin context, a {@link JobAutoScalerContext} extended with the
+     *     per-plugin configuration and convenience access to the evaluated metrics and job
+     *     topology.
      * @param scalingSummaries The computed scaling summaries keyed by vertex ID. This map contains
      *     only vertices that require a parallelism change.
      * @return The (possibly modified) scaling summaries to apply, or an empty map to veto the
      *     scaling.
      */
     Map<JobVertexID, ScalingSummary> apply(
-            Context<KEY, CTX> context, Map<JobVertexID, ScalingSummary> scalingSummaries);
+            Context<KEY> context, Map<JobVertexID, ScalingSummary> scalingSummaries);
 
     /**
-     * Immutable context wrapping all inputs available to the scaling executor plugin, providing
-     * access to the autoscaler context, configuration, evaluated metrics, and job topology.
+     * The scaling executor plugin context. It {@code extends} {@link JobAutoScalerContext}, sharing
+     * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
+     * cycle accessors (such as {@link #getEvaluatedMetrics()} and {@link #getJobTopology()}). Its
+     * {@code getConfiguration()} returns the effective per-plugin configuration: the job
+     * configuration with this plugin's prefix-stripped {@code
+     * job.autoscaler.scaling.custom-executor.<name>.<parameter>} overrides (the {@code
+     * kubernetes.operator.} legacy fallback honored) merged on top, so plugin-specific keys take
+     * precedence.
      *
      * @param <KEY> The job key.
-     * @param <CTX> Instance of {@link JobAutoScalerContext}.
      */
-    @Value
-    class Context<KEY, CTX extends JobAutoScalerContext<KEY>> {
+    class Context<KEY> extends JobAutoScalerContext<KEY> {
 
-        /** The autoscaler context for the current job. */
-        CTX autoScalerContext;
-
-        /**
-         * The prefix-stripped, per-plugin configuration for this invocation, populated from {@code
-         * job.autoscaler.scaling.custom-executor.<name>.<parameter>} entries (with the {@code
-         * kubernetes.operator.} legacy fallback honored). Never {@code null}; empty when the plugin
-         * has no per-instance options configured.
-         */
-        Configuration configuration;
-
-        /** The evaluated scaling metrics for all vertices and global metrics. */
-        EvaluatedMetrics evaluatedMetrics;
-
-        /** The job topology. */
-        JobTopology jobTopology;
+        public Context(JobAutoScalerContext<KEY> autoScalerContext, Configuration overrides) {
+            super(autoScalerContext, overrides);
+        }
     }
 }

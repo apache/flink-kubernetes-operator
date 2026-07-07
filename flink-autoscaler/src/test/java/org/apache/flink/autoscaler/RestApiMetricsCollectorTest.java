@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
@@ -68,7 +69,9 @@ class RestApiMetricsCollectorTest {
 
     @Test
     void testAggregateMultiplePendingRecordsMetricsPerSource() throws Exception {
-        var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
+        var collector =
+                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        new InMemoryAutoScalerStateStore<>());
 
         JobVertexID jobVertexID = new JobVertexID();
         var flinkMetrics =
@@ -163,7 +166,9 @@ class RestApiMetricsCollectorTest {
                             (c, e) ->
                                     new StandaloneClientHAServices(
                                             miniCluster.getRestAddress().get().toString()));
-            var collector = new RestApiMetricsCollector<>();
+            var collector =
+                    new RestApiMetricsCollector<>(
+                            new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
             // Metrics might not be available yet, and the JobManager exposes the slot metrics
             // before the TaskManager has registered its slots (reporting 0). Retry the assertion
             // until the slots are registered, or the timeout is reached.
@@ -245,7 +250,9 @@ class RestApiMetricsCollectorTest {
                         conf,
                         new UnregisteredMetricsGroup(),
                         () -> client);
-        var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
+        var collector =
+                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        new InMemoryAutoScalerStateStore<>());
 
         assertThrows(RuntimeException.class, () -> collector.queryTmMetrics(context));
 

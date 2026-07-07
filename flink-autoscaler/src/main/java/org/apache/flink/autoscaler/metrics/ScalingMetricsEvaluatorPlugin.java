@@ -19,16 +19,13 @@
 package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import lombok.Value;
+import lombok.Getter;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
-import java.util.SortedMap;
 
 /**
  * A pluggable plugin that allows users to provide custom scaling-metric evaluation logic on top of
@@ -69,46 +66,44 @@ public interface ScalingMetricsEvaluatorPlugin {
      * @return A map of evaluated scaling metrics for the vertex which would get merged with
      *     internally evaluated metrics.
      * @throws UnsupportedOperationException if an attempt is made to modify the {@code
-     *     evaluatedMetrics}, {@code Context.config}, {@code Context.metricsHistory}, {@code
-     *     Context.evaluatedVertexMetrics}.
+     *     evaluatedMetrics}, the context's configuration, its metric history or its evaluated
+     *     vertex metrics.
      */
     Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Context evaluationContext);
+            Context<?> evaluationContext);
 
     /**
-     * Context providing relevant job and metric information to assist in custom metric evaluation.
+     * The custom metric evaluator context. It {@code extends} {@link JobAutoScalerContext}, sharing
+     * its {@link org.apache.flink.autoscaler.JobAutoScalerContext.ScalingCycleState} and inherited
+     * cycle accessors (topology, metric history, restart time). Its {@code getConfiguration()}
+     * returns the effective evaluator configuration (the job configuration with this evaluator's
+     * {@code job.autoscaler.metrics.custom-evaluator.<name>.} overrides merged on top), enriched
+     * with the in-progress evaluated vertex metrics ({@code getEvaluatedVertexMetrics()}) and the
+     * backlog flag ({@code isProcessingBacklog()}).
      */
-    @Value
-    class Context {
-        /**
-         * An un-modifiable view of the job configuration, with the evaluator-specific options
-         * (configured under {@code job.autoscaler.metrics.custom-evaluator.<name>.}) merged on top
-         * with their prefix stripped. Evaluator-specific keys take precedence over the job-level
-         * value of the same key, so a CR can override behaviour for this evaluator alone.
-         */
-        Configuration config;
-
-        /**
-         * An un-modifiable view of the historical record of collected metrics, ordered by
-         * timestamp.
-         */
-        SortedMap<Instant, CollectedMetrics> metricsHistory;
+    @Getter
+    class Context<KEY> extends JobAutoScalerContext<KEY> {
 
         /**
          * An un-modifiable view of evaluated metrics for previously evaluated vertices. Note:
          * evaluation of a vertex for scaling metrics happens topologically.
          */
-        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedVertexMetrics;
-
-        /** The job topology representing the structure of the Flink job. */
-        JobTopology topology;
+        private final Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>
+                evaluatedVertexMetrics;
 
         /** Indicates whether the job is processing backlog. */
-        boolean processingBacklog;
+        private final boolean processingBacklog;
 
-        /** Maximum restart time based on scaling records. */
-        Duration restartTime;
+        public Context(
+                JobAutoScalerContext<KEY> autoScalerContext,
+                Configuration overrides,
+                Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedVertexMetrics,
+                boolean processingBacklog) {
+            super(autoScalerContext, overrides);
+            this.evaluatedVertexMetrics = evaluatedVertexMetrics;
+            this.processingBacklog = processingBacklog;
+        }
     }
 }

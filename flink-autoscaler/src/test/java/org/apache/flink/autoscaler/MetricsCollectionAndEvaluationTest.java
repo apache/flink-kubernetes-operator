@@ -63,7 +63,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class MetricsCollectionAndEvaluationTest {
 
     private JobAutoScalerContext<JobID> context;
-    private ScalingMetricEvaluator evaluator;
+    private ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>> evaluator;
     private TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector;
     private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor;
     private InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
@@ -80,7 +80,7 @@ public class MetricsCollectionAndEvaluationTest {
     @BeforeEach
     public void setup() {
         context = createDefaultJobAutoScalerContext();
-        evaluator = new ScalingMetricEvaluator(List.of());
+        evaluator = new ScalingMetricEvaluator<>(List.of());
         stateStore = new InMemoryAutoScalerStateStore<>();
         scalingExecutor = new ScalingExecutor<>(new TestingEventCollector<>(), stateStore);
 
@@ -103,7 +103,7 @@ public class MetricsCollectionAndEvaluationTest {
                         new VertexInfo(
                                 sink, Map.of(map, REBALANCE), 8, 24, new IOMetrics(0, 0, 0)));
 
-        metricsCollector = new TestingMetricsCollector<>(topology);
+        metricsCollector = new TestingMetricsCollector<>(topology, stateStore);
 
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(10));
@@ -131,14 +131,14 @@ public class MetricsCollectionAndEvaluationTest {
 
         // We haven't left the stabilization period, but we're collecting and returning the metrics
         // for reporting
-        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        var collectedMetrics = collect();
         assertEquals(1, collectedMetrics.getMetricHistory().size());
 
         // We haven't collected a full window yet, but we're collecting and returning the metrics
         // for reporting
         clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         metricsCollector.setClock(clock);
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(2, collectedMetrics.getMetricHistory().size());
         assertFalse(collectedMetrics.isFullyCollected());
 
@@ -147,7 +147,7 @@ public class MetricsCollectionAndEvaluationTest {
         clock = Clock.offset(clock, Duration.ofSeconds(1));
         metricsCollector.setClock(clock);
 
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertFalse(collectedMetrics.isFullyCollected());
 
@@ -159,13 +159,13 @@ public class MetricsCollectionAndEvaluationTest {
                                 .plus(conf.get(AutoScalerOptions.METRICS_WINDOW)),
                         ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
 
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
         // Test resetting the collector and make sure we can deserialize the scalingInfo correctly
-        metricsCollector = new TestingMetricsCollector<>(topology);
+        metricsCollector = new TestingMetricsCollector<>(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.setClock(clock);
         setDefaultMetrics(metricsCollector);
@@ -177,11 +177,12 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.updateMetrics(map, tm -> tm.setNumRecordsIn(2000));
         metricsCollector.updateMetrics(sink, tm -> tm.setNumRecordsIn(4000));
 
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
-        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
+        var evaluation =
+                evaluator.computeEvaluatedMetrics(null, conf, collectedMetrics, restartTime);
         scalingExecutor.scaleResource(
                 context,
                 evaluation,
@@ -236,12 +237,12 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testKafkaPulsarNumPartitions() throws Exception {
         setDefaultMetrics(metricsCollector);
-        metricsCollector.updateMetrics(context, stateStore);
+        collect();
 
         var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
 
-        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        var collectedMetrics = collect();
         clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         metricsCollector.setMetricNames(
@@ -255,7 +256,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.2.currentOffset",
                                 "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(5, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
 
         metricsCollector.setMetricNames(
@@ -269,7 +270,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.2.currentOffset",
                                 "1.Source__Kafka_Source_(testTopic).kafkaCluster.my-cluster-2.KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(6, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
 
         metricsCollector.setMetricNames(
@@ -288,7 +289,7 @@ public class MetricsCollectionAndEvaluationTest {
                                         + ".persistent_//public/default/testTopic-partition-3.e427h.numMsgsReceived",
                                 "0.Source__pulsar_source[1].PulsarConsumer"
                                         + ".persistent_//public/default/testTopic-partition-4.m962n.numMsgsReceived")));
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(5, collectedMetrics.getJobTopology().get(source2).getNumSourcePartitions());
     }
 
@@ -307,12 +308,12 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testMetricCollectorWindow() throws Exception {
         setDefaultMetrics(metricsCollector);
-        var metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        var metricsHistory = collect();
         assertEquals(1, metricsHistory.getMetricHistory().size());
 
         // Not stable, metrics collected and reported
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(2, metricsHistory.getMetricHistory().size());
 
         // Update clock to stable time
@@ -322,37 +323,37 @@ public class MetricsCollectionAndEvaluationTest {
 
         // This call will lead to metric collection but we haven't reached the window size yet
         // which will hold back metrics
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(3, metricsHistory.getMetricHistory().size());
         assertFalse(metricsHistory.isFullyCollected());
 
         // Collect more values in window
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(4, metricsHistory.getMetricHistory().size());
         assertFalse(metricsHistory.isFullyCollected());
 
         // Window size reached
         metricsCollector.setClock(Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(3, metricsHistory.getMetricHistory().size());
         assertTrue(metricsHistory.isFullyCollected());
 
         // Window size + 1 will invalidate the first metric
         metricsCollector.setClock(
                 Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusSeconds(1)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(3, metricsHistory.getMetricHistory().size());
 
         // Complete new metric window with just the currently collected metric
         metricsCollector.setClock(
                 Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusDays(1)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(1, metricsHistory.getMetricHistory().size());
 
         // Existing metrics should be cleared on job updates, and start collecting from fresh
         metricsCollector.setJobUpdateTs(clock.instant().plus(Duration.ofDays(10)));
-        metricsHistory = metricsCollector.updateMetrics(context, stateStore);
+        metricsHistory = collect();
         assertEquals(1, metricsHistory.getMetricHistory().size());
     }
 
@@ -367,7 +368,7 @@ public class MetricsCollectionAndEvaluationTest {
 
         // We haven't left the stabilization period, we're returning the metrics
         // but don't act on it since the metric window is not full yet
-        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        var collectedMetrics = collect();
         assertFalse(collectedMetrics.getMetricHistory().isEmpty());
         assertFalse(collectedMetrics.isFullyCollected());
     }
@@ -376,7 +377,7 @@ public class MetricsCollectionAndEvaluationTest {
     public void testTolerateAbsenceOfPendingRecordsMetric() throws Exception {
         var topology = new JobTopology(new VertexInfo(source1, Map.of(), 5, 720));
 
-        metricsCollector = new TestingMetricsCollector<>(topology);
+        metricsCollector = new TestingMetricsCollector<>(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
 
         metricsCollector.updateMetrics(
@@ -394,14 +395,15 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector.setClock(clock);
 
-        metricsCollector.updateMetrics(context, stateStore);
+        collect();
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(2)));
 
         metricsCollector.updateMetrics(source1, tm -> tm.setNumRecordsIn(1000));
-        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        var collectedMetrics = collect();
 
         var evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+                evaluator.computeEvaluatedMetrics(
+                        null, context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
                 500.,
                 evaluation
@@ -459,7 +461,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 true,
                                 IOMetrics.FINISHED_METRICS));
 
-        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector = new TestingMetricsCollector(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.updateMetrics(
                 s1,
@@ -494,7 +496,7 @@ public class MetricsCollectionAndEvaluationTest {
         var source = new JobVertexID();
         var topology = new JobTopology(new VertexInfo(source, Map.of(), 10, 720));
 
-        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector = new TestingMetricsCollector(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.updateMetrics(
                 source,
@@ -509,8 +511,7 @@ public class MetricsCollectionAndEvaluationTest {
         context.getConfiguration().set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(100), ZoneId.systemDefault()));
         var collectedMetrics =
-                metricsCollector
-                        .updateMetrics(context, stateStore)
+                collect()
                         .getMetricHistory()
                         .get(Instant.ofEpochMilli(100))
                         .getVertexMetrics()
@@ -523,8 +524,7 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.updateMetrics(source, tm -> tm.setPendingRecords(0L));
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(200), ZoneId.systemDefault()));
         collectedMetrics =
-                metricsCollector
-                        .updateMetrics(context, stateStore)
+                collect()
                         .getMetricHistory()
                         .get(Instant.ofEpochMilli(200))
                         .getVertexMetrics()
@@ -540,8 +540,7 @@ public class MetricsCollectionAndEvaluationTest {
                 tm -> tm.setAvgBackpressureTimePerSec(500));
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(300), ZoneId.systemDefault()));
         collectedMetrics =
-                metricsCollector
-                        .updateMetrics(context, stateStore)
+                collect()
                         .getMetricHistory()
                         .get(Instant.ofEpochMilli(300))
                         .getVertexMetrics()
@@ -553,8 +552,7 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(400), ZoneId.systemDefault()));
         collectedMetrics =
-                metricsCollector
-                        .updateMetrics(context, stateStore)
+                collect()
                         .getMetricHistory()
                         .get(Instant.ofEpochMilli(400))
                         .getVertexMetrics()
@@ -570,7 +568,7 @@ public class MetricsCollectionAndEvaluationTest {
         var source = new JobVertexID();
         var topology = new JobTopology(new VertexInfo(source, Map.of(), 10, 720));
 
-        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector = new TestingMetricsCollector(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.updateMetrics(
                 source,
@@ -588,36 +586,32 @@ public class MetricsCollectionAndEvaluationTest {
 
         // Until window is full (time=200) we keep returning stabilizing metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(50), ZoneId.systemDefault()));
-        assertEquals(
-                1, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(1, collect().getMetricHistory().size());
         assertEquals(1, stateStore.getCollectedMetrics(context).size());
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(60), ZoneId.systemDefault()));
-        assertEquals(
-                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, collect().getMetricHistory().size());
         assertEquals(2, stateStore.getCollectedMetrics(context).size());
 
         testTolerateMetricsMissingDuringStabilizationPhase(topology);
 
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(150), ZoneId.systemDefault()));
-        assertEquals(
-                3, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(3, collect().getMetricHistory().size());
         assertEquals(3, stateStore.getCollectedMetrics(context).size());
 
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(180), ZoneId.systemDefault()));
-        assertEquals(
-                4, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(4, collect().getMetricHistory().size());
         assertEquals(4, stateStore.getCollectedMetrics(context).size());
 
         // Once we reach full time we trim the stabilization metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(260), ZoneId.systemDefault()));
-        assertEquals(
-                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, collect().getMetricHistory().size());
         assertEquals(2, stateStore.getCollectedMetrics(context).size());
     }
 
     private void testTolerateMetricsMissingDuringStabilizationPhase(JobTopology topology) {
         var collectorWithMissingMetrics =
-                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(topology) {
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        topology, stateStore) {
                     @Override
                     protected Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
                             JobAutoScalerContext<JobID> ctx, JobTopology topology) {
@@ -634,9 +628,7 @@ public class MetricsCollectionAndEvaluationTest {
                 () -> stateStore.getCollectedMetrics(context).size();
 
         int numCollectedMetricsBeforeTest = numCollectedMetricsSupplier.get();
-        assertThrows(
-                NotReadyException.class,
-                () -> collectorWithMissingMetrics.updateMetrics(context, stateStore));
+        assertThrows(NotReadyException.class, () -> collectorWithMissingMetrics.collect(context));
         assertEquals(numCollectedMetricsBeforeTest, numCollectedMetricsSupplier.get());
     }
 
@@ -644,7 +636,7 @@ public class MetricsCollectionAndEvaluationTest {
     public void testScaleDownWithZeroProcessingRate() throws Exception {
         var topology = new JobTopology(new VertexInfo(source1, Map.of(), 2, 720));
 
-        metricsCollector = new TestingMetricsCollector<>(topology);
+        metricsCollector = new TestingMetricsCollector<>(topology, stateStore);
         metricsCollector.setJobUpdateTs(startTime);
 
         var conf = context.getConfiguration();
@@ -661,7 +653,8 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         var evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+                evaluator.computeEvaluatedMetrics(
+                        null, context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
                 0,
                 evaluation
@@ -712,7 +705,9 @@ public class MetricsCollectionAndEvaluationTest {
                 .getMetricHistory()
                 .put(Instant.ofEpochSecond(1234), new CollectedMetrics(newMetrics, Map.of()));
 
-        evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
+        evaluation =
+                evaluator.computeEvaluatedMetrics(
+                        null, context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
                 3.,
                 evaluation
@@ -729,16 +724,22 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector.setClock(clock);
 
-        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        var collectedMetrics = collect();
         assertEquals(1, collectedMetrics.getMetricHistory().size());
         assertFalse(collectedMetrics.isFullyCollected());
 
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(2)));
 
-        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        collectedMetrics = collect();
         assertEquals(2, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
         return collectedMetrics;
+    }
+
+    private CollectedMetricHistory collect() throws Exception {
+        context.getScalingCycleState().setNow(null);
+        metricsCollector.collect(context);
+        return context.getScalingCycleState().getCollectedMetrics();
     }
 }

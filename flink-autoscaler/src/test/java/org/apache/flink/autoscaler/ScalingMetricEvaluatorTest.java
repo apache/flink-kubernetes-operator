@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
@@ -45,6 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKED_RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
@@ -55,12 +57,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Scaling evaluator test. */
 public class ScalingMetricEvaluatorTest {
 
-    private ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator(List.of());
+    private ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>> evaluator =
+            new ScalingMetricEvaluator<>(List.of());
 
     @Test
     public void testLagBasedSourceScaling() {
@@ -119,7 +123,8 @@ public class ScalingMetricEvaluatorTest {
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
         var evaluatedMetrics =
                 evaluator
-                        .evaluate(
+                        .computeEvaluatedMetrics(
+                                null,
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
@@ -153,7 +158,8 @@ public class ScalingMetricEvaluatorTest {
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(1));
         evaluatedMetrics =
                 evaluator
-                        .evaluate(
+                        .computeEvaluatedMetrics(
+                                null,
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
@@ -176,7 +182,8 @@ public class ScalingMetricEvaluatorTest {
 
         evaluatedMetrics =
                 evaluator
-                        .evaluate(
+                        .computeEvaluatedMetrics(
+                                null,
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
@@ -198,7 +205,8 @@ public class ScalingMetricEvaluatorTest {
         conf.set(CATCH_UP_DURATION, Duration.ZERO);
         evaluatedMetrics =
                 evaluator
-                        .evaluate(
+                        .computeEvaluatedMetrics(
+                                null,
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
@@ -257,7 +265,8 @@ public class ScalingMetricEvaluatorTest {
         conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
         evaluatedMetrics =
                 evaluator
-                        .evaluate(
+                        .computeEvaluatedMetrics(
+                                null,
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
@@ -327,14 +336,17 @@ public class ScalingMetricEvaluatorTest {
         conf.set(
                 AutoScalerOptions.customEvaluatorClassOption(customEvaluatorName),
                 TestCustomEvaluator.class.getName());
-        var customEvaluatorAwareEvaluator = new ScalingMetricEvaluator(List.of(customEvaluator));
+        var customEvaluatorAwareEvaluator =
+                new ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>>(
+                        List.of(customEvaluator));
+
+        var collectedMetrics = new CollectedMetricHistory(topology, metricHistory, Instant.now());
+        var ctx = createDefaultJobAutoScalerContext();
+        ctx.getScalingCycleState().setCollectedMetrics(collectedMetrics);
 
         var evaluatedMetrics =
                 customEvaluatorAwareEvaluator
-                        .evaluate(
-                                conf,
-                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
-                                Duration.ZERO)
+                        .computeEvaluatedMetrics(ctx, conf, collectedMetrics, Duration.ZERO)
                         .getVertexMetrics();
 
         assertEquals(
@@ -361,6 +373,49 @@ public class ScalingMetricEvaluatorTest {
                 EvaluatedScalingMetric.of(0.0),
                 evaluatedMetrics.get(source).get(ScalingMetric.LAG));
         assertFalse(evaluatedMetrics.get(sink).containsKey(ScalingMetric.LAG));
+    }
+
+    @Test
+    void testEvaluatorPluginContextExtendsCanonicalContext() {
+        var vertex = new JobVertexID();
+        var topology = new JobTopology(new VertexInfo(vertex, Collections.emptyMap(), 1, 1, null));
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                Instant.ofEpochMilli(1), new CollectedMetrics(Map.of(vertex, Map.of()), Map.of()));
+        var collectedMetrics = new CollectedMetricHistory(topology, metricHistory, Instant.EPOCH);
+
+        var autoScalerContext = createDefaultJobAutoScalerContext();
+        autoScalerContext.getScalingCycleState().setCollectedMetrics(collectedMetrics);
+        autoScalerContext.getScalingCycleState().setRestartTime(Duration.ofSeconds(7));
+        autoScalerContext.getConfiguration().setString("job.key", "job-value");
+
+        var pluginOverrides = new Configuration();
+        pluginOverrides.setString("evaluator.key", "value");
+        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedVertexMetrics =
+                Map.of();
+
+        var pluginContext =
+                new ScalingMetricsEvaluatorPlugin.Context<>(
+                        autoScalerContext, pluginOverrides, evaluatedVertexMetrics, true);
+
+        // It is a JobAutoScalerContext sharing the canonical context's cycle state and metric
+        // group.
+        assertInstanceOf(JobAutoScalerContext.class, pluginContext);
+        assertSame(autoScalerContext.getScalingCycleState(), pluginContext.getScalingCycleState());
+        assertSame(autoScalerContext.getMetricGroup(), pluginContext.getMetricGroup());
+
+        // getConfiguration() overlays this plugin's overrides on top of the job configuration.
+        assertEquals("job-value", pluginContext.getConfiguration().getString("job.key", null));
+        assertEquals("value", pluginContext.getConfiguration().getString("evaluator.key", null));
+
+        // Cycle-derived accessors read through the shared cycle state.
+        assertSame(topology, pluginContext.getJobTopology());
+        assertEquals(Duration.ofSeconds(7), pluginContext.getRestartTime());
+        assertEquals(metricHistory, pluginContext.getMetricsHistory());
+
+        // Plugin-specific fields.
+        assertSame(evaluatedVertexMetrics, pluginContext.getEvaluatedVertexMetrics());
+        assertTrue(pluginContext.isProcessingBacklog());
     }
 
     @Test
@@ -1040,16 +1095,19 @@ public class ScalingMetricEvaluatorTest {
         ScalingMetricsEvaluatorPlugin customEvaluator = new TestCustomEvaluator();
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
 
+        var ctx = createDefaultJobAutoScalerContext();
+        ctx.getScalingCycleState()
+                .setCollectedMetrics(
+                        new CollectedMetricHistory(topology, metricHistory, Instant.EPOCH));
+
         var testCustomEvaluationSession =
                 Tuple2.of(
                         customEvaluator,
-                        new ScalingMetricsEvaluatorPlugin.Context(
+                        new ScalingMetricsEvaluatorPlugin.Context<>(
+                                ctx,
                                 new UnmodifiableConfiguration(conf),
-                                Collections.unmodifiableSortedMap(metricHistory),
                                 Collections.unmodifiableMap(new HashMap<>()),
-                                topology,
-                                false,
-                                Duration.ZERO));
+                                false));
 
         var testCustomEvaluatorResult =
                 ScalingMetricEvaluator.runCustomEvaluator(
@@ -1142,7 +1200,7 @@ public class ScalingMetricEvaluatorTest {
     void testGetCustomEvaluatorIfRequired() {
         ScalingMetricsEvaluatorPlugin testCustomEvaluator = new TestCustomEvaluator();
         var customEvaluatorAwareEvaluator =
-                new ScalingMetricEvaluator(List.of(testCustomEvaluator));
+                new ScalingMetricEvaluator<>(List.of(testCustomEvaluator));
 
         String testCustomEvaluatorName = "test-custom-evaluator";
         String testCustomEvaluatorClassName = TestCustomEvaluator.class.getName();
@@ -1227,28 +1285,9 @@ public class ScalingMetricEvaluatorTest {
         conf.removeConfig(classOpt);
 
         // Case 7: No custom evaluators registered at all -> null even when configured.
-        var noCustomEvaluator = new ScalingMetricEvaluator(Collections.emptyList());
+        var noCustomEvaluator = new ScalingMetricEvaluator<>(Collections.emptyList());
         conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
         conf.set(classOpt, testCustomEvaluatorClassName);
         assertNull(noCustomEvaluator.getCustomEvaluatorIfRequired(conf));
-    }
-
-    @Test
-    void testMergeEvaluatorConfig() {
-        var jobConf = new Configuration();
-        jobConf.setString("only-job", "j");
-        jobConf.setString("shared", "job-value");
-
-        var evaluatorConf = new Configuration();
-        evaluatorConf.setString("only-evaluator", "e");
-        evaluatorConf.setString("shared", "evaluator-value");
-
-        var merged = ScalingMetricEvaluator.mergeEvaluatorConfig(jobConf, evaluatorConf);
-
-        // Job-only and evaluator-only keys are both visible.
-        assertEquals("j", merged.getString("only-job", null));
-        assertEquals("e", merged.getString("only-evaluator", null));
-        // On a key present in both, the evaluator-specific value wins.
-        assertEquals("evaluator-value", merged.getString("shared", null));
     }
 }

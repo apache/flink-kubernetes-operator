@@ -26,7 +26,7 @@ package org.apache.flink.autoscaler.alignment;
 public class TestAlignmentMode implements ParallelismAlignmentMode {
 
     @Override
-    public int alignParallelism(Context ctx) {
+    public int alignParallelism(Context<?> ctx) {
         int n = ParallelismAligner.numKeyGroupsOrPartitions(ctx);
         for (int p = ctx.getNewParallelism(); p >= 1; p--) {
             if (n % p == 0) {

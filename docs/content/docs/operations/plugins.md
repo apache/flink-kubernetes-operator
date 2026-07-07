@@ -215,12 +215,12 @@ The following steps demonstrate how to develop and use a custom metric evaluator
         public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
                 JobVertexID vertex,
                 Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-                Context context) {
+                Context<?> context) {
             Map<ScalingMetric, EvaluatedScalingMetric> overrides = new HashMap<>();
             // Example: override the target data rate for source vertices based
             // on an evaluator-specific option read from the merged configuration.
-            double target = context.getConfig().getDouble("target-data-rate", 0.0);
-            if (target > 0 && context.getTopology().isSource(vertex)) {
+            double target = context.getConfiguration().getDouble("target-data-rate", 0.0);
+            if (target > 0 && context.getJobTopology().isSource(vertex)) {
                 overrides.put(
                         ScalingMetric.TARGET_DATA_RATE,
                         EvaluatedScalingMetric.avg(target));
@@ -230,7 +230,7 @@ The following steps demonstrate how to develop and use a custom metric evaluator
     }
     ```
 
-   The `Context` object exposes an un-modifiable view of the configuration, the metrics history, previously evaluated vertex metrics (evaluation happens topologically), the job topology, backlog status, and max restart time. The configuration is the job configuration with the evaluator-specific options (prefix stripped) merged on top, so an evaluator-specific key overrides the job-level value of the same key.
+   The `Context` extends `JobAutoScalerContext`, exposing the metric history, job topology and max restart time through the inherited accessors, plus the previously evaluated vertex metrics (evaluation happens topologically) and backlog status. Its `getConfiguration()` returns the job configuration with the evaluator-specific options (prefix stripped) merged on top, so an evaluator-specific key overrides the job-level value of the same key.
 
 2. Create the service definition file `org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin` in `META-INF/services` with the fully-qualified class name of your implementation:
     ```text
@@ -239,7 +239,7 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
 3. Use the Maven tool to package the project and generate the custom metric evaluator JAR.
 
-4. Select the custom metric evaluator via configuration. The evaluator whose implementation class FQN matches the configured `job.autoscaler.metrics.custom-evaluator.<name>.class` value will be invoked, and any other `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are merged on top of the job configuration with the `job.autoscaler.metrics.custom-evaluator.<instance>.` prefix stripped, and exposed via `Context.getConfig()`, taking precedence over the job-level value of the same key. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN.
+4. Select the custom metric evaluator via configuration. The evaluator whose implementation class FQN matches the configured `job.autoscaler.metrics.custom-evaluator.<name>.class` value will be invoked, and any other `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are merged on top of the job configuration with the `job.autoscaler.metrics.custom-evaluator.<instance>.` prefix stripped, and exposed via `Context.getConfiguration()`, taking precedence over the job-level value of the same key. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN.
     ```yaml
     job.autoscaler.metrics.custom-evaluators: my-evaluator
     job.autoscaler.metrics.custom-evaluator.my-evaluator.class: org.apache.flink.autoscaler.custom.CustomEvaluator
@@ -295,18 +295,18 @@ The following steps demonstrate how to develop and use a custom alignment mode.
 
         /** Apply to every vertex, not only the source and keyBy vertices the built-ins handle. */
         @Override
-        public boolean isApplicable(Context ctx) {
+        public boolean isApplicable(Context<?> ctx) {
             return true;
         }
 
         @Override
-        public int align(Context ctx) {
+        public int alignParallelism(Context<?> ctx) {
             // Number of key groups, or source partitions for a partitioned source.
             int n = ctx.getNumSourcePartitions() > 0
                     ? ctx.getNumSourcePartitions()
                     : ctx.getMaxParallelism();
             // Optional mode-specific parameter, read from the per-mode configuration.
-            int minParallelism = ctx.getModeConfiguration().getInteger("min-parallelism", 1);
+            int minParallelism = ctx.getConfiguration().getInteger("min-parallelism", 1);
             for (int p = ctx.getNewParallelism(); p >= minParallelism; p--) {
                 if (n % p == 0) {
                     return p;
@@ -316,7 +316,7 @@ The following steps demonstrate how to develop and use a custom alignment mode.
         }
     }
     ```
-   The `Context` exposes the current and computed target parallelism, the number of key groups or source partitions, the input ship strategies, the `JobAutoScalerContext`, the per-vertex evaluated metrics, the job topology, and the prefix-stripped per-mode `Configuration` (`getModeConfiguration()`). The autoscaler calls `align` only when `isApplicable(Context)` returns true. That method defaults to keyBy (hash) vertices and to partitioned sources that report a partition count (Kafka and Pulsar do by default), and a custom mode can override it to widen the scope, for example to align custom partitioned vertices.
+   The `Context` extends `JobAutoScalerContext`, adding the per-vertex alignment inputs: the current and computed target parallelism, the number of key groups or source partitions, the input ship strategies, and the vertex's evaluated metrics. The job topology is available through the inherited `getJobTopology()`, and `getConfiguration()` returns the job configuration with this mode's prefix-stripped per-mode options merged on top. The autoscaler calls `alignParallelism` only when `isApplicable(Context)` returns true. That method defaults to keyBy (hash) vertices and to partitioned sources that report a partition count (Kafka and Pulsar do by default), and a custom mode can override it to widen the scope, for example to align custom partitioned vertices.
 
 2. Create the service definition file `org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode` in `META-INF/services`:
     ```text
@@ -325,7 +325,7 @@ The following steps demonstrate how to develop and use a custom alignment mode.
 
 3. Use the Maven tool to package the project and generate the custom alignment mode JAR.
 
-4. Select the custom mode by name and point it at your implementation class. Any other `job.autoscaler.scaling.parallelism-alignment.mode.<name>.*` entries are passed to the mode (prefix-stripped) through `Context#getModeConfiguration()`:
+4. Select the custom mode by name and point it at your implementation class. Any other `job.autoscaler.scaling.parallelism-alignment.mode.<name>.*` entries are merged (prefix-stripped) on top of the job configuration and exposed to the mode through `Context#getConfiguration()`:
     ```yaml
     job.autoscaler.scaling.parallelism-alignment.mode: custom-mode
     job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.class: org.apache.flink.autoscaler.alignment.CustomAlignmentMode
@@ -378,7 +378,6 @@ The following steps demonstrate how to develop and use a custom scaling executor
     ```java
     package org.apache.flink.autoscaler.custom;
 
-    import org.apache.flink.autoscaler.JobAutoScalerContext;
     import org.apache.flink.autoscaler.ScalingExecutorPlugin;
     import org.apache.flink.autoscaler.ScalingSummary;
     import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -387,8 +386,7 @@ The following steps demonstrate how to develop and use a custom scaling executor
     import java.util.Map;
 
     /** Custom implementation of {@link ScalingExecutorPlugin} that caps parallelism. */
-    public class CustomScalingExecutor<KEY, CTX extends JobAutoScalerContext<KEY>>
-            implements ScalingExecutorPlugin<KEY, CTX> {
+    public class CustomScalingExecutor<KEY> implements ScalingExecutorPlugin<KEY> {
 
         @Override
         public int priority() {
@@ -398,7 +396,7 @@ The following steps demonstrate how to develop and use a custom scaling executor
 
         @Override
         public Map<JobVertexID, ScalingSummary> apply(
-                Context<KEY, CTX> context, Map<JobVertexID, ScalingSummary> scalingSummaries) {
+                Context<KEY> context, Map<JobVertexID, ScalingSummary> scalingSummaries) {
             // Read plugin-specific options from the prefix-stripped scoped Configuration.
             int maxParallelism =
                     context.getConfiguration().getInteger("max-parallelism", Integer.MAX_VALUE);
@@ -415,7 +413,7 @@ The following steps demonstrate how to develop and use a custom scaling executor
     }
     ```
 
-   The `Context` object exposes the autoscaler context for the current job, the evaluated scaling metrics, the job topology, and the prefix-stripped per-instance `Configuration`.
+   The `Context` extends `JobAutoScalerContext` for the current job, exposing the evaluated scaling metrics and job topology through the inherited accessors. Its `getConfiguration()` returns the job configuration with this plugin instance's prefix-stripped options merged on top.
 
 2. Create the service definition file `org.apache.flink.autoscaler.ScalingExecutorPlugin` in `META-INF/services` with the fully-qualified class name of your implementation:
     ```text

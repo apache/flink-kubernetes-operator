@@ -59,13 +59,13 @@ public enum KeyGroupOrPartitionsAdjustMode implements ParallelismAlignmentMode, 
     }
 
     @Override
-    public int alignParallelism(Context ctx) {
+    public int alignParallelism(Context<?> ctx) {
         // Called directly (without an emitter) the SCALING_LIMITED event is suppressed; the
         // autoscaler path goes through the emitter overload below via ParallelismAligner.
         return alignParallelism(ctx, (expected, actual) -> {});
     }
 
-    int alignParallelism(Context ctx, ParallelismAligner.ScalingLimitedEmitter emitter) {
+    int alignParallelism(Context<?> ctx, ParallelismAligner.ScalingLimitedEmitter emitter) {
         int aligned = ParallelismAligner.firstAlignedInRegion(ctx, maximize);
         if (aligned > 0) {
             return aligned;

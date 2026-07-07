@@ -86,7 +86,8 @@ public class BacklogBasedScalingTest {
                                         Map.of(source1, REBALANCE),
                                         1,
                                         720,
-                                        new IOMetrics(0, 0, 0))));
+                                        new IOMetrics(0, 0, 0))),
+                        stateStore);
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -105,7 +106,7 @@ public class BacklogBasedScalingTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(List.of()),
+                        new ScalingMetricEvaluator<>(List.of()),
                         scalingExecutor,
                         eventCollector,
                         new TestingScalingRealizer<>(),
@@ -406,7 +407,7 @@ public class BacklogBasedScalingTest {
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
         autoscaler.scale(context);
-        assertTrue(autoscaler.lastEvaluatedMetrics.isEmpty());
+        assertTrue(autoscaler.metricsEvaluator.lastEvaluatedMetrics.isEmpty());
         assertTrue(eventCollector.events.isEmpty());
     }
 

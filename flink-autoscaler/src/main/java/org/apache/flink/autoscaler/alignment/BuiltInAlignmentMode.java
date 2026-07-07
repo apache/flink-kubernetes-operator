@@ -42,7 +42,7 @@ public enum BuiltInAlignmentMode implements ParallelismAlignmentMode, DescribedE
                     + "when one is within reach. Balances even data distribution against resource "
                     + "usage, tolerating mild skew to avoid over-provisioning.") {
         @Override
-        public int alignParallelism(Context ctx) {
+        public int alignParallelism(Context<?> ctx) {
             return alignOrKeepTarget(ctx, true);
         }
     },
@@ -51,14 +51,14 @@ public enum BuiltInAlignmentMode implements ParallelismAlignmentMode, DescribedE
             "Aligns to a parallelism that evenly divides the number of key groups or source "
                     + "partitions, spreading data evenly across subtasks to reduce skew.") {
         @Override
-        public int alignParallelism(Context ctx) {
+        public int alignParallelism(Context<?> ctx) {
             return alignOrKeepTarget(ctx, false);
         }
     },
 
     OFF("Disables alignment. The autoscaler's computed target parallelism is used as-is.") {
         @Override
-        public int alignParallelism(Context ctx) {
+        public int alignParallelism(Context<?> ctx) {
             return ctx.getNewParallelism();
         }
     };
@@ -67,7 +67,7 @@ public enum BuiltInAlignmentMode implements ParallelismAlignmentMode, DescribedE
      * Scans the direction's region for an aligned value, and keeps the computed target when none is
      * found (never blocking the scale).
      */
-    private static int alignOrKeepTarget(Context ctx, boolean acceptLoadReducing) {
+    private static int alignOrKeepTarget(Context<?> ctx, boolean acceptLoadReducing) {
         int aligned = ParallelismAligner.firstAlignedInRegion(ctx, acceptLoadReducing);
         return aligned > 0 ? aligned : ctx.getNewParallelism();
     }

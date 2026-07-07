@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.alignment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.configuration.Configuration;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -41,7 +43,7 @@ class AlignmentModeTest {
     private final ParallelismAligner.ScalingLimitedEmitter emitter =
             (expected, actual) -> emitted.incrementAndGet();
 
-    private ParallelismAlignmentMode.Context ctx(
+    private ParallelismAlignmentMode.Context<JobID> ctx(
             int current, int newParallelism, int numSourcePartitions, int maxParallelism) {
         return ctx(
                 current,
@@ -53,7 +55,7 @@ class AlignmentModeTest {
                 List.of(ShipStrategy.HASH));
     }
 
-    private ParallelismAlignmentMode.Context ctx(
+    private ParallelismAlignmentMode.Context<JobID> ctx(
             int current,
             int newParallelism,
             int numSourcePartitions,
@@ -61,7 +63,9 @@ class AlignmentModeTest {
             int parallelismLowerLimit,
             int parallelismUpperLimit,
             Collection<ShipStrategy> inputShipStrategies) {
-        return new ParallelismAlignmentMode.Context(
+        return new ParallelismAlignmentMode.Context<>(
+                createDefaultJobAutoScalerContext(),
+                new Configuration(),
                 null,
                 current,
                 newParallelism,
@@ -70,10 +74,7 @@ class AlignmentModeTest {
                 parallelismLowerLimit,
                 parallelismUpperLimit,
                 inputShipStrategies,
-                null,
-                Map.of(),
-                null,
-                new Configuration());
+                Map.of());
     }
 
     @Test
@@ -95,8 +96,7 @@ class AlignmentModeTest {
     void builtInModesFallBackToTargetInsteadOfBlocking() {
         // current=22, target=25, N=35 source partitions, upper bound 30: no aligned value preserves
         // the scale-up. Built-in modes return the raw target (OFF fallback), and emit no event.
-        ParallelismAlignmentMode.Context blocked =
-                ctx(22, 25, 35, 128, 20, 30, List.of(ShipStrategy.HASH));
+        var blocked = ctx(22, 25, 35, 128, 20, 30, List.of(ShipStrategy.HASH));
         assertThat(BuiltInAlignmentMode.EVENLY_SPREAD.alignParallelism(blocked)).isEqualTo(25);
         assertThat(BuiltInAlignmentMode.BALANCED.alignParallelism(blocked)).isEqualTo(25);
         assertThat(emitted).hasValue(0);
@@ -108,7 +108,7 @@ class AlignmentModeTest {
         // N=12, scale-up to target 7 with the region capped at 8: no divisor in [7, 8]. The new
         // built-in modes keep the target (7), whereas the legacy modes relax below the target to
         // the nearest divisor 6.
-        ParallelismAlignmentMode.Context c = ctx(5, 7, 12, 8);
+        var c = ctx(5, 7, 12, 8);
         assertThat(BuiltInAlignmentMode.EVENLY_SPREAD.alignParallelism(c)).isEqualTo(7);
         assertThat(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD.alignParallelism(c)).isEqualTo(6);
     }
@@ -117,8 +117,7 @@ class AlignmentModeTest {
     @SuppressWarnings("deprecation")
     void legacyModesBlockAndEmit() {
         // The same scenario under the deprecated legacy mode blocks (returns current) and emits.
-        ParallelismAlignmentMode.Context blocked =
-                ctx(22, 25, 35, 128, 20, 30, List.of(ShipStrategy.HASH));
+        var blocked = ctx(22, 25, 35, 128, 20, 30, List.of(ShipStrategy.HASH));
         assertThat(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD.alignParallelism(blocked, emitter))
                 .isEqualTo(22);
         assertThat(emitted).hasValue(1);
@@ -126,13 +125,12 @@ class AlignmentModeTest {
 
     @Test
     void modesDoNotApplyToNonSourceNonHashVertices() {
-        ParallelismAlignmentMode.Context rebalance =
-                ctx(16, 24, 0, 128, 1, Integer.MAX_VALUE, List.of(ShipStrategy.REBALANCE));
+        var rebalance = ctx(16, 24, 0, 128, 1, Integer.MAX_VALUE, List.of(ShipStrategy.REBALANCE));
         assertThat(BuiltInAlignmentMode.BALANCED.isApplicable(rebalance)).isFalse();
         assertThat(BuiltInAlignmentMode.EVENLY_SPREAD.isApplicable(rebalance)).isFalse();
         assertThat(BuiltInAlignmentMode.OFF.isApplicable(rebalance)).isFalse();
         // A source / keyBy vertex is in scope.
-        ParallelismAlignmentMode.Context hash = ctx(16, 24, 0, 128);
+        var hash = ctx(16, 24, 0, 128);
         assertThat(BuiltInAlignmentMode.BALANCED.isApplicable(hash)).isTrue();
     }
 
