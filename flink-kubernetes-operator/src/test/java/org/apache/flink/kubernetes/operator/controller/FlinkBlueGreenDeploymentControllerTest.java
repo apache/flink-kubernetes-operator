@@ -558,6 +558,69 @@ public class FlinkBlueGreenDeploymentControllerTest {
         testTransitionToGreen(rs, customValue, null);
     }
 
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyGreenNotAbortedWhenNotReadyAfterBlueDeleted(FlinkVersion flinkVersion)
+            throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        // Tiny abort grace so the abort deadline is already expired by the time Blue is deleted.
+        var configuration = blueGreenDeployment.getSpec().getConfiguration();
+        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
+        configuration.put(DEPLOYMENT_DELETION_DELAY.key(), "0");
+
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        // Trigger the transition to Green
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(2, getFlinkDeployments().size());
+
+        // Green becomes ready -> marks the ready timestamp and schedules deletion of Blue
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
+        rs = reconcile(rs.deployment);
+
+        // Let the (zero) deletion delay elapse
+        Thread.sleep(10);
+
+        // This reconcile deletes Blue at cutover. The transition must finalize forward to
+        // ACTIVE_GREEN within the same reconcile
+        rs = reconcile(rs.deployment);
+        assertEquals(1, getFlinkDeployments().size(), "Blue should be deleted at cutover");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Transition must commit forward to ACTIVE_GREEN when Blue is deleted");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
+                "Abort timer must be cleared once finalized");
+
+        // Post-cutover restart: Green briefly goes not-ready as it rescales into the capacity Blue
+        // just freed.
+        simulateJobFailure(getFlinkDeployments().get(0));
+        rs = reconcile(rs.deployment);
+
+        var green = getFlinkDeployments().get(0);
+        assertEquals(1, getFlinkDeployments().size(), "Green must still exist");
+        assertNotEquals(
+                JobState.SUSPENDED,
+                green.getSpec().getJob().getState(),
+                "Green must not be suspended by a post-cutover not-ready blip");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Must remain ACTIVE_GREEN; must not roll back after cutover");
+    }
+
     private static String getFlinkConfigurationValue(
             FlinkDeploymentSpec flinkDeploymentSpec, String propertyName) {
         return flinkDeploymentSpec.getFlinkConfiguration().get(propertyName).asText();
