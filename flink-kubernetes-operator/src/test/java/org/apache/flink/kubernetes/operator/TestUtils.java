@@ -583,6 +583,18 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
+        public <R extends HasMetadata> Optional<R> getSecondaryResource(
+                Class<R> expectedType, String eventSourceName, String name, String namespace) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <R> Stream<R> getSecondaryResourcesAsStream(
+                Class<R> expectedType, String eventSourceName) {
+            return Stream.empty();
+        }
+
+        @Override
         public ControllerConfiguration<T> getControllerConfiguration() {
             return null;
         }

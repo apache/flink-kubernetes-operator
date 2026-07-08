@@ -101,6 +101,18 @@ public class TestingJosdkContext<P extends HasMetadata> implements Context<P> {
     }
 
     @Override
+    public <R extends HasMetadata> Optional<R> getSecondaryResource(
+            Class<R> expectedType, String eventSourceName, String name, String namespace) {
+        return Optional.empty();
+    }
+
+    @Override
+    public <R> Stream<R> getSecondaryResourcesAsStream(
+            Class<R> expectedType, String eventSourceName) {
+        return Stream.empty();
+    }
+
+    @Override
     public ControllerConfiguration<P> getControllerConfiguration() {
         return null;
     }
