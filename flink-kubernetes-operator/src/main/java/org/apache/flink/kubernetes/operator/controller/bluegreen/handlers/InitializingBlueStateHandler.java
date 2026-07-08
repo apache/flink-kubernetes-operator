@@ -30,7 +30,6 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService.patchStatusUpdateControl;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
-import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 
 /** State handler for the INITIALIZING_BLUE state. */
 public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler {
@@ -54,11 +53,11 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
 
         // Deploy only if this is the initial deployment (no previous spec exists)
         // or if we're recovering from a failure and the spec has changed since the last attempt
+        var state = deploymentStatus.getJobStatus().getState();
         if (deploymentStatus.getLastReconciledSpec() == null
-                || (deploymentStatus.getJobStatus().getState().equals(JobStatus.FAILING)
+                || ((state == null || JobStatus.FAILING.equals(state))
                         && hasSpecChanged(context))) {
 
-            setLastReconciledSpec(context);
             return deploymentService.initiateDeployment(
                     context,
                     BlueGreenDeploymentType.BLUE,
@@ -69,7 +68,7 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
             LOG.warn(
                     "Ignoring initial deployment. Last Reconciled Spec null: {}. BG Status: {}.",
                     deploymentStatus.getLastReconciledSpec() == null,
-                    deploymentStatus.getJobStatus().getState());
+                    state);
             return UpdateControl.noUpdate();
         }
     }

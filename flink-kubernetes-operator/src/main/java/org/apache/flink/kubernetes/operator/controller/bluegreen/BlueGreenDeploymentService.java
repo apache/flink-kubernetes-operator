@@ -30,7 +30,10 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -45,12 +48,16 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.updateTransitionStageFromJobStatus;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.validateAdvancedModeConfig;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
@@ -58,6 +65,7 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.revertToLastSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.triggerSavepoint;
 
@@ -86,6 +94,7 @@ public class BlueGreenDeploymentService {
             Savepoint lastCheckpoint,
             boolean isFirstDeployment) {
         ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
+        context.getDeploymentStatus().setError(null);
 
         FlinkDeployment flinkDeployment =
                 prepareFlinkDeployment(
@@ -94,6 +103,16 @@ public class BlueGreenDeploymentService {
                         lastCheckpoint,
                         isFirstDeployment,
                         bgMeta);
+
+        Optional<String> configError = validateAdvancedModeConfig(context);
+        if (configError.isPresent()) {
+            return rejectWithValidationError(context, configError.get());
+        }
+        if (isFirstDeployment) {
+            setLastReconciledSpec(context);
+        }
+        BlueGreenTransitionUtils.prepareTransitionMetadata(
+                context, nextBlueGreenDeploymentType, flinkDeployment, isFirstDeployment);
 
         deployCluster(context, flinkDeployment);
 
@@ -114,6 +133,10 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
 
         BlueGreenDiffType specDiff = getSpecDiff(context);
+
+        if (specDiff == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+            return rejectImmutableFieldChange(context);
+        }
 
         if (specDiff != BlueGreenDiffType.IGNORE) {
             FlinkDeployment currentFlinkDeployment =
@@ -145,6 +168,11 @@ public class BlueGreenDeploymentService {
 
             if (currentFlinkDeployment != null && isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
+                    Optional<String> configError = validateAdvancedModeConfig(context);
+                    if (configError.isPresent()) {
+                        return rejectWithValidationError(context, configError.get());
+                    }
+
                     boolean savepointTriggered = false;
                     try {
                         savepointTriggered = handleSavepoint(context, currentFlinkDeployment);
@@ -487,6 +515,7 @@ public class BlueGreenDeploymentService {
         }
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
+            BlueGreenTransitionUtils.moveToFirstTransitionStage(context);
             return shouldWeDelete(
                     context,
                     transitionState.currentDeployment,
@@ -519,7 +548,11 @@ public class BlueGreenDeploymentService {
         if (hasSpecChanged(context)) {
             BlueGreenDiffType diffType = getSpecDiff(context);
 
-            // Block SUSPEND during transition - wait for transition to complete first
+            if (diffType == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+                return rejectImmutableFieldChange(context);
+            }
+
+            // Block SUSPEND during transition
             if (diffType == BlueGreenDiffType.SUSPEND) {
                 LOG.info(
                         "Suspend requested during transition for '{}'. "
@@ -583,6 +616,12 @@ public class BlueGreenDeploymentService {
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState) {
 
+        if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
+            // Wait until CLEAR_TO_TEARDOWN is set by the client
+            return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                    .rescheduleAfter(getReconciliationReschedInterval(context));
+        }
+
         var deploymentStatus = context.getDeploymentStatus();
 
         if (currentDeployment == null) {
@@ -590,7 +629,7 @@ public class BlueGreenDeploymentService {
             return finalizeBlueGreenDeployment(context, nextState);
         }
 
-        long deploymentDeletionDelayMs = BlueGreenUtils.getDeploymentDeletionDelay(context);
+        long deploymentDeletionDelayMs = getDeploymentDeletionDelay(context);
         long deploymentReadyTimestamp =
                 instantStrToMillis(deploymentStatus.getDeploymentReadyTimestamp());
 
@@ -684,8 +723,8 @@ public class BlueGreenDeploymentService {
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
+        BlueGreenTransitionUtils.rollbackActiveDeploymentType(context, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
-        context.getDeploymentStatus().setSavepointTriggerId(null);
 
         var error =
                 String.format(
@@ -699,6 +738,33 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, String error) {
         LOG.error(error);
         return patchStatusUpdateControl(context, null, JobStatus.FAILING, error);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectWithValidationError(
+            BlueGreenContext context, String error) {
+        LOG.warn(error);
+        revertToLastSpec(context);
+        EventUtils.createOrUpdateEventWithInterval(
+                context.getJosdkContext().getClient(),
+                context.getBgDeployment(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.ValidationError.toString(),
+                error,
+                EventRecorder.Component.Operator,
+                e -> {},
+                null,
+                null);
+        context.getDeploymentStatus().setError(error);
+        return patchStatusUpdateControl(context, null, null, null);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectImmutableFieldChange(
+            BlueGreenContext context) {
+        String error =
+                String.format(
+                        "transitionMode cannot be changed after initial deployment for '%s'. Reverting spec.",
+                        context.getBgDeployment().getMetadata().getName());
+        return rejectWithValidationError(context, error);
     }
 
     private static FlinkBlueGreenDeploymentState getPreviousState(
@@ -829,6 +895,7 @@ public class BlueGreenDeploymentService {
         }
 
         if (jobState != null) {
+            updateTransitionStageFromJobStatus(context, jobState);
             deploymentStatus.getJobStatus().setState(jobState);
         }
 
@@ -842,6 +909,7 @@ public class BlueGreenDeploymentService {
 
         deploymentStatus.setLastReconciledTimestamp(java.time.Instant.now().toString());
         flinkBlueGreenDeployment.setStatus(deploymentStatus);
+
         return UpdateControl.patchStatus(flinkBlueGreenDeployment);
     }
 
