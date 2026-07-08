@@ -689,6 +689,8 @@ public class BlueGreenDeploymentService {
                 getPreviousState(nextState, context.getDeployments());
         context.getDeploymentStatus().setBlueGreenState(previousState);
         context.getDeploymentStatus().setSavepointTriggerId(null);
+        context.getDeploymentStatus().setDeploymentReadyTimestamp(millisToInstantStr(0));
+        context.getDeploymentStatus().setAbortTimestamp(millisToInstantStr(0));
 
         var error =
                 String.format(
