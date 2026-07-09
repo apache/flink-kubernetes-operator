@@ -191,10 +191,6 @@ defaultConfiguration:
 #        interval: 5 MINUTE
 #      reconcile.interval: 15 s
 #      observer.progress-check.interval: 5 s
-#    taskmanager:
-#      numberOfTaskSlots: 1   # default for managed clusters; override per-job via spec.flinkConfiguration
-#
-# Set job parallelism via spec.job.parallelism, not parallelism.default (the operator manages it).
 
   flink-conf.yaml: |+
     # Flink Config Overrides
