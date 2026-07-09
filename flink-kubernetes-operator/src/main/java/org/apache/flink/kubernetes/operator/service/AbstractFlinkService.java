@@ -1042,11 +1042,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                 timeout);
     }
 
+    /**
+     * Remove operator-only keys, preserving raw values so the write boundaries can serialize them
+     * in the target Flink version's YAML dialect.
+     */
     @VisibleForTesting
     protected static Configuration removeOperatorConfigs(Configuration config) {
-        // Copy and remove keys directly: a toMap() round-trip would serialize values (e.g. the
-        // list-typed pipeline.jars) in the operator's own YAML dialect, which the target Flink
-        // version may not parse. Raw values let the write boundaries render per target version.
         Configuration newConfig = new Configuration(config);
         for (String key : config.keySet()) {
             if (key.startsWith(K8S_OP_CONF_PREFIX)
