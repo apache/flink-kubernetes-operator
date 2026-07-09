@@ -20,10 +20,10 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
-import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

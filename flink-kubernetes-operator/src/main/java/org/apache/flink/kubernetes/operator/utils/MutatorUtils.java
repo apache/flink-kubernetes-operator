@@ -19,9 +19,9 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.plugin.PluginManager;
+import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.mutator.DefaultFlinkMutator;
-import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

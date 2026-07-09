@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.mutator;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
 
 import java.util.Optional;
 
