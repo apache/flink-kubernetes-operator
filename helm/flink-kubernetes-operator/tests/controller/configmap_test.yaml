@@ -69,8 +69,6 @@ tests:
       - isNotNull:
           path: data["log4j-console.properties"]
 
-  # FLINK-39791: the ConfigMap emits a single config-file key, always named config.yaml,
-  # resolved as config.yaml (when set) > user flink-conf.yaml > the values.yaml default.
   - it: Emits a single config.yaml key with today's effective defaults and no redundant seed keys
     asserts:
       - isNotNull:
