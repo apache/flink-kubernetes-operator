@@ -22,19 +22,14 @@ under the License.
 
     <parent>
         <groupId>org.apache.flink</groupId>
-        <artifactId>flink-kubernetes-operator-parent</artifactId>
+        <artifactId>flink-kubernetes-operator-examples</artifactId>
         <version>1.16-SNAPSHOT</version>
-        <relativePath>../..</relativePath>
+        <relativePath>..</relativePath>
     </parent>
 
     <artifactId>autoscaling</artifactId>
 
     <name>Flink Autoscaler Test Job</name>
-
-    <!-- Given that this is an example skip maven deployment -->
-    <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
-    </properties>
 
     <dependencies>
 
