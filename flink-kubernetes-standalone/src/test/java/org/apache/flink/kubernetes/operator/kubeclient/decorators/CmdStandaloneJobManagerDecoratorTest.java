@@ -32,9 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * @link CmdStandaloneJobManagerDecorator unit tests
@@ -67,11 +65,11 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
-        assertThat(
-                decoratedPod.getMainContainer().getCommand(), containsInAnyOrder(MOCK_ENTRYPATH));
-        assertThat(
-                decoratedPod.getMainContainer().getArgs(),
-                containsInAnyOrder(CmdStandaloneJobManagerDecorator.JOBMANAGER_ENTRYPOINT_ARG));
+        assertThat(decoratedPod.getMainContainer().getCommand())
+                .containsExactlyInAnyOrder(MOCK_ENTRYPATH);
+        assertThat(decoratedPod.getMainContainer().getArgs())
+                .containsExactlyInAnyOrder(
+                        CmdStandaloneJobManagerDecorator.JOBMANAGER_ENTRYPOINT_ARG);
     }
 
     @Test
@@ -85,17 +83,16 @@ public class CmdStandaloneJobManagerDecoratorTest {
         configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
-        assertThat(
-                decoratedPod.getMainContainer().getCommand(), containsInAnyOrder(MOCK_ENTRYPATH));
-        assertThat(
-                decoratedPod.getMainContainer().getArgs(),
-                containsInAnyOrder(
+        assertThat(decoratedPod.getMainContainer().getCommand())
+                .containsExactlyInAnyOrder(MOCK_ENTRYPATH);
+        assertThat(decoratedPod.getMainContainer().getArgs())
+                .containsExactlyInAnyOrder(
                         CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
                         "--allowNonRestoredState",
                         "--fromSavepoint",
                         "/tmp/savepoint/path",
                         "--job-classname",
-                        testMainClass));
+                        testMainClass);
     }
 
     @Test
@@ -105,11 +102,10 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
-        assertThat(
-                decoratedPod.getMainContainer().getCommand(), containsInAnyOrder(MOCK_ENTRYPATH));
-        assertThat(
-                decoratedPod.getMainContainer().getArgs(),
-                containsInAnyOrder(CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG));
+        assertThat(decoratedPod.getMainContainer().getCommand())
+                .containsExactlyInAnyOrder(MOCK_ENTRYPATH);
+        assertThat(decoratedPod.getMainContainer().getArgs())
+                .containsExactlyInAnyOrder(CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG);
     }
 
     @Test
@@ -124,13 +120,12 @@ public class CmdStandaloneJobManagerDecoratorTest {
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
 
-        assertThat(
-                decoratedPod.getMainContainer().getCommand(), containsInAnyOrder(MOCK_ENTRYPATH));
-        assertThat(
-                decoratedPod.getMainContainer().getArgs(),
-                containsInAnyOrder(
+        assertThat(decoratedPod.getMainContainer().getCommand())
+                .containsExactlyInAnyOrder(MOCK_ENTRYPATH);
+        assertThat(decoratedPod.getMainContainer().getArgs())
+                .containsExactlyInAnyOrder(
                         CmdStandaloneJobManagerDecorator.JOBMANAGER_ENTRYPOINT_ARG,
-                        CmdStandaloneJobManagerDecorator.POD_IP_ARG));
+                        CmdStandaloneJobManagerDecorator.POD_IP_ARG);
     }
 
     @Test
@@ -144,13 +139,12 @@ public class CmdStandaloneJobManagerDecoratorTest {
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
 
-        assertThat(
-                decoratedPod.getMainContainer().getArgs(),
-                contains(
+        assertThat(decoratedPod.getMainContainer().getArgs())
+                .containsExactly(
                         CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
                         "--host",
                         CmdStandaloneJobManagerDecorator.POD_IP_ARG,
                         "--test",
-                        "123"));
+                        "123");
     }
 }
