@@ -45,12 +45,11 @@ maybe_enable_jemalloc
 
 # Select the logging framework JARs to put on the classpath.
 # Supported values: "log4j2" (default), "logback".
-OPERATOR_LOG=${FLINK_HOME:-/opt/flink}/log
 LOGGING_FRAMEWORK="${LOGGING_FRAMEWORK:-log4j2}"
 if [ "$LOGGING_FRAMEWORK" = "logback" ]; then
-    LOG_CLASSPATH="$OPERATOR_LOG/logback/*"
+    LOG_CLASSPATH="$OPERATOR_LIB/logback/*"
 else
-    LOG_CLASSPATH="$OPERATOR_LOG/log4j/*"
+    LOG_CLASSPATH="$OPERATOR_LIB/log4j/*"
 fi
 
 if [ "$1" = "help" ]; then
