@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.mutator;
+package org.apache.flink.kubernetes.operator.api.mutator;
 
 import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;

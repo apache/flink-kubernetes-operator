@@ -64,7 +64,7 @@ The following steps demonstrate how to develop and use a custom validator.
     }
     ```
 
-2. Create service definition file `org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator` in `META-INF/services`.   With custom `FlinkResourceValidator` implementation, the service definition describes as follows:
+2. Create service definition file `org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator` in `META-INF/services`.   With custom `FlinkResourceValidator` implementation, the service definition describes as follows:
     ```text
     org.apache.flink.kubernetes.operator.validation.CustomValidator
     ```
@@ -136,7 +136,7 @@ The following steps demonstrate how to develop and use a custom mutator.
 
    import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
    import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-   import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
+   import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
    
    import java.util.Optional;
    
@@ -156,7 +156,7 @@ The following steps demonstrate how to develop and use a custom mutator.
    }
    ```
 
-2. Create service definition file `org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator` in `META-INF/services`.   With custom `FlinkResourceMutator` implementation, the service definition describes as follows:
+2. Create service definition file `org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator` in `META-INF/services`.   With custom `FlinkResourceMutator` implementation, the service definition describes as follows:
     ```text
     org.apache.flink.mutator.CustomFlinkMutator
     ```
