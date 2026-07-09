@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
@@ -6,9 +7,7 @@ regarding copyright ownership.  The ASF licenses this file
 to you under the Apache License, Version 2.0 (the
 "License"); you may not use this file except in compliance
 with the License.  You may obtain a copy of the License at
-
   http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing,
 software distributed under the License is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -23,21 +22,24 @@ under the License.
 
     <parent>
         <groupId>org.apache.flink</groupId>
-        <artifactId>flink-kubernetes-operator-examples</artifactId>
+        <artifactId>flink-kubernetes-operator-parent</artifactId>
         <version>1.16-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
-    <artifactId>kubernetes-client-examples</artifactId>
-    <name>Flink Kubernetes Client Code Example</name>
+    <artifactId>flink-kubernetes-operator-examples</artifactId>
+    <name>Flink Kubernetes Operator Examples</name>
+    <packaging>pom</packaging>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-kubernetes-operator</artifactId>
-            <version>1.16-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-    </dependencies>
+    <!-- Given that these are examples skip maven deployment -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
 
+    <modules>
+        <module>autoscaling</module>
+        <module>flink-beam-example</module>
+        <module>flink-sql-runner-example</module>
+        <module>kubernetes-client-examples</module>
+    </modules>
 </project>
