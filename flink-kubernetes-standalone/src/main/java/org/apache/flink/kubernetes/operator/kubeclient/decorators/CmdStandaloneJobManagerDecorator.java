@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.kubeclient.decorators;
 
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.decorators.AbstractKubernetesStepDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
@@ -38,6 +39,9 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
     public static final String APPLICATION_MODE_ARG = "standalone-job";
     public static final String POD_IP_ARG =
             String.format("$(%s)", Constants.ENV_FLINK_POD_IP_ADDRESS);
+    public static final String DYNAMIC_PROPERTY_FLAG = "-D";
+    public static final String JOBMANAGER_RPC_ADDRESS_ARG =
+            String.format("%s=%s", JobManagerOptions.ADDRESS.key(), POD_IP_ARG);
 
     private final StandaloneKubernetesJobManagerParameters kubernetesJobManagerParameters;
 
@@ -64,7 +68,7 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
                         .addToArgs(JOBMANAGER_ENTRYPOINT_ARG);
 
         if (kubernetesJobManagerParameters.isHAEnabled()) {
-            containerBuilder.addToArgs(POD_IP_ARG);
+            containerBuilder.addToArgs(DYNAMIC_PROPERTY_FLAG, JOBMANAGER_RPC_ADDRESS_ARG);
         }
 
         return containerBuilder.build();
@@ -99,8 +103,8 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
         }
 
         if (kubernetesJobManagerParameters.isHAEnabled()) {
-            args.add("--host");
-            args.add(POD_IP_ARG);
+            args.add(DYNAMIC_PROPERTY_FLAG);
+            args.add(JOBMANAGER_RPC_ADDRESS_ARG);
         }
 
         List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
