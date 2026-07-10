@@ -428,7 +428,8 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
         // Make sure the upgrade was executed as long as we have the savepoint information
         if (fromMode == UpgradeMode.LAST_STATE && toMode != UpgradeMode.STATELESS) {
-            // We cant make progress as no HA meta available after LAST_STATE, upgrade. It means the
+            // We can't make progress as no HA meta available after LAST_STATE, upgrade. It means
+            // the
             // job started and terminated, but we didn't see...
             assertEquals(
                     JobManagerDeploymentStatus.DEPLOYING,
@@ -447,7 +448,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                     toMode == UpgradeMode.STATELESS ? UpgradeMode.STATELESS : UpgradeMode.SAVEPOINT,
                     lastReconciledSpec.getJob().getUpgradeMode());
 
-            // Complete upgrade and recover succesfully with the latest savepoint
+            // Complete upgrade and recover successfully with the latest savepoint
             reconciler.reconcile(deployment, context);
             lastReconciledSpec =
                     deployment

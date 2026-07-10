@@ -314,7 +314,7 @@ function enable_minikube_ingress {
 function start_minikube_if_not_running {
     if ! minikube status; then
         echo "Starting minikube ..."
-        # Please update tbe docs when changing kubernetes version
+        # Please update the docs when changing kubernetes version
         minikube start \
         --kubernetes-version=v1.28.0 \
         --extra-config=kubelet.image-gc-high-threshold=99 \

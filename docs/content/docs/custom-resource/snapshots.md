@@ -192,7 +192,7 @@ To disable automatic savepoint cleanup by the operator you can set `kubernetes.o
 #### Checkpoints
 
 FlinkStateSnapshots of checkpoint type will always be cleaned up. It's not possible to set max age for them.
-The maxmimum amount of checkpoint resources retained will be deteremined by the Flink configuration `state.checkpoints.num-retained`.
+The maximum amount of checkpoint resources retained will be determined by the Flink configuration `state.checkpoints.num-retained`.
 
 {{< hint warning >}}
 Checkpoint cleanup is only supported if FlinkStateSnapshot resources are enabled.

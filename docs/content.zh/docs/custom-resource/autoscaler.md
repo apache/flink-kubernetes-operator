@@ -26,7 +26,7 @@ under the License.
 
 # Autoscaler
 
-The operator provides a job autoscaler functionality that collects various metrics from running Flink jobs and automatically scales individual job vertexes (chained operator groups) to eliminate backpressure and satisfy the utilization target set by the user.
+The operator provides a job autoscaler functionality that collects various metrics from running Flink jobs and automatically scales individual job vertices (chained operator groups) to eliminate backpressure and satisfy the utilization target set by the user.
 By adjusting parallelism on a job vertex level (in contrast to job parallelism) we can efficiently autoscale complex and heterogeneous streaming applications.
 
 Key benefits to the user:
@@ -46,7 +46,7 @@ Collected metrics:
  - Busy and backpressured time at each job vertex
 
 {{< hint info >}}
-Please note that we are not using any container memory / CPU utilization metrics directly here. High utilization will be reflected in the processing rate and busy time metrics of the individual job vertexes.
+Please note that we are not using any container memory / CPU utilization metrics directly here. High utilization will be reflected in the processing rate and busy time metrics of the individual job vertices.
 {{< /hint >}}
 
 The algorithm starts from the sources and recursively computes the required processing capacity (target data rate) for each operator in the pipeline. At the source vertices, target data rate is equal to incoming data rate (from the Kafka topic).
@@ -152,7 +152,7 @@ During this time period no metrics will be collected and no scaling actions will
 ### Target utilization and flexible boundaries
 
 In order to provide stable job performance and some buffer for load fluctuations, the autoscaler allows users to set a target utilization level for the job (`job.autoscaler.target.utilization`).
-A target of `0.6` means we are targeting 60% utilization/load for the job vertexes.
+A target of `0.6` means we are targeting 60% utilization/load for the job vertices.
 
 In general, it's not recommended to set target utilization close to 100% as performance usually degrades as we reach capacity limits in most real world systems.
 
