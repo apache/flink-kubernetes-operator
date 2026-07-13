@@ -109,8 +109,14 @@ public abstract class AbstractFlinkResourceReconciler<
         if (reconciliationStatus.isBeforeFirstDeployment()) {
             var spec = cr.getSpec();
 
-            // If the job is submitted in suspend state, no need to reconcile
+            // If the job is created in suspended state, acknowledge the spec without deploying.
+            // We must still update status (observedGeneration, lastReconciledSpec) so that
+            // external tools know the operator has processed this generation.
             if (spec.getJob() != null && spec.getJob().getState().equals(JobState.SUSPENDED)) {
+                LOG.info("Resource created in suspended state, acknowledging without deployment");
+                var deployConfig = ctx.getDeployConfig(spec);
+                ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
+                statusRecorder.patchAndCacheStatus(cr, ctx.getKubernetesClient());
                 return;
             }
 

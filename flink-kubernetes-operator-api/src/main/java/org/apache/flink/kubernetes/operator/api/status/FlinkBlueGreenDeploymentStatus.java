@@ -38,6 +38,9 @@ public class FlinkBlueGreenDeploymentStatus {
 
     private JobStatus jobStatus = new JobStatus();
 
+    /** Last observed generation of the FlinkBlueGreenDeployment. */
+    private Long observedGeneration;
+
     /** The state of the blue/green transition. */
     private FlinkBlueGreenDeploymentState blueGreenState;
 

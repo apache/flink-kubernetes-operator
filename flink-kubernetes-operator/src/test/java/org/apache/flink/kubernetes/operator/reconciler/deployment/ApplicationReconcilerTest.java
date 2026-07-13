@@ -1343,6 +1343,46 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(2L, deployment.getStatus().getObservedGeneration());
     }
 
+    @Test
+    public void testSuspendedFirstDeploymentSetsObservedGeneration() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getMetadata().setGeneration(1L);
+        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+
+        // Verify initial state: nothing has been reconciled yet
+        assertNull(deployment.getStatus().getObservedGeneration());
+        assertTrue(deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
+
+        // Reconcile the suspended deployment
+        reconciler.reconcile(deployment, context);
+
+        // observedGeneration must be set so external tools know we processed the spec
+        assertEquals(1L, deployment.getStatus().getObservedGeneration());
+
+        // lastReconciledSpec must be recorded so isBeforeFirstDeployment() returns false
+        assertFalse(deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
+
+        // State should be DEPLOYED and marked stable (suspended = stable by convention)
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertTrue(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+
+        // No Flink cluster should have been created
+        assertEquals(0, flinkService.listJobs().size());
+
+        // Later: resuming the job should trigger a real deployment
+        deployment.getSpec().getJob().setState(JobState.RUNNING);
+        deployment.getMetadata().setGeneration(2L);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals(2L, deployment.getStatus().getObservedGeneration());
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testRollbackUpgradeModeHandling(boolean jmStarted) throws Exception {

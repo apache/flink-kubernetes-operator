@@ -43,19 +43,24 @@ public class InitializingBlueStateHandler extends AbstractBlueGreenStateHandler 
     public UpdateControl<FlinkBlueGreenDeployment> handle(BlueGreenContext context) {
         FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
 
-        // Block initial deployment if job.state is SUSPENDED - user must start with RUNNING
+        // Block initial deployment if job.state is SUSPENDED - user must start with RUNNING.
+        // We still record the spec and update observedGeneration so external tools know the
+        // operator has processed this generation.
         var jobSpec = context.getBgDeployment().getSpec().getTemplate().getSpec().getJob();
         if (jobSpec != null && jobSpec.getState() == JobState.SUSPENDED) {
             LOG.info(
                     "Blocking initial deployment '{}' - job.state is SUSPENDED, waiting for RUNNING",
                     context.getBgDeployment().getMetadata().getName());
+            setLastReconciledSpec(context);
             return patchStatusUpdateControl(context, null, JobStatus.SUSPENDED, null);
         }
 
-        // Deploy only if this is the initial deployment (no previous spec exists)
-        // or if we're recovering from a failure and the spec has changed since the last attempt
+        // Deploy only if this is the initial deployment (no previous spec exists),
+        // recovering from a failure, or resuming from a suspended initial state
         if (deploymentStatus.getLastReconciledSpec() == null
                 || (deploymentStatus.getJobStatus().getState().equals(JobStatus.FAILING)
+                        && hasSpecChanged(context))
+                || (deploymentStatus.getJobStatus().getState().equals(JobStatus.SUSPENDED)
                         && hasSpecChanged(context))) {
 
             setLastReconciledSpec(context);
