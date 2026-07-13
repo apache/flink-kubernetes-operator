@@ -577,7 +577,16 @@ public class FlinkBlueGreenDeploymentControllerTest {
         configuration.put(ABORT_GRACE_PERIOD.key(), "1");
         configuration.put(DEPLOYMENT_DELETION_DELAY.key(), "0");
 
+        blueGreenDeployment
+                .getSpec()
+                .setIngress(
+                        IngressSpec.builder()
+                                .template("{{name}}.{{namespace}}.example.com")
+                                .className("nginx")
+                                .build());
+
         var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+        assertIngressPointsToService(BLUE_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
 
         // Trigger the transition to Green
         simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
@@ -611,6 +620,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 0,
                 instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
                 "Abort timer must be cleared once finalized");
+        assertIngressPointsToService(GREEN_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
 
         // Post-cutover restart: Green briefly goes not-ready
         simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
