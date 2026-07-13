@@ -476,6 +476,20 @@ public class BlueGreenDeploymentService {
         TransitionState transitionState =
                 determineTransitionState(context, currentBlueGreenDeploymentType);
 
+        CutoverSchedule schedule =
+                new CutoverSchedule(
+                        instantStrToMillis(
+                                context.getDeploymentStatus().getDeploymentReadyTimestamp()),
+                        BlueGreenUtils.getDeploymentDeletionDelay(context));
+
+        // If an earlier BlueGreenDeployment deleted the previous deployment but failed before
+        // finalizing the transition, there is nothing to roll back to so we must finalize forward
+        // instead of aborting to a deleted target.
+        if (isGoneOrTerminating(transitionState.currentDeployment)
+                && schedule.isPastDeletionDeadline()) {
+            return finalizeBlueGreenDeployment(context, transitionState.nextState);
+        }
+
         if (isChildSuspended(transitionState.nextDeployment)) {
             if (transitionState.nextDeployment.getStatus().getLifecycleState()
                     == ResourceLifecycleState.SUSPENDED) {
@@ -491,11 +505,16 @@ public class BlueGreenDeploymentService {
                     context,
                     transitionState.currentDeployment,
                     transitionState.nextDeployment,
-                    transitionState.nextState);
+                    transitionState.nextState,
+                    schedule);
         } else {
             return shouldWeAbort(
                     context, transitionState.nextDeployment, transitionState.nextState);
         }
+    }
+
+    private static boolean isGoneOrTerminating(FlinkDeployment deployment) {
+        return deployment == null || deployment.getMetadata().getDeletionTimestamp() != null;
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> finalizeSuspendedDeployment(
@@ -581,7 +600,8 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context,
             FlinkDeployment currentDeployment,
             FlinkDeployment nextDeployment,
-            FlinkBlueGreenDeploymentState nextState) {
+            FlinkBlueGreenDeploymentState nextState,
+            CutoverSchedule schedule) {
 
         var deploymentStatus = context.getDeploymentStatus();
 
@@ -590,22 +610,18 @@ public class BlueGreenDeploymentService {
             return finalizeBlueGreenDeployment(context, nextState);
         }
 
-        long deploymentDeletionDelayMs = BlueGreenUtils.getDeploymentDeletionDelay(context);
-        long deploymentReadyTimestamp =
-                instantStrToMillis(deploymentStatus.getDeploymentReadyTimestamp());
-
-        if (deploymentReadyTimestamp == 0) {
+        if (!schedule.readinessRecorded()) {
             LOG.info(
                     "FlinkDeployment '{}' marked ready, rescheduling reconciliation in {} seconds.",
                     nextDeployment.getMetadata().getName(),
-                    deploymentDeletionDelayMs / 1000);
+                    schedule.getDeletionDelayMs() / 1000);
 
             deploymentStatus.setDeploymentReadyTimestamp(Instant.now().toString());
             return patchStatusUpdateControl(context, null, null, null)
-                    .rescheduleAfter(deploymentDeletionDelayMs);
+                    .rescheduleAfter(schedule.getDeletionDelayMs());
         }
 
-        long deletionTimestamp = deploymentReadyTimestamp + deploymentDeletionDelayMs;
+        long deletionTimestamp = schedule.deletionDeadlineMs();
 
         if (deletionTimestamp < System.currentTimeMillis()) {
             return deleteDeployment(currentDeployment, context);
@@ -860,5 +876,24 @@ public class BlueGreenDeploymentService {
         final FlinkDeployment currentDeployment;
         final FlinkDeployment nextDeployment;
         final FlinkBlueGreenDeploymentState nextState;
+    }
+
+    @Getter
+    @AllArgsConstructor
+    private static class CutoverSchedule {
+        final long deploymentReadyTimestampMs;
+        final long deletionDelayMs;
+
+        boolean readinessRecorded() {
+            return deploymentReadyTimestampMs != 0;
+        }
+
+        long deletionDeadlineMs() {
+            return deploymentReadyTimestampMs + deletionDelayMs;
+        }
+
+        boolean isPastDeletionDeadline() {
+            return readinessRecorded() && deletionDeadlineMs() < System.currentTimeMillis();
+        }
     }
 }
