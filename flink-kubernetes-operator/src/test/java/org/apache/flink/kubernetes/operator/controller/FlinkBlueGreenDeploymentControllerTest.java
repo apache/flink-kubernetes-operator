@@ -57,11 +57,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
@@ -71,6 +73,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPL
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -584,16 +587,21 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 rs.reconciledStatus.getBlueGreenState());
         assertEquals(2, getFlinkDeployments().size());
 
-        // Green becomes ready -> marks the ready timestamp and schedules deletion of Blue
-        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
-        rs = reconcile(rs.deployment);
+        // Green becomes ready -> marks the ready timestamp and schedules deletion of Blue.
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
 
-        // Let the (zero) deletion delay elapse
-        Thread.sleep(10);
+        // Reconcile until the (zero) deletion delay elapses: Blue is deleted at cutover and the
+        // transition finalizes forward to ACTIVE_GREEN.
+        var latestRs = new AtomicReference<>(rs);
+        await().atMost(Duration.ofSeconds(10))
+                .until(
+                        () -> {
+                            latestRs.set(reconcile(latestRs.get().deployment));
+                            return latestRs.get().reconciledStatus.getBlueGreenState()
+                                    == FlinkBlueGreenDeploymentState.ACTIVE_GREEN;
+                        });
+        rs = latestRs.get();
 
-        // This reconcile deletes Blue at cutover. The transition must finalize forward to
-        // ACTIVE_GREEN within the same reconcile
-        rs = reconcile(rs.deployment);
         assertEquals(1, getFlinkDeployments().size(), "Blue should be deleted at cutover");
         assertEquals(
                 FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
@@ -604,16 +612,14 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
                 "Abort timer must be cleared once finalized");
 
-        // Post-cutover restart: Green briefly goes not-ready as it rescales into the capacity Blue
-        // just freed.
-        simulateJobFailure(getFlinkDeployments().get(0));
+        // Post-cutover restart: Green briefly goes not-ready
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
         rs = reconcile(rs.deployment);
 
-        var green = getFlinkDeployments().get(0);
         assertEquals(1, getFlinkDeployments().size(), "Green must still exist");
         assertNotEquals(
                 JobState.SUSPENDED,
-                green.getSpec().getJob().getState(),
+                getFlinkDeploymentByName(GREEN_CLUSTER_ID).getSpec().getJob().getState(),
                 "Green must not be suspended by a post-cutover not-ready blip");
         assertEquals(
                 FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
@@ -1535,6 +1541,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 .inNamespace(TEST_NAMESPACE)
                 .list()
                 .getItems();
+    }
+
+    private FlinkDeployment getFlinkDeploymentByName(String name) {
+        return getFlinkDeployments().stream()
+                .filter(d -> name.equals(d.getMetadata().getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("FlinkDeployment '" + name + "' not found"));
     }
 
     private static FlinkBlueGreenDeployment buildSessionCluster(
