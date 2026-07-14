@@ -44,6 +44,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -57,6 +58,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -71,6 +73,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPL
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -556,6 +559,111 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Initiate the redeployment
         testTransitionToGreen(rs, customValue, null);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyGreenFinalizesForwardWhenBlueDeletedButTransitionNotFinalized(
+            FlinkVersion flinkVersion) throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        // Tiny abort grace so the abort deadline is already expired by the time Blue is gone.
+        var configuration = blueGreenDeployment.getSpec().getConfiguration();
+        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
+        configuration.put(DEPLOYMENT_DELETION_DELAY.key(), "0");
+
+        blueGreenDeployment
+                .getSpec()
+                .setIngress(
+                        IngressSpec.builder()
+                                .template("{{name}}.{{namespace}}.example.com")
+                                .className("nginx")
+                                .build());
+
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+        assertIngressPointsToService(BLUE_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // Trigger the transition to Green
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(2, getFlinkDeployments().size());
+
+        // Green becomes ready -> marks the ready timestamp and schedules deletion of Blue. Blue is
+        // not deleted in this reconcile (deletion happens on the next one), so we stay in
+        // TRANSITIONING_TO_GREEN. This is the last parent status that was persisted before the
+        // (simulated) crash.
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertTrue(
+                instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()) > 0,
+                "Ready timestamp must be set once Green is ready (cutover reached)");
+        var preFinalize = rs.deployment;
+        // Ingress still points to Blue here (cutover hasn't happened). Capture it: the loop below
+        // runs the real finalize, which prematurely flips the ingress to Green. Restoring this
+        // pre-cutover ingress models the ingress write being part of the same lost finalize, so the
+        // recovery reconcile is what actually performs the Blue -> Green cutover.
+        var preFinalizeIngress = captureManagedIngress();
+
+        // Let the controller actually delete Blue at cutover via its real delete path. We keep
+        // reconciling from preFinalize and wait for Blue to be gone. The ACTIVE_GREEN status this
+        // finalize would have persisted is intentionally discarded below, modelling a crash after
+        // the delete was accepted but before the finalizing status patch persisted.
+        await().atMost(Duration.ofSeconds(10))
+                .until(
+                        () -> {
+                            reconcile(preFinalize);
+                            return getFlinkDeployments().size() == 1;
+                        });
+
+        // Restore the pre-cutover (Blue) ingress so the recovery reconcile must perform the flip.
+        restoreIngress(preFinalizeIngress);
+        assertIngressPointsToService(BLUE_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // Crash gap: recovery resumes from the last persisted parent status (preFinalize: still
+        // TRANSITIONING_TO_GREEN with the ready timestamp set) while Blue is already gone. Green is
+        // momentarily not-ready, the exact condition that previously caused a rollback to the
+        // already-deleted Blue.
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(preFinalize);
+        assertEquals(1, getFlinkDeployments().size(), "Only Green must remain after cutover");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Transition must commit forward to ACTIVE_GREEN once Blue is deleted");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
+                "Abort timer must be cleared once finalized");
+        assertNotEquals(
+                JobState.SUSPENDED,
+                getFlinkDeploymentByName(GREEN_CLUSTER_ID).getSpec().getJob().getState(),
+                "Green must not be suspended by a not-ready blip after Blue is deleted");
+        // Cutover contract: ingress must point to Green.
+        assertIngressPointsToService(GREEN_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // Post-cutover restart: Green briefly goes not-ready again
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(rs.deployment);
+        assertEquals(1, getFlinkDeployments().size(), "Green must still exist");
+        assertNotEquals(
+                JobState.SUSPENDED,
+                getFlinkDeploymentByName(GREEN_CLUSTER_ID).getSpec().getJob().getState(),
+                "Green must not be suspended by a post-cutover not-ready blip");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Must remain ACTIVE_GREEN; must not roll back after cutover");
     }
 
     private static String getFlinkConfigurationValue(
@@ -1474,6 +1582,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 .getItems();
     }
 
+    private FlinkDeployment getFlinkDeploymentByName(String name) {
+        return getFlinkDeployments().stream()
+                .filter(d -> name.equals(d.getMetadata().getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("FlinkDeployment '" + name + "' not found"));
+    }
+
     private static FlinkBlueGreenDeployment buildSessionCluster(
             String name,
             String namespace,
@@ -1550,6 +1665,19 @@ public class FlinkBlueGreenDeploymentControllerTest {
     }
 
     // ==================== Ingress Helper Methods ====================
+
+    private HasMetadata captureManagedIngress() {
+        return IngressUtils.ingressInNetworkingV1(kubernetesClient)
+                ? getIngressV1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE)
+                : getIngressV1beta1(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE);
+    }
+
+    private void restoreIngress(HasMetadata ingress) {
+        // Clear the resourceVersion so the replace isn't rejected by optimistic locking (the live
+        // object's version changed when the loop's finalize flipped it).
+        ingress.getMetadata().setResourceVersion(null);
+        kubernetesClient.resource(ingress).update();
+    }
 
     private void assertIngressPointsToService(String expectedServiceName) {
         if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
