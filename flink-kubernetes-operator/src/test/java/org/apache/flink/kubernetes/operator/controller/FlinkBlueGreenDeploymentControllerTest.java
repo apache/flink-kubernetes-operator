@@ -63,6 +63,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
@@ -716,8 +717,17 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // 4) Green then goes unhealthy and the abort grace elapses -> abort back to ACTIVE_BLUE.
         simulateJobFailure(getFlinkDeployments().get(1));
-        Thread.sleep(abortGracePeriodMs);
-        rs = reconcile(rs.deployment);
+        var abortRef = new AtomicReference<>(rs);
+        await().atMost(2L * abortGracePeriodMs, TimeUnit.MILLISECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            abortRef.set(reconcile(abortRef.get().deployment));
+                            assertEquals(
+                                    FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                                    abortRef.get().reconciledStatus.getBlueGreenState());
+                        });
+        rs = abortRef.get();
 
         assertFailingJobStatus(rs);
         assertEquals(
@@ -804,8 +814,15 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // 7) Wait out the (re-armed) delete-Blue delay, then reconcile -> Blue is finally deleted
         //    and only Green remains.
         var greenDeploymentName = getFlinkDeployments().get(1).getMetadata().getName();
-        Thread.sleep(rs.updateControl.getScheduleDelay().get());
-        reconcile(rs.deployment);
+        var deleteRef = new AtomicReference<>(rs);
+        await().atMost(2L * deletionDelayMs, TimeUnit.MILLISECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            deleteRef.set(reconcile(deleteRef.get().deployment));
+                            assertEquals(1, getFlinkDeployments().size());
+                        });
+        rs = deleteRef.get();
 
         var flinkDeployments = getFlinkDeployments();
         assertEquals(
