@@ -57,11 +57,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
@@ -71,6 +73,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPL
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -556,6 +559,82 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Initiate the redeployment
         testTransitionToGreen(rs, customValue, null);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyGreenNotAbortedWhenNotReadyAfterBlueDeleted(FlinkVersion flinkVersion)
+            throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        // Tiny abort grace so the abort deadline is already expired by the time Blue is deleted.
+        var configuration = blueGreenDeployment.getSpec().getConfiguration();
+        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
+        configuration.put(DEPLOYMENT_DELETION_DELAY.key(), "0");
+
+        blueGreenDeployment
+                .getSpec()
+                .setIngress(
+                        IngressSpec.builder()
+                                .template("{{name}}.{{namespace}}.example.com")
+                                .className("nginx")
+                                .build());
+
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+        assertIngressPointsToService(BLUE_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // Trigger the transition to Green
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(2, getFlinkDeployments().size());
+
+        // Green becomes ready -> marks the ready timestamp and schedules deletion of Blue.
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+
+        // Reconcile until the (zero) deletion delay elapses: Blue is deleted at cutover and the
+        // transition finalizes forward to ACTIVE_GREEN.
+        var latestRs = new AtomicReference<>(rs);
+        await().atMost(Duration.ofSeconds(10))
+                .until(
+                        () -> {
+                            latestRs.set(reconcile(latestRs.get().deployment));
+                            return latestRs.get().reconciledStatus.getBlueGreenState()
+                                    == FlinkBlueGreenDeploymentState.ACTIVE_GREEN;
+                        });
+        rs = latestRs.get();
+
+        assertEquals(1, getFlinkDeployments().size(), "Blue should be deleted at cutover");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Transition must commit forward to ACTIVE_GREEN when Blue is deleted");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
+                "Abort timer must be cleared once finalized");
+        assertIngressPointsToService(GREEN_CLUSTER_ID + REST_SVC_NAME_SUFFIX);
+
+        // Post-cutover restart: Green briefly goes not-ready
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(rs.deployment);
+
+        assertEquals(1, getFlinkDeployments().size(), "Green must still exist");
+        assertNotEquals(
+                JobState.SUSPENDED,
+                getFlinkDeploymentByName(GREEN_CLUSTER_ID).getSpec().getJob().getState(),
+                "Green must not be suspended by a post-cutover not-ready blip");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Must remain ACTIVE_GREEN; must not roll back after cutover");
     }
 
     private static String getFlinkConfigurationValue(
@@ -1472,6 +1551,13 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 .inNamespace(TEST_NAMESPACE)
                 .list()
                 .getItems();
+    }
+
+    private FlinkDeployment getFlinkDeploymentByName(String name) {
+        return getFlinkDeployments().stream()
+                .filter(d -> name.equals(d.getMetadata().getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("FlinkDeployment '" + name + "' not found"));
     }
 
     private static FlinkBlueGreenDeployment buildSessionCluster(

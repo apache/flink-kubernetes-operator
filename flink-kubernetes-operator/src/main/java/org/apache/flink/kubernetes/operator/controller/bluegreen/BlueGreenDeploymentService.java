@@ -608,7 +608,7 @@ public class BlueGreenDeploymentService {
         long deletionTimestamp = deploymentReadyTimestamp + deploymentDeletionDelayMs;
 
         if (deletionTimestamp < System.currentTimeMillis()) {
-            return deleteDeployment(currentDeployment, context);
+            return deleteDeployment(currentDeployment, context, nextState);
         } else {
             return waitBeforeDeleting(currentDeployment, deletionTimestamp);
         }
@@ -627,17 +627,20 @@ public class BlueGreenDeploymentService {
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> deleteDeployment(
-            FlinkDeployment currentDeployment, BlueGreenContext context) {
+            FlinkDeployment currentDeployment,
+            BlueGreenContext context,
+            FlinkBlueGreenDeploymentState nextState) {
 
         boolean deleted = deleteFlinkDeployment(currentDeployment, context);
 
         if (!deleted) {
             LOG.info("FlinkDeployment '{}' not deleted, will retry", currentDeployment);
+            return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                    .rescheduleAfter(RETRY_DELAY_MS);
         } else {
             LOG.info("FlinkDeployment '{}' deleted!", currentDeployment);
+            return finalizeBlueGreenDeployment(context, nextState);
         }
-
-        return UpdateControl.<FlinkBlueGreenDeployment>noUpdate().rescheduleAfter(RETRY_DELAY_MS);
     }
 
     // ==================== Abort and Retry Methods ====================
