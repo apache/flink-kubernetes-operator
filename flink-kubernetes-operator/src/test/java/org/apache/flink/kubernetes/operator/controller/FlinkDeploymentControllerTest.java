@@ -214,9 +214,6 @@ public class FlinkDeploymentControllerTest {
         }
 
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
-        // Simulate a cluster whose actual registered TaskManager count differs from the
-        // spec-derived count (parallelism 1), so the assertion below verifies the value observed
-        // from the running cluster rather than a spec-derived one.
         flinkService.setTaskManagerReplicas(3);
         verifyReconcileNormalLifecycle(appCluster);
         var jobs = flinkService.listJobs();
@@ -382,8 +379,6 @@ public class FlinkDeploymentControllerTest {
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
-        // The actual replica count is populated during observation from the running cluster; right
-        // after reconciliation (cluster not yet observed) it stays 0.
         assertEquals(
                 new TaskManagerInfo(
                         FlinkUtils.getTaskManagerLabelSelector(appCluster.getMetadata().getName()),

@@ -99,11 +99,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
-        // The actual number of TaskManagers registered with the cluster (e.g. fluctuating in
-        // reactive mode), independent of the spec-derived count.
         flinkService.setTaskManagerReplicas(5);
-
-        // Drive the deployment to a ready state so cluster info gets observed.
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -112,41 +108,18 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         var labelSelector =
                 FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
-
-        // The status reflects the actual count from the cluster, not ceil(parallelism / slots).
         assertEquals(
                 new TaskManagerInfo(labelSelector, 5), deployment.getStatus().getTaskManager());
 
-        // The reported count tracks the actual cluster state across observations.
         flinkService.setTaskManagerReplicas(3);
         observer.observe(deployment, readyContext);
         assertEquals(
                 new TaskManagerInfo(labelSelector, 3), deployment.getStatus().getTaskManager());
-    }
 
-    @Test
-    public void observePreservesTaskManagerOnFetchFailure() throws Exception {
-        Configuration conf =
-                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-
-        observer.observe(deployment, TestUtils.createEmptyContext());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-
-        flinkService.setTaskManagerReplicas(4);
-        observer.observe(deployment, readyContext);
-        observer.observe(deployment, readyContext);
-
-        var labelSelector =
-                FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
-        assertEquals(
-                new TaskManagerInfo(labelSelector, 4), deployment.getStatus().getTaskManager());
-
-        // A failure while fetching the cluster info must not overwrite the last known good value.
         flinkService.setTaskManagerReplicasError(true);
         observer.observe(deployment, readyContext);
         assertEquals(
-                new TaskManagerInfo(labelSelector, 4), deployment.getStatus().getTaskManager());
+                new TaskManagerInfo(labelSelector, 3), deployment.getStatus().getTaskManager());
     }
 
     @Test

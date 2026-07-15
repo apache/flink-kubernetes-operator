@@ -351,7 +351,6 @@ public class FlinkUtils {
                 || haMode.equalsIgnoreCase("kubernetes");
     }
 
-    /** Builds the label selector matching the TaskManager pods of the given cluster. */
     public static String getTaskManagerLabelSelector(String clusterId) {
         return "component=taskmanager,app=" + clusterId;
     }

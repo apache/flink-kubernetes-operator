@@ -36,12 +36,7 @@ public class SessionObserver extends AbstractFlinkDeploymentObserver {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
             logger.debug("Observing session cluster");
-            var observeConfig = ctx.getObserveConfig();
-            // The TaskManager count also exercises the /taskmanagers REST endpoint, keeping the
-            // health-check coverage getClusterInfo previously provided when it fetched the count
-            // itself.
-            var taskManagerReplicas = ctx.getFlinkService().getTaskManagerReplicas(observeConfig);
-            ctx.getFlinkService().getClusterInfo(observeConfig, null, taskManagerReplicas);
+            ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig(), null);
             var rs = ctx.getResource().getStatus().getReconciliationStatus();
             if (rs.getState() == ReconciliationState.DEPLOYED) {
                 rs.markReconciledSpecAsStable();

@@ -107,11 +107,7 @@ public class SessionObserverTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
-        // The actual number of TaskManagers registered with the session cluster, independent of
-        // any spec-derived count.
         flinkService.setTaskManagerReplicas(5);
-
-        // Drive the session cluster to a ready state so cluster info gets observed.
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -123,7 +119,6 @@ public class SessionObserverTest extends OperatorTestBase {
         assertEquals(
                 new TaskManagerInfo(labelSelector, 5), deployment.getStatus().getTaskManager());
 
-        // The reported count tracks the actual cluster state across observations.
         flinkService.setTaskManagerReplicas(2);
         observer.observe(deployment, readyContext);
         assertEquals(
