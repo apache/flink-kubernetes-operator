@@ -63,6 +63,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
@@ -548,7 +549,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(
                 ReconciliationState.UPGRADING,
                 flinkDeployments.get(1).getStatus().getReconciliationStatus().getState());
-        assertTrue(instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()) > 0);
+        assertEquals(0, instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()));
         // savepointTriggerId must be cleared on abort so the next transition
         // triggers a fresh savepoint instead of reusing a stale triggerId
         assertNull(rs.reconciledStatus.getSavepointTriggerId());
@@ -635,6 +636,214 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
                 rs.reconciledStatus.getBlueGreenState(),
                 "Must remain ACTIVE_GREEN; must not roll back after cutover");
+    }
+
+    /** Regression test: an aborted transition must reset the delete-Blue deletion delay. */
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyReadyTimestampResetOnAbortPreventsPrematureBlueDelete(
+            FlinkVersion flinkVersion) throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.SAVEPOINT);
+
+        // Abort grace long enough to let Green be marked ready before any abort fires;
+        // a non-trivial deletion delay so the delete-Blue wait is observable.
+        var abortGracePeriodMs = 1500;
+        var deletionDelayMs = 1000;
+        Map<String, String> configuration = blueGreenDeployment.getSpec().getConfiguration();
+        configuration.put(ABORT_GRACE_PERIOD.key(), String.valueOf(abortGracePeriodMs));
+        configuration.put(DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(deletionDelayMs));
+        configuration.put(RECONCILIATION_RESCHEDULING_INTERVAL.key(), "500");
+
+        // 1) Bring up ACTIVE_BLUE.
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+        assertEquals(
+                1, getFlinkDeployments().size(), "only Blue should exist before any transition");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must be running once ACTIVE_BLUE is established");
+
+        // 2) Spec change -> savepoint Blue (sets savepointTriggerId) -> start the (first)
+        //    transition to Green.
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs = handleSavepoint(rs);
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must keep running when the transition to Green starts");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(1).getSpec().getJob().getState(),
+                "Green must be running once the transition initiates it");
+
+        // 3) Green becomes ready -> controller marks it ready and arms the delete-Blue delay.
+        //    Blue is intentionally NOT deleted yet (still waiting out the deletion delay).
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
+        rs = reconcile(rs.deployment);
+
+        var firstReadyTimestamp =
+                instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp());
+        var firstAbortTimestamp = instantStrToMillis(rs.reconciledStatus.getAbortTimestamp());
+        var firstSavepointTriggerId = rs.reconciledStatus.getSavepointTriggerId();
+        assertEquals(
+                2, getFlinkDeployments().size(), "Blue must still exist during the delete delay");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must keep running while Green transitions");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(1).getSpec().getJob().getState(),
+                "Green must be running once started");
+        assertTrue(
+                firstReadyTimestamp > 0,
+                "Green should be marked ready, setting deploymentReadyTimestamp");
+        assertTrue(
+                firstAbortTimestamp > 0,
+                "abortTimestamp should be set while transitioning, before the abort");
+        assertNotNull(
+                firstSavepointTriggerId,
+                "savepointTriggerId should be set by the transition's savepoint before the abort");
+
+        // 4) Green then goes unhealthy and the abort grace elapses -> abort back to ACTIVE_BLUE.
+        simulateJobFailure(getFlinkDeployments().get(1));
+        var abortRef = new AtomicReference<>(rs);
+        await().atMost(2L * abortGracePeriodMs, TimeUnit.MILLISECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            abortRef.set(reconcile(abortRef.get().deployment));
+                            assertEquals(
+                                    FlinkBlueGreenDeploymentState.ACTIVE_BLUE,
+                                    abortRef.get().reconciledStatus.getBlueGreenState());
+                        });
+        rs = abortRef.get();
+
+        assertFailingJobStatus(rs);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must keep running after the abort");
+        assertEquals(
+                JobState.SUSPENDED,
+                getFlinkDeployments().get(1).getSpec().getJob().getState(),
+                "Green must be suspended on abort while Blue keeps running");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()),
+                "deploymentReadyTimestamp must be reset to 0 on abort so the next transition re-arms the delete-Blue delay");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()),
+                "abortTimestamp must be reset to 0 on abort, matching the finalize paths");
+        assertNull(
+                rs.reconciledStatus.getSavepointTriggerId(),
+                "savepointTriggerId must be cleared on abort");
+
+        // 5) Redeploy: another spec change -> savepoint Blue again -> transition to Green again.
+        simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
+        rs = handleSavepoint(rs);
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
+                rs.reconciledStatus.getBlueGreenState());
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must keep running during the redeploy transition");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(1).getSpec().getJob().getState(),
+                "Green must be running again after the redeploy re-initiates it");
+        assertEquals(
+                0,
+                instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()),
+                "delete-Blue delay must not be armed until Green reports ready");
+        assertTrue(
+                instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()) > firstAbortTimestamp,
+                "redeploy must set a fresh abortTimestamp, later than the aborted transition's");
+        var redeploySavepointTriggerId = rs.reconciledStatus.getSavepointTriggerId();
+        assertNotNull(redeploySavepointTriggerId, "redeploy must set a savepointTriggerId");
+        assertNotEquals(
+                firstSavepointTriggerId,
+                redeploySavepointTriggerId,
+                "redeploy must set a fresh savepointTriggerId, not reuse the aborted transition's");
+
+        // 6) Green becomes ready again. Blue MUST NOT be deleted immediately — the controller must
+        //    re-arm and wait the full deletion delay first (mark-ready + reschedule), exactly as it
+        //    does on a first transition.
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
+        rs = reconcile(rs.deployment);
+        assertTrue(
+                rs.updateControl.isPatchStatus(),
+                "on redeploy, Green becoming ready must mark-ready and reschedule, not immediately delete Blue");
+        assertTrue(rs.updateControl.getScheduleDelay().isPresent());
+        assertEquals(
+                deletionDelayMs,
+                (long) rs.updateControl.getScheduleDelay().get(),
+                "the delete-Blue deletion delay must be honored on the redeploy");
+        assertEquals(
+                2,
+                getFlinkDeployments().size(),
+                "Blue must still be running while the delete-Blue delay is pending");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(0).getSpec().getJob().getState(),
+                "Blue must keep running while the delete-Blue delay is pending");
+        assertEquals(
+                JobState.RUNNING,
+                getFlinkDeployments().get(1).getSpec().getJob().getState(),
+                "Green must be running while awaiting Blue deletion");
+        assertTrue(
+                instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp())
+                        > firstReadyTimestamp,
+                "Green reporting ready must arm a fresh delete-Blue delay, later than the aborted transition's");
+
+        // 7) Wait out the (re-armed) delete-Blue delay, then reconcile -> Blue is finally deleted
+        //    and only Green remains.
+        var greenDeploymentName = getFlinkDeployments().get(1).getMetadata().getName();
+        var deleteRef = new AtomicReference<>(rs);
+        await().atMost(2L * deletionDelayMs, TimeUnit.MILLISECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            deleteRef.set(reconcile(deleteRef.get().deployment));
+                            assertEquals(1, getFlinkDeployments().size());
+                        });
+        rs = deleteRef.get();
+
+        var flinkDeployments = getFlinkDeployments();
+        assertEquals(
+                1,
+                flinkDeployments.size(),
+                "Blue must be deleted once the re-armed deletion delay elapses");
+        assertEquals(
+                greenDeploymentName,
+                flinkDeployments.get(0).getMetadata().getName(),
+                "the surviving deployment must be Green");
+        assertEquals(
+                JobState.RUNNING,
+                flinkDeployments.get(0).getSpec().getJob().getState(),
+                "Green must remain running after Blue is deleted");
+
+        // 8) Final reconcile finalizes the transition -> ACTIVE_GREEN.
+        rs = reconcile(rs.deployment);
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_GREEN,
+                rs.reconciledStatus.getBlueGreenState(),
+                "Green must become the active state after Blue is deleted");
     }
 
     private static String getFlinkConfigurationValue(
