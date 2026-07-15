@@ -26,6 +26,10 @@ under the License.
 
 # Helm installation
 
+{{< hint info >}}
+The chart supports both **Helm 3 and Helm 4**. It is an `apiVersion: v2` chart, which the Helm 4 CLI installs natively, so a single chart works with either CLI. When installing the `helm-unittest` plugin under Helm 4, pass `--verify=false`.
+{{< /hint >}}
+
 The operator installation is managed by a helm chart. To install with the chart bundled in the source code run:
 
 ```

@@ -24,6 +24,10 @@ on:
       test:
         required: true
         type: string
+      helm-version:
+        required: false
+        type: string
+        default: "v3.17.3"
       create-namespace:
         type: boolean
         default: false
@@ -43,6 +47,15 @@ jobs:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
           cache: 'maven'
+      - name: Set up Helm ${{ inputs.helm-version }}
+        run: |
+          HELM_VERSION=${{ inputs.helm-version }}
+          curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/helm
+          tar -xzf /tmp/helm.tar.gz -C /tmp/helm
+          sudo mv /tmp/helm/linux-amd64/helm /usr/local/bin/helm
+          helm version
       - name: Start minikube
         run: |
           source e2e-tests/utils.sh

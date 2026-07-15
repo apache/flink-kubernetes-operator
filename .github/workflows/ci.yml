@@ -40,7 +40,12 @@ jobs:
   helm_lint_test:
     runs-on: ubuntu-latest
 
-    name: Helm Lint Test
+    name: Helm Lint Test (Helm ${{ matrix.helm-version }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        helm-version: [ "v3.17.3", "v4.1.1" ]
 
     steps:
       - name: Determine branch name
@@ -61,7 +66,7 @@ jobs:
 
       - name: Set up Helm
         run: |
-          HELM_VERSION=v3.17.3
+          HELM_VERSION=${{ matrix.helm-version }}
           curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
           echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tar.gz" | sha256sum -c -
           mkdir -p /tmp/helm
@@ -69,7 +74,12 @@ jobs:
           sudo mv /tmp/helm/linux-amd64/helm /usr/local/bin/helm
 
       - name: Install Helm unittest plugin
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version 0.8.1
+        run: |
+          # Helm 4 rejects git-based plugin installs without provenance; --verify=false
+          # opts out of that check and does not exist on Helm 3.
+          verify_flag=""
+          [[ "${{ matrix.helm-version }}" == v4* ]] && verify_flag="--verify=false"
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version 0.8.1 $verify_flag
 
       - name: Run Helm unittest
         run: helm unittest ${{ env.HELM_CHART_DIR }}/${{ env.FLINK_OPERATOR_CHART }} --file "tests/**/*_test.yaml" --strict --debug
@@ -97,7 +107,12 @@ jobs:
       - name: Run Helm lint
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-          helm lint ${{ env.HELM_CHART_DIR }}/${{ env.FLINK_OPERATOR_CHART }} --strict --debug
+          # Helm 4's lint enforces SemVerV2 on the chart version, which the dev
+          # version (mirroring the Maven X.Y-SNAPSHOT scheme) is not, so --strict
+          # would fail only on Helm 4. Keep --strict on Helm 3.
+          strict_flag="--strict"
+          [[ "${{ matrix.helm-version }}" == v4* ]] && strict_flag=""
+          helm lint ${{ env.HELM_CHART_DIR }}/${{ env.FLINK_OPERATOR_CHART }} $strict_flag --debug
 
       - name: Run chart-testing (lint)
         if: steps.list-changed.outputs.changed == 'true'
@@ -155,6 +170,14 @@ jobs:
       flink-version: "v1_20"
       http-client: ${{ matrix.http-client }}
       test: test_application_operations.sh
+  e2e_smoke_test_helm4:
+    name: Smoke test (Helm 4)
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: "17"
+      flink-version: "v1_20"
+      test: test_application_operations.sh
+      helm-version: "v4.1.1"
   java_runtimes:
     name: Java runtimes smoke test
     needs: e2e_smoke_test
