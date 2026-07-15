@@ -117,17 +117,14 @@ public interface FlinkService {
 
     void disposeSavepoint(String savepointPath, Configuration conf) throws Exception;
 
-    Map<String, String> getClusterInfo(
-            Configuration conf, @Nullable String jobId, int taskManagerReplicas) throws Exception;
-
     /**
-     * Returns the actual number of TaskManagers currently registered with the running Flink
-     * cluster, as reported by the Flink REST API. Unlike the value derived from the spec
-     * (parallelism / slots), this reflects the real cluster state, which is important for
-     * deployments where the TaskManager count fluctuates dynamically (e.g. standalone reactive
-     * mode).
+     * Returns a snapshot of the running Flink cluster: the info map merged into {@code
+     * status.clusterInfo} plus the actual number of TaskManagers currently registered. The replica
+     * count reflects the real cluster state (important for deployments where the TaskManager count
+     * fluctuates dynamically, e.g. standalone reactive mode) rather than a value derived from the
+     * spec.
      */
-    int getTaskManagerReplicas(Configuration conf) throws Exception;
+    ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
 
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 

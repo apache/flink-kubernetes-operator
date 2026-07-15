@@ -81,26 +81,20 @@ public abstract class AbstractFlinkDeploymentObserver
     private void observeClusterInfo(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkApp = ctx.getResource();
         try {
-            var observeConfig = ctx.getObserveConfig();
-            // Fetch the actual number of registered TaskManagers once and reuse it both for the
-            // cluster resource totals and the reported replica count, so a single /taskmanagers
-            // call backs a consistent snapshot.
-            var replicas = ctx.getFlinkService().getTaskManagerReplicas(observeConfig);
-            Map<String, String> clusterInfo =
+            var clusterInfo =
                     ctx.getFlinkService()
                             .getClusterInfo(
-                                    observeConfig,
-                                    flinkApp.getStatus().getJobStatus().getJobId(),
-                                    replicas);
-            flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
+                                    ctx.getObserveConfig(),
+                                    flinkApp.getStatus().getJobStatus().getJobId());
+            flinkApp.getStatus().getClusterInfo().putAll(clusterInfo.getInfo());
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
 
-            // Report the actual number of TaskManagers registered with the running cluster rather
-            // than a value derived from the spec, so the status reflects dynamically changing
-            // deployments (e.g. standalone reactive mode).
             var labelSelector =
                     FlinkUtils.getTaskManagerLabelSelector(flinkApp.getMetadata().getName());
-            flinkApp.getStatus().setTaskManager(new TaskManagerInfo(labelSelector, replicas));
+            flinkApp.getStatus()
+                    .setTaskManager(
+                            new TaskManagerInfo(
+                                    labelSelector, clusterInfo.getTaskManagerReplicas()));
         } catch (Exception e) {
             logger.warn("Exception while fetching cluster info", e);
         }
