@@ -152,6 +152,9 @@ webhook:
   #   create: true
   # mutator:
   #   create: true
+  # Name of the Kubernetes Secret that stores the webhook TLS certificate.
+  # Defaults to {{ .Release.Name }}-webhook-server-cert if not set.
+  # certSecretName: custom-webhook-cert-secret
   keystore:
     useDefaultPassword: true
     passwordSecretRef:

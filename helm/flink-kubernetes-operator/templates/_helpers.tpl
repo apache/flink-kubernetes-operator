@@ -89,3 +89,10 @@ Supported values for .Values.logging.framework: "log4j2" (default), "logback".
 -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
 {{- end -}}
 {{- end }}
+
+{{/*
+Create the name of the webhook certificate secret.
+*/}}
+{{- define "flink-operator.webhookCertSecretName" -}}
+{{- default (printf "%s-webhook-server-cert" .Release.Name) .Values.webhook.certSecretName }}
+{{- end }}
