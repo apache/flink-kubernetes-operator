@@ -383,3 +383,16 @@ tests:
         key: log4j-operator.properties
         path: log4j-operator.properties
 
+- it: Should mount the operator config as config.yaml by default
+  asserts:
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: config.yaml
+        path: config.yaml
+  - notContains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: flink-conf.yaml
+        path: flink-conf.yaml
+

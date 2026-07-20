@@ -121,7 +121,7 @@ basic-session-example-rest   LoadBalancer   10.96.36.250   127.0.0.1     8081:30
 ```
 The operator picks up the default log and flink configurations from `/opt/flink/conf`. You can put the rest configuration parameters here:
 ```bash
-cat /opt/flink/conf/flink-conf.yaml
+cat /opt/flink/conf/config.yaml
 rest.port: 8081
 rest.address: localhost
 kubernetes.rest-service.exposed.type: LoadBalancer
