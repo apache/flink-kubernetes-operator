@@ -117,7 +117,14 @@ public interface FlinkService {
 
     void disposeSavepoint(String savepointPath, Configuration conf) throws Exception;
 
-    Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
+    /**
+     * Returns a snapshot of the running Flink cluster: the info map merged into {@code
+     * status.clusterInfo} plus the actual number of TaskManagers currently registered. The replica
+     * count reflects the real cluster state (important for deployments where the TaskManager count
+     * fluctuates dynamically, e.g. standalone reactive mode) rather than a value derived from the
+     * spec.
+     */
+    ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
 
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 

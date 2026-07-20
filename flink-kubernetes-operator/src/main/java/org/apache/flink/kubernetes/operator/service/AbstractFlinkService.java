@@ -787,23 +787,22 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId)
-            throws Exception {
-        Map<String, String> clusterInfo = new HashMap<>();
+    public ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception {
+        int taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        Map<String, String> info = new HashMap<>();
 
-        populateFlinkVersion(conf, clusterInfo);
+        populateFlinkVersion(conf, info);
 
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
-        clusterInfo.put(
+        info.put(
                 FIELD_NAME_TOTAL_CPU,
                 String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
-        clusterInfo.put(
+        info.put(
                 FIELD_NAME_TOTAL_MEMORY,
                 String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
 
-        populateStateSize(conf, jobId, clusterInfo);
+        populateStateSize(conf, jobId, info);
 
-        return clusterInfo;
+        return new ClusterInfo(info, taskManagerReplicas);
     }
 
     private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)

@@ -1195,14 +1195,16 @@ public class AbstractFlinkServiceTest {
                         AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
                         "" + MemorySize.ofMebiBytes(1000).getBytes() * 2);
 
-        assertEquals(expectedEntries, flinkService.getClusterInfo(conf, null));
+        var clusterInfo = flinkService.getClusterInfo(conf, null);
+        assertEquals(1, clusterInfo.getTaskManagerReplicas());
+        assertEquals(expectedEntries, clusterInfo.getInfo());
 
         assertEquals(
                 ImmutableMap.<String, String>builder()
                         .putAll(expectedEntries)
                         .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
                         .build(),
-                flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
+                flinkService.getClusterInfo(conf, JobID.generate().toHexString()).getInfo());
     }
 
     @Test

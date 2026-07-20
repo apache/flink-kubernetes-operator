@@ -375,4 +375,4 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | labelSelector | java.lang.String | TaskManager label selector. |
-| replicas | int | Number of TaskManager replicas if defined in the spec. |
+| replicas | int | Actual number of TaskManagers registered with the running Flink cluster. This is 0 until the running cluster has been observed (which only happens once the JobManager is ready) and may transiently report a partial count while TaskManagers are still registering. |

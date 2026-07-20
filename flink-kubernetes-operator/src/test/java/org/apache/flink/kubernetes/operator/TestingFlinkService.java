@@ -49,8 +49,10 @@ import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
+import org.apache.flink.kubernetes.operator.service.ClusterInfo;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.DuplicateJobSubmissionException;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
@@ -155,6 +157,13 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
+
+    // Simulates the actual number of TaskManagers registered with the cluster. When null, a
+    // converged cluster is assumed and the count is derived from the spec.
+    @Setter private Integer taskManagerReplicas = null;
+
+    // When set, getClusterInfo throws to simulate a REST failure while fetching the TM count.
+    @Setter private boolean taskManagerReplicasError = false;
 
     @Getter private Configuration submittedConf;
 
@@ -717,12 +726,18 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf, String jobId)
-            throws TimeoutException {
+    public ClusterInfo getClusterInfo(Configuration conf, String jobId) throws TimeoutException {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }
-        return CLUSTER_INFO;
+        if (taskManagerReplicasError) {
+            throw new RuntimeException("Failed to fetch TaskManager count");
+        }
+        int replicas =
+                taskManagerReplicas != null
+                        ? taskManagerReplicas
+                        : FlinkUtils.getNumTaskManagers(conf);
+        return new ClusterInfo(CLUSTER_INFO, replicas);
     }
 
     @Override
