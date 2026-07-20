@@ -1243,9 +1243,10 @@ public abstract class AbstractFlinkService implements FlinkService {
                         Objects::isNull, timeout.toMillis(), TimeUnit.MILLISECONDS);
                 LOG.info("Completed {}", operation);
             } catch (KubernetesClientException kce) {
-                // We completely ignore not found errors and simply log others
+                // Not found means deletion completed. Other errors must abort this reconcile so a
+                // replacement cluster is not submitted while the old deployment still exists.
                 if (kce.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
-                    LOG.warn("Error while " + operation, kce);
+                    throw kce;
                 }
             }
         }
