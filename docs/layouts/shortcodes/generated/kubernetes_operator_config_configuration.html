@@ -429,6 +429,12 @@
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.session-job.cancel-existing-on-submit</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>When enabled, before submitting a FlinkSessionJob the operator cancels any non-terminal job already running on the session cluster that has the same Flink job name (pipeline.name, which defaults to the resource name). This prevents duplicate jobs when a previous job was orphaned on the session cluster (for example its FlinkSessionJob was deleted while the cluster was unreachable) and the resource is later recreated. Applies only to new submissions, not to deployment retries.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.session.deletion.block-on-session-jobs</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
