@@ -143,6 +143,26 @@ public class AutoScalerOptions {
                                     + "Reducing the frequency of job restarts can improve job availability. "
                                     + "Scale down can be executed directly if it's less than or equal 0.");
 
+    public static final ConfigOption<Boolean> DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED =
+            autoScalerConfig("dynamic-source.topology-correction.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("dynamic-source.topology-correction.enabled"))
+                    .withDescription(
+                            "Enables topology correction from the optional "
+                                    + "DynamicKafkaSource.activeSplitCount gauge. Missing or "
+                                    + "incomplete data falls back to legacy behavior. Valid data "
+                                    + "caps ordinary source scaling; persistently fewer active "
+                                    + "splits than parallelism bypasses the scale-down delay, "
+                                    + "while a "
+                                    + "persistent empty-reader hole may request one controlled "
+                                    + "same-parallelism recovery. The Kubernetes realizer supports "
+                                    + "LAST_STATE jobs only. This is disabled by default. Enable "
+                                    + "it only when the source/runtime restore semantics "
+                                    + "redistribute active splits after recovery for the "
+                                    + "configured source mode.");
+
     public static final ConfigOption<Integer> VERTEX_MIN_PARALLELISM =
             autoScalerConfig("vertex.min-parallelism")
                     .intType()

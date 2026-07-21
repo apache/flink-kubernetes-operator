@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -53,11 +54,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
@@ -66,6 +69,8 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_S
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.copyScalingSummaries;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT;
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -80,8 +85,28 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             "Resource usage is above the allowed limit for scaling operations. Please adjust the resource quota manually.";
 
     public static final String SCALING_VETOED_REASON = "ScalingVetoed";
+    public static final String SOURCE_ASSIGNMENT_REBALANCE_REASON = "SourceAssignmentRebalance";
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
+
+    /** One job-level same-parallelism recovery request for observed dynamic-source holes. */
+    static class SourceAssignmentRebalanceRequest {
+        private final Set<JobVertexID> vertices;
+        private final long requestId;
+
+        SourceAssignmentRebalanceRequest(Set<JobVertexID> vertices, long requestId) {
+            this.vertices = vertices;
+            this.requestId = requestId;
+        }
+
+        Set<JobVertexID> getVertices() {
+            return vertices;
+        }
+
+        long getRequestId() {
+            return requestId;
+        }
+    }
 
     private final JobVertexScaler<KEY, Context> jobVertexScaler;
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
@@ -239,6 +264,139 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         delayedScaleDown.clearAll();
 
         return true;
+    }
+
+    /**
+     * Detect assignment holes that cannot be repaired by changing parallelism.
+     *
+     * <p>When a source has at least as many active splits as readers ({@code N >= P}) but the
+     * minimum reader count is zero, a same-parallelism recovery lets the source redistribute the
+     * active splits. The condition must hold for every sample retained in the metrics window so a
+     * transient empty reader during reassignment does not restart the job. A small durable latch
+     * keeps one stable restart nonce for the continuous hole; missing optional metrics leave that
+     * latch untouched, and a persistent non-hole topology clears it.
+     */
+    @VisibleForTesting
+    Optional<SourceAssignmentRebalanceRequest> getSourceAssignmentRebalanceRequest(
+            Context context,
+            JobTopology jobTopology,
+            SortedMap<Instant, CollectedMetrics> metricHistory,
+            DelayedScaleDown delayedScaleDown,
+            Instant now) {
+        var conf = context.getConfiguration();
+        if (!conf.get(DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED)) {
+            delayedScaleDown.clearSourceAssignmentRebalance();
+            return Optional.empty();
+        }
+        if (metricHistory.isEmpty()) {
+            return Optional.empty();
+        }
+
+        var holes = new HashSet<JobVertexID>();
+        var recoveredTrackedVertices = new HashSet<String>();
+        var trackedVertices = delayedScaleDown.getSourceAssignmentRebalanceVertices();
+        var currentVertexIds = new HashSet<String>();
+        var latestVertexMetrics = metricHistory.get(metricHistory.lastKey()).getVertexMetrics();
+        var excludedVertexIds = conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+
+        for (var vertex : jobTopology.getVertexInfos().keySet()) {
+            var vertexId = vertex.toHexString();
+            currentVertexIds.add(vertexId);
+            if (!jobTopology.isSource(vertex) || excludedVertexIds.contains(vertexId)) {
+                if (trackedVertices.contains(vertexId)) {
+                    recoveredTrackedVertices.add(vertexId);
+                }
+                continue;
+            }
+
+            int parallelism = jobTopology.get(vertex).getParallelism();
+            var metrics = latestVertexMetrics.get(vertex);
+            if (parallelism <= 0 || !hasValidSourceAssignmentMetrics(metrics)) {
+                continue;
+            }
+
+            if (hasSourceAssignmentHole(metrics, parallelism)) {
+                if (hasPersistentSourceAssignmentHole(vertex, parallelism, metricHistory)) {
+                    holes.add(vertex);
+                }
+            } else if (trackedVertices.contains(vertexId)
+                    && hasPersistentSourceAssignmentNonHole(vertex, parallelism, metricHistory)) {
+                // N < P is handled by the partition-cap path; N == 0 or min > 0 is non-hole.
+                // Require the same full-window stability as hole detection before re-arming.
+                recoveredTrackedVertices.add(vertexId);
+            }
+        }
+
+        trackedVertices.stream()
+                .filter(vertexId -> !currentVertexIds.contains(vertexId))
+                .forEach(recoveredTrackedVertices::add);
+        if (!trackedVertices.isEmpty() && recoveredTrackedVertices.containsAll(trackedVertices)) {
+            delayedScaleDown.clearSourceAssignmentRebalance();
+        }
+
+        if (holes.isEmpty()
+                || !conf.get(SCALING_ENABLED)
+                || CalendarUtils.inExcludedPeriods(conf, now)) {
+            return Optional.empty();
+        }
+
+        long requestId =
+                delayedScaleDown.getOrCreateSourceAssignmentRebalanceRequestId(
+                        holes, now.toEpochMilli());
+        return Optional.of(new SourceAssignmentRebalanceRequest(holes, requestId));
+    }
+
+    private static boolean hasPersistentSourceAssignmentHole(
+            JobVertexID vertex,
+            int parallelism,
+            SortedMap<Instant, CollectedMetrics> metricHistory) {
+        return metricHistory.values().stream()
+                .allMatch(
+                        collectedMetrics -> {
+                            var vertexMetrics = collectedMetrics.getVertexMetrics().get(vertex);
+                            return hasValidSourceAssignmentMetrics(vertexMetrics)
+                                    && hasSourceAssignmentHole(vertexMetrics, parallelism);
+                        });
+    }
+
+    private static boolean hasPersistentSourceAssignmentNonHole(
+            JobVertexID vertex,
+            int parallelism,
+            SortedMap<Instant, CollectedMetrics> metricHistory) {
+        return metricHistory.values().stream()
+                .allMatch(
+                        collectedMetrics -> {
+                            var vertexMetrics = collectedMetrics.getVertexMetrics().get(vertex);
+                            return hasValidSourceAssignmentMetrics(vertexMetrics)
+                                    && !hasSourceAssignmentHole(vertexMetrics, parallelism);
+                        });
+    }
+
+    private static boolean hasValidSourceAssignmentMetrics(
+            @Nullable Map<ScalingMetric, Double> metrics) {
+        if (metrics == null) {
+            return false;
+        }
+
+        var activeSplitCount = metrics.get(ACTIVE_SOURCE_SPLIT_COUNT);
+        var minActiveSplitCount = metrics.get(MIN_ACTIVE_SOURCE_SPLIT_COUNT);
+        return isWholeNonNegativeValue(activeSplitCount)
+                && isWholeNonNegativeValue(minActiveSplitCount)
+                && minActiveSplitCount <= activeSplitCount;
+    }
+
+    private static boolean hasSourceAssignmentHole(
+            Map<ScalingMetric, Double> metrics, int parallelism) {
+        return metrics.get(ACTIVE_SOURCE_SPLIT_COUNT) >= parallelism
+                && metrics.get(MIN_ACTIVE_SOURCE_SPLIT_COUNT) == 0;
+    }
+
+    private static boolean isWholeNonNegativeValue(@Nullable Double value) {
+        return value != null
+                && Double.isFinite(value)
+                && value >= 0
+                && value <= Integer.MAX_VALUE
+                && value == Math.rint(value);
     }
 
     private void updateRecommendedParallelism(

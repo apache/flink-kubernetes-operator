@@ -57,6 +57,20 @@ public enum ScalingMetric {
     /** Source vertex partition count. */
     NUM_SOURCE_PARTITIONS(false),
 
+    /**
+     * Active split count reported by a dynamic source's lifetime per-subtask gauge. This is kept
+     * separate from {@link #NUM_SOURCE_PARTITIONS}, whose legacy metric-name counting remains the
+     * partition/alignment input to ordinary utilization scaling; when available, this gauge
+     * supplies an additional upper bound.
+     */
+    ACTIVE_SOURCE_SPLIT_COUNT(false),
+
+    /**
+     * Minimum active split count across dynamic-source subtasks. Zero means at least one reader is
+     * empty while the aggregate active split count is positive.
+     */
+    MIN_ACTIVE_SOURCE_SPLIT_COUNT(false),
+
     /** Upper boundary of the target data rate range. */
     SCALE_UP_RATE_THRESHOLD(false),
 

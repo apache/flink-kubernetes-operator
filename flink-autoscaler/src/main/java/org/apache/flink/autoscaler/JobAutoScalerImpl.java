@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 
 /** The default implementation of {@link JobAutoScaler}. */
 public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -181,7 +182,58 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         if (!metricsEvaluator.evaluate(ctx)) {
             return;
         }
-        if (scalingExecutor.execute(ctx)) {
+        var parallelismChanged = scalingExecutor.execute(ctx);
+        var sourceAssignmentRebalanceTriggered = false;
+        if (!parallelismChanged) {
+            var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
+            var collectedMetrics = cycleState.getCollectedMetrics();
+            var rebalanceRequest =
+                    scalingExecutor.getSourceAssignmentRebalanceRequest(
+                            ctx,
+                            collectedMetrics.getJobTopology(),
+                            collectedMetrics.getMetricHistory(),
+                            delayedScaleDown,
+                            cycleState.getNow());
+            if (rebalanceRequest.isPresent()) {
+                // Persist the stable nonce before mutating desired state. A later pass can retry
+                // the same nonce if reconciliation fails after the realizer accepts it.
+                if (delayedScaleDown.isUpdated()) {
+                    stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
+                    stateStore.flush(ctx);
+                }
+
+                var effectiveRequestId =
+                        scalingRealizer.realizeSourceAssignmentRebalance(
+                                ctx, rebalanceRequest.get().getRequestId());
+                if (effectiveRequestId.isPresent()) {
+                    if (effectiveRequestId.getAsLong() != rebalanceRequest.get().getRequestId()) {
+                        delayedScaleDown.replaceSourceAssignmentRebalanceRequestId(
+                                effectiveRequestId.getAsLong());
+                    }
+                    sourceAssignmentRebalanceTriggered =
+                            !delayedScaleDown.isSourceAssignmentRebalanceTriggered();
+                    delayedScaleDown.markSourceAssignmentRebalanceTriggered();
+                    if (sourceAssignmentRebalanceTriggered) {
+                        eventHandler.handleEvent(
+                                ctx,
+                                AutoScalerEventHandler.Type.Normal,
+                                ScalingExecutor.SOURCE_ASSIGNMENT_REBALANCE_REASON,
+                                String.format(
+                                        "Covered dynamic source assignment holes in vertices %s "
+                                                + "with controlled same-parallelism recovery.",
+                                        rebalanceRequest.get().getVertices()),
+                                ScalingExecutor.SOURCE_ASSIGNMENT_REBALANCE_REASON,
+                                ctx.getConfiguration().get(SCALING_EVENT_INTERVAL));
+                    }
+                }
+            }
+
+            if (delayedScaleDown.isUpdated()) {
+                stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
+            }
+        }
+
+        if (parallelismChanged || sourceAssignmentRebalanceTriggered) {
             autoscalerMetrics.incrementScaling();
         } else {
             autoscalerMetrics.incrementBalanced();

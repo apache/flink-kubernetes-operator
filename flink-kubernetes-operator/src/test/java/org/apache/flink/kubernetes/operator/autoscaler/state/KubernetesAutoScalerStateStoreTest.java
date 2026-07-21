@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler.state;
 
+import org.apache.flink.autoscaler.DelayedScaleDown;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
@@ -37,6 +38,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -124,6 +126,47 @@ public class KubernetesAutoScalerStateStoreTest
         // Make sure we can still access everything
         Assertions.assertEquals(scalingHistory, getTrimmedScalingHistory(stateStore, ctx, newTs));
         assertThat(stateStore.getCollectedMetrics(ctx)).isEqualTo(metricHistory);
+    }
+
+    @Test
+    void testOldDelayedScaleDownStateStillDeserializes() throws Exception {
+        var delayedScaleDown =
+                KubernetesAutoScalerStateStore.YAML_MAPPER.readValue(
+                        "delayedVertices: {}", DelayedScaleDown.class);
+
+        assertThat(delayedScaleDown.getDelayedVertices()).isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceVertices()).isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+        assertThat(delayedScaleDown.isSourceAssignmentRebalanceTriggered()).isFalse();
+    }
+
+    @Test
+    void testSourceAssignmentRecoveryLatchRoundTrips() throws Exception {
+        var vertex = new JobVertexID();
+        var serializedState =
+                KubernetesAutoScalerStateStore.YAML_MAPPER.writeValueAsString(
+                        Map.of(
+                                "delayedVertices",
+                                Map.of(),
+                                "sourceAssignmentRebalanceVertices",
+                                Set.of(vertex.toHexString()),
+                                "sourceAssignmentRebalanceRequestId",
+                                123L,
+                                "sourceAssignmentRebalanceTriggered",
+                                true));
+        var delayedScaleDown =
+                KubernetesAutoScalerStateStore.YAML_MAPPER.readValue(
+                        serializedState, DelayedScaleDown.class);
+        var roundTripped =
+                KubernetesAutoScalerStateStore.YAML_MAPPER.readValue(
+                        KubernetesAutoScalerStateStore.YAML_MAPPER.writeValueAsString(
+                                delayedScaleDown),
+                        DelayedScaleDown.class);
+
+        assertThat(roundTripped.getSourceAssignmentRebalanceVertices())
+                .containsExactly(vertex.toHexString());
+        assertThat(roundTripped.getSourceAssignmentRebalanceRequestId()).isEqualTo(123L);
+        assertThat(roundTripped.isSourceAssignmentRebalanceTriggered()).isTrue();
     }
 
     @Test

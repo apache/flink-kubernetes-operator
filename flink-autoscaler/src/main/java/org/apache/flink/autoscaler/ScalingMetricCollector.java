@@ -31,6 +31,7 @@ import org.apache.flink.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -383,6 +384,13 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     out.put(jobVertexID, vertexScalingMetrics);
 
                     if (jobTopology.isSource(jobVertexID)) {
+                        if (conf.get(
+                                AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED)) {
+                            addDynamicSourceTopologyMetrics(
+                                    jobTopology.get(jobVertexID),
+                                    vertexFlinkMetrics,
+                                    vertexScalingMetrics);
+                        }
                         ScalingMetrics.computeLagMetrics(vertexFlinkMetrics, vertexScalingMetrics);
                     }
 
@@ -421,6 +429,80 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         LOG.debug("Global metrics: {}", globalMetrics);
 
         return new CollectedMetrics(out, globalMetrics);
+    }
+
+    /**
+     * Publish the optional dynamic-source topology signal without changing the legacy source
+     * partition count.
+     *
+     * <p>{@code activeSplitCount} is a lifetime per-subtask gauge. A positive {@code sum / avg}
+     * equals the number of reporting subtasks, so only publish it when every current subtask is
+     * represented. This avoids treating a temporarily incomplete optional metric as a real
+     * partition shrink. An all-zero aggregate cannot prove reporter completeness or produce a
+     * positive parallelism target, so it is retained only as a non-scaling topology observation.
+     */
+    private void addDynamicSourceTopologyMetrics(
+            VertexInfo vertexInfo,
+            Map<FlinkMetric, AggregatedMetric> vertexFlinkMetrics,
+            Map<ScalingMetric, Double> vertexScalingMetrics) {
+        var metric = vertexFlinkMetrics.get(FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT);
+        if (metric == null
+                || metric.getSum() == null
+                || metric.getMin() == null
+                || metric.getAvg() == null) {
+            return;
+        }
+
+        double sum = metric.getSum();
+        double min = metric.getMin();
+        double avg = metric.getAvg();
+        if (sum == 0 && min == 0 && avg == 0) {
+            vertexScalingMetrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, 0D);
+            vertexScalingMetrics.put(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT, 0D);
+            return;
+        }
+
+        if (!isValidWholeCount(sum)
+                || !isValidWholeCount(min)
+                || !Double.isFinite(avg)
+                || avg <= 0
+                || sum == 0
+                || min > sum
+                || sum > Integer.MAX_VALUE
+                || min > Integer.MAX_VALUE) {
+            LOG.debug(
+                    "Ignoring invalid active split aggregate sum={}, min={}, avg={} for {}",
+                    sum,
+                    min,
+                    avg,
+                    vertexInfo.getId());
+            return;
+        }
+
+        double reportingSubtasks = sum / avg;
+        if (!approximatelyEqual(reportingSubtasks, vertexInfo.getParallelism())) {
+            LOG.debug(
+                    "Ignoring incomplete active split aggregate sum={}, min={}, avg={} for {} "
+                            + "at parallelism {}",
+                    sum,
+                    min,
+                    avg,
+                    vertexInfo.getId(),
+                    vertexInfo.getParallelism());
+            return;
+        }
+
+        vertexScalingMetrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, Math.rint(sum));
+        vertexScalingMetrics.put(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT, Math.rint(min));
+    }
+
+    private static boolean isValidWholeCount(double value) {
+        return Double.isFinite(value) && value >= 0 && approximatelyEqual(value, Math.rint(value));
+    }
+
+    private static boolean approximatelyEqual(double left, double right) {
+        return Math.abs(left - right)
+                <= 1e-6 * Math.max(1D, Math.max(Math.abs(left), Math.abs(right)));
     }
 
     private static Supplier<Double> observedTprAvg(
@@ -478,6 +560,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     @SneakyThrows
     private Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
             Context ctx, JobTopology topology, Stream<JobVertexID> vertexStream) {
+        boolean dynamicSourceTopologyCorrectionEnabled =
+                ctx.getConfiguration()
+                        .get(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED);
         try (var restClient = ctx.getRestClusterClient()) {
             return vertexStream
                     .filter(v -> !topology.getFinishedVertices().contains(v))
@@ -485,8 +570,18 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                             Collectors.toMap(
                                     v -> v,
                                     v ->
-                                            getFilteredVertexMetricNames(
-                                                    restClient, ctx.getJobID(), v, topology)));
+                                            dynamicSourceTopologyCorrectionEnabled
+                                                    ? getFilteredVertexMetricNames(
+                                                            restClient,
+                                                            ctx.getJobID(),
+                                                            v,
+                                                            topology,
+                                                            true)
+                                                    : getFilteredVertexMetricNames(
+                                                            restClient,
+                                                            ctx.getJobID(),
+                                                            v,
+                                                            topology)));
         }
     }
 
@@ -496,6 +591,16 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             JobID jobID,
             JobVertexID jobVertexID,
             JobTopology topology) {
+        return getFilteredVertexMetricNames(restClient, jobID, jobVertexID, topology, false);
+    }
+
+    /** Query and filter metric names for a given job vertex. */
+    Map<String, FlinkMetric> getFilteredVertexMetricNames(
+            RestClusterClient<?> restClient,
+            JobID jobID,
+            JobVertexID jobVertexID,
+            JobTopology topology,
+            boolean dynamicSourceTopologyCorrectionEnabled) {
 
         var allMetricNames = queryAggregatedMetricNames(restClient, jobID, jobVertexID);
         var filteredMetrics = new HashMap<String, FlinkMetric>();
@@ -523,6 +628,14 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     .findAny(allMetricNames)
                     .ifPresent(
                             m -> filteredMetrics.put(m, FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT));
+            if (dynamicSourceTopologyCorrectionEnabled) {
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT
+                        .findAny(allMetricNames)
+                        .ifPresent(
+                                m ->
+                                        filteredMetrics.put(
+                                                m, FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT));
+            }
         } else {
             FlinkMetric.NUM_RECORDS_IN_PER_SEC
                     .findAny(allMetricNames)

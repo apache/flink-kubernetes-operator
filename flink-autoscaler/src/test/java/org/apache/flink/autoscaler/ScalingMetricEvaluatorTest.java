@@ -442,6 +442,62 @@ public class ScalingMetricEvaluatorTest {
     }
 
     @Test
+    public void testActiveSplitDeficitRequiresFullMetricsWindow() {
+        assertFalse(
+                evaluateActiveSplitCount(10, 10D, 5D)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+        assertFalse(
+                evaluateActiveSplitCount(10, null, 5D)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+        assertFalse(
+                evaluateActiveSplitCount(10, 5D, 0D)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+
+        assertEquals(
+                EvaluatedScalingMetric.of(4),
+                evaluateActiveSplitCount(10, 5D, 4D).get(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+
+        // N >= P remains available immediately so it can cap later ordinary scale-ups.
+        assertEquals(
+                EvaluatedScalingMetric.of(10),
+                evaluateActiveSplitCount(10, 5D, 10D).get(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+    }
+
+    private Map<ScalingMetric, EvaluatedScalingMetric> evaluateActiveSplitCount(
+            int parallelism, Double... activeSplitCounts) {
+        var source = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), parallelism, 100, null));
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+
+        for (int i = 0; i < activeSplitCounts.length; i++) {
+            var metrics = new HashMap<ScalingMetric, Double>();
+            metrics.put(ScalingMetric.NUM_RECORDS_IN, (double) i);
+            metrics.put(ScalingMetric.NUM_RECORDS_OUT, (double) i);
+            metrics.put(ScalingMetric.LAG, 0D);
+            metrics.put(ScalingMetric.LOAD, 0.5);
+            if (activeSplitCounts[i] != null) {
+                metrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, activeSplitCounts[i]);
+            }
+            metricHistory.put(
+                    Instant.ofEpochSecond(i),
+                    new CollectedMetrics(Map.of(source, metrics), Map.of()));
+        }
+
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        return evaluator
+                .computeEvaluatedMetrics(
+                        null,
+                        conf,
+                        new CollectedMetricHistory(topology, metricHistory, Instant.now()),
+                        Duration.ZERO)
+                .getVertexMetrics()
+                .get(source);
+    }
+
+    @Test
     public void testUtilizationBoundaryComputationWithRestartTimesTracking() {
 
         var conf = new Configuration();

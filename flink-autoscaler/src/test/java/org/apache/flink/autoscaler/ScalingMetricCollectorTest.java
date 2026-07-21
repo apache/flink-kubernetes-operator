@@ -58,6 +58,7 @@ import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJo
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -482,6 +483,41 @@ public class ScalingMetricCollectorTest {
         testRequiredMetrics(
                 metricList, getSourceRequiredMetrics(), testCollector, source, topology);
         testRequiredMetrics(metricList, getRequiredMetrics(), testCollector, sink, topology);
+    }
+
+    @Test
+    public void testDynamicSourceMetricIsCollectedOnlyWhenEnabled() {
+        List<String> metricList =
+                new ArrayList<>(
+                        List.of(
+                                "busyTimeMsPerSecond",
+                                "backPressuredTimeMsPerSecond",
+                                "Source__XXX.numRecordsInPerSecond",
+                                "Source__XXX.numRecordsIn"));
+        String activeSplitMetric = "Source__DynamicKafkaSource.DynamicKafkaSource.activeSplitCount";
+        metricList.add(activeSplitMetric);
+        RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> testCollector =
+                new RestApiMetricsCollector<>(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>()) {
+                    @Override
+                    protected Collection<String> queryAggregatedMetricNames(
+                            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
+                        return metricList;
+                    }
+                };
+
+        var source = new JobVertexID();
+        var topology = new JobTopology(new VertexInfo(source, Map.of(), 1, 1));
+
+        assertFalse(
+                testCollector
+                        .getFilteredVertexMetricNames(null, new JobID(), source, topology, false)
+                        .containsKey(activeSplitMetric));
+        assertEquals(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                testCollector
+                        .getFilteredVertexMetricNames(null, new JobID(), source, topology, true)
+                        .get(activeSplitMetric));
     }
 
     @Test
