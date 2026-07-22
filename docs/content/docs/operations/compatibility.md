@@ -61,3 +61,17 @@ The Helm chart included in the operator repo provides a convenient way to deploy
 We are constantly working on improving the configuration parameters and features to cover all the different scenarios.
 
 At this time we do not provide backward compatibility for the Helm chart configuration / components. Please verify your custom settings before upgrading to a new version.
+
+## Flink Version Compatibility
+
+Starting with Flink Kubernetes Operator 1.7, the operator supports only the last 4 Flink minor
+versions based on the operator release date. Versions outside this range are marked as
+`@Deprecated` in the API and will produce a validation warning when used.
+
+For the exact list of currently supported and deprecated Flink versions, refer to
+[FlinkVersion.java](https://github.com/apache/flink-kubernetes-operator/blob/main/flink-kubernetes-operator-api/src/main/java/org/apache/flink/kubernetes/operator/api/spec/FlinkVersion.java).
+
+{{< hint warning >}}
+It is strongly recommended to upgrade to a supported Flink version to ensure continued
+compatibility with the operator.
+{{< /hint >}}
