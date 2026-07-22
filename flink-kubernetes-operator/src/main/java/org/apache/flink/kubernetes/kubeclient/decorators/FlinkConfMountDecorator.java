@@ -157,7 +157,8 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
         // For Flink versions that use the standard config we have to set the standardYaml flag in
         // the Configuration object manually instead of simply cloning, otherwise it would simply
         // inherit it from the base config (which would always be false currently).
-        Configuration clusterSideConfig = new Configuration(useStandardYamlConfig());
+        Configuration clusterSideConfig =
+                new Configuration(useStandardYamlConfig(flinkConfig.get(FLINK_VERSION)));
         clusterSideConfig.addAll(flinkConfig);
         // Remove some configuration options that should not be taken to cluster side.
         clusterSideConfig.removeConfig(KubernetesConfigOptions.KUBE_CONFIG_FILE);
@@ -175,7 +176,7 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
     private void validateConfigKeysForV2(Configuration clusterSideConfig) {
 
         // Only validate Flink 2.0 yaml configs
-        if (!useStandardYamlConfig()) {
+        if (!useStandardYamlConfig(clusterSideConfig.get(FLINK_VERSION))) {
             return;
         }
 
@@ -231,7 +232,10 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
      * @return conf file name
      */
     public String getFlinkConfFilename() {
-        return useStandardYamlConfig() ? "config.yaml" : "flink-conf.yaml";
+        return useStandardYamlConfig(
+                        kubernetesComponentConf.getFlinkConfiguration().get(FLINK_VERSION))
+                ? "config.yaml"
+                : "flink-conf.yaml";
     }
 
     /**
@@ -239,12 +243,10 @@ public class FlinkConfMountDecorator extends AbstractKubernetesStepDecorator {
      * flink-conf.yaml. While technically 1.19+ could use this we don't want to change the behaviour
      * for already released Flink versions, so only switch to new yaml from Flink 2.0 onwards.
      *
+     * @param flinkVersion Flink version of the target deployment
      * @return True for Flink version 2.0 and above
      */
-    boolean useStandardYamlConfig() {
-        return kubernetesComponentConf
-                .getFlinkConfiguration()
-                .get(FLINK_VERSION)
-                .isEqualOrNewer(FlinkVersion.v2_0);
+    public static boolean useStandardYamlConfig(FlinkVersion flinkVersion) {
+        return flinkVersion != null && flinkVersion.isEqualOrNewer(FlinkVersion.v2_0);
     }
 }
