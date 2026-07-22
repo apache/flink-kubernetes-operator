@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
 import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -54,6 +55,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.api.common.JobStatus.CANCELLING;
+import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
@@ -830,5 +832,67 @@ class FlinkSessionJobControllerTest {
         assertEquals(
                 sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 sessionJob.getStatus().getReconciliationStatus().getLastStableSpec());
+    }
+
+    @Test
+    public void testJobFinishedWithNonExternallyAddressableCheckpoint() throws Exception {
+        // Submit the session job
+        testController.reconcile(sessionJob, context);
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
+
+        // Observe RUNNING state
+        testController.reconcile(sessionJob, context);
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+
+        // Simulate the job finishing quickly
+        var jobs = flinkService.listJobs();
+        assertEquals(1, jobs.size());
+        var job = jobs.get(0);
+        jobs.set(
+                0,
+                Tuple3.of(
+                        job.f0,
+                        new JobStatusMessage(
+                                job.f1.getJobId(),
+                                job.f1.getJobName(),
+                                FINISHED,
+                                job.f1.getStartTime()),
+                        job.f2));
+
+        // Simulate checkpointing enabled but no state.checkpoints.dir configured
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.of(
+                                new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                        1L,
+                                        NonPersistentMetadataCheckpointStorageLocation
+                                                .EXTERNAL_POINTER,
+                                        System.currentTimeMillis())),
+                        Optional.empty()));
+
+        // Reconcile - should handle the UpgradeFailureException gracefully
+        testController.events().clear();
+        testController.reconcile(sessionJob, context);
+
+        // Job status should reflect FINISHED, not be stuck at RECONCILING
+        assertEquals(FINISHED, sessionJob.getStatus().getJobStatus().getState());
+
+        // Reconciliation status should reflect the error
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+
+        // Error should be recorded about the non-externally-addressable checkpoint
+        assertNotNull(sessionJob.getStatus().getError());
+        assertTrue(sessionJob.getStatus().getError().contains("not externally addressable"));
+
+        // Verify warning event was emitted with the specific reason
+        var errorEvent =
+                testController.events().stream()
+                        .filter(e -> e.getType().equals(EventRecorder.Type.Warning.toString()))
+                        .findFirst();
+        assertTrue(errorEvent.isPresent());
+        assertEquals("CheckpointNotFound", errorEvent.get().getReason());
+        assertTrue(errorEvent.get().getMessage().contains("not externally addressable"));
     }
 }
