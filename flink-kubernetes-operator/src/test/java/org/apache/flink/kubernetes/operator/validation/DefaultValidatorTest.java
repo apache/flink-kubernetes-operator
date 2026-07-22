@@ -39,7 +39,6 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
-import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
@@ -100,13 +99,8 @@ public class DefaultValidatorTest {
                 dep -> dep.getSpec().getJob().setParallelism(0),
                 "Job parallelism must be larger than 0");
 
-        testError(
-                dep -> {
-                    var tmSpec = new TaskManagerSpec();
-                    tmSpec.setReplicas(0);
-                    dep.getSpec().setTaskManager(tmSpec);
-                },
-                "TaskManager replicas must be larger than 0");
+        // TaskManager replicas < 1 is rejected by the CRD schema (@Min(1)) at admission, not by
+        // DefaultValidator; see FlinkConfigurationYamlSupportTest#crdRejectsInvalidSpecValues.
 
         testSuccess(
                 dep -> {
@@ -239,9 +233,9 @@ public class DefaultValidatorTest {
                                                 Constants.CONFIG_FILE_LOG4J_NAME,
                                                 "rootLogger.level = INFO")));
 
-        testError(
-                dep -> dep.getSpec().setIngress(new IngressSpec()),
-                "Ingress template must be defined");
+        // An ingress without a template is rejected by the CRD schema (@Required) at admission,
+        // not by DefaultValidator; see
+        // FlinkConfigurationYamlSupportTest#crdRejectsInvalidSpecValues.
 
         testError(
                 dep ->
@@ -279,9 +273,8 @@ public class DefaultValidatorTest {
                                                 "true")),
                 "HA must be enabled for rollback support.");
 
-        testError(
-                dep -> dep.getSpec().getJobManager().setReplicas(0),
-                "JobManager replicas should not be configured less than one.");
+        // JobManager replicas < 1 is rejected by the CRD schema (@Min(1)) at admission, not by
+        // DefaultValidator; see FlinkConfigurationYamlSupportTest#crdRejectsInvalidSpecValues.
 
         // Test resource validation
         testSuccessDeprecatedResource(
@@ -577,7 +570,8 @@ public class DefaultValidatorTest {
                 },
                 "Cannot switch from standalone kubernetes to native kubernetes cluster");
 
-        testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
+        // A null flinkVersion is rejected by the CRD schema (@Required) at admission, not by
+        // DefaultValidator; see FlinkConfigurationYamlSupportTest#crdRejectsInvalidSpecValues.
 
         testError(
                 dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_14),

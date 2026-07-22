@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.generator.annotation.Min;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -46,6 +47,7 @@ public class FlinkStateSnapshotSpec {
      * Maximum number of retries before the snapshot is considered as failed. Set to -1 for
      * unlimited or 0 for no retries.
      */
+    @Min(-1)
     private int backoffLimit = -1;
 
     public boolean isSavepoint() {
