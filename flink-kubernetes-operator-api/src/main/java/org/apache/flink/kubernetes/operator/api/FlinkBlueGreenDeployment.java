@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
 
-/** Custom resource definition that represents a deployments with Blue/Green rollout capability. */
+/** Custom resource definition that represents a deployment with Blue/Green rollout capability. */
 @Experimental
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()

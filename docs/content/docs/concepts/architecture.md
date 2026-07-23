@@ -26,55 +26,49 @@ under the License.
 
 # Architecture
 
-Flink Kubernetes Operator (Operator) acts as a control plane to manage the complete deployment lifecycle of Apache Flink applications. The Operator can be installed on a Kubernetes cluster using [Helm](https://helm.sh). In most production environments it is typically deployed in a designated namespace and controls Flink deployments in one or more managed namespaces. The custom resource definition (CRD) that describes the schema of a `FlinkDeployment` is a cluster wide resource. For a CRD, the declaration must be registered before any resources of that CRDs kind(s) can be used, and the registration process sometimes takes a few seconds.
+The operator runs inside a Kubernetes cluster and is built from a small set of cooperating components. Everything revolves around the Flink custom resources: users declare them, the control plane admits and stores them, and the operator turns them into running Flink clusters.
 
-{{< img src="/img/concepts/architecture.svg" alt="Flink Kubernetes Operator Architecture" >}}
-> Note: There is no support at this time for [upgrading or deleting CRDs using Helm](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/).
+Following one resource through the system gives the complete picture. A user applies a Flink custom resource with standard Kubernetes tooling. The Kubernetes API server receives the request and, before storing anything, hands the resource to the admission webhook to be mutated and validated. Once admitted, the resource is persisted and the operator is notified of the change. Its reconciliation loop then deploys and manages the Flink cluster the resource describes, reporting progress back into the resource status. The diagram below shows this end to end:
 
-## Control Loop
-The Operator follow the Kubernetes principles, notably the [control loop](https://kubernetes.io/docs/concepts/architecture/controller/):
+<!-- Editable draw.io source: docs/static/img/concepts/architecture-overview-v2.drawio (the exported SVG below also embeds a copy of the diagram). -->
+{{< img src="/img/concepts/architecture-overview.svg" alt="Flink Kubernetes Operator high-level architecture" >}}
 
-{{< img src="/img/concepts/control_loop.svg" alt="Control Loop" >}}
+At the center of the diagram sit the custom resources, the meeting point of the whole system: users write the desired state into their spec, and the operator answers with the observed state in their status, so neither ever talks to the other directly. Beyond declaring resources, the only other lever users have is configuration, which tunes how the operator and the webhook themselves behave. Every other relationship in the diagram is just as sharply cut: the admission webhook guards the write path and talks only to the API server, and the Flink clusters are managed exclusively by the operator, each running cluster being the realization of a resource stored on the API server.
 
-Users can interact with the operator using the Kubernetes command-line tool, [kubectl](https://kubernetes.io/docs/tasks/tools/). The Operator continuously tracks cluster events relating to the `FlinkDeployment` and `FlinkSessionJob` custom resources. When the operator receives a new resource update, it will take action to adjust the Kubernetes cluster to the desired state as part of its reconciliation loop. The initial loop consists of the following high-level steps:
+For everything related to the custom resources themselves, from their overall structure down to every configurable field, see [Custom Resource → Overview]({{< ref "docs/custom-resource/overview" >}}).
 
-1. User submits a `FlinkDeployment`/`FlinkSessionJob` custom resource(CR) using `kubectl`
-2. Operator observes the current status of the Flink resource (if previously deployed)
-3. Operator validates the submitted resource change
-4. Operator reconciles any required changes and executes upgrades
-
-The CR can be (re)applied on the cluster any time. The Operator makes continuous adjustments to imitate the desired state until the current state becomes the desired state. All lifecycle management operations are realized using this very simple principle in the Operator.
-
-The Operator is built with the [Java Operator SDK](https://github.com/java-operator-sdk/java-operator-sdk) and uses the [Native Kubernetes Integration](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/) for launching Flink deployments and submitting jobs under the hood. The Java Operator SDK is a higher level framework and related tooling to support writing Kubernetes Operators in Java. Both the Java Operator SDK and Flink's native kubernetes integration itself is using the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) to interact with the Kubernetes API Server.
-
-## Flink Resource Lifecycle
-
-The Operator manages the lifecycle of Flink resources. The following chart illustrates the different possible states and transitions:
-
-{{< img src="/img/concepts/resource_lifecycle.svg" alt="Flink Resource Lifecycle" >}}
-
-**We can distinguish the following states:**
-
-  - CREATED : The resource was created in Kubernetes but not yet handled by the operator
-  - SUSPENDED : The (job) resource has been suspended
-  - UPGRADING : The resource is suspended before upgrading to a new spec
-  - DEPLOYED : The resource is deployed/submitted to Kubernetes, but it's not yet considered to be stable and might be rolled back in the future
-  - STABLE : The resource deployment is considered to be stable and won't be rolled back
-  - ROLLING_BACK : The resource is being rolled back to the last stable spec
-  - ROLLED_BACK : The resource is deployed with the last stable spec
-  - FAILED : The job terminally failed
+For everything related to deploying the operator and the webhook, from the overall deployment architecture down to the concrete setup, see [Deployment → Overview]({{< ref "docs/deployment/overview" >}}).
 
 ## Admission Control
 
-In addition to compiled-in admission plugins, a custom admission plugin named Flink Kubernetes Operator Webhook (Webhook)
-can be started as extension and run as webhook.
+In addition to Kubernetes' compiled-in admission plugins, the operator ships its own admission webhook, following the Kubernetes [dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) pattern. The webhook intercepts creates and updates of Flink custom resources before they are persisted, so a broken spec is stopped at the door instead of reaching the operator.
 
-The Webhook follow the Kubernetes principles, notably the [dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/).
+<!-- Editable draw.io source: docs/static/img/concepts/admission-control.drawio (the exported SVG below also embeds a copy of the diagram). -->
+{{< img src="/img/concepts/admission-control.svg" alt="Admission Control" >}}
 
-It's deployed by default when the Operator is installed on a Kubernetes cluster using [Helm](https://helm.sh).
-Please see further details how to deploy the Operator/Webhook [here](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/#deploying-the-operator).
+Every admission request is delivered by the API server to the webhook's TLS endpoint. The certificate behind the endpoint comes from a keystore file mounted from a Kubernetes Secret, which the webhook watches and hot-reloads whenever it changes, so certificates rotate without a restart. Once received, the request passes through two stages:
 
-The Webhook is using TLS protocol for communication by default. It automatically loads/re-loads keystore file when the file
-has changed and provides the following endpoints:
+1. **Mutate**: the resource may first be adjusted before it is stored, and every adjustment made here flows back to the API server as a patch. The built-in mutation is deliberately minimal, it stamps each session job with a label naming its target session cluster, so all jobs of a cluster can be found efficiently. The stage is extensible with custom mutators.
+2. **Validate**: the spec is then checked against the operator's validation rules, from unsupported Flink versions and forbidden configuration keys to inconsistent job settings and disallowed spec transitions. The rule set is extensible with custom validators. A valid spec is admitted, an invalid one is turned away.
 
-{{< img src="/img/concepts/webhook.svg" alt="Webhook" >}}
+A rejected spec is never stored and never reaches the operator: the failed `kubectl` operation reports the reason immediately, and the running deployment is unaffected. Admission is the first line of defense, the operator validates the spec again on every reconciliation pass, so validation holds even when the webhook is disabled.
+
+The webhook is deployed by default with the Helm installation and can be disabled entirely. Its deployment is covered under [Deployment → Overview]({{< ref "docs/deployment/overview" >}}).
+
+## Reconciliation Loop
+
+The operator is built on the [Java Operator SDK](https://javaoperatorsdk.io/) (JOSDK), whose reconciliation loop implements the Kubernetes [control loop](https://kubernetes.io/docs/concepts/architecture/controller/) pattern. JOSDK provides the machinery of the loop: it watches the Flink custom resources and triggers a reconciliation pass for a resource whenever it is created or updated, after failures, and periodically in between, independently for every managed resource. What happens inside each pass is the operator's own logic, and it always moves through the same phases:
+
+<!-- Editable draw.io source: docs/static/img/concepts/control-loop.drawio (the exported SVG below also embeds a copy of the diagram). -->
+{{< img src="/img/concepts/reconciliation-loop.svg" alt="Reconciliation Loop" >}}
+
+1. **Observe**: every pass starts by facing reality. The operator queries the running deployment through the Flink REST API and the Kubernetes API and refreshes the resource status with what it finds, the job state, the health of the JobManager, and the progress of pending operations such as savepoints. All later decisions in the pass are made against these fresh facts, and the same facts are what anyone inspecting the resource status sees.
+2. **Validate**: before acting on the desired state, the operator re-checks the spec against the same validation rules the admission webhook applies. An invalid spec is reported on the resource and set aside, the pass continues against the last valid one, and the running deployment stays untouched.
+3. **Reconcile**: only now does the operator act. The desired spec is diffed against the last successfully reconciled one, and the difference dictates the action: nothing at all when they match, a scale-only adjustment when just the parallelism changed, a full upgrade cycle when the job itself changed, or a rollback when a previous upgrade never became stable. Whatever the action, its outcome is written back into the resource status, which is exactly what the next pass will observe.
+
+The loop then starts again from observation. A resource can be created or re-applied at any time, and the operator keeps adjusting the running deployment until the current state matches the desired state.
+
+For launching Flink clusters and submitting jobs the operator builds on Flink's [Native Kubernetes Integration](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/) in the default [operator deployment mode]({{< ref "docs/deployment/overview#operator-deployment-modes" >}}). Both JOSDK and the native integration use the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) to talk to the Kubernetes API server.
+
+The loop is the mechanism, and lifecycle management is what it delivers: deployments, upgrades, rollbacks, snapshots, and autoscaling are all outcomes of this one repeating cycle. How they come together over the life of a Flink resource is covered under [Lifecycle Management]({{< ref "docs/concepts/lifecycle-management" >}}).
+

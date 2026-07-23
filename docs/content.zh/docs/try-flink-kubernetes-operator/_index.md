@@ -1,5 +1,5 @@
 ---
-title: Try the Flink Kubernetes Operator 
+title: Try Flink Kubernetes Operator 
 icon: <i class="fa fa-rocket title appetizer" aria-hidden="true"></i>
 bold: true
 bookCollapseSection: true
