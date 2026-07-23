@@ -67,12 +67,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_ABORT_GRACE_PERIOD;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -225,7 +225,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs.deployment
                 .getSpec()
                 .getConfiguration()
-                .put(DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(ALT_DELETION_DELAY_VALUE));
+                .put(
+                        BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(),
+                        String.valueOf(ALT_DELETION_DELAY_VALUE));
         kubernetesClient.resource(rs.deployment).createOrReplace();
 
         // Reconcile - should skip savepointing and go directly to transition
@@ -357,9 +359,15 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         null,
                         UpgradeMode.STATELESS); // STATELESS to skip savepointing
         // Set longer abort grace period BEFORE deployment to avoid abort during transition test
-        blueGreenDeployment.getSpec().getConfiguration().put(ABORT_GRACE_PERIOD.key(), "60000");
+        blueGreenDeployment
+                .getSpec()
+                .getConfiguration()
+                .put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), "60000");
         // Use zero deletion delay to avoid timing-based flakiness during transition completion
-        blueGreenDeployment.getSpec().getConfiguration().put(DEPLOYMENT_DELETION_DELAY.key(), "0");
+        blueGreenDeployment
+                .getSpec()
+                .getConfiguration()
+                .put(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(), "0");
         var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
 
         // === TRIGGER TRANSITION ===
@@ -483,9 +491,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         var abortGracePeriodMs = 1200;
         var reconciliationReschedulingIntervalMs = 3000;
         Map<String, String> configuration = blueGreenDeployment.getSpec().getConfiguration();
-        configuration.put(ABORT_GRACE_PERIOD.key(), String.valueOf(abortGracePeriodMs));
+        configuration.put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), String.valueOf(abortGracePeriodMs));
         configuration.put(
-                RECONCILIATION_RESCHEDULING_INTERVAL.key(),
+                BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL.key(),
                 String.valueOf(reconciliationReschedulingIntervalMs));
 
         var rs =
@@ -1670,7 +1678,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         if (customDeletionDelayMs > 0) {
             bgSpec.getConfiguration()
-                    .put(DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(customDeletionDelayMs));
+                    .put(
+                            BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(),
+                            String.valueOf(customDeletionDelayMs));
         }
 
         FlinkDeploymentSpec spec = template.getSpec();
@@ -1833,10 +1843,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
         flinkDeploymentSpec.setFlinkConfiguration(conf);
 
         Map<String, String> configuration = new HashMap<>();
-        configuration.put(ABORT_GRACE_PERIOD.key(), "1");
-        configuration.put(RECONCILIATION_RESCHEDULING_INTERVAL.key(), "500");
+        configuration.put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), "1");
+        configuration.put(BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL.key(), "500");
         configuration.put(
-                DEPLOYMENT_DELETION_DELAY.key(), String.valueOf(DEFAULT_DELETION_DELAY_VALUE));
+                BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(),
+                String.valueOf(DEFAULT_DELETION_DELAY_VALUE));
 
         var flinkDeploymentTemplateSpec =
                 FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build();

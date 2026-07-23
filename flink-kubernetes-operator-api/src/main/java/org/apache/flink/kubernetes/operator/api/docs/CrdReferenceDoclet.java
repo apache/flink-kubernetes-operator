@@ -51,6 +51,11 @@ public class CrdReferenceDoclet implements Doclet {
             "org.apache.flink.kubernetes.operator.api.spec";
     private static final String STATUS_PACKAGE_PREFIX =
             "org.apache.flink.kubernetes.operator.api.status";
+
+    /** Helper classes living in the CRD packages that are not part of the CRD data model. */
+    private static final Set<String> EXCLUDED_CLASSES =
+            Set.of(SPEC_PACKAGE_PREFIX + ".ConfigObjectNodeDeserializer");
+
     private DocTrees treeUtils;
     private String templateFile;
     private String outputFile;
@@ -123,6 +128,7 @@ public class CrdReferenceDoclet implements Doclet {
                     sortedByName(
                             environment.getIncludedElements().stream()
                                     .filter(e -> e.toString().startsWith(SPEC_PACKAGE_PREFIX))
+                                    .filter(e -> !EXCLUDED_CLASSES.contains(e.toString()))
                                     .collect(Collectors.toSet()));
             handleAbstractClass(spec, environment.getTypeUtils());
             se.show(spec);
@@ -133,6 +139,7 @@ public class CrdReferenceDoclet implements Doclet {
                     sortedByName(
                             environment.getIncludedElements().stream()
                                     .filter(e -> e.toString().startsWith(STATUS_PACKAGE_PREFIX))
+                                    .filter(e -> !EXCLUDED_CLASSES.contains(e.toString()))
                                     .collect(Collectors.toSet()));
             handleAbstractClass(status, environment.getTypeUtils());
             se.show(status);
@@ -175,6 +182,23 @@ public class CrdReferenceDoclet implements Doclet {
         return doc.replaceAll("\\s+", " ").trim();
     }
 
+    private boolean isPrintableField(Element e) {
+        if (e.getKind() != ElementKind.FIELD || e.getModifiers().contains(Modifier.STATIC)) {
+            return false;
+        }
+        var jsonIgnore = e.getAnnotation(JsonIgnore.class);
+        return jsonIgnore == null || !jsonIgnore.value();
+    }
+
+    private boolean hasPrintableFields(Element classElement) {
+        if (classElement.getEnclosedElements().stream().anyMatch(this::isPrintableField)) {
+            return true;
+        }
+        var parent = child2ParentElements.get(classElement);
+        return parent != null
+                && parent.getEnclosedElements().stream().anyMatch(this::isPrintableField);
+    }
+
     private Set<? extends Element> sortedByName(Set<? extends Element> elements) {
         Set<Element> out =
                 new TreeSet<>((e1, e2) -> CharSequence.compare(e1.toString(), e2.toString()));
@@ -191,6 +215,22 @@ public class CrdReferenceDoclet implements Doclet {
 
         void show(Set<? extends Element> elements) {
             scan(elements, 0);
+        }
+
+        private void printFieldRows(Element classElement) {
+            for (Element enclosed : classElement.getEnclosedElements()) {
+                if (isPrintableField(enclosed)) {
+                    DocCommentTree fieldDoc = treeUtils.getDocCommentTree(enclosed);
+                    out.println(
+                            "| "
+                                    + getNameOrJsonPropValue(enclosed)
+                                    + " | "
+                                    + enclosed.asType().toString()
+                                    + " | "
+                                    + (fieldDoc != null ? cleanDoc(fieldDoc.toString()) : "")
+                                    + " |");
+                }
+            }
         }
 
         @Override
@@ -212,26 +252,17 @@ public class CrdReferenceDoclet implements Doclet {
                     out.println();
                     out.println("**Description**: " + dcTree);
                     out.println();
-                    out.println("| Parameter | Type | Docs |");
-                    out.println("| ----------| ---- | ---- |");
-                    // if this is a child class, print it's parent's enclosed elements.
-                    if (child2ParentElements.containsKey(e)) {
-                        MdPrinter mdPrinter = new MdPrinter(out);
-                        mdPrinter.scan(child2ParentElements.get(e).getEnclosedElements(), depth);
+                    // do not print an empty parameter table for field-less classes
+                    if (hasPrintableFields(e)) {
+                        out.println("| Parameter | Type | Docs |");
+                        out.println("| ----------| ---- | ---- |");
+                        // if this is a child class, print it's parent's fields first.
+                        if (child2ParentElements.containsKey(e)) {
+                            printFieldRows(child2ParentElements.get(e));
+                        }
+                        printFieldRows(e);
                     }
-                    break;
-                case FIELD:
-                    if (e.getModifiers().contains(Modifier.STATIC)) {
-                        return null;
-                    }
-                    out.println(
-                            "| "
-                                    + getNameOrJsonPropValue(e)
-                                    + " | "
-                                    + e.asType().toString()
-                                    + " | "
-                                    + (dcTree != null ? cleanDoc(dcTree.toString()) : "")
-                                    + " |");
+                    // nested types are documented through their own top-level entries
                     return null;
                 case ENUM:
                     out.println();

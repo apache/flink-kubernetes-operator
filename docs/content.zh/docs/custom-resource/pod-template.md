@@ -24,20 +24,21 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Pod template
+# Pod Template
 
-<a name="pod-template"></a>
+The custom resources are designed with a minimal set of direct, shorthand settings for the most basic attributes of a deployment. For all other settings the spec provides the `flinkConfiguration` and `podTemplate` fields.
 
-Operator CRD 被设计为一组直接、简短的 CRD 设置，以表达 deployment 的最基本属性。对于所有其他设置，CRD 提供了 `flinkConfiguration` 和 `podTemplate` 字段。
+Pod templates customize the JobManager and TaskManager pods of a `FlinkDeployment`, for example with volume mounts, ephemeral storage, or sidecar containers. They exist only there: a `FlinkSessionJob` carries no pod template, its job runs on the session cluster's pods.
 
-Pod templates 允许自定义 Flink Job 和 Task Manager 的 pod，例如指定卷挂载、临时存储、sidecar 容器等。
+The template type is not an operator invention: `podTemplate` is the standard Kubernetes [`PodTemplateSpec`](https://github.com/fabric8io/kubernetes-client/blob/main/kubernetes-model-generator/kubernetes-model-core/src/generated/java/io/fabric8/kubernetes/api/model/PodTemplateSpec.java) from the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) model the operator is built on, with the CRD schema generated from the upstream `Pod` type. Anything a Kubernetes pod template can express is valid here.
 
-Pod template 可以被分层，如下面的示例所示。
-一个通用的 pod template 可以保存适用于作业和 task manager 的设置，比如 `volumeMounts`。作业或 task manager 下的另一个模板可以定义补充或覆盖通用模板中的其他设置，比如一个 task manager sidecar。
+`spec.jobManager` and `spec.taskManager` are deliberately thin wrappers around the same structure: each holds only `replicas`, the container `resources` (standard Kubernetes resource requirements, with the older `resource` shorthand deprecated), and its own `podTemplate`. Everything else about the pods is expressed through the templates.
 
-Operator 将分别合并作业和 task manager 的通用和特定模板。
+Pod templates can be layered, as shown in the example below. A common template under `spec.podTemplate` holds the settings that apply to both JobManager and TaskManager, like `volumeMounts`, while a template under `spec.jobManager` or `spec.taskManager` defines additional settings that supplement or override the common ones, such as a TaskManager sidecar. The operator merges the common and specific templates for each side.
 
-下面是一个完整的示例：
+The Flink container is identified by its fixed name: `flink-main-container` must not be changed, it is how the operator and Flink locate the main container among the sidecars when merging and deploying the templates.
+
+A full example:
 
 ```yaml
 apiVersion: flink.apache.org/v1beta1
@@ -70,17 +71,19 @@ spec:
         - name: flink-logs
           emptyDir: { }
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048Mi"
+        cpu: "1"
   taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048Mi"
+        cpu: "1"
     podTemplate:
       spec:
         initContainers:
-          # Sample sidecar container
+          # Sample init container
           - name: busybox
             image: busybox:1.35.0
             command: [ 'sh','-c','echo hello from task manager' ]
@@ -90,39 +93,33 @@ spec:
 ```
 
 {{< hint info >}}
-当使用与 Flink 原生 Kubernetes 集成的 operator 时，请参考 [pod template 字段优先级](
-https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink)。
+In [Native Mode]({{< ref "docs/deployment/overview#native-mode" >}}) some template fields are overwritten by Flink, see [Fields Overwritten by Flink](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink). In [Standalone Mode]({{< ref "docs/deployment/overview#standalone-mode" >}}) the operator merges the templates directly into the Deployments it creates.
 {{< /hint >}}
 
+## Array Merging Behavior
 
-## Array Merging Behaviour
+When layering pod templates, defining both a top-level and a JobManager-specific template for example, the corresponding YAML objects are merged together.
 
-<a name="array-meging-behaviour"></a>
+The default behavior is to merge arrays by position: the objects at the same array index are combined. This requires that containers in the templates are defined in the same order, otherwise the results may be undefined.
 
-当分层 pod templates（例如同时定义顶层和 jobmanager 特定的 pod 模板）时，相应的 yaml 会合并在一起。
-
-Pod 模板机制的默认行为是通过合并相应数组位置的对象来合并数组。
-这要求 podTemplates 中的容器以相同的顺序定义，否则结果可能未定义。
-
-默认行为（按位置合并）：
+Default behavior (merge by position):
 
 ```
-arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
-arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+base:     [{name: a, p1: v1}, {name: b, p1: v1}]
+override: [{name: a, p2: v2}, {name: c, p2: v2}]
 
-merged: [{name: a, p1: v1, p2: v2}, {name: c, p1: v1, p2: v2}]
+merged:   [{name: a, p1: v1, p2: v2}, {name: c, p1: v1, p2: v2}]
 ```
 
-Operator 支持另一种数组合并机制，可以通过 `kubernetes.operator.pod-template.merge-arrays-by-name` 标志启用。
-当为 true 时，不会进行默认的位置合并，而是根据名称合并定义了 `name` 属性的对象数组元素，并且生成的数组将是两个输入数组的并集。
+The operator supports an alternative array merging mechanism, enabled with `kubernetes.operator.pod-template.merge-arrays-by-name`. When true, object array elements that define a `name` property are merged by that name instead of their position, and the resulting array is the union of the two inputs.
 
-通过名称合并：
+Merge by name:
 
 ```
-arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
-arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+base:     [{name: a, p1: v1}, {name: b, p1: v1}]
+override: [{name: a, p2: v2}, {name: c, p2: v2}]
 
-merged: [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
+merged:   [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
 ```
 
-当合并容器规格或者当基础模板和覆盖模板没有一起定义时，按名称合并可以非常方便。
+Merging by name is convenient when merging container specs or when the base and override templates are not defined together.

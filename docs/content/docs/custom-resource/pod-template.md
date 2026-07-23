@@ -24,23 +24,21 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Pod template
+# Pod Template
 
-The operator CRD is designed to have a minimal set of direct, short-hand CRD settings to express the most
-basic attributes of a deployment. For all other settings the CRD provides the `flinkConfiguration` and
-`podTemplate` fields.
+The custom resources are designed with a minimal set of direct, shorthand settings for the most basic attributes of a deployment. For all other settings the spec provides the `flinkConfiguration` and `podTemplate` fields.
 
-Pod templates permit customization of the Flink job and task manager pods, for example to specify
-volume mounts, ephemeral storage, sidecar containers etc.
+Pod templates customize the JobManager and TaskManager pods of a `FlinkDeployment`, for example with volume mounts, ephemeral storage, or sidecar containers. They exist only there: a `FlinkSessionJob` carries no pod template, its job runs on the session cluster's pods.
 
-Pod templates can be layered, as shown in the example below.
-A common pod template may hold the settings that apply to both job and task manager,
-like `volumeMounts`. Another template under job or task manager can define additional settings that supplement or override those
-in the common template, such as a task manager sidecar.
+The template type is not an operator invention: `podTemplate` is the standard Kubernetes [`PodTemplateSpec`](https://github.com/fabric8io/kubernetes-client/blob/main/kubernetes-model-generator/kubernetes-model-core/src/generated/java/io/fabric8/kubernetes/api/model/PodTemplateSpec.java) from the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) model the operator is built on, with the CRD schema generated from the upstream `Pod` type. Anything a Kubernetes pod template can express is valid here.
 
-The operator is going to merge the common and specific templates for job and task manager respectively.
+`spec.jobManager` and `spec.taskManager` are deliberately thin wrappers around the same structure: each holds only `replicas`, the container `resources` (standard Kubernetes resource requirements, with the older `resource` shorthand deprecated), and its own `podTemplate`. Everything else about the pods is expressed through the templates.
 
-Here the full example:
+Pod templates can be layered, as shown in the example below. A common template under `spec.podTemplate` holds the settings that apply to both JobManager and TaskManager, like `volumeMounts`, while a template under `spec.jobManager` or `spec.taskManager` defines additional settings that supplement or override the common ones, such as a TaskManager sidecar. The operator merges the common and specific templates for each side.
+
+The Flink container is identified by its fixed name: `flink-main-container` must not be changed, it is how the operator and Flink locate the main container among the sidecars when merging and deploying the templates.
+
+A full example:
 
 ```yaml
 apiVersion: flink.apache.org/v1beta1
@@ -75,17 +73,17 @@ spec:
   jobManager:
     resources:
       requests:
-        memory: "2048m"
+        memory: "2048Mi"
         cpu: "1"
   taskManager:
     resources:
       requests:
-        memory: "2048m"
+        memory: "2048Mi"
         cpu: "1"
     podTemplate:
       spec:
         initContainers:
-          # Sample sidecar container
+          # Sample init container
           - name: busybox
             image: busybox:1.35.0
             command: [ 'sh','-c','echo hello from task manager' ]
@@ -95,36 +93,33 @@ spec:
 ```
 
 {{< hint info >}}
-When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
-https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
+In [Native Mode]({{< ref "docs/deployment/overview#native-mode" >}}) some template fields are overwritten by Flink, see [Fields Overwritten by Flink](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink). In [Standalone Mode]({{< ref "docs/deployment/overview#standalone-mode" >}}) the operator merges the templates directly into the Deployments it creates.
 {{< /hint >}}
 
-## Array Merging Behaviour
+## Array Merging Behavior
 
-When layering pod templates (defining both a top level and jobmanager specific podtemplate for example) the corresponding yamls are merged together.
+When layering pod templates, defining both a top-level and a JobManager-specific template for example, the corresponding YAML objects are merged together.
 
-The default behaviour of the pod template mechanism is to merge array arrays by merging the objects in the respective array positions.
-This requires that containers in the podTemplates are defined in the same order otherwise the results may be undefined.
+The default behavior is to merge arrays by position: the objects at the same array index are combined. This requires that containers in the templates are defined in the same order, otherwise the results may be undefined.
 
-Default behaviour (merge by position):
+Default behavior (merge by position):
 
 ```
-arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
-arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+base:     [{name: a, p1: v1}, {name: b, p1: v1}]
+override: [{name: a, p2: v2}, {name: c, p2: v2}]
 
-merged: [{name: a, p1: v1, p2: v2}, {name: c, p1: v1, p2: v2}]
+merged:   [{name: a, p1: v1, p2: v2}, {name: c, p1: v1, p2: v2}]
 ```
 
-The operator supports an alternative array merging mechanism that can be enabled by the `kubernetes.operator.pod-template.merge-arrays-by-name` flag.
-When true, instead of the default positional merging, object array elements that have a `name` property defined will be merged by their name and the resulting array will be a union of the two input arrays.
+The operator supports an alternative array merging mechanism, enabled with `kubernetes.operator.pod-template.merge-arrays-by-name`. When true, object array elements that define a `name` property are merged by that name instead of their position, and the resulting array is the union of the two inputs.
 
 Merge by name:
 
 ```
-arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
-arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+base:     [{name: a, p1: v1}, {name: b, p1: v1}]
+override: [{name: a, p2: v2}, {name: c, p2: v2}]
 
-merged: [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
+merged:   [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
 ```
 
-Merging by name can be very convenient when merging container specs or when the base and override templates are not defined together.
+Merging by name is convenient when merging container specs or when the base and override templates are not defined together.

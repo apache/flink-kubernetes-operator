@@ -9,6 +9,24 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.bluegreen.abort.grace-period</h5></td>
+            <td style="word-wrap: break-word;">10 min</td>
+            <td>Duration</td>
+            <td>The max time to wait for a deployment to become ready before aborting it.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.bluegreen.deployment-deletion.delay</h5></td>
+            <td style="word-wrap: break-word;">0 ms</td>
+            <td>Duration</td>
+            <td>Configurable delay before deleting a deployment after being marked done.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.bluegreen.reconciliation.reschedule-interval</h5></td>
+            <td style="word-wrap: break-word;">15 s</td>
+            <td>Duration</td>
+            <td>Configurable delay to use when the operator reschedules a reconciliation.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.checkpoint.trigger.grace-period</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
@@ -318,7 +336,7 @@
             <td><h5>kubernetes.operator.pod-template.merge-arrays-by-name</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.</td>
+            <td>Configure the array merge behavior during pod merging. Arrays can be either merged by position or name matching.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.rate-limiter.limit</h5></td>

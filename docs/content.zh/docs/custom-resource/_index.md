@@ -3,6 +3,7 @@ title: Custom Resource
 icon: <i class="fa fa-code title maindish" aria-hidden="true"></i>
 bold: true
 bookCollapseSection: true
+sectionBreak: true
 weight: 3
 ---
 <!--

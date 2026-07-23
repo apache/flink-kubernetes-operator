@@ -1,15 +1,10 @@
 ---
 title: Development
-icon: <i class="fa fa-book title maindish" aria-hidden="true"></i>
+icon: <i class="fa fa-code-fork title coffee" aria-hidden="true"></i>
 bold: true
 bookCollapseSection: true
-weight: 5
----
-title: RoadMap
-icon: <i class="fa fa-book title maindish" aria-hidden="true"></i>
-bold: true
-bookCollapseSection: true
-weight: 5
+sectionBreak: true
+weight: 7
 ---
 <!--
 Licensed to the Apache Software Foundation (ASF) under one

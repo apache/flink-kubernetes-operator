@@ -43,9 +43,51 @@ public class KubernetesOperatorConfigOptions {
     public static final String VERSION_CONF_PREFIX = DEFAULT_CONF_PREFIX + "flink-version.";
     public static final String FLINK_VERSION_GREATER_THAN_SUFFIX = "+";
     public static final String NAMESPACE_CONF_PREFIX = DEFAULT_CONF_PREFIX + "namespace.";
+
+    /**
+     * System options that are read inside the reconcile loop and therefore pick up dynamic
+     * ConfigMap updates on the next cycle.
+     */
+    public static final String SECTION_SYSTEM_RECONCILE = "system_reconcile";
+
+    /**
+     * System options that are read once at operator startup (JOSDK plumbing, leader election,
+     * watched namespaces) and require an operator restart to take effect.
+     */
+    public static final String SECTION_SYSTEM_STARTUP = "system_startup";
+
+    /**
+     * Umbrella string kept for backwards compatibility. New options should pick {@link
+     * #SECTION_SYSTEM_RECONCILE} or {@link #SECTION_SYSTEM_STARTUP} instead.
+     */
     public static final String SECTION_SYSTEM = "system";
+
+    /**
+     * Advanced options that influence behavior inside the reconcile loop (observer cadence, event
+     * caps, deletion semantics, label selectors, ingress management, savepoint history thresholds).
+     */
+    public static final String SECTION_ADVANCED_RECONCILE = "system_advanced_reconcile";
+
+    /**
+     * Advanced options that govern operator subsystems and are read once at operator startup
+     * (dynamic config watcher, cache, health probe, canary, cluster resource view, termination,
+     * informer error handling). Require an operator restart to take effect.
+     */
+    public static final String SECTION_ADVANCED_STARTUP = "system_advanced_startup";
+
+    /**
+     * Umbrella string kept for backwards compatibility. New options should pick {@link
+     * #SECTION_ADVANCED_RECONCILE} or {@link #SECTION_ADVANCED_STARTUP} instead.
+     */
     public static final String SECTION_ADVANCED = "system_advanced";
+
     public static final String SECTION_DYNAMIC = "dynamic";
+
+    /**
+     * Options of the blue/green deployments, read from the {@code spec.configuration} map of the
+     * {@code FlinkBlueGreenDeployment} resource rather than from the operator configuration.
+     */
+    public static final String SECTION_BLUEGREEN = "bluegreen";
 
     public static ConfigOptions.OptionBuilder operatorConfig(String key) {
         return ConfigOptions.key(K8S_OP_CONF_PREFIX + key);
@@ -55,7 +97,7 @@ public class KubernetesOperatorConfigOptions {
         return K8S_OP_CONF_PREFIX + key;
     }
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_RECONCILE_INTERVAL =
             operatorConfig("reconcile.interval")
                     .durationType()
@@ -64,7 +106,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval for the controller to reschedule the reconcile process.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_REST_READY_DELAY =
             operatorConfig("observer.rest-ready.delay")
                     .durationType()
@@ -72,7 +114,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Final delay before deployment is marked ready after port becomes accessible.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_RECONCILE_PARALLELISM =
             operatorConfig("reconcile.parallelism")
                     .intType()
@@ -81,7 +123,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The maximum number of threads running the reconciliation loop. Use -1 for infinite.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL =
             operatorConfig("observer.progress-check.interval")
                     .durationType()
@@ -107,7 +149,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval before a checkpoint trigger attempt is marked as unsuccessful.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_TIMEOUT =
             operatorConfig("flink.client.timeout")
                     .durationType()
@@ -116,7 +158,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the observer to wait the flink rest client to return.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_CANCEL_TIMEOUT =
             operatorConfig("flink.client.cancel.timeout")
                     .durationType()
@@ -125,7 +167,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to cancel job.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_RESOURCE_CLEANUP_TIMEOUT =
             operatorConfig("resource.cleanup.timeout")
                     .durationType()
@@ -135,7 +177,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_JOB_SUBMISSION_TIMEOUT =
             operatorConfig("job.submission.timeout")
                     .durationType()
@@ -158,7 +200,7 @@ public class KubernetesOperatorConfigOptions {
                             "The timeout for deployments to become ready/stable "
                                     + "before being rolled back if rollback is enabled.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<String> OPERATOR_USER_ARTIFACTS_BASE_DIR =
             operatorConfig("user.artifacts.base.dir")
                     .stringType()
@@ -180,7 +222,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable inplace scaling for Flink 1.18+ using the resource requirements API. On failure or earlier Flink versions it falls back to regular full redeployment.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
             operatorConfig("dynamic.config.enabled")
                     .booleanType()
@@ -188,21 +230,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable on-the-fly config changes through the operator configmap.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL =
             operatorConfig("dynamic.config.check.interval")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
                     .withDescription("Time interval for checking config changes.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_CONFIG_CACHE_TIMEOUT =
             operatorConfig("config.cache.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
                     .withDescription("Expiration time for cached configs.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_CONFIG_CACHE_SIZE =
             operatorConfig("config.cache.size")
                     .intType()
@@ -260,7 +302,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum number of savepoint FlinkStateSnapshot resources entries to retain.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD =
             ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
                     .intType()
@@ -276,7 +318,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age for savepoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
             ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
                     .durationType()
@@ -284,7 +326,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age threshold for FlinkStateSnapshot resources to retain.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_EXCEPTION_STACK_TRACE_ENABLED =
             operatorConfig("exception.stacktrace.enabled")
                     .booleanType()
@@ -292,7 +334,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Enable exception stacktrace to be included in CR status error field.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EXCEPTION_STACK_TRACE_MAX_LENGTH =
             operatorConfig("exception.stacktrace.max.length")
                     .intType()
@@ -300,7 +342,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum length of stacktrace to be included in CR status error field.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EXCEPTION_FIELD_MAX_LENGTH =
             operatorConfig("exception.field.max.length")
                     .intType()
@@ -308,7 +350,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum length of each exception field including stack trace to be included in CR status error field.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT =
             operatorConfig("exception.throwable.list.max.count")
                     .intType()
@@ -333,7 +375,7 @@ public class KubernetesOperatorConfigOptions {
                             "Custom HTTP header for HttpArtifactFetcher. The header will be applied when getting the session job artifacts. "
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<List<String>> JAR_URI_ALLOWED_SCHEMES =
             operatorConfig("user.artifacts.allowed-schemes")
                     .stringType()
@@ -345,7 +387,7 @@ public class KubernetesOperatorConfigOptions {
                                     + "via other schemes (such as 's3' or 'hdfs') can extend this list. "
                                     + "Scheme matching is case-insensitive.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Boolean> JAR_URI_DISALLOW_RESTRICTED_HOSTS =
             operatorConfig("user.artifacts.disallow-restricted-hosts")
                     .booleanType()
@@ -412,7 +454,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Custom plugins listener class, 'listener-name' is the name of the plugin listener, and its value is a fully qualified class name.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =
             operatorConfig("watched.namespaces")
                     .stringType()
@@ -420,7 +462,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Comma separated list of namespaces the operator monitors for custom resources.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<String> OPERATOR_LABEL_SELECTOR =
             operatorConfig("label.selector")
                     .stringType()
@@ -429,7 +471,7 @@ public class KubernetesOperatorConfigOptions {
                             "Label selector of the custom resources to be watched. Please see "
                                     + "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors for the format supported.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
             operatorConfig("dynamic.namespaces.enabled")
                     .booleanType()
@@ -437,21 +479,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Enables the operator to dynamically update the list of namespaces it watches. Requires dynamic.config.enabled to be set to true.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
             operatorConfig("retry.initial.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(5))
                     .withDescription("Initial interval of retries on unhandled controller errors.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_RETRY_MAX_INTERVAL =
             operatorConfig("retry.max.interval")
                     .durationType()
                     .noDefaultValue()
                     .withDescription("Max interval of retries on unhandled controller errors.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Double> OPERATOR_RETRY_INTERVAL_MULTIPLIER =
             operatorConfig("retry.interval.multiplier")
                     .doubleType()
@@ -459,21 +501,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Interval multiplier of retries on unhandled controller errors.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_RETRY_MAX_ATTEMPTS =
             operatorConfig("retry.max.attempts")
                     .intType()
                     .defaultValue(15)
                     .withDescription("Max attempts of retries on unhandled controller errors.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_RATE_LIMITER_PERIOD =
             operatorConfig("rate-limiter.refresh-period")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(15))
                     .withDescription("Operator rate limiter refresh period for each resource.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_RATE_LIMITER_LIMIT =
             operatorConfig("rate-limiter.limit")
                     .intType()
@@ -505,21 +547,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Cancel jobs during last-state upgrade. This config is ignored for session jobs where cancel is the only mechanism to perform this type of upgrade.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =
             operatorConfig("health.probe.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription("Enables health probe for the kubernetes operator.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_HEALTH_PROBE_PORT =
             operatorConfig("health.probe.port")
                     .intType()
                     .defaultValue(8085)
                     .withDescription("The port the health probe will use to expose the status.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_STOP_ON_INFORMER_ERROR =
             operatorConfig("startup.stop-on-informer-error")
                     .booleanType()
@@ -529,7 +571,7 @@ public class KubernetesOperatorConfigOptions {
 
     public static final int DEFAULT_TERMINATION_TIMEOUT_SECONDS = 10;
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_TERMINATION_TIMEOUT =
             operatorConfig("termination.timeout")
                     .durationType()
@@ -586,7 +628,7 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription("Whether to restart failed jobs.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_LEADER_ELECTION_ENABLED =
             operatorConfig("leader-election.enabled")
                     .booleanType()
@@ -594,7 +636,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Enable leader election for the operator to allow running standby instances.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<String> OPERATOR_LEADER_ELECTION_LEASE_NAME =
             operatorConfig("leader-election.lease-name")
                     .stringType()
@@ -602,21 +644,21 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Leader election lease name, must be unique for leases in the same namespace.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_LEASE_DURATION =
             operatorConfig("leader-election.lease-duration")
                     .durationType()
                     .defaultValue(LeaderElectionConfiguration.LEASE_DURATION_DEFAULT_VALUE)
                     .withDescription("Leader election lease duration.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_RENEW_DEADLINE =
             operatorConfig("leader-election.renew-deadline")
                     .durationType()
                     .defaultValue(LeaderElectionConfiguration.RENEW_DEADLINE_DEFAULT_VALUE)
                     .withDescription("Leader election renew deadline.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_RETRY_PERIOD =
             operatorConfig("leader-election.retry-period")
                     .durationType()
@@ -631,7 +673,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Time after which jobmanager pods of terminal application deployments are shut down.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Duration> CANARY_RESOURCE_TIMEOUT =
             operatorConfig("health.canary.resource.timeout")
                     .durationType()
@@ -653,9 +695,9 @@ public class KubernetesOperatorConfigOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(
-                            "Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.");
+                            "Configure the array merge behavior during pod merging. Arrays can be either merged by position or name matching.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<DeletionPropagation> RESOURCE_DELETION_PROPAGATION =
             operatorConfig("resource.deletion.propagation")
                     .enumType(DeletionPropagation.class)
@@ -695,7 +737,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Block FlinkDeployment deletion if managed jobs are running in the session cluster.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
             operatorConfig("cluster.resource-view.refresh-interval")
                     .durationType()
@@ -703,7 +745,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
             operatorConfig("events.exceptions.stacktrace-lines")
                     .intType()
@@ -711,7 +753,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum number of stack trace lines to include in exception-related Kubernetes event messages.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
             operatorConfig("events.exceptions.limit-per-reconciliation")
                     .intType()
@@ -719,11 +761,35 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
 
-    @Documentation.Section(SECTION_ADVANCED)
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
             operatorConfig("ingress.manage")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "Feature flag if operator will manage the Ingress resource. If false, no InformerEventSource will be registered for Ingress, and Ingress won't be created.");
+
+    @Documentation.Section(SECTION_BLUEGREEN)
+    public static final ConfigOption<Duration> BLUEGREEN_ABORT_GRACE_PERIOD =
+            operatorConfig("bluegreen.abort.grace-period")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(10))
+                    .withDescription(
+                            "The max time to wait for a deployment to become ready before aborting it.");
+
+    @Documentation.Section(SECTION_BLUEGREEN)
+    public static final ConfigOption<Duration> BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL =
+            operatorConfig("bluegreen.reconciliation.reschedule-interval")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(15))
+                    .withDescription(
+                            "Configurable delay to use when the operator reschedules a reconciliation.");
+
+    @Documentation.Section(SECTION_BLUEGREEN)
+    public static final ConfigOption<Duration> BLUEGREEN_DEPLOYMENT_DELETION_DELAY =
+            operatorConfig("bluegreen.deployment-deletion.delay")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(0))
+                    .withDescription(
+                            "Configurable delay before deleting a deployment after being marked done.");
 }

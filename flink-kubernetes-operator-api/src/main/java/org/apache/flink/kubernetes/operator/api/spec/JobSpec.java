@@ -101,7 +101,7 @@ public class JobSpec implements Diffable<JobSpec> {
     /**
      * Nonce used to reset the autoscaler metrics, parallelism overrides and history for the job.
      * This can be used to quickly go back to the initial user-provided parallelism settings without
-     * having to toggle the autoscaler on and off. In order to trigger the reset behaviour simply
+     * having to toggle the autoscaler on and off. In order to trigger the reset behavior simply
      * change the nonce to a new non-null value.
      */
     @SpecDiff(value = DiffType.IGNORE)
