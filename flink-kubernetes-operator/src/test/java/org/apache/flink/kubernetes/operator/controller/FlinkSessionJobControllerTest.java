@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.api.common.JobStatus.CANCELED;
 import static org.apache.flink.api.common.JobStatus.CANCELLING;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RECONCILING;
@@ -326,6 +327,150 @@ class FlinkSessionJobControllerTest {
         testController.reconcile(sessionJob, context);
         testController.reconcile(sessionJob, context);
         assertEquals("cp2", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+    }
+
+    @Test
+    public void verifySuspendCompletesAfterAsyncCancellation() throws Exception {
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+
+        // Suspending a stateless session job is executed through an asynchronous cancellation, the
+        // reconciler can only initiate it and has to wait for the observer to see it complete
+        sessionJob.getSpec().getJob().setState(JobState.SUSPENDED);
+        testController.reconcile(sessionJob, context);
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+        assertEquals(ResourceLifecycleState.UPGRADING, sessionJob.getStatus().getLifecycleState());
+
+        // Once the cancellation was observed there is nothing left to do for the suspend
+        testController.reconcile(sessionJob, context);
+        assertSuspendCompleted(sessionJob, UpgradeMode.STATELESS);
+
+        // Further reconciliations must not disturb the suspended state
+        for (int i = 0; i < MAX_RECONCILE_TIMES; i++) {
+            testController.reconcile(sessionJob, context);
+            assertSuspendCompleted(sessionJob, UpgradeMode.STATELESS);
+        }
+
+        // The job can be resumed
+        flinkService.clearJobsInTerminalState();
+        sessionJob.getSpec().getJob().setState(JobState.RUNNING);
+        testController.reconcile(sessionJob, context);
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals(RECONCILING, sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = org.apache.flink.api.common.JobStatus.class,
+            mode = EnumSource.Mode.INCLUDE,
+            names = {"FINISHED", "FAILED"})
+    public void verifySuspendCompletesWhenJobEndsWhileCancelling(
+            org.apache.flink.api.common.JobStatus terminalStatus) throws Exception {
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+
+        sessionJob.getSpec().getJob().setState(JobState.SUSPENDED);
+        testController.reconcile(sessionJob, context);
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
+
+        // The job reaches a globally terminal state on its own before the cancellation completes
+        var job = flinkService.listJobs().get(0);
+        job.f1 =
+                new JobStatusMessage(
+                        job.f1.getJobId(),
+                        job.f1.getJobName(),
+                        terminalStatus,
+                        job.f1.getStartTime());
+
+        testController.reconcile(sessionJob, context);
+
+        // The suspend is over however the job ended, so the resource must be reported as suspended
+        // instead of waiting for a cancellation that will never be observed
+        var status = sessionJob.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+        assertEquals(terminalStatus, status.getJobStatus().getState());
+        assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+        assertEquals(
+                JobState.SUSPENDED,
+                reconciliationStatus.deserializeLastReconciledSpec().getJob().getState());
+        assertTrue(reconciliationStatus.isLastReconciledSpecStable());
+        assertEquals(ResourceLifecycleState.SUSPENDED, status.getLifecycleState());
+        // The user asked for a suspend, the terminated job must not be submitted again
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals(0, flinkService.getRunningCount());
+    }
+
+    @Test
+    public void verifyLastStateSuspendCompletesAfterAsyncCancellation() throws Exception {
+        sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+
+        // Simulate completed checkpoints
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.of(
+                                new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                        0, "cp1", System.currentTimeMillis())),
+                        Optional.empty()));
+
+        sessionJob.getSpec().getJob().setState(JobState.SUSPENDED);
+        testController.reconcile(sessionJob, context);
+        assertEquals(CANCELLING, sessionJob.getStatus().getJobStatus().getState());
+
+        testController.reconcile(sessionJob, context);
+        // The upgrade mode recorded while cancelling describes how the state was preserved, it must
+        // be kept so that the job can be restored from the checkpoint later
+        assertSuspendCompleted(sessionJob, UpgradeMode.SAVEPOINT);
+        assertEquals("cp1", sessionJob.getStatus().getJobStatus().getUpgradeSavepointPath());
+
+        // Resuming restores from the checkpoint taken during the cancellation
+        flinkService.clearJobsInTerminalState();
+        sessionJob.getSpec().getJob().setState(JobState.RUNNING);
+        testController.reconcile(sessionJob, context);
+        var jobs = flinkService.listJobs();
+        assertEquals(1, jobs.size());
+        assertEquals("cp1", jobs.get(0).f0);
+    }
+
+    @Test
+    public void verifyExternallyCancelledJobIsRestarted() throws Exception {
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+        assertEquals(RUNNING, sessionJob.getStatus().getJobStatus().getState());
+
+        // The job is cancelled outside the operator while the target state is still RUNNING
+        var job = flinkService.listJobs().get(0);
+        job.f1 =
+                new JobStatusMessage(
+                        job.f1.getJobId(), job.f1.getJobName(), CANCELED, job.f1.getStartTime());
+
+        testController.reconcile(sessionJob, context);
+
+        // The operator must resubmit the job instead of reporting the resource as suspended, so the
+        // cancelled job is joined by a freshly submitted one
+        assertEquals(2, flinkService.listJobs().size());
+        assertEquals(1, flinkService.getRunningCount());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+        assertEquals(
+                JobState.RUNNING,
+                sessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
     }
 
     @Test
@@ -894,5 +1039,20 @@ class FlinkSessionJobControllerTest {
         assertTrue(errorEvent.isPresent());
         assertEquals("CheckpointNotFound", errorEvent.get().getReason());
         assertTrue(errorEvent.get().getMessage().contains("not externally addressable"));
+    }
+
+    private static void assertSuspendCompleted(
+            FlinkSessionJob sessionJob, UpgradeMode expectedUpgradeMode) {
+        var status = sessionJob.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+        var lastReconciledJobSpec = reconciliationStatus.deserializeLastReconciledSpec().getJob();
+
+        assertEquals(CANCELED, status.getJobStatus().getState());
+        assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+        assertEquals(JobState.SUSPENDED, lastReconciledJobSpec.getState());
+        assertEquals(expectedUpgradeMode, lastReconciledJobSpec.getUpgradeMode());
+        assertTrue(reconciliationStatus.isLastReconciledSpecStable());
+        assertEquals(ResourceLifecycleState.SUSPENDED, status.getLifecycleState());
+        assertNull(status.getError());
     }
 }

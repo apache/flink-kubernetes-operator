@@ -350,6 +350,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                             && JobStatus.CANCELLING.equals(previousJobStatus))) {
                 // The job was cancelled
                 markSuspended(resource);
+                finalizeSuspendedUpgrade(resource);
             }
 
             recordJobErrorIfPresent(ctx, clusterJobStatus);
@@ -371,6 +372,29 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     s.getJob().setState(JobState.SUSPENDED);
                     m.setFirstDeployment(false);
                 });
+    }
+
+    /**
+     * When a suspend is executed through an asynchronous cancellation the reconciler exits early
+     * and leaves the resource in the UPGRADING state until the cancellation completes. Once the job
+     * has ended there is nothing left to do for a suspend request, so we complete the upgrade here,
+     * otherwise the resource would report the UPGRADING lifecycle state indefinitely.
+     *
+     * <p>Must be called right after {@link #markSuspended(AbstractFlinkResource)}, which records
+     * the suspended job state that this completion makes stable.
+     *
+     * @param resource The Flink resource whose cancellation was just observed.
+     */
+    private static void finalizeSuspendedUpgrade(AbstractFlinkResource<?, ?> resource) {
+        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+        if (reconciliationStatus.getState() != ReconciliationState.UPGRADING
+                || resource.getSpec().getJob().getState() != JobState.SUSPENDED) {
+            return;
+        }
+        LOG.debug("Suspend completed after asynchronous cancellation");
+        reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+        // Suspended specs are always marked stable, same as for synchronous suspends
+        reconciliationStatus.markReconciledSpecAsStable();
     }
 
     private void recordJobErrorIfPresent(
