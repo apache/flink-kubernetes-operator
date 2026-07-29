@@ -25,87 +25,63 @@ under the License.
 -->
 
 # Overview
-Flink Kubernetes Operator acts as a control plane to manage the complete deployment lifecycle of Apache Flink applications. Although Flink’s native Kubernetes integration already allows you to directly deploy Flink applications on a running Kubernetes(k8s) cluster, [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) and the [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) have also become central to a Kubernetes native deployment experience.
 
-Flink Kubernetes Operator aims to capture the responsibilities of a human operator who is managing Flink deployments. Human operators have deep knowledge of how Flink deployments ought to behave, how to start clusters, how to deploy jobs, how to upgrade them and how to react if there are problems. The main goal of the operator is the automation of these activities, which cannot be achieved through the Flink native integration alone.
+Apache Flink runs natively on Kubernetes: it can bring up a JobManager and TaskManagers and submit a job. But a streaming application lives for months, and that native integration effectively stops at deployment, everything that comes afterward, restarting unhealthy jobs, savepointing before upgrades, rolling back bad releases, resizing as load shifts, stays with a person who understands Flink, indefinitely.
 
-## Features
-### Core
-- Fully-automated [Job Lifecycle Management]({{< ref "docs/custom-resource/job-management" >}})
-  - Running, suspending and deleting applications
-  - Stateful and stateless application upgrades
-  - Triggering and managing savepoints
-  - Handling errors, rolling-back broken upgrades
-- Multiple Flink version support: v1.19, v1.20, v2.0, v2.1, v2.2
-- [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
-  - Application cluster
-  - Session cluster
-  - Session job
-- Built-in [High Availability](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/)   
-- Extensible framework
-  - [Custom validators]({{< ref "docs/operations/plugins#custom-flink-resource-validators" >}})
-  - [Custom resource listeners]({{< ref "docs/operations/plugins#custom-flink-resource-listeners" >}})  
-- Advanced [Configuration]({{< ref "docs/operations/configuration" >}}) management
-  - Default configurations with dynamic updates
-  - Per job configuration
-  - Environment variables
-- POD augmentation via [Pod Templates]({{< ref "docs/custom-resource/pod-template" >}})
-  - Native Kubernetes POD definitions
-  - Layering (Base/JobManager/TaskManager overrides)
-- [Job Autoscaler]({{< ref "docs/custom-resource/autoscaler" >}})
-  - Collect lag and utilization metrics
-  - Scale job vertices to the ideal parallelism
-  - Scale up and down as the load changes
-- [Snapshot management]({{< ref "docs/custom-resource/snapshots" >}})
-  - Manage snapshots via Kubernetes CRs
-### Operations
-- Operator [Metrics]({{< ref "docs/operations/metrics-logging#metrics" >}})
-  - Utilizes the well-established [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics)
-  - Pluggable metrics reporters
-  - Detailed resources and kubernetes api access metrics
-- Fully-customizable [Logging]({{< ref "docs/operations/metrics-logging#logging" >}})
-  - Default log configuration
-  - Per job log configuration
-  - Sidecar based log forwarders
-- Flink Web UI and REST Endpoint Access
-  - Fully supported Flink Native Kubernetes [service expose types](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#accessing-flinks-web-ui)
-  - Dynamic [Ingress templates]({{< ref "docs/operations/ingress" >}})
-- [Helm based installation]({{< ref "docs/operations/helm" >}})
-  - Automated [RBAC configuration]({{< ref "docs/operations/rbac" >}})
-  - Advanced customization techniques
-- Up-to-date public repositories
-  - GitHub Container Registry [ghcr.io/apache/flink-kubernetes-operator](http://ghcr.io/apache/flink-kubernetes-operator)
-  - DockerHub [https://hub.docker.com/r/apache/flink-kubernetes-operator](https://hub.docker.com/r/apache/flink-kubernetes-operator)
+The Flink Kubernetes Operator takes that work off human hands, following the Kubernetes [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/): the desired application is declared as a [custom resource](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/), and the operator continuously reconciles the running cluster toward it, observing what runs, comparing it against the declaration, and acting to close any gap. Flink applications become first-class Kubernetes objects, managed and secured with the same tooling as any other workload.
 
-## Built-in Examples
+The automation is only part of it. Across the full load range, from saturation to idle, the operator optimizes for both performance and cost: under load, pipelines hold their throughput targets and upgrades roll out with no dip, and when demand falls, parallelism and cluster resources are trimmed, so nothing keeps paying for idle capacity.
 
-The operator project comes with a wide variety of built in examples to show you how to use the operator functionality.
-The examples are maintained as part of the operator repo and can be found [here](https://github.com/apache/flink-kubernetes-operator/tree/main/examples).
+<!-- The exported SVG embeds its own editable draw.io source: open it directly in draw.io to modify the figure. -->
+{{< img src="/img/concepts/overview-deliverables.svg" alt="The operator deliverables at a glance" >}}
 
-**What is covered:**
+Three properties round it out:
 
- - Application, Session and SessionJob submission
- - Checkpointing and HA configuration
- - Java, SQL and Python Flink jobs
- - Ingress, logging and metrics configuration
- - Advanced operator deployment techniques using Kustomize
- - And some more...
+- Scale: a single lightweight instance, on a modest resource footprint, is built to manage hundreds or thousands of pipelines at once.
+- Coverage: long-running streaming jobs and bounded batch jobs alike, on Kubernetes in [native or standalone mode]({{< ref "docs/deployment/overview#operator-deployment-modes" >}}).
+- Currency: the operator integrates with the latest Flink versions and their features as they arrive, listed under [Compatibility → Supported Flink Versions]({{< ref "docs/deployment/compatibility#supported-flink-versions" >}}).
 
-## Known Issues & Limitations
+Reducing human intervention to a minimum does not remove the need to understand the operator: knowing what it can do, how it manages a job's lifecycle, and where its limits lie is what makes it safe to trust with production workloads, and the rest of this documentation builds that understanding.
 
-### JobManager High-availability
-The Operator supports both [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) and [Zookeeper HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/zookeeper_ha/) for providing High-availability for Flink jobs. The HA solution can benefit from using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
+## Operator Deliverables
 
-### JobResultStore Resource Leak
-To mitigate the impact of [FLINK-27569](https://issues.apache.org/jira/browse/FLINK-27569) the operator introduced a workaround [FLINK-27573](https://issues.apache.org/jira/browse/FLINK-27573) by setting `job-result-store.delete-on-commit=false` and a unique value for `job-result-store.storage-path` for every cluster launch. The storage path for older runs must be cleaned up manually, keeping the latest directory always:
-```shell
-ls -lth /tmp/flink/ha/job-result-store/basic-checkpoint-ha-example/
-total 0
-drwxr-xr-x 2 9999 9999 40 May 12 09:51 119e0203-c3a9-4121-9a60-d58839576f01 <- must be retained
-drwxr-xr-x 2 9999 9999 60 May 12 09:46 a6031ec7-ab3e-4b30-ba77-6498e58e6b7f
-drwxr-xr-x 2 9999 9999 60 May 11 15:11 b6fb2a9c-d1cd-4e65-a9a1-e825c4b47543
-```
+The operator is built to be useful the moment it is installed, with no add-on components or custom automation required around it. A default installation already covers the essentials of running Flink in production:
 
-### AuditUtils can log sensitive information present in the custom resources
-As reported in [FLINK-30306](https://issues.apache.org/jira/browse/FLINK-30306) when Flink custom resources change the operator logs the change, which could include sensitive information. We suggest ingesting secrets to Flink containers during runtime to mitigate this.
-Also note that anyone who has access to the custom resources already had access to the potentially sensitive information in question, but folks who only have access to the logs could also see them now. We are planning to introduce redaction rules to AuditUtils to improve this in a later release.
+- **[Lifecycle Management]({{< ref "docs/concepts/lifecycle-management" >}})**: the operator runs the full life of an application, deploying it, keeping it running, and cleanly suspending or deleting it. It upgrades jobs statefully or statelessly, snapshots their state declaratively, rolls back failed upgrades, and restarts unhealthy jobs on its own, so routine operations and common failures no longer need a person on call.
+- **[Zero-Downtime Upgrades]({{< ref "docs/concepts/zero-downtime-upgrades" >}})**: for jobs that cannot tolerate the brief restart of a normal upgrade, blue/green deployments bring the new version up alongside the old one and switch over only once it is proven healthy, aborting back to the old version when it is not, so an upgrade never interrupts the stream.
+- **[Autoscaling]({{< ref "docs/concepts/autoscaling" >}})**: the operator measures each job's real workload and continuously right-sizes its parallelism, adding capacity under load and releasing it as demand falls, with TaskManager memory tuned alongside, keeping jobs on their throughput targets without over-provisioning.
+- **Kubernetes-Native Operations**: everything an application needs to run well in a cluster is treated as a first-class concern, from Helm installation, RBAC, and high availability to metrics, logging, events, and ingress, so the operator fits existing Kubernetes practices instead of standing apart from them.
+
+Taken together, these turn a Flink application from something that has to be watched and operated by hand into a workload that largely runs itself, shifting effort away from keeping the pipeline alive and toward improving what it does.
+
+## Operator Capabilities
+
+Each highlight above is backed by a broader set of concrete features. The groups below organize them by concern, from deployment and autoscaling to configuration, operations, and installation, with each feature linking to the page that documents it in full.
+
+### Deployment and Lifecycle
+- **[Custom Resources]({{< ref "docs/custom-resource/overview" >}})**: application clusters, session clusters, and session jobs declared as first-class Kubernetes objects, with snapshots and blue/green transitions expressed the same way.
+- **[Job Management]({{< ref "docs/managing/job-management" >}})**: starting, suspending, resuming, upgrading, and deleting jobs, with stateful and stateless upgrade modes, automatic restarts and recovery, and rollbacks for upgrades that fail to stabilize.
+- **[Snapshot Management]({{< ref "docs/managing/snapshot-management" >}})**: savepoints and checkpoints triggered and tracked declaratively through custom resources.
+- **[Blue/Green Deployments]({{< ref "docs/managing/bluegreen-deployments" >}})**: a second deployment brought up beside the running one and switched over only once healthy, keeping the stream uninterrupted.
+- **[High Availability]({{< ref "docs/deployment/leader-election" >}})**: Flink's Kubernetes HA services with standby JobManagers for the jobs, and leader election for the operator itself.
+
+### Autoscaling
+- **[Autoscaler]({{< ref "docs/managing/autoscaler" >}})**: per-vertex parallelism continuously right-sized from observed utilization, scaling up under load and down as demand falls.
+- **[Autotuning]({{< ref "docs/managing/autotuning" >}})**: TaskManager memory right-sized from observed usage, applied alongside scaling actions without extra restarts.
+
+### Configuration and Extensibility
+- **[Configuration]({{< ref "docs/deployment/configuration" >}})**: default configuration with dynamic updates, per-job overrides, and environment variables.
+- **[Pod Template]({{< ref "docs/custom-resource/pod-template" >}})**: native pod definitions with base, JobManager, and TaskManager layering.
+- **[Ingress]({{< ref "docs/custom-resource/ingress" >}})**: dynamic ingress templates for reaching the Flink web UI, alongside Flink's native [service expose types](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#accessing-flinks-web-ui).
+- **[Plugins]({{< ref "docs/deployment/plugins" >}})**: custom validators, mutators, and listeners for the custom resources, and pluggable phases of the autoscaler loop.
+
+### Operations and Observability
+- **[Metrics]({{< ref "docs/operations/metrics" >}})**: built on the [Flink metric system](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics), with pluggable reporters and detailed resource and Kubernetes API metrics.
+- **[Logging]({{< ref "docs/operations/logging" >}})**: default and per-resource logging configuration for the operator and the Flink deployments it manages.
+- **[Events]({{< ref "docs/operations/events" >}})**: Kubernetes events on the custom resources tracing deployments, upgrades, snapshots, and scaling decisions.
+- **[State]({{< ref "docs/operations/state" >}})**: the resource status, autoscaler records, and Flink cluster ConfigMaps the operator maintains, with their recovery and cleanup behavior.
+
+### Installation and Security
+- **[Helm Installation]({{< ref "docs/deployment/helm/installation" >}})**: chart-driven installation with [RBAC]({{< ref "docs/deployment/helm/rbac" >}}) generated for the operator and its jobs, and extensive customization.
+- **[Security]({{< ref "docs/deployment/security" >}})**: service account boundaries, pod security, webhook and Flink connection TLS, and keeping credentials out of the configuration.
+- **Official Images**: published to [GHCR](https://github.com/apache/flink-kubernetes-operator/pkgs/container/flink-kubernetes-operator) and [DockerHub](https://hub.docker.com/r/apache/flink-kubernetes-operator).

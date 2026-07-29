@@ -26,107 +26,98 @@ under the License.
 
 # Quick Start
 
-This document provides a quick introduction to using the Flink Kubernetes Operator. Readers
-of this document will be able to deploy the Flink operator itself and an example Flink job to a local
-Kubernetes installation.
+This page walks through deploying the operator and an example Flink job on a local Kubernetes installation.
 
 ## Prerequisites
 
-We assume that you have a local installations of the following:
-1. [docker](https://docs.docker.com/)
-2. [kubernetes](https://kubernetes.io/)
-3. [helm](https://helm.sh/docs/intro/quickstart/)
+The quick start requires local installations of the following, so that the `kubectl` and `helm` commands are available:
 
-So that the `kubectl` and `helm` commands are available on your local system.
+1. [Docker](https://docs.docker.com/)
+2. [Kubernetes](https://kubernetes.io/)
+3. [Helm](https://helm.sh/docs/intro/quickstart/)
 
-For docker we recommend that you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed
-and configured with at least 8GB of RAM.
-For kubernetes [minikube](https://minikube.sigs.k8s.io/docs/start/) is our choice, at the time of writing this we are
-using version v1.28.0 (end-to-end tests are using the same version). You can start a cluster with the following command:
+For Docker, [Docker Desktop](https://www.docker.com/products/docker-desktop) configured with at least 8GB of RAM is recommended. For Kubernetes, [minikube](https://minikube.sigs.k8s.io/docs/start/) is a good choice, pinned below to v1.28.0, the version the end-to-end tests run against. Start a cluster with:
 
-```bash
+```shell
 minikube start --kubernetes-version=v1.28.0
-😄  minikube v1.28.0 on Darwin 13.0.1
-✨  Automatically selected the docker driver. Other choices: hyperkit, ssh
-📌  Using Docker Desktop driver with root privileges
-👍  Starting control plane node minikube in cluster minikube
-🚜  Pulling base image ...
-🔥  Creating docker container (CPUs=2, Memory=4000MB) ...
-🐳  Preparing Kubernetes v1.28.0 on Docker 20.10.20 ...
-    ▪ Generating certificates and keys ...
-    ▪ Booting up control plane ...
-    ▪ Configuring RBAC rules ...
-🔎  Verifying Kubernetes components...
-    ▪ Using image gcr.io/k8s-minikube/storage-provisioner:v5
-🌟  Enabled addons: default-storageclass, storage-provisioner
-🏄  Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
 ```
 
-We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is optional for this quickstart guide.
+[k9s](https://k9scli.io/) is a convenient terminal UI for Kubernetes, optional for this guide.
 
-## Deploying the operator
+## Deploying the Operator
 
-Install the certificate manager on your Kubernetes cluster to enable adding the webhook component (only needed once per Kubernetes cluster):
-```bash
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.18.2/cert-manager.yaml
+Install [cert-manager](https://cert-manager.io/) to enable the webhook component (needed once per Kubernetes cluster):
+
+```shell
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 ```
 
 {{< hint info >}}
-In case the cert manager installation failed for any reason you can disable the webhook by passing `--set webhook.create=false` to the helm install command for the operator.
+If the cert-manager installation fails, the webhook can be disabled with `--set webhook.create=false` on the helm install command below. The certificate setup and the disable options are covered in detail under [Cert Manager]({{< ref "docs/deployment/helm/cert-manager" >}}).
 {{< /hint >}}
 
-Now you can deploy the selected stable Flink Kubernetes Operator version using the included Helm chart:
+Deploy the latest stable operator version using the included Helm chart:
 
-```bash
+```shell
 helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-{{< stable >}}{{< version >}}{{< /stable >}}{{< unstable >}}&lt;OPERATOR-VERSION&gt;{{< /unstable >}}/
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator
 ```
 
-To find the list of stable versions please visit https://flink.apache.org/downloads.html
+The list of stable versions is available on the Flink [downloads page](https://flink.apache.org/downloads.html).
 
 {{< hint info >}}
-The Helm chart by default points to the `ghcr.io/apache/flink-kubernetes-operator` image repository.
-If you have connectivity issues or prefer to use Dockerhub instead you can use `--set image.repository=apache/flink-kubernetes-operator` during installation.
+The Helm chart points to the `ghcr.io/apache/flink-kubernetes-operator` image repository by default. In case of connectivity issues, or to use DockerHub instead, set `--set image.repository=apache/flink-kubernetes-operator` during installation.
 {{< /hint >}}
 
-You may verify your installation via `kubectl` and `helm`:
-```bash
+Verify the installation via `kubectl` and `helm`:
+
+```shell
 kubectl get pods
-NAME READY STATUS RESTARTS AGE
-flink-kubernetes-operator-fb5d46f94-ghd8b 2/2 Running 0 4m21s
+NAME                                        READY   STATUS    RESTARTS   AGE
+flink-kubernetes-operator-fb5d46f94-ghd8b   2/2     Running   0          4m21s
 
 helm list
-NAME NAMESPACE REVISION UPDATED STATUS CHART APP VERSION
-flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-{{< version >}} {{< version >}}
+NAME                        NAMESPACE   REVISION   UPDATED                                STATUS     CHART                                       APP VERSION
+flink-kubernetes-operator   default     1          2022-03-09 17:39:55.461359 +0100 CET   deployed   flink-kubernetes-operator-{{< version >}}   {{< version >}}
 ```
 
-## Submitting a Flink job
+## Submitting a Flink Job
 
-Once the operator is running as seen in the previous step you are ready to submit a Flink job:
-```bash
+With the operator running, submit the example Flink job:
+
+```shell
 kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/{{< stable_branch >}}/examples/basic.yaml
 ```
-You may follow the logs of your job, after a successful startup (which can take on the order of a minute in a fresh environment, seconds afterwards) you can:
 
-```bash
+Follow the job logs after startup, which can take about a minute in a fresh environment, seconds afterwards:
+
+```shell
 kubectl logs -f deploy/basic-example
 
-2022-03-11 21:46:04,458 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Triggering checkpoint 206 (type=CHECKPOINT) @ 1647035164458 for job a12c04ac7f5d8418d8ab27931bf517b7.
-2022-03-11 21:46:04,465 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 206 for job a12c04ac7f5d8418d8ab27931bf517b7 (28509 bytes, checkpointDuration=7 ms, finalizationTime=0 ms).
-2022-03-11 21:46:06,458 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Triggering checkpoint 207 (type=CHECKPOINT) @ 1647035166458 for job a12c04ac7f5d8418d8ab27931bf517b7.
-2022-03-11 21:46:06,483 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 207 for job a12c04ac7f5d8418d8ab27931bf517b7 (28725 bytes, checkpointDuration=25 ms, finalizationTime=0 ms).
+INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Triggering checkpoint 206 (type=CHECKPOINT) @ 1647035164458 for job a12c04ac7f5d8418d8ab27931bf517b7.
+INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 206 for job a12c04ac7f5d8418d8ab27931bf517b7 (28509 bytes, checkpointDuration=7 ms, finalizationTime=0 ms).
 ```
 
-To expose the Flink Dashboard you may add a port-forward rule or look the [ingress configuration options]({{< ref "docs/operations/ingress" >}}):
+To expose the Flink Dashboard, add a port-forward rule or see the [Ingress]({{< ref "docs/custom-resource/ingress" >}}) configuration options:
 
-```bash
+```shell
 kubectl port-forward svc/basic-example-rest 8081
 ```
 
-Now the Flink Dashboard is accessible at [localhost:8081](http://localhost:8081/).
+The Flink Dashboard is then accessible at [localhost:8081](http://localhost:8081/).
 
-In order to stop your job and delete your FlinkDeployment you can:
+To stop the job and delete the `FlinkDeployment`:
 
-```bash
+```shell
 kubectl delete flinkdeployment/basic-example
 ```
+
+## Built-in Examples
+
+The operator project ships a wide variety of built-in examples showing how to use its functionality. They are maintained as part of the operator repo, in the [examples directory](https://github.com/apache/flink-kubernetes-operator/tree/main/examples), and cover, among others:
+
+- Application, session, and session job submission
+- Checkpointing and HA configuration
+- Java, SQL, and Python Flink jobs
+- Ingress, logging, and metrics configuration
+- Advanced operator deployment techniques using Kustomize

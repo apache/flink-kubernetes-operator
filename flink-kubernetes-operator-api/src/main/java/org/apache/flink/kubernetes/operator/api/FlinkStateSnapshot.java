@@ -29,7 +29,9 @@ import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
 
-/** Custom resource definition for taking manual savepoints of Flink jobs. */
+/**
+ * Custom resource definition that represents a savepoint or checkpoint operation on a Flink job.
+ */
 @Experimental
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()
