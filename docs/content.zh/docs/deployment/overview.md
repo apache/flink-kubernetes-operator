@@ -38,7 +38,7 @@ Everything the operator needs lands in the cluster at installation time. Helm in
 
 The figure reads in the order things come into existence:
 - At cluster scope sit the four CRDs of the `flink.apache.org` API group, registered by Helm.
-- The operator namespace holds the operator's own footprint: a single Deployment whose pod runs the operator and webhook containers, the [configuration ConfigMap]({{< ref "docs/deployment/configuration" >}}) they read, and the webhook's Service with its two TLS Secrets, `webhook-server-cert` carrying the certificate and `flink-operator-webhook-secret` the password of its keystore.
+- The operator namespace holds the operator's own footprint: a single Deployment whose pod runs the operator and webhook containers, the [configuration ConfigMap]({{< ref "docs/deployment/configuration" >}}) they read, and the webhook's Service with its two TLS Secrets, `flink-operator-webhook-server-cert` carrying the certificate and `flink-operator-webhook-secret` the password of its keystore.
 - The managed namespace holds the `FlinkDeployment` itself and everything materialized from it: the JobManager Deployment with its ReplicaSet and pods, the bare TaskManager pods, the REST Service, and the ConfigMaps that carry the Flink configuration, the pod template, the HA metadata, and the [autoscaler state]({{< ref "docs/operations/state#autoscaler-state" >}}).
 - The entry points frame the picture: `kubectl` or Helm reaches everything through the Kubernetes API server, while a browser reaches the Flink Web UI through the optional Ingress in front of the REST Service.
 

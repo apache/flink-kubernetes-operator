@@ -271,7 +271,7 @@ spec:
         {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: keystore
           secret:
-            secretName: webhook-server-cert
+            secretName: flink-operator-webhook-server-cert
             items:
             - key: keystore.p12
               path: keystore.p12
