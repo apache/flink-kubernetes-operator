@@ -47,9 +47,9 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.ABORT_GRACE_PERIOD;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.DEPLOYMENT_DELETION_DELAY;
-import static org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentConfigOptions.RECONCILIATION_RESCHEDULING_INTERVAL;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_ABORT_GRACE_PERIOD;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.getDependentObjectMeta;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.replaceFlinkBlueGreenDeployment;
 
@@ -155,7 +155,9 @@ public class BlueGreenUtils {
      */
     public static long getReconciliationReschedInterval(BlueGreenContext context) {
         return Math.max(
-                getConfigOption(context.getBgDeployment(), RECONCILIATION_RESCHEDULING_INTERVAL)
+                getConfigOption(
+                                context.getBgDeployment(),
+                                BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL)
                         .toMillis(),
                 0);
     }
@@ -168,7 +170,8 @@ public class BlueGreenUtils {
      */
     public static long getDeploymentDeletionDelay(BlueGreenContext context) {
         return Math.max(
-                getConfigOption(context.getBgDeployment(), DEPLOYMENT_DELETION_DELAY).toMillis(),
+                getConfigOption(context.getBgDeployment(), BLUEGREEN_DEPLOYMENT_DELETION_DELAY)
+                        .toMillis(),
                 0);
     }
 
@@ -180,7 +183,7 @@ public class BlueGreenUtils {
      */
     public static long getAbortGracePeriod(BlueGreenContext context) {
         long abortGracePeriod =
-                getConfigOption(context.getBgDeployment(), ABORT_GRACE_PERIOD).toMillis();
+                getConfigOption(context.getBgDeployment(), BLUEGREEN_ABORT_GRACE_PERIOD).toMillis();
         return abortGracePeriod;
     }
 

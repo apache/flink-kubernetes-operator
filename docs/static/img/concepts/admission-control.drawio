@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="admission-control" name="admission-control">
+    <mxGraphModel dx="1234" dy="794" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="640" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ac5-webhook" value="&lt;b&gt;Admission Webhook&lt;/b&gt;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;spacing=14;fillColor=#F59E0B;strokeColor=none;fontColor=#FFFFFF;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="317" y="120" width="367" height="324" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-endpoint" value="&lt;b&gt;TLS&lt;/b&gt;&lt;br&gt;endpoint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#334155;fontSize=10;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="360" y="252" width="112" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-badge0" value="0" style="ellipse;whiteSpace=wrap;html=1;fillColor=#334155;strokeColor=#FFFFFF;strokeWidth=2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;shadow=0;" vertex="1" parent="ac5-endpoint">
+          <mxGeometry x="-8" y="-8" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-flow1" value="" style="endArrow=blockThin;endFill=1;html=1;strokeColor=#FFFFFF;strokeWidth=5;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ac5-endpoint" target="XYYWyx1inEky5-nwF_OF-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-flow2" value="" style="endArrow=blockThin;endFill=1;html=1;strokeColor=#FFFFFF;strokeWidth=5;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="XYYWyx1inEky5-nwF_OF-1" target="XYYWyx1inEky5-nwF_OF-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;strokeColor=#FFFFFF;" edge="1" parent="1" source="ac5-keystore" target="ac5-endpoint">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-keystore" value="&lt;b&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;TLS&lt;/font&gt;&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;keystore&lt;/font&gt;&lt;/div&gt;" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFFFFF;strokeColor=#CBD5E1;fontColor=#334155;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="391.5" y="179" width="49" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ac5-e-in" value="admission review" style="endArrow=classic;html=1;rounded=1;strokeWidth=2;strokeColor=#334155;fontSize=10;fontColor=#334155;labelBackgroundColor=#FFFFFF;entryX=0;entryY=0.5;" edge="1" parent="1" target="ac5-endpoint">
+          <mxGeometry x="-0.0061" y="-1" relative="1" as="geometry">
+            <mxPoint x="140" y="272" as="sourcePoint" />
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ac5-e-out" value="patched spec (allowed or denied)" style="endArrow=classic;html=1;rounded=1;strokeWidth=2;strokeColor=#334155;fontSize=10;fontColor=#334155;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="XYYWyx1inEky5-nwF_OF-3">
+          <mxGeometry x="0.5153" relative="1" as="geometry">
+            <mxPoint x="140" y="379" as="targetPoint" />
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-1" value="&lt;b style=&quot;font-size: 13px;&quot;&gt;Mutate&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#334155;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="530" y="252" width="112" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-2" value="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#334155;strokeColor=#FFFFFF;strokeWidth=2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;shadow=0;" vertex="1" parent="XYYWyx1inEky5-nwF_OF-1">
+          <mxGeometry x="-8" y="-8" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-3" value="&lt;b style=&quot;font-size: 13px;&quot;&gt;Validate&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;fontColor=#334155;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="530" y="359" width="112" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-4" value="2" style="ellipse;whiteSpace=wrap;html=1;fillColor=#334155;strokeColor=#FFFFFF;strokeWidth=2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;shadow=0;" vertex="1" parent="XYYWyx1inEky5-nwF_OF-3">
+          <mxGeometry x="-8" y="-8" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="XYYWyx1inEky5-nwF_OF-8" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0;entryDx=17.5;entryDy=0;entryPerimeter=0;curved=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#FFFFFF;" edge="1" parent="1" source="ac5-keystore" target="ac5-keystore">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="376" y="202" />
+              <mxPoint x="376" y="160" />
+              <mxPoint x="409" y="160" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

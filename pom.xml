@@ -398,6 +398,8 @@ under the License.
                         <exclude>apache-maven-3.2.5/**</exclude>
                         <!-- Documentation -->
                         <exclude>docs/static/font-awesome/**</exclude>
+                        <!-- Figure assets carry no license header, and the editable draw.io source embedded in the SVGs exceeds apache-rat's XML entity-size limit -->
+                        <exclude>docs/static/img/**</exclude>
                         <exclude>docs/resources/**</exclude>
                         <exclude>docs/public/**</exclude>
                         <exclude>docs/themes/book/**</exclude>
