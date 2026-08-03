@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -107,18 +108,20 @@ public class FlinkSessionJobController
             return UpdateControl.noUpdate();
         }
 
-        observer.observe(ctx);
-        if (!validateSessionJob(ctx)) {
-            statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
-            return ReconciliationUtils.toUpdateControl(
-                    ctx.getOperatorConfig(), flinkSessionJob, previousJob, false);
-        }
-
         try {
+            observer.observe(ctx);
+            if (!validateSessionJob(ctx)) {
+                statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
+                return ReconciliationUtils.toUpdateControl(
+                        ctx.getOperatorConfig(), flinkSessionJob, previousJob, false);
+            }
             statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
             reconciler.reconcile(ctx);
+        } catch (UpgradeFailureException ufe) {
+            ReconciliationUtils.updateForReconciliationError(ctx, ufe);
+            triggerErrorEvent(ctx, ufe, ufe.getReason());
         } catch (Exception e) {
-            triggerErrorEvent(ctx, e);
+            triggerErrorEvent(ctx, e, EventRecorder.Reason.Error.name());
             throw new ReconciliationException(e);
         }
         statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
@@ -158,11 +161,11 @@ public class FlinkSessionJobController
         return deleteControl;
     }
 
-    private void triggerErrorEvent(FlinkResourceContext<?> ctx, Exception e) {
+    private void triggerErrorEvent(FlinkResourceContext<?> ctx, Exception e, String reason) {
         eventRecorder.triggerEvent(
                 ctx.getResource(),
                 EventRecorder.Type.Warning,
-                EventRecorder.Reason.Error.name(),
+                reason,
                 ExceptionUtils.getExceptionMessage(e),
                 EventRecorder.Component.Job,
                 ctx.getKubernetesClient());
