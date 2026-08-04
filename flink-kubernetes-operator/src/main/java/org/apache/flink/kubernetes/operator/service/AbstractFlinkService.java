@@ -117,6 +117,7 @@ import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.Waitable;
 import lombok.SneakyThrows;
@@ -1242,6 +1243,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                 deleted.waitUntilCondition(
                         Objects::isNull, timeout.toMillis(), TimeUnit.MILLISECONDS);
                 LOG.info("Completed {}", operation);
+            } catch (KubernetesClientTimeoutException e) {
+                // Rethrow timeouts before the broader catch swallows it
+                throw e;
             } catch (KubernetesClientException kce) {
                 // We completely ignore not found errors and simply log others
                 if (kce.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
