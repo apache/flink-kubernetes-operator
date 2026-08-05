@@ -83,9 +83,9 @@ under the License.
         <flink.version>1.20.4</flink.version>
         <guava.version>33.4.0-jre</guava.version>
 
-        <slf4j.version>1.7.36</slf4j.version>
+        <slf4j.version>2.0.18</slf4j.version>
         <log4j.version>2.25.4</log4j.version>
-        <logback.version>1.2.13</logback.version>
+        <logback.version>1.5.34</logback.version>
 
         <spotless.version>2.40.0</spotless.version>
         <it.skip>true</it.skip>

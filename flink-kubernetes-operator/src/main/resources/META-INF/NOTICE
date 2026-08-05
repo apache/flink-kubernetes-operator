@@ -63,7 +63,6 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.apache.logging.log4j:log4j-1.2-api:jar:2.25.4
 - org.apache.logging.log4j:log4j-api:jar:2.25.4
 - org.apache.logging.log4j:log4j-core:jar:2.25.4
-- org.apache.logging.log4j:log4j-slf4j-impl:jar:2.25.4
 - org.checkerframework:checker-qual:jar:3.43.0
 - org.javassist:javassist:jar:3.24.0-GA
 - org.jetbrains.kotlin:kotlin-stdlib-common:jar:1.8.21
@@ -73,7 +72,7 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.jetbrains:annotations:jar:13.0
 - org.objenesis:objenesis:jar:2.1
 - org.quartz-scheduler:quartz:jar:2.4.0
-- org.slf4j:slf4j-api:jar:1.7.36
+- org.slf4j:slf4j-api:jar:2.0.18
 - org.snakeyaml:snakeyaml-engine:jar:2.6
 - org.xerial.snappy:snappy-java:jar:1.1.10.4
 - org.yaml:snakeyaml:jar:2.5

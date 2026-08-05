@@ -115,11 +115,7 @@ Logback XML overrides replace the entire default configuration. Unlike Log4j2 `.
 
 ## Logging Library Version Overrides
 
-The operator ships with Logback 1.2.x and SLF4J 1.7.x. These versions are bundled in the Docker image and the SLF4J 1.7.x API is shaded into the operator JAR.
-
-{{< hint warning >}}
-Upgrading to Logback 1.4+/1.5+ or SLF4J 2.x is not supported. SLF4J 2.x uses a `ServiceLoader`-based binding mechanism that is incompatible with the SLF4J 1.7.x API shaded inside the operator. Replacing the JARs at runtime will result in `ClassNotFoundException: org.slf4j.impl.StaticLoggerBinder`.
-{{< /hint >}}
+The operator ships with Logback 1.5.x and SLF4J 2.0.x. These versions are bundled in the Docker image and the SLF4J 2.0.x API is shaded into the operator JAR.
 
 ## FlinkDeployment Logging Configuration
 

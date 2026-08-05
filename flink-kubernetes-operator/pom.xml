@@ -123,8 +123,9 @@ under the License.
         </dependency>
 
         <!-- Logging: SLF4J API and Log4j2 implementation are shaded into the operator JAR.
-             Only the SLF4J bindings (log4j-slf4j-impl / logback-classic) are excluded
-             and shipped as separate JARs so the entrypoint can pick one. -->
+             Only the SLF4J bindings (log4j-slf4j2-impl / logback-classic + logback-core)
+             are excluded and shipped as separate JARs so the entrypoint can pick one.
+             SLF4J 2.x is required: JOSDK and the fabric8 client are compiled against it. -->
 
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -134,7 +135,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
             <version>${log4j.version}</version>
             <scope>provided</scope>
         </dependency>
@@ -318,7 +319,7 @@ under the License.
                         <!-- Log4j2 SLF4J binding (default logging framework) -->
                         <artifactItem>
                             <groupId>org.apache.logging.log4j</groupId>
-                            <artifactId>log4j-slf4j-impl</artifactId>
+                            <artifactId>log4j-slf4j2-impl</artifactId>
                             <version>${log4j.version}</version>
                             <outputDirectory>${project.build.directory}/log4j</outputDirectory>
                         </artifactItem>
