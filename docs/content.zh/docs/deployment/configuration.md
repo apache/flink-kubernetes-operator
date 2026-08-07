@@ -54,7 +54,7 @@ defaultConfiguration:
 Operator configuration can be delivered in either of Flink's two configuration formats, by defining the matching key under `defaultConfiguration` in the Helm `values.yaml`:
 
 - `flink-conf.yaml` is the legacy format, which accepts only flat key-value pairs written with dot notation and does not support nested YAML maps. This is the format the chart ships by default.
-- `config.yaml` is the YAML 1.2 format defined from Flink 1.19 onward and the only format Flink 2.0 accepts. It supports nested keys (see the [Flink Configuration File](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/deployment/config/#flink-configuration-file) documentation):
+- `config.yaml` is the YAML 1.2 format defined from Flink 1.19 onward and the only format Flink 2.0 accepts. It supports nested keys (see the [Flink Configuration File](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/config/#flink-configuration-file) documentation):
 
 ```yaml
 defaultConfiguration:

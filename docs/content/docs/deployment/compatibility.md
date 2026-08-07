@@ -97,7 +97,7 @@ The operator JVM links against a specific Flink release for its own runtime need
 This bundled runtime is used by the operator process for purposes such as:
 
 - Pluggable filesystem access (`org.apache.flink.core.fs.FileSystem`), used to fetch `FlinkSessionJob` artifacts from non-HTTP schemes such as `s3://`, `gs://`, `hdfs://`.
-- Configuration parsing (`org.apache.flink.configuration.GlobalConfiguration`) that reads the operator's own `flink-conf.yaml`.
+- Configuration parsing (`org.apache.flink.configuration.GlobalConfiguration`) that reads the operator's own `config.yaml`.
 - Plugin discovery (`org.apache.flink.core.plugin.PluginManager`) that loads custom validators, mutators, listeners, and filesystem factories.
 
 ## Kubernetes
