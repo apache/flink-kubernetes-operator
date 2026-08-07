@@ -113,10 +113,13 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     }
 
     /**
-     * Fetch runtime configuration from the Flink REST API and cache it in the config manager when
-     * the job is in RUNNING state and no cached config exists for the current job ID. After
-     * caching, the runtime values are applied directly to the already-memoized observe config so
-     * subsequent consumers see the merged values without a full config regeneration.
+     * Fetch runtime configuration from the Flink REST API and cache it when the job is in RUNNING
+     * state and no cached config exists for the current job ID. Uses the context-level memoized
+     * {@link FlinkResourceContext#getRuntimeConfig()} to avoid redundant Guava cache lookups within
+     * the same reconciliation cycle. After caching via {@link
+     * FlinkResourceContext#putRuntimeConfig(Map)}, the runtime values are applied directly to the
+     * already-memoized observe config so subsequent consumers see the merged values without a full
+     * config regeneration.
      */
     private void fetchAndCacheRuntimeConfig(
             FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
@@ -124,25 +127,20 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             return;
         }
 
-        var resource = ctx.getResource();
-        var jobStatus = resource.getStatus().getJobStatus();
-        var namespace = resource.getMetadata().getNamespace();
-        var name = resource.getMetadata().getName();
-        var jobId = jobStatus.getJobId();
-        var configManager = ctx.getConfigManager();
-
-        if (configManager.getRuntimeConfig(namespace, name, jobId).isPresent()) {
+        if (ctx.getRuntimeConfig().isPresent()) {
             LOG.debug("Runtime configuration already cached");
             return;
         }
 
         LOG.debug("Fetching runtime configuration");
+        var jobStatus = ctx.getResource().getStatus().getJobStatus();
         try {
             var runtimeConfig =
                     ctx.getFlinkService()
                             .getRuntimeConfiguration(
-                                    ctx.getObserveConfig(), JobID.fromHexString(jobId));
-            configManager.putRuntimeConfig(namespace, name, jobId, runtimeConfig);
+                                    ctx.getObserveConfig(),
+                                    JobID.fromHexString(jobStatus.getJobId()));
+            ctx.putRuntimeConfig(runtimeConfig);
             var currentObserveConfig = ctx.getObserveConfig();
             if (currentObserveConfig != null) {
                 runtimeConfig.forEach(currentObserveConfig::setString);
