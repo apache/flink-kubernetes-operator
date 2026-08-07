@@ -39,7 +39,7 @@ spec:
     kubernetes.secrets: basic-secure-cert:/opt/flink/tls-cert
   deploymentName: basic-secure-deployment-only
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1-TopSpeedWindowing.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/2.2.0/flink-examples-streaming-2.2.0-TopSpeedWindowing.jar
     parallelism: 4
     upgradeMode: stateless
 

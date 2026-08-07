@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.15-SNAPSHOT</version>
+        <version>1.16-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -122,7 +122,9 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
-        <!-- Logging -->
+        <!-- Logging: SLF4J API and Log4j2 implementation are shaded into the operator JAR.
+             Only the SLF4J bindings (log4j-slf4j-impl / logback-classic) are excluded
+             and shipped as separate JARs so the entrypoint can pick one. -->
 
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -134,6 +136,7 @@ under the License.
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${log4j.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -153,6 +156,14 @@ under the License.
             <artifactId>log4j-1.2-api</artifactId>
             <version>${log4j.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
 
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -193,13 +204,6 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kube-api-test-client-inject</artifactId>
             <version>${fabric8.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>mockwebserver</artifactId>
-            <version>${okhttp.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -311,6 +315,27 @@ under the License.
                 </executions>
                 <configuration>
                     <artifactItems>
+                        <!-- Log4j2 SLF4J binding (default logging framework) -->
+                        <artifactItem>
+                            <groupId>org.apache.logging.log4j</groupId>
+                            <artifactId>log4j-slf4j-impl</artifactId>
+                            <version>${log4j.version}</version>
+                            <outputDirectory>${project.build.directory}/log4j</outputDirectory>
+                        </artifactItem>
+                        <!-- Logback SLF4J binding (alternative logging framework) -->
+                        <artifactItem>
+                            <groupId>ch.qos.logback</groupId>
+                            <artifactId>logback-classic</artifactId>
+                            <version>${logback.version}</version>
+                            <outputDirectory>${project.build.directory}/logback</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>ch.qos.logback</groupId>
+                            <artifactId>logback-core</artifactId>
+                            <version>${logback.version}</version>
+                            <outputDirectory>${project.build.directory}/logback</outputDirectory>
+                        </artifactItem>
+                        <!-- Metrics plugins -->
                         <artifactItem>
                             <groupId>org.apache.flink</groupId>
                             <artifactId>flink-metrics-datadog</artifactId>
@@ -353,6 +378,24 @@ under the License.
                             <version>${flink.version}</version>
                             <outputDirectory>${plugins.tmp.dir}/flink-metrics-jmx</outputDirectory>
                         </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-dropwizard</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-dropwizard</outputDirectory>
+                        </artifactItem>
+                        <!--
+                        flink-metrics-otel is only published from Flink 2.0.0 onwards on Maven Central.
+                        While this repo still pins flink.version=1.20.4 the artifact cannot be resolved
+                        and breaks the build. Restore this block once flink.version is bumped to >= 2.0.0
+                        (introduced by FLINK-39541).
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-otel</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-otel</outputDirectory>
+                        </artifactItem>
+                        -->
                     </artifactItems>
                 </configuration>
             </plugin>

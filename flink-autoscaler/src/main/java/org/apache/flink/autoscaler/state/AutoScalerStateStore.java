@@ -85,7 +85,7 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
     @Nonnull
     DelayedScaleDown getDelayedScaleDown(Context jobContext) throws Exception;
 
-    /** Removes all data from this context. Flush stil needs to be called. */
+    /** Removes all data from this context. Flush still needs to be called. */
     void clearAll(Context jobContext) throws Exception;
 
     /**

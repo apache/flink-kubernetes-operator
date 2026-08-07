@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
@@ -34,7 +33,7 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @SuperBuilder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class FlinkStateSnapshotStatus implements Diffable<FlinkStateSnapshotStatus> {
+public class FlinkStateSnapshotStatus {
 
     /** Current state of the snapshot. */
     @PrinterColumn(name = "Snapshot State")

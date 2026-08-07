@@ -29,7 +29,7 @@ under the License.
 
     <groupId>org.apache.flink</groupId>
     <artifactId>flink-kubernetes-operator-parent</artifactId>
-    <version>1.15-SNAPSHOT</version>
+    <version>1.16-SNAPSHOT</version>
 
     <name>Flink Kubernetes: </name>
     <packaging>pom</packaging>
@@ -59,10 +59,7 @@ under the License.
         <module>flink-autoscaler</module>
         <module>flink-autoscaler-standalone</module>
         <module>flink-autoscaler-plugin-jdbc</module>
-        <module>examples/flink-sql-runner-example</module>
-        <module>examples/flink-beam-example</module>
-        <module>examples/kubernetes-client-examples</module>
-        <module>examples/autoscaling</module>
+        <module>examples</module>
     </modules>
 
     <properties>
@@ -75,19 +72,20 @@ under the License.
         <maven-javadoc-plugin.version>3.3.2</maven-javadoc-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>5.2.2</operator.sdk.version>
+        <operator.sdk.version>5.5.0</operator.sdk.version>
         <operator.sdk.webhook-framework.version>3.0.0</operator.sdk.webhook-framework.version>
 
-        <fabric8.version>7.3.1</fabric8.version>
+        <fabric8.version>7.8.0</fabric8.version>
 
         <lombok.version>1.18.30</lombok.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <commons-io.version>2.17.0</commons-io.version>
-        <flink.version>1.20.1</flink.version>
+        <flink.version>1.20.4</flink.version>
         <guava.version>33.4.0-jre</guava.version>
 
         <slf4j.version>1.7.36</slf4j.version>
-        <log4j.version>2.23.1</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
+        <logback.version>1.2.13</logback.version>
 
         <spotless.version>2.40.0</spotless.version>
         <it.skip>true</it.skip>
@@ -125,7 +123,7 @@ under the License.
                 <artifactId>jackson-bom</artifactId>
                 <type>pom</type>
                 <scope>import</scope>
-                <version>2.15.0</version>
+                <version>2.21.3</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>
@@ -400,6 +398,8 @@ under the License.
                         <exclude>apache-maven-3.2.5/**</exclude>
                         <!-- Documentation -->
                         <exclude>docs/static/font-awesome/**</exclude>
+                        <!-- Figure assets carry no license header, and the editable draw.io source embedded in the SVGs exceeds apache-rat's XML entity-size limit -->
+                        <exclude>docs/static/img/**</exclude>
                         <exclude>docs/resources/**</exclude>
                         <exclude>docs/public/**</exclude>
                         <exclude>docs/themes/book/**</exclude>

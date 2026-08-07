@@ -31,6 +31,7 @@ import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.kubeclient.decorators.FlinkConfMountDecorator;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -123,6 +124,7 @@ import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.Waitable;
 import lombok.SneakyThrows;
@@ -351,9 +353,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                     }
                     break;
                 case CANCEL:
-                    cancelJobOrError(clusterClient, status, false);
-                    // This is async we need to return
-                    return CancelResult.pending();
+                    if (!cancelJobOrError(clusterClient, status, false)) {
+                        // This is async we need to return
+                        return CancelResult.pending();
+                    }
+                    break;
             }
         }
         if (suspendMode.deleteCluster() || deleteCluster) {
@@ -376,9 +380,12 @@ public abstract class AbstractFlinkService implements FlinkService {
             switch (suspendMode) {
                 case STATELESS:
                 case CANCEL:
-                    cancelJobOrError(clusterClient, status, suspendMode == SuspendMode.STATELESS);
-                    // This is async we need to return and re-observe
-                    return CancelResult.pending();
+                    if (!cancelJobOrError(
+                            clusterClient, status, suspendMode == SuspendMode.STATELESS)) {
+                        // This is async we need to return and re-observe
+                        return CancelResult.pending();
+                    }
+                    break;
                 case SAVEPOINT:
                     savepointPath = savepointJobOrError(clusterClient, status, conf);
                     break;
@@ -389,14 +396,30 @@ public abstract class AbstractFlinkService implements FlinkService {
         return CancelResult.completed(savepointPath);
     }
 
-    public void cancelJobOrError(
+    /**
+     * Attempts to cancel a Flink job given its current status. If the job is already in the process
+     * of being cancelled or has been terminated, the method handles these cases accordingly.
+     *
+     * @param clusterClient the {@code RestClusterClient} instance used to interact with the Flink
+     *     cluster.
+     * @param status the current status of the job, encapsulated in a {@code CommonStatus} object.
+     * @param ignoreMissing a flag indicating whether the absence of the job should be ignored. If
+     *     {@code true}, the method will return {@code true} when the job is missing. If {@code
+     *     false}, an exception will be thrown when the job cannot be found.
+     * @return {@code true} if the job was already missing or terminated, and no further action is
+     *     needed. {@code false} if cancellation was successfully initiated and is still pending
+     *     (the caller should await completion before proceeding).
+     * @throws UpgradeFailureException if the job cannot be cancelled due to an unexpected error, or
+     *     if the job is missing and {@code ignoreMissing} is set to {@code false}.
+     */
+    public boolean cancelJobOrError(
             RestClusterClient<String> clusterClient,
             CommonStatus<?> status,
             boolean ignoreMissing) {
         var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
         if (ReconciliationUtils.isJobCancelling(status)) {
             LOG.info("Job already cancelling");
-            return;
+            return false;
         }
         LOG.info("Cancelling job");
         try {
@@ -408,6 +431,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             if (isJobMissing(e)) {
                 if (ignoreMissing) {
                     LOG.info("Job already missing");
+                    return true;
                 } else {
                     throw new UpgradeFailureException(
                             "Cannot find job when trying to cancel",
@@ -416,6 +440,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 }
             } else if (isJobTerminated(e)) {
                 LOG.info("Job already terminated");
+                return true;
             } else {
                 LOG.warn("Error while cancelling job", e);
                 throw new UpgradeFailureException(
@@ -423,6 +448,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         status.getJobStatus().setState(JobStatus.CANCELLING);
+        return false;
     }
 
     public String savepointJobOrError(
@@ -493,9 +519,16 @@ public abstract class AbstractFlinkService implements FlinkService {
             return true;
         }
 
-        return findThrowable(e, RestClientException.class)
+        if (findThrowable(e, RestClientException.class)
                 .map(RestClientException::getHttpResponseStatus)
                 .map(respCode -> HttpResponseStatus.CONFLICT == respCode)
+                .orElse(false)) {
+            return true;
+        }
+
+        return Optional.ofNullable(ExceptionUtils.getExceptionMessage(e))
+                .map(String::toLowerCase)
+                .map(msg -> msg.contains("already reached another terminal state"))
                 .orElse(false);
     }
 
@@ -736,7 +769,10 @@ public abstract class AbstractFlinkService implements FlinkService {
 
             var stats = response.get();
             if (stats == null) {
-                throw new IllegalStateException("Checkpoint ID %d for job %s does not exist!");
+                throw new IllegalStateException(
+                        String.format(
+                                "Checkpoint ID %d for job %s does not exist!",
+                                checkpointId, jobId));
             } else if (stats instanceof CheckpointStatistics.CompletedCheckpointStatistics) {
                 return CheckpointStatsResult.completed(
                         ((CheckpointStatistics.CompletedCheckpointStatistics) stats)
@@ -1014,7 +1050,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     ? RestoreMode.DEFAULT
                                     : null,
                             conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
-                                    ? conf.toMap()
+                                    ? configToMapWithVersionDialect(conf, flinkVersion)
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
@@ -1118,19 +1154,36 @@ public abstract class AbstractFlinkService implements FlinkService {
                 timeout);
     }
 
+    /**
+     * Remove operator-only keys, preserving raw values so the write boundaries can serialize them
+     * in the target Flink version's YAML dialect.
+     */
     @VisibleForTesting
     protected static Configuration removeOperatorConfigs(Configuration config) {
-        Configuration newConfig = new Configuration();
-        config.toMap()
-                .forEach(
-                        (k, v) -> {
-                            if (!k.startsWith(K8S_OP_CONF_PREFIX)
-                                    && !k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
-                                newConfig.setString(k, v);
-                            }
-                        });
-
+        Configuration newConfig = new Configuration(config);
+        for (String key : config.keySet()) {
+            if (key.startsWith(K8S_OP_CONF_PREFIX)
+                    || key.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
+                newConfig.removeKey(key);
+            }
+        }
         return newConfig;
+    }
+
+    /**
+     * Serialize the config in the YAML dialect of the given Flink version so the receiving cluster
+     * can parse the values regardless of the operator's own config format.
+     *
+     * @param conf Config to serialize
+     * @param flinkVersion Flink version of the receiving cluster
+     * @return Map of config entries in the target version's string format
+     */
+    @VisibleForTesting
+    protected static Map<String, String> configToMapWithVersionDialect(
+            Configuration conf, FlinkVersion flinkVersion) {
+        var copy = new Configuration(FlinkConfMountDecorator.useStandardYamlConfig(flinkVersion));
+        copy.addAll(conf);
+        return copy.toMap();
     }
 
     private void validateHaMetadataExists(Configuration conf) {
@@ -1159,6 +1212,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    @Override
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
@@ -1318,6 +1372,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                 deleted.waitUntilCondition(
                         Objects::isNull, timeout.toMillis(), TimeUnit.MILLISECONDS);
                 LOG.info("Completed {}", operation);
+            } catch (KubernetesClientTimeoutException e) {
+                // Rethrow timeouts before the broader catch swallows it
+                throw e;
             } catch (KubernetesClientException kce) {
                 // We completely ignore not found errors and simply log others
                 if (kce.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {

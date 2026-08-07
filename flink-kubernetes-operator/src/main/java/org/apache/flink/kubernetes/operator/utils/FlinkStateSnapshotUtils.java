@@ -322,7 +322,7 @@ public class FlinkStateSnapshotUtils {
      *
      * @param snapshot snapshot resource
      * @param location result location
-     * @param setTriggerTimestamp if ture, set the trigger timestamp to current time
+     * @param setTriggerTimestamp if true, set the trigger timestamp to current time
      */
     public static void snapshotSuccessful(
             FlinkStateSnapshot snapshot, String location, boolean setTriggerTimestamp) {

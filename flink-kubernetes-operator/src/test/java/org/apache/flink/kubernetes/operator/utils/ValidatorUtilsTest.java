@@ -52,13 +52,15 @@ public class ValidatorUtilsTest {
                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
+            var configManager = new FlinkConfigManager(new Configuration());
+            var pluginManager =
+                    OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig());
             assertEquals(
                     new HashSet<>(
                             Arrays.asList(
                                     DefaultValidator.class.getName(),
                                     TestValidator.class.getName())),
-                    ValidatorUtils.discoverValidators(new FlinkConfigManager(new Configuration()))
-                            .stream()
+                    ValidatorUtils.discoverValidators(configManager, pluginManager).stream()
                             .map(v -> v.getClass().getName())
                             .collect(Collectors.toSet()));
         } finally {

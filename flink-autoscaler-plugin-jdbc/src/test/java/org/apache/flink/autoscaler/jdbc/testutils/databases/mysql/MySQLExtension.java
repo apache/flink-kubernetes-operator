@@ -23,7 +23,7 @@ import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 
 import java.util.List;
 
@@ -37,11 +37,11 @@ class MySQLExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCa
     private static final List<String> TABLES =
             List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
 
-    private final MySQLContainer<?> container;
+    private final MySQLContainer container;
 
     public MySQLExtension(String mysqlVersion) {
         this.container =
-                new MySQLContainer<>(String.format("mysql:%s", mysqlVersion))
+                new MySQLContainer(String.format("mysql:%s", mysqlVersion))
                         .withCommand("--character-set-server=utf8")
                         .withDatabaseName(DATABASE_NAME)
                         .withUsername(USER_NAME)

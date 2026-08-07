@@ -156,7 +156,7 @@
             <td><h5>kubernetes.operator.pod-template.merge-arrays-by-name</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.</td>
+            <td>Configure the array merge behavior during pod merging. Arrays can be either merged by position or name matching.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.cleanup.enabled</h5></td>
@@ -195,7 +195,13 @@
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.session.block-on-unmanaged-jobs</h5></td>
+            <td><h5>kubernetes.operator.session.deletion.block-on-session-jobs</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Block FlinkDeployment deletion if managed jobs are running in the session cluster.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.session.deletion.block-on-unmanaged-jobs</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
             <td>Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.</td>

@@ -71,6 +71,8 @@ public class SpecDiffTest {
         assertEquals(0, diff.getNumDiffs());
 
         left = BaseTestUtils.buildApplicationCluster().getSpec();
+        // This section mutates the deprecated resource.memory field directly.
+        BaseTestUtils.useDeprecatedResource(left);
         left.setPodTemplate(BaseTestUtils.getTestPodTemplate("localhost", List.of()));
         left.setIngress(IngressSpec.builder().template("template").build());
 

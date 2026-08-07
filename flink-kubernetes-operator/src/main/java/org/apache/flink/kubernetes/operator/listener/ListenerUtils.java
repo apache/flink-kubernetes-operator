@@ -22,9 +22,8 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DelegatingConfiguration;
-import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 
@@ -33,10 +32,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -53,8 +50,6 @@ public class ListenerUtils {
     private static final String SUFFIX = ".class";
     private static final Pattern PTN =
             Pattern.compile(Pattern.quote(PREFIX) + "([\\S&&[^.]]*)" + Pattern.quote(SUFFIX));
-    private static final List<String> EXTRA_PARENT_FIRST_PATTERNS =
-            List.of("io.fabric8", "com.fasterxml");
 
     /**
      * Load {@link FlinkResourceListener} implementations from the plugin directory. Only listeners
@@ -64,15 +59,17 @@ public class ListenerUtils {
      * kubernetes.operator.plugins.listeners.test.k1: v1
      *
      * @param configManager {@link FlinkConfigManager} to access plugin configurations.
+     * @param pluginManager shared {@link PluginManager} used for plugin discovery.
      * @return Enabled listeners.
      */
     public static Collection<FlinkResourceListener> discoverListeners(
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager, PluginManager pluginManager) {
         var listeners = new ArrayList<FlinkResourceListener>();
-        var conf = getListenerBaseConf(configManager);
+        var conf = configManager.getDefaultConfig();
 
         Map<String, Configuration> listenerConfigs = loadListenerConfigs(conf);
-        PluginUtils.createPluginManagerFromRootFolder(conf)
+        LOG.info("Loading FlinkResourceListener implementations from plugin directory.");
+        pluginManager
                 .load(FlinkResourceListener.class)
                 .forEachRemaining(
                         listener -> {
@@ -94,21 +91,6 @@ public class ListenerUtils {
                             }
                         });
         return listeners;
-    }
-
-    private static Configuration getListenerBaseConf(FlinkConfigManager configManager) {
-        var conf = new Configuration(configManager.getDefaultConfig());
-        List<String> additionalPatterns =
-                new ArrayList<>(
-                        conf.getOptional(
-                                        CoreOptions
-                                                .PLUGIN_ALWAYS_PARENT_FIRST_LOADER_PATTERNS_ADDITIONAL)
-                                .orElse(Collections.emptyList()));
-        additionalPatterns.addAll(EXTRA_PARENT_FIRST_PATTERNS);
-        conf.set(
-                CoreOptions.PLUGIN_ALWAYS_PARENT_FIRST_LOADER_PATTERNS_ADDITIONAL,
-                additionalPatterns);
-        return conf;
     }
 
     @VisibleForTesting

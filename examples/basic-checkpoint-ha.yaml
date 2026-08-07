@@ -34,13 +34,15 @@ spec:
     kubernetes.operator.savepoint.format.type: NATIVE
   serviceAccount: flink
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   podTemplate:
     spec:
       containers:

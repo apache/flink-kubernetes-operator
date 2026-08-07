@@ -9,6 +9,24 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.bluegreen.abort.grace-period</h5></td>
+            <td style="word-wrap: break-word;">10 min</td>
+            <td>Duration</td>
+            <td>The max time to wait for a deployment to become ready before aborting it.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.bluegreen.deployment-deletion.delay</h5></td>
+            <td style="word-wrap: break-word;">0 ms</td>
+            <td>Duration</td>
+            <td>Configurable delay before deleting a deployment after being marked done.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.bluegreen.reconciliation.reschedule-interval</h5></td>
+            <td style="word-wrap: break-word;">15 s</td>
+            <td>Duration</td>
+            <td>Configurable delay to use when the operator reschedules a reconciliation.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.checkpoint.trigger.grace-period</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
@@ -318,7 +336,7 @@
             <td><h5>kubernetes.operator.pod-template.merge-arrays-by-name</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.</td>
+            <td>Configure the array merge behavior during pod merging. Arrays can be either merged by position or name matching.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.rate-limiter.limit</h5></td>
@@ -429,7 +447,13 @@
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.session.block-on-unmanaged-jobs</h5></td>
+            <td><h5>kubernetes.operator.session.deletion.block-on-session-jobs</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Block FlinkDeployment deletion if managed jobs are running in the session cluster.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.session.deletion.block-on-unmanaged-jobs</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
             <td>Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.</td>
@@ -453,10 +477,22 @@
             <td>Operator shutdown timeout before reconciliation threads are killed.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.user.artifacts.allowed-schemes</h5></td>
+            <td style="word-wrap: break-word;">"https"</td>
+            <td>List&lt;String&gt;</td>
+            <td>Comma separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. Only 'https' is allowed by default. Operators that need to fetch artifacts via other schemes (such as 's3' or 'hdfs') can extend this list. Scheme matching is case-insensitive.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.user.artifacts.base.dir</h5></td>
             <td style="word-wrap: break-word;">"/opt/flink/artifacts"</td>
             <td>String</td>
             <td>The base dir to put the session job artifacts.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.disallow-restricted-hosts</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, site-local, wildcard or multicast addresses are rejected during validation. Disable only if the operator legitimately needs to fetch from such addresses.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>

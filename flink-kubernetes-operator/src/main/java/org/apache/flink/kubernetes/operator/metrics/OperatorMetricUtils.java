@@ -20,11 +20,11 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
-import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.HistogramStatistics;
@@ -55,10 +55,16 @@ public class OperatorMetricUtils {
     private static final String OPERATOR_METRICS_PREFIX = K8S_OP_CONF_PREFIX + "metrics.";
     private static final String METRICS_PREFIX = "metrics.";
 
+    @VisibleForTesting
     public static KubernetesOperatorMetricGroup initOperatorMetrics(Configuration defaultConfig) {
+        return initOperatorMetrics(
+                defaultConfig, OperatorPluginUtils.createPluginManager(defaultConfig));
+    }
+
+    public static KubernetesOperatorMetricGroup initOperatorMetrics(
+            Configuration defaultConfig, PluginManager pluginManager) {
         Configuration metricConfig = createMetricConfig(defaultConfig);
         LOG.info("Initializing operator metrics using conf: {}", metricConfig);
-        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(metricConfig);
         MetricRegistry metricRegistry = createMetricRegistry(metricConfig, pluginManager);
         KubernetesOperatorMetricGroup operatorMetricGroup =
                 KubernetesOperatorMetricGroup.create(

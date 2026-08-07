@@ -134,6 +134,9 @@ public class CrdCompatibilityChecker {
             }
             err("Type mismatch for " + path + ". Old node type is not null, while new node null");
         }
+        if (oldNode.get("type") == null) {
+            return;
+        }
 
         String oldType = oldNode.get("type").asText();
 

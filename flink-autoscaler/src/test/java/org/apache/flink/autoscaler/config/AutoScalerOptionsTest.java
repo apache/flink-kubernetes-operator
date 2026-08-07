@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.config;
 
 import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +52,25 @@ public class AutoScalerOptionsTest {
                                                                                             .length()))
                                                             .isEqualTo(configOption.key());
                                                 }));
+    }
+
+    @Test
+    void testOverlayConfiguration() {
+        var base = new Configuration();
+        base.setString("only-base", "b");
+        base.setString("shared", "base-value");
+
+        var overrides = new Configuration();
+        overrides.setString("only-overrides", "o");
+        overrides.setString("shared", "override-value");
+
+        var merged = AutoScalerOptions.overlayConfiguration(base, overrides);
+
+        // Base-only and override-only keys are both visible.
+        assertThat(merged.getString("only-base", null)).isEqualTo("b");
+        assertThat(merged.getString("only-overrides", null)).isEqualTo("o");
+        // On a key present in both, the override value wins.
+        assertThat(merged.getString("shared", null)).isEqualTo("override-value");
     }
 
     private static List<ConfigOption<?>> retrieveAutoscalerConfigOptions() {

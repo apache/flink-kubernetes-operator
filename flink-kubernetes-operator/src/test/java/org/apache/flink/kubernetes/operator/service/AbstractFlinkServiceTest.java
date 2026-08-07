@@ -25,8 +25,10 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -116,9 +118,11 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentList;
 import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import lombok.SneakyThrows;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -342,15 +346,7 @@ public class AbstractFlinkServiceTest {
     @ValueSource(ints = {404, 409, 500})
     public void cancelErrorHandling(int statusCode) throws Exception {
 
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
-        testingClusterClient.setCancelFunction(
-                jobID ->
-                        CompletableFuture.failedFuture(
-                                new RuntimeException(
-                                        new RestClientException(
-                                                "errrr", HttpResponseStatus.valueOf(statusCode)))));
-        var flinkService = new TestingService(testingClusterClient);
+        var flinkService = getTestingService("errrr", HttpResponseStatus.valueOf(statusCode));
 
         JobID jobID = JobID.generate();
         var job = TestUtils.buildSessionJob();
@@ -368,8 +364,102 @@ public class AbstractFlinkServiceTest {
             assertEquals(RUNNING, jobStatus.getState());
         } else {
             flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
-            assertEquals(CANCELLING, jobStatus.getState());
+            assertEquals(FINISHED, jobStatus.getState());
+            assertNull(jobStatus.getJobId());
         }
+    }
+
+    @Test
+    public void cancelErrorHandlingWithTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
+        assertEquals(FINISHED, jobStatus.getState());
+        assertNull(jobStatus.getJobId());
+    }
+
+    /**
+     * Reproduces the operator-upgrade scenario for Session Mode with CANCEL upgrade mode: when a
+     * running session job's JobManager has already moved the job into a terminal state (e.g.
+     * FAILED) and the operator (after a restart/upgrade) tries to cancel it, the cancellation
+     * request comes back with "already reached another terminal state". Previously this caused the
+     * finalizer to never be removed, leaving the CR stuck in Terminating.
+     */
+    @Test
+    public void cancelSessionJobWithCancelModeAndTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        var result = flinkService.cancelSessionJob(job, SuspendMode.CANCEL, new Configuration());
+        // Must NOT be pending — the CR would otherwise be stuck in Terminating indefinitely
+        assertFalse(result.isPending());
+        assertEquals(FINISHED, jobStatus.getState());
+        assertNull(jobStatus.getJobId());
+    }
+
+    @NotNull
+    private TestingService getTestingService(String message, HttpResponseStatus badRequest)
+            throws Exception {
+        final var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        testingClusterClient.setCancelFunction(
+                jobID ->
+                        CompletableFuture.failedFuture(
+                                new RuntimeException(
+                                        new RestClientException(message, badRequest))));
+        return new TestingService(testingClusterClient);
+    }
+
+    /**
+     * Reproduces FLINK-37766 for Application Mode: when a running application job's JobManager has
+     * moved the job to a terminal state (e.g. FAILED due to HA desync) and the operator tries to
+     * cancel the job with CANCEL suspend mode (used for last-state upgrades), the "already reached
+     * another terminal state" response previously caused the operator to always return
+     * CancelResult.pending(), looping forever without completing the upgrade/deletion.
+     */
+    @Test
+    public void cancelApplicationJobWithCancelModeAndTerminalStateMessage() throws Exception {
+        var flinkService =
+                getTestingService(
+                        "Job cancellation failed because the job has already reached another terminal state (FAILED).",
+                        HttpResponseStatus.BAD_REQUEST);
+
+        JobID jobID = JobID.generate();
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(RUNNING);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        var result =
+                flinkService.cancelJob(
+                        deployment,
+                        SuspendMode.CANCEL,
+                        configManager.getObserveConfig(deployment),
+                        false);
+        // Must NOT be pending — the operator would otherwise loop forever on the upgrade
+        assertFalse(result.isPending());
+        assertEquals(FINISHED, jobStatus.getState());
     }
 
     @ParameterizedTest
@@ -1010,6 +1100,34 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
+    public void removeOperatorConfigsKeepsTypedValuesTest() {
+        // Simulate an operator process running on standard config.yaml.
+        boolean previousDialect = GlobalConfiguration.isStandardYaml();
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            var jars = List.of("local:///opt/flink/job.jar");
+            var deployConfig = new Configuration(true);
+            deployConfig.set(PipelineOptions.JARS, jars);
+            deployConfig.setString("kubernetes.operator.myKey", "v");
+
+            var newConf = AbstractFlinkService.removeOperatorConfigs(deployConfig);
+
+            assertFalse(newConf.containsKey("kubernetes.operator.myKey"));
+            // Typed values must survive so write boundaries can render them per Flink version.
+            assertEquals(jars, newConf.get(PipelineOptions.JARS));
+            assertEquals(
+                    Map.of("pipeline.jars", "local:///opt/flink/job.jar"),
+                    AbstractFlinkService.configToMapWithVersionDialect(
+                            newConf, FlinkVersion.v1_20));
+            assertEquals(
+                    Map.of("pipeline.jars", "['local:///opt/flink/job.jar']"),
+                    AbstractFlinkService.configToMapWithVersionDialect(newConf, FlinkVersion.v2_0));
+        } finally {
+            GlobalConfiguration.setStandardYaml(previousDialect);
+        }
+    }
+
+    @Test
     public void getMetricsTest() throws Exception {
         var jobId = new JobID();
         var metricNames = List.of("m1", "m2");
@@ -1240,19 +1358,75 @@ public class AbstractFlinkServiceTest {
         assertTrue(remainingMillis > 0);
         assertTrue(remainingMillis < 10000 - deleteDelay / 2);
 
-        // Test actual timeout
-        remainingMillis =
-                flinkService
-                        .deleteDeploymentBlocking(
+        // Timeout waiting for deletion should throw, not silently return
+        Assertions.assertThrows(
+                KubernetesClientTimeoutException.class,
+                () ->
+                        flinkService.deleteDeploymentBlocking(
                                 "Test",
                                 client.apps()
                                         .deployments()
                                         .inNamespace(namespace)
                                         .withName(deploymentName),
                                 DeletionPropagation.BACKGROUND,
-                                Duration.ofMillis(10))
-                        .toMillis();
-        assertEquals(0, remainingMillis);
+                                Duration.ofMillis(10)));
+    }
+
+    @Test
+    public void testDeleteBlockingTimeoutThrows() {
+        String deploymentName = "test-cluster";
+        String namespace = "test-namespace";
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        namespace, deploymentName);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        namespace, deploymentName);
+
+        Deployment deployment =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(deploymentName)
+                        .withNamespace(namespace)
+                        .endMetadata()
+                        .build();
+        DeploymentList deploymentList =
+                new DeploymentListBuilder()
+                        .withMetadata(new ListMeta())
+                        .withItems(deployment)
+                        .build();
+
+        // GET always returns the deployment; watch never emits DELETED within the test window
+        mockServer
+                .expect()
+                .get()
+                .withPath(getUrl)
+                .andReturn(HttpURLConnection.HTTP_OK, deploymentList)
+                .always();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(deployment, "DELETED"))
+                .done()
+                .always();
+
+        Assertions.assertThrows(
+                KubernetesClientTimeoutException.class,
+                () ->
+                        AbstractFlinkService.deleteBlocking(
+                                "Test",
+                                () ->
+                                        client.apps()
+                                                .deployments()
+                                                .inNamespace(namespace)
+                                                .withName(deploymentName),
+                                Duration.ofMillis(100)));
     }
 
     @ParameterizedTest

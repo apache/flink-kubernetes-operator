@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
@@ -47,8 +48,10 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nullable;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -89,7 +92,8 @@ public class JobAutoScalerImplTest {
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 10));
 
         var metricsCollector =
-                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        jobTopology, stateStore);
         metricsCollector.updateMetrics(
                 jobVertexID,
                 TestMetrics.builder()
@@ -100,7 +104,8 @@ public class JobAutoScalerImplTest {
                         .pendingRecords(0L)
                         .build());
 
-        ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator();
+        ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>> evaluator =
+                new ScalingMetricEvaluator<>(Collections.emptyList());
         ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor =
                 new ScalingExecutor<>(eventCollector, stateStore);
 
@@ -113,9 +118,12 @@ public class JobAutoScalerImplTest {
                         scalingRealizer,
                         stateStore);
 
+        var now = Instant.now();
+        autoscaler.setClock(Clock.fixed(now, ZoneId.systemDefault()));
         autoscaler.scale(context);
 
         metricsCollector.updateMetrics(jobVertexID, m -> m.setNumRecordsIn(100));
+        autoscaler.setClock(Clock.fixed(now.plus(Duration.ofSeconds(10)), ZoneId.systemDefault()));
         autoscaler.scale(context);
 
         MetricGroup metricGroup = autoscaler.flinkMetrics.get(context.getJobKey()).getMetricGroup();
@@ -164,7 +172,8 @@ public class JobAutoScalerImplTest {
     public void testTolerateRecoverableExceptions() throws Exception {
         TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>
                 collectorWhichThrowsRecoverableException =
-                        new TestingMetricsCollector<>(new JobTopology(Collections.emptySet())) {
+                        new TestingMetricsCollector<>(
+                                new JobTopology(Collections.emptySet()), stateStore) {
                             @Override
                             protected Collection<String> queryAggregatedMetricNames(
                                     RestClusterClient<?> restClient,
@@ -195,7 +204,8 @@ public class JobAutoScalerImplTest {
         JobVertexID jobVertexID = new JobVertexID();
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 20));
         var metricsCollector =
-                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        jobTopology, stateStore);
         ScalingRealizer<JobID, JobAutoScalerContext<JobID>>
                 realizeParallelismOverridesWithExceptionsScalingRealizer =
                         new ScalingRealizer<>() {
@@ -233,8 +243,8 @@ public class JobAutoScalerImplTest {
     void testParallelismOverrides() throws Exception {
         var autoscaler =
                 new JobAutoScalerImpl<>(
-                        new TestingMetricsCollector<>(new JobTopology()),
-                        null,
+                        new TestingMetricsCollector<>(new JobTopology(), stateStore),
+                        new ScalingMetricEvaluator<>(Collections.emptyList()),
                         null,
                         eventCollector,
                         scalingRealizer,
@@ -291,6 +301,12 @@ public class JobAutoScalerImplTest {
 
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "true");
         autoscaler.scale(context);
+        assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
+
+        // Test job not running: overrides must still be re-projected onto the spec so that an
+        // in-flight upgrade does not regress the autoscaler's last decision (self-heal).
+        var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        autoscaler.scale(notRunningContext);
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
         // Make sure cleanup removes everything
@@ -352,6 +368,55 @@ public class JobAutoScalerImplTest {
     }
 
     @Test
+    void testOverridesAreReappliedWhenJobNotRunning() throws Exception {
+        // Regression guard for the self-heal contract: while the job is in an in-flight upgrade
+        // (JobStatus != RUNNING), the autoscaler must still re-project its persisted decisions
+        // onto the spec on every reconcile cycle. Skipping the realizer in this state (as an
+        // earlier "if (!waiting)" guard did) lets external resets of spec.flinkConfiguration go
+        // unhealed and triggers a spurious second upgrade once the reconciler diffs the spec
+        // against lastReconciledSpec.
+        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+
+        var v1 = new JobVertexID().toString();
+        stateStore.storeParallelismOverrides(context, Map.of(v1, "3"));
+        ConfigChanges configChanges = new ConfigChanges();
+        configChanges.addOverride(TaskManagerOptions.MANAGED_MEMORY_FRACTION, 0.42f);
+        stateStore.storeConfigChanges(context, configChanges);
+        stateStore.flush(context);
+
+        var notRunningContext = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        new TestingMetricsCollector<>(new JobTopology(), stateStore),
+                        new ScalingMetricEvaluator<>(Collections.emptyList()),
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore);
+
+        autoscaler.scale(notRunningContext);
+
+        boolean sawParallelism = false;
+        boolean sawConfig = false;
+        for (var event : scalingRealizer.events) {
+            if (event.getParallelismOverrides() != null) {
+                sawParallelism = true;
+                assertEquals(Map.of(v1, "3"), event.getParallelismOverrides());
+            }
+            if (event.getConfigChanges() != null) {
+                sawConfig = true;
+                assertThat(event.getConfigChanges().getOverrides())
+                        .containsExactly(
+                                entry(TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(), "0.42"));
+            }
+        }
+        assertTrue(
+                sawParallelism,
+                "Parallelism overrides must be re-applied while job is not running");
+        assertTrue(sawConfig, "Config overrides must be re-applied while job is not running");
+    }
+
+    @Test
     void testApplyConfigOverrides() throws Exception {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =
@@ -384,7 +449,7 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testAutoscalerDisabled() throws Exception {
-        context.getConfiguration().setBoolean(AUTOSCALER_ENABLED, false);
+        context.getConfiguration().set(AUTOSCALER_ENABLED, false);
         context.getConfiguration().set(VERTEX_SCALING_HISTORY_AGE, Duration.ofMillis(200));
 
         var scalingHistory = new TreeMap<Instant, ScalingSummary>();

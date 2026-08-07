@@ -27,13 +27,15 @@ spec:
     taskmanager.numberOfTaskSlots: 1
   serviceAccount: flink
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "1"
   job:
     jarURI: local:///opt/flink/usrlib/sql-runner.jar
     args: ["/opt/flink/usrlib/sql-scripts/simple.sql"]

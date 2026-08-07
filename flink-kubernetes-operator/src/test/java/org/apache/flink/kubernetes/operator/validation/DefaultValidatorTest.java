@@ -51,6 +51,8 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -61,6 +63,7 @@ import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
@@ -281,43 +284,47 @@ public class DefaultValidatorTest {
                 "JobManager replicas should not be configured less than one.");
 
         // Test resource validation
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
 
         // Test resource validation with k8s specification
-        testSuccess(dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
-        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
+        testSuccessDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
 
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory("invalid"),
                 "TaskManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory("invalid"),
                 "JobManager resource memory parse error");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory(null),
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory(null),
                 "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
-        testError(
+        testErrorDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
                 },
                 "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
 
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getJobManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
                 });
-        testSuccess(
+        testSuccessDeprecatedResource(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec()
@@ -328,6 +335,121 @@ public class DefaultValidatorTest {
                                             MANAGED_MEMORY_SIZE.key(),
                                             "1024m"));
                 });
+
+        // Test ResourceRequirements validation
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("500m")))
+                                            .build());
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .build());
+                });
+
+        // limits-only must be accepted: Kubernetes defaults requests to limits, so memory
+        // defined via limits is sufficient.
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withLimits(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("2")))
+                                            .build());
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withLimits(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("2")))
+                                            .build());
+                });
+
+        // Negative ResourceRequirements validation cases
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("abc")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests memory parse error");
+        testError(
+                dep -> {
+                    dep.getSpec().getJobManager().setResource(null);
+                    dep.getSpec()
+                            .getJobManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("notacpu")))
+                                            .build());
+                },
+                "JobManager resource requirements requests cpu parse error");
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("2Gi")))
+                                            .withLimits(Map.of("memory", new Quantity("xyz")))
+                                            .build());
+                },
+                "TaskManager resource requirements limits memory parse error");
 
         // Test savepoint restore validation
         testSuccess(
@@ -464,6 +586,8 @@ public class DefaultValidatorTest {
                         + " is not supported by this operator version");
 
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
+        testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_18));
+        testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_19));
 
         testError(
                 dep -> dep.getSpec().setServiceAccount(null),
@@ -483,16 +607,12 @@ public class DefaultValidatorTest {
                                     "kubernetes");
                 });
 
-        testError(
-                dep -> {
-                    dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc");
-                },
+        testErrorDeprecatedResource(
+                dep -> dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc"),
                 "JobManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
 
-        testError(
-                dep -> {
-                    dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc");
-                },
+        testErrorDeprecatedResource(
+                dep -> dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc"),
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
     }
 
@@ -601,6 +721,118 @@ public class DefaultValidatorTest {
                 "InitialSavepointPath must not be empty for savepoint redeploymen");
     }
 
+    @Test
+    public void testJarUriSchemeValidation() {
+        var defaultAllowed = List.of("https");
+
+        // Allowed scheme is accepted.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://example.com/path/to/job.jar", defaultAllowed, true));
+        // Null jarURI is allowed (e.g. for entryClass-only jobs).
+        Assertions.assertEquals(
+                Optional.empty(), DefaultValidator.validateJarURI(null, defaultAllowed, true));
+
+        // Disallowed schemes are rejected.
+        for (String disallowed :
+                List.of(
+                        "http://example.com/job.jar",
+                        "file:///var/run/secrets/kubernetes.io/serviceaccount/token",
+                        "s3://my-bucket/job.jar",
+                        "local:///tmp/sample.jar")) {
+            var error = DefaultValidator.validateJarURI(disallowed, defaultAllowed, true);
+            assertTrue(error.isPresent(), "expected error for " + disallowed);
+            assertTrue(
+                    error.get().startsWith("jarURI scheme '"),
+                    "unexpected message for " + disallowed + ": " + error.get());
+        }
+
+        // Missing scheme is rejected.
+        var noScheme = DefaultValidator.validateJarURI("/no/scheme/job.jar", defaultAllowed, true);
+        assertTrue(noScheme.isPresent());
+        assertTrue(noScheme.get().startsWith("jarURI must include a scheme"));
+
+        // Malformed URI is rejected.
+        var malformed = DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true);
+        assertTrue(malformed.isPresent());
+        assertTrue(malformed.get().startsWith("jarURI is not a valid URI"));
+
+        // Operators can extend the allowlist (case-insensitive matching).
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "S3://my-bucket/job.jar", List.of("https", "s3"), true));
+    }
+
+    @Test
+    public void testJarUriHostValidation() {
+        var defaultAllowed = List.of("https");
+
+        // Cloud-metadata link-local, loopback, site-local and wildcard addresses must be rejected.
+        for (String restricted :
+                List.of(
+                        "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
+                        "https://127.0.0.1/job.jar",
+                        "https://localhost/job.jar",
+                        "https://10.0.0.1/job.jar",
+                        "https://192.168.1.1/job.jar")) {
+            var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
+            assertTrue(error.isPresent(), "expected error for " + restricted);
+            assertTrue(
+                    error.get().contains("resolves to a restricted address"),
+                    "unexpected message for " + restricted + ": " + error.get());
+        }
+
+        // Disabling the restricted-host check allows loopback.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://127.0.0.1/job.jar", defaultAllowed, false));
+    }
+
+    @Test
+    public void testSessionJobJarUriValidationUsesOperatorConfig() {
+        // Operator-level config sets a custom allowlist; the CR cannot override it.
+        var operatorConf = new Configuration();
+        operatorConf.set(
+                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("https", "s3"));
+        var customValidator = new DefaultValidator(new FlinkConfigManager(operatorConf));
+
+        // s3 is allowed by operator config.
+        var s3Job = TestUtils.buildSessionJob();
+        s3Job.getSpec().getJob().setJarURI("s3://my-bucket/job.jar");
+        Assertions.assertEquals(
+                Optional.empty(), customValidator.validateSessionJob(s3Job, Optional.empty()));
+
+        // file:// is still rejected.
+        var fileJob = TestUtils.buildSessionJob();
+        fileJob.getSpec().getJob().setJarURI("file:///etc/passwd");
+        var fileError = customValidator.validateSessionJob(fileJob, Optional.empty());
+        assertTrue(fileError.isPresent());
+        assertTrue(fileError.get().startsWith("jarURI scheme 'file'"));
+
+        // A CR-supplied override of the allowlist is ignored — the operator-level config wins.
+        var overrideJob = TestUtils.buildSessionJob();
+        overrideJob
+                .getSpec()
+                .setFlinkConfiguration(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key(),
+                                "https;file"));
+        overrideJob.getSpec().getJob().setJarURI("file:///etc/passwd");
+        var overrideError = customValidator.validateSessionJob(overrideJob, Optional.empty());
+        assertTrue(overrideError.isPresent());
+        assertTrue(overrideError.get().startsWith("jarURI scheme 'file'"));
+
+        // Default validator (https only) rejects the default https-but-link-local URI for sanity.
+        var loopbackJob = TestUtils.buildSessionJob();
+        loopbackJob.getSpec().getJob().setJarURI("https://169.254.169.254/job.jar");
+        var loopbackError = validator.validateSessionJob(loopbackJob, Optional.empty());
+        assertTrue(loopbackError.isPresent());
+        assertTrue(loopbackError.get().contains("resolves to a restricted address"));
+    }
+
     @ParameterizedTest
     @EnumSource(UpgradeMode.class)
     public void testFlinkVersionChangeValidation(UpgradeMode toUpgradeMode) {
@@ -639,12 +871,166 @@ public class DefaultValidatorTest {
             // Stopped with LAST_STATE mode with different Flink Version
             suspendSpec.getJob().setUpgradeMode(fromUpgrade);
             suspendSpec.getJob().setState(fromState);
-            suspendSpec.setFlinkVersion(FlinkVersion.v1_18);
+            suspendSpec.setFlinkVersion(FlinkVersion.v1_19);
 
             dep.getStatus()
                     .getReconciliationStatus()
                     .serializeAndSetLastReconciledSpec(suspendSpec, dep);
         };
+    }
+
+    @Test
+    public void testNegativeCpuResourceRequirementIsRejected() {
+        // A negative cpu request parses via Quantity.getAmountInBytes, so DefaultValidator must
+        // reject it explicitly (cpu must be strictly positive; Kubernetes would otherwise reject
+        // the pod downstream).
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "cpu",
+                                                            new Quantity("-1")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests cpu must be positive");
+    }
+
+    @Test
+    public void testNegativeEphemeralStorageResourceRequirementIsRejected() {
+        // Same as negative cpu: getAmountInBytes accepts a negative ephemeral-storage value, so it
+        // must be rejected explicitly.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(
+                                                    Map.of(
+                                                            "memory",
+                                                            new Quantity("2Gi"),
+                                                            "ephemeral-storage",
+                                                            new Quantity("-5Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests ephemeral-storage must not be negative");
+    }
+
+    @Test
+    public void testNegativeMemoryResourceRequirementIsRejected() {
+        // Negative memory IS rejected today, but only incidentally: "-2Gi" fails to parse as a
+        // MemorySize ("text does not start with a number") rather than via an explicit sign check.
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().setResource(null);
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("memory", new Quantity("-2Gi")))
+                                            .build());
+                },
+                "TaskManager resource requirements requests memory parse error");
+    }
+
+    @Test
+    public void testZeroCpuResourceRequirementIsRejected() {
+        // A zero cpu request parses fine but is not a usable value, so it must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests cpu must be positive");
+    }
+
+    @Test
+    public void testZeroMemoryResourceRequirementIsRejected() {
+        // Zero memory would become TOTAL_PROCESS_MEMORY=0 and fail at deploy, so reject it here.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("0")))
+                                                .build()),
+                "TaskManager resource requirements requests memory must be positive");
+    }
+
+    @Test
+    public void testMemoryRequestExceedingLimitIsRejected() {
+        // Kubernetes rejects a request larger than its limit; the validator should catch it first.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(Map.of("memory", new Quantity("4Gi")))
+                                                .withLimits(Map.of("memory", new Quantity("2Gi")))
+                                                .build()),
+                "TaskManager resource requirements memory request");
+    }
+
+    @Test
+    public void testCpuRequestExceedingLimitIsRejected() {
+        // Mixed-unit comparison: 1000m request vs 500m limit must be rejected.
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1000m")))
+                                                .withLimits(Map.of("cpu", new Quantity("500m")))
+                                                .build()),
+                "TaskManager resource requirements cpu request");
+    }
+
+    @Test
+    public void testRequestsBelowLimitsPasses() {
+        // requests <= limits for both cpu and memory must validate cleanly.
+        testSuccess(
+                dep ->
+                        dep.getSpec()
+                                .getTaskManager()
+                                .setResources(
+                                        new ResourceRequirementsBuilder()
+                                                .withRequests(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("2Gi"),
+                                                                "cpu",
+                                                                new Quantity("1")))
+                                                .withLimits(
+                                                        Map.of(
+                                                                "memory",
+                                                                new Quantity("4Gi"),
+                                                                "cpu",
+                                                                new Quantity("2")))
+                                                .build()));
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
@@ -667,6 +1053,29 @@ public class DefaultValidatorTest {
         } else {
             fail("Did not get expected error: " + expectedErr);
         }
+    }
+
+    /**
+     * Like {@link #testSuccess(Consumer)} but first switches the deployment to the deprecated
+     * {@code resource} field, for tests that specifically exercise that path.
+     */
+    private void testSuccessDeprecatedResource(Consumer<FlinkDeployment> deploymentModifier) {
+        testSuccess(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                });
+    }
+
+    /** See {@link #testSuccessDeprecatedResource(Consumer)}; error-expecting variant. */
+    private void testErrorDeprecatedResource(
+            Consumer<FlinkDeployment> deploymentModifier, String expectedErr) {
+        testError(
+                dep -> {
+                    TestUtils.useDeprecatedResource(dep);
+                    deploymentModifier.accept(dep);
+                },
+                expectedErr);
     }
 
     @Test
@@ -739,9 +1148,7 @@ public class DefaultValidatorTest {
                                             CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
                                                     "test-checkpoint-dir"));
                 },
-                flinkDeployment -> {
-                    flinkDeployment.getSpec().setFlinkConfiguration(Map.of());
-                },
+                flinkDeployment -> flinkDeployment.getSpec().setFlinkConfiguration(Map.of()),
                 null);
     }
 
@@ -848,15 +1255,32 @@ public class DefaultValidatorTest {
     public void testAutoScalerDeploymentWithInvalidScalingCoefficientMin() {
         var result =
                 testAutoScalerConfiguration(
-                        flinkConf ->
-                                flinkConf.put(
-                                        AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN
-                                                .key(),
-                                        "1.2"));
+                        flinkConf -> {
+                            // The coefficient is only validated when observed scalability is on.
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED.key(), "true");
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN.key(),
+                                    "1.2");
+                        });
         assertErrorContains(
                 result,
                 getFormattedErrorMessage(
                         AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN, 0.01d, 1d));
+    }
+
+    @Test
+    public void testInvalidScalingCoefficientMinIgnoredWhenObservedScalabilityDisabled() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED.key(), "false");
+                            flinkConf.put(
+                                    AutoScalerOptions.OBSERVED_SCALABILITY_COEFFICIENT_MIN.key(),
+                                    "1.2");
+                        });
+        assertErrorNotContains(result);
     }
 
     @Test
@@ -892,6 +1316,37 @@ public class DefaultValidatorTest {
     @Test
     public void testValidateSessionJob() {
         testSessionJobAutoScalerConfiguration(flinkConf -> {}).ifPresent(Assertions::fail);
+    }
+
+    @Test
+    public void testMetricsWindowSmallerThanReconcileIntervalIsRejected() {
+        // The default reconcile interval is 60s. A smaller metric window means fewer than two
+        // samples are retained per loop and autoscaling never runs, so it must be rejected.
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "30 s"));
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get().contains(AutoScalerOptions.METRICS_WINDOW.key()));
+    }
+
+    @Test
+    public void testMetricsWindowLargerThanReconcileIntervalIsAccepted() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "5 min"));
+        assertErrorNotContains(result);
+    }
+
+    @Test
+    public void testSmallMetricsWindowIgnoredWhenAutoscalerDisabled() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
+                            flinkConf.put(AutoScalerOptions.METRICS_WINDOW.key(), "1 s");
+                        });
+        assertErrorNotContains(result);
     }
 
     @Test
@@ -1015,9 +1470,7 @@ public class DefaultValidatorTest {
 
         deploymentResult =
                 testAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.8");
-                        });
+                        flinkConf -> flinkConf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.8"));
         assertErrorContains(
                 deploymentResult,
                 getFormattedErrorMessage(
@@ -1027,9 +1480,8 @@ public class DefaultValidatorTest {
 
         deploymentResult =
                 testAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
-                        });
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5"));
 
         assertErrorContains(
                 deploymentResult,
@@ -1057,9 +1509,7 @@ public class DefaultValidatorTest {
 
         sessionResult =
                 testSessionJobAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6");
-                        });
+                        flinkConf -> flinkConf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "0.6"));
         assertErrorContains(
                 sessionResult,
                 getFormattedErrorMessage(
@@ -1069,9 +1519,8 @@ public class DefaultValidatorTest {
 
         sessionResult =
                 testSessionJobAutoScalerConfiguration(
-                        flinkConf -> {
-                            flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5");
-                        });
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "1.5"));
 
         assertErrorContains(
                 sessionResult,
@@ -1111,7 +1560,7 @@ public class DefaultValidatorTest {
         conf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
         conf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "100000.0");
         conf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "0.6");
-        conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED.key(), "0.1");
+        conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD.key(), "0.1");
         conf.put(AutoScalerOptions.UTILIZATION_TARGET.key(), "0.7");
         conf.put(AutoScalerOptions.UTILIZATION_MAX.key(), "1.0");
         conf.put(AutoScalerOptions.UTILIZATION_MIN.key(), "0.3");
@@ -1125,17 +1574,6 @@ public class DefaultValidatorTest {
                 configValue.key(),
                 min != null ? min.toString() : "-Infinity",
                 max != null ? max.toString() : "+Infinity");
-    }
-
-    private static String getFormattedNumberOrderErrorMessage(
-            ConfigOption<Double> configValueLeft, ConfigOption<Double> configValueRight) {
-        return String.format(
-                "The AutoScalerOption %s or %s is invalid, %s must be less than or equal to the value of "
-                        + "%s",
-                configValueLeft.key(),
-                configValueRight.key(),
-                configValueLeft.key(),
-                configValueRight.key());
     }
 
     private static String getFormattedErrorMessage(ConfigOption<Double> configValue, Double min) {

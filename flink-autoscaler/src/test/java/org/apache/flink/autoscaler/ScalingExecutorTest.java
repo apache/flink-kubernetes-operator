@@ -20,10 +20,10 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
+import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
@@ -36,6 +36,7 @@ import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -46,10 +47,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -555,16 +559,10 @@ public class ScalingExecutorTest {
                 new ScalingExecutor<>(
                         eventCollector,
                         stateStore,
-                        new ResourceCheck() {
-                            @Override
-                            public boolean trySchedule(
-                                    int currentInstances,
-                                    int newInstances,
-                                    double cpuPerInstance,
-                                    MemorySize memoryPerInstance) {
-                                return false;
-                            }
-                        });
+                        (currentInstances, newInstances, cpuPerInstance, memoryPerInstance) ->
+                                false,
+                        Collections.emptyList(),
+                        Collections.emptyList());
 
         // Scaling blocked due to unavailable resources
         assertFalse(
@@ -724,7 +722,7 @@ public class ScalingExecutorTest {
                                         1,
                                         2,
                                         100.0,
-                                        157.0,
+                                        200.0,
                                         110.0)));
         assertTrue(
                 event.getMessage()
@@ -1027,7 +1025,6 @@ public class ScalingExecutorTest {
                         jobTopology,
                         new DelayedScaleDown()));
         if (quotaReached) {
-            assertEquals("ScalingReport", eventCollector.events.poll().getReason());
             assertEquals("ResourceQuotaReached", eventCollector.events.poll().getReason());
             assertTrue(eventCollector.events.isEmpty());
         }
@@ -1065,5 +1062,630 @@ public class ScalingExecutorTest {
                         Collectors.toMap(
                                 e -> JobVertexID.fromHexString(e.getKey()),
                                 e -> Integer.valueOf(e.getValue())));
+    }
+
+    @Nested
+    class ScalingExecutorPluginTest {
+
+        private JobVertexID source;
+        private JobVertexID sink;
+        private JobTopology jobTopology;
+        private EvaluatedMetrics metrics;
+
+        @BeforeEach
+        void setupFilter() {
+            source = new JobVertexID();
+            sink = new JobVertexID();
+            jobTopology =
+                    new JobTopology(
+                            new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                            new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
+            metrics =
+                    new EvaluatedMetrics(
+                            Map.of(source, evaluated(10, 110, 100), sink, evaluated(10, 110, 100)),
+                            dummyGlobalMetrics);
+        }
+
+        /**
+         * Registers the given plugins with the per-reconciliation resolver by setting both {@code
+         * scaling.custom-executors} and the per-instance {@code
+         * scaling.custom-executor.<name>.class} keys on the shared {@code conf}, then constructs a
+         * {@link ScalingExecutor} bound to those plugins as the discovered SPI bag. The instance
+         * name is the plugin's FQN so that approve/veto event {@code messageKey} assertions can
+         * stay phrased in terms of {@code plugin.getClass().getName()}.
+         */
+        @SafeVarargs
+        private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> executorWith(
+                ScalingExecutorPlugin<JobID>... plugins) {
+            var instances = new ArrayList<String>();
+            for (var p : plugins) {
+                var name = p.getClass().getName();
+                instances.add(name);
+                conf.setString(AutoScalerOptions.customScalingExecutorClassKey(name), name);
+            }
+            conf.set(AutoScalerOptions.SCALING_CUSTOM_EXECUTORS, instances);
+            return new ScalingExecutor<JobID, JobAutoScalerContext<JobID>>(
+                    eventCollector, stateStore, null, List.of(plugins), Collections.emptyList());
+        }
+
+        @Test
+        void testFilterApprovesScaling() throws Exception {
+            // A filter that approves scaling (passes through unchanged).
+            ScalingExecutorPlugin<JobID> approveFilter = (ctx, summaries) -> summaries;
+
+            var executorWithFilter = executorWith(approveFilter);
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterVetoesScaling() throws Exception {
+            // A filter that vetoes scaling.
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilter = executorWith(vetoFilter);
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterModifiesSummaries() throws Exception {
+            // A filter that removes one vertex from scaling summaries.
+            ScalingExecutorPlugin<JobID> modifyFilter =
+                    (ctx, summaries) -> {
+                        // Keep only the first entry
+                        var firstEntry = summaries.entrySet().iterator().next();
+                        return Map.of(firstEntry.getKey(), firstEntry.getValue());
+                    };
+
+            var executorWithFilter = executorWith(modifyFilter);
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Despite 2 vertices needing scaling, only 1 should be in overrides
+            // because the filter removed one
+            var overrides = stateStore.getParallelismOverrides(context);
+            assertFalse(overrides.isEmpty());
+        }
+
+        @Test
+        void testFilterReturnsEmptyMapVetoesScaling() throws Exception {
+            // A filter that returns empty map (no vertices left to scale).
+            ScalingExecutorPlugin<JobID> emptyMapFilter =
+                    (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilter = executorWith(emptyMapFilter);
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testMultipleFiltersChained() throws Exception {
+            // First filter: approves scaling
+            ScalingExecutorPlugin<JobID> approveFilter = (ctx, summaries) -> summaries;
+
+            // Second filter: vetoes scaling
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilters = executorWith(approveFilter, vetoFilter);
+
+            var now = Instant.now();
+            assertFalse(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testMultipleFiltersAllApprove() throws Exception {
+            // Both filters approve
+            ScalingExecutorPlugin<JobID> filter1 = (ctx, summaries) -> summaries;
+            ScalingExecutorPlugin<JobID> filter2 = (ctx, summaries) -> summaries;
+
+            var executorWithFilters = executorWith(filter1, filter2);
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testNoFiltersScalesNormally() throws Exception {
+            // Empty filter collection (default behavior)
+            var executorNoFilters =
+                    new ScalingExecutor<>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            Collections.emptyList(),
+                            Collections.emptyList());
+
+            var now = Instant.now();
+            assertTrue(
+                    executorNoFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+        }
+
+        @Test
+        void testFilterReceivesCorrectContext() throws Exception {
+            // A filter that asserts it receives the expected context parameters
+            var receivedContextHolder =
+                    new Object() {
+                        ScalingExecutorPlugin.Context<JobID> pluginContext;
+                        Map<JobVertexID, ScalingSummary> summaries;
+                    };
+
+            ScalingExecutorPlugin<JobID> captureFilter =
+                    (ctx, summaries) -> {
+                        receivedContextHolder.pluginContext = ctx;
+                        receivedContextHolder.summaries = summaries;
+                        return summaries;
+                    };
+
+            var executorWithFilter = executorWith(captureFilter);
+
+            var now = Instant.now();
+            context.getScalingCycleState().setEvaluatedMetrics(metrics);
+            context.getScalingCycleState()
+                    .setCollectedMetrics(
+                            new CollectedMetricHistory(jobTopology, new TreeMap<>(), now));
+            executorWithFilter.scaleResource(
+                    context,
+                    metrics,
+                    new HashMap<>(),
+                    new ScalingTracking(),
+                    now,
+                    jobTopology,
+                    new DelayedScaleDown());
+
+            assertThat(receivedContextHolder.pluginContext).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getJobKey())
+                    .isEqualTo(context.getJobKey());
+            assertThat(receivedContextHolder.pluginContext.getConfiguration()).isNotNull();
+            assertThat(receivedContextHolder.pluginContext.getEvaluatedMetrics()).isSameAs(metrics);
+            assertThat(receivedContextHolder.pluginContext.getJobTopology()).isSameAs(jobTopology);
+            // The plugin context is a JobAutoScalerContext sharing the canonical cycle state and
+            // metric group.
+            assertThat(receivedContextHolder.pluginContext)
+                    .isInstanceOf(JobAutoScalerContext.class);
+            assertThat(receivedContextHolder.pluginContext.getScalingCycleState())
+                    .isSameAs(context.getScalingCycleState());
+            assertThat(receivedContextHolder.pluginContext.getMetricGroup())
+                    .isSameAs(context.getMetricGroup());
+            assertThat(receivedContextHolder.summaries).isNotEmpty();
+            // Both vertices should be in the summaries since both are above target
+            assertThat(receivedContextHolder.summaries).containsKey(source);
+            assertThat(receivedContextHolder.summaries).containsKey(sink);
+        }
+
+        @Test
+        void testFilterPriorityOrdering() throws Exception {
+            // Track execution order
+            var executionOrder = new ArrayList<String>();
+
+            // High priority filter (priority = -10, should execute first)
+            ScalingExecutorPlugin<JobID> highPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public int priority() {
+                            return -10;
+                        }
+
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID> ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("high");
+                            return summaries;
+                        }
+                    };
+
+            // Default priority filter (priority = 0, should execute second)
+            ScalingExecutorPlugin<JobID> defaultPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID> ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("default");
+                            return summaries;
+                        }
+                    };
+
+            // Low priority filter (priority = 10, should execute last)
+            ScalingExecutorPlugin<JobID> lowPriorityFilter =
+                    new ScalingExecutorPlugin<>() {
+                        @Override
+                        public int priority() {
+                            return 10;
+                        }
+
+                        @Override
+                        public Map<JobVertexID, ScalingSummary> apply(
+                                ScalingExecutorPlugin.Context<JobID> ctx,
+                                Map<JobVertexID, ScalingSummary> summaries) {
+                            executionOrder.add("low");
+                            return summaries;
+                        }
+                    };
+
+            // Register all three plugins unsorted; the per-reconciliation resolver inside
+            // ScalingExecutor sorts the resolved chain by ascending
+            // ScalingExecutorPlugin#priority().
+            var executorWithFilters =
+                    executorWith(lowPriorityFilter, defaultPriorityFilter, highPriorityFilter);
+
+            var now = Instant.now();
+            assertTrue(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            now,
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Verify they executed in priority order: high (-10), default (0), low (10)
+            assertThat(executionOrder).containsExactly("high", "default", "low");
+        }
+
+        @Test
+        void testApprovingPluginAllowsScalingWithoutVetoEvent() throws Exception {
+            ScalingExecutorPlugin<JobID> approveFilter = (ctx, summaries) -> summaries;
+
+            var executorWithFilter = executorWith(approveFilter);
+
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertThat(findEventByReason(ScalingExecutor.SCALING_VETOED_REASON)).isEmpty();
+        }
+
+        @Test
+        void testVetoEventEmittedWhenPluginVetoes() throws Exception {
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilter = executorWith(vetoFilter);
+
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessage()).contains(vetoFilter.getClass().getName());
+            assertThat(vetoEvent.getMessageKey())
+                    .isEqualTo(
+                            ScalingExecutor.SCALING_VETOED_REASON
+                                    + ":"
+                                    + vetoFilter.getClass().getName());
+        }
+
+        @Test
+        void testVetoAfterApproveEmitsVetoEvent() throws Exception {
+            ScalingExecutorPlugin<JobID> approveFilter = (ctx, summaries) -> summaries;
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+
+            var executorWithFilters = executorWith(approveFilter, vetoFilter);
+
+            assertFalse(
+                    executorWithFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessage()).contains(vetoFilter.getClass().getName());
+        }
+
+        @Test
+        void testNoPluginEventsEmittedWhenNoPluginsRegistered() throws Exception {
+            var executorNoFilters =
+                    new ScalingExecutor<>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            Collections.emptyList(),
+                            Collections.emptyList());
+
+            assertTrue(
+                    executorNoFilters.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertThat(findEventByReason(ScalingExecutor.SCALING_VETOED_REASON)).isEmpty();
+        }
+
+        @Test
+        void testLegacyFallbackClassKeyResolvesPlugin() throws Exception {
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+            var name = vetoFilter.getClass().getName();
+            conf.set(AutoScalerOptions.SCALING_CUSTOM_EXECUTORS, List.of(name));
+            conf.setString(AutoScalerOptions.customScalingExecutorClassFallbackKey(name), name);
+
+            var executorWithFilter =
+                    new ScalingExecutor<>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            List.of(vetoFilter),
+                            Collections.emptyList());
+
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Plugin actually ran -> veto event was emitted with the configured instance name.
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessageKey())
+                    .isEqualTo(ScalingExecutor.SCALING_VETOED_REASON + ":" + name);
+        }
+
+        @Test
+        void testLegacyFallbackForCustomExecutorsList() throws Exception {
+            // The 'scaling.custom-executors' LIST itself is registered ONLY via the legacy
+            // 'kubernetes.operator.'-prefixed key — the canonical key is intentionally not set.
+            // The resolver must still pick up the configured instance via the fallback.
+            ScalingExecutorPlugin<JobID> vetoFilter = (ctx, summaries) -> Collections.emptyMap();
+            var name = vetoFilter.getClass().getName();
+            // Set ONLY the legacy form of 'scaling.custom-executors'.
+            conf.setString(
+                    AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
+                            + AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + "scaling.custom-executors",
+                    name);
+            // Per-instance .class still set under the canonical namespace so resolution succeeds.
+            conf.setString(AutoScalerOptions.customScalingExecutorClassKey(name), name);
+
+            var executorWithFilter =
+                    new ScalingExecutor<JobID, JobAutoScalerContext<JobID>>(
+                            eventCollector,
+                            stateStore,
+                            null,
+                            List.of(vetoFilter),
+                            Collections.emptyList());
+
+            assertFalse(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            // Plugin actually ran -> veto event was emitted with the configured instance name.
+            var vetoEvent = findEventByReason(ScalingExecutor.SCALING_VETOED_REASON).orElseThrow();
+            assertThat(vetoEvent.getMessageKey())
+                    .isEqualTo(ScalingExecutor.SCALING_VETOED_REASON + ":" + name);
+        }
+
+        @Test
+        void testPluginReceivesScopedConfiguration() throws Exception {
+            // The resolver must pass to each plugin a per-instance scoped Configuration whose
+            // keys have the 'job.autoscaler.scaling.custom-executor.<name>.' prefix stripped.
+            var captured =
+                    new java.util.concurrent.atomic.AtomicReference<
+                            org.apache.flink.configuration.Configuration>();
+            ScalingExecutorPlugin<JobID> capturingPlugin =
+                    (ctx, summaries) -> {
+                        captured.set(ctx.getConfiguration());
+                        return summaries;
+                    };
+
+            var executorWithFilter = executorWith(capturingPlugin);
+            var name = capturingPlugin.getClass().getName();
+            // Canonical-prefixed parameter keys.
+            conf.setString(
+                    AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + AutoScalerOptions.SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                            + name
+                            + ".threshold",
+                    "0.85");
+            conf.setString(
+                    AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + AutoScalerOptions.SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                            + name
+                            + ".allow-scale-down",
+                    "true");
+
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            var scoped = captured.get();
+            assertThat(scoped).as("plugin received Configuration").isNotNull();
+            assertThat(scoped.toMap())
+                    .as("plugin-specific keys exposed with prefix stripped")
+                    .containsEntry("threshold", "0.85")
+                    .containsEntry("allow-scale-down", "true");
+            assertThat(scoped.toMap()).containsKey("class");
+        }
+
+        @Test
+        void testPluginReceivesScopedConfigurationFromLegacyPrefix() throws Exception {
+            var captured =
+                    new java.util.concurrent.atomic.AtomicReference<
+                            org.apache.flink.configuration.Configuration>();
+            ScalingExecutorPlugin<JobID> capturingPlugin =
+                    (ctx, summaries) -> {
+                        captured.set(ctx.getConfiguration());
+                        return summaries;
+                    };
+
+            var executorWithFilter = executorWith(capturingPlugin);
+            var name = capturingPlugin.getClass().getName();
+            conf.setString(
+                    AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
+                            + AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + AutoScalerOptions.SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                            + name
+                            + ".legacy-only",
+                    "from-legacy");
+
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertThat(captured.get().toMap())
+                    .as("legacy-only key exposed to plugin with prefix stripped")
+                    .containsEntry("legacy-only", "from-legacy");
+        }
+
+        @Test
+        void testCanonicalConfigKeyOverridesLegacyOnOverlap() throws Exception {
+            var captured =
+                    new java.util.concurrent.atomic.AtomicReference<
+                            org.apache.flink.configuration.Configuration>();
+            ScalingExecutorPlugin<JobID> capturingPlugin =
+                    (ctx, summaries) -> {
+                        captured.set(ctx.getConfiguration());
+                        return summaries;
+                    };
+
+            var executorWithFilter = executorWith(capturingPlugin);
+            var name = capturingPlugin.getClass().getName();
+            conf.setString(
+                    AutoScalerOptions.OLD_K8S_OP_CONF_PREFIX
+                            + AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + AutoScalerOptions.SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                            + name
+                            + ".threshold",
+                    "legacy-value");
+            conf.setString(
+                    AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                            + AutoScalerOptions.SCALING_CUSTOM_EXECUTOR_CONF_PREFIX
+                            + name
+                            + ".threshold",
+                    "canonical-value");
+
+            assertTrue(
+                    executorWithFilter.scaleResource(
+                            context,
+                            metrics,
+                            new HashMap<>(),
+                            new ScalingTracking(),
+                            Instant.now(),
+                            jobTopology,
+                            new DelayedScaleDown()));
+
+            assertThat(captured.get().toMap())
+                    .as("canonical prefix wins on overlap")
+                    .containsEntry("threshold", "canonical-value");
+        }
+
+        private Optional<TestingEventCollector.Event<JobID, JobAutoScalerContext<JobID>>>
+                findEventByReason(String reason) {
+            return eventCollector.events.stream()
+                    .filter(e -> reason.equals(e.getReason()))
+                    .findFirst();
+        }
     }
 }

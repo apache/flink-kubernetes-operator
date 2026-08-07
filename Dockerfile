@@ -38,13 +38,13 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
 FROM eclipse-temurin:${JAVA_VERSION}-jre-jammy
 ENV FLINK_HOME=/opt/flink
 ENV FLINK_PLUGINS_DIR=$FLINK_HOME/plugins
-ENV OPERATOR_VERSION=1.15-SNAPSHOT
+ENV OPERATOR_VERSION=1.16-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar
 
 ENV OPERATOR_LIB=$FLINK_HOME/operator-lib
-RUN mkdir -p $OPERATOR_LIB
+RUN mkdir -p $OPERATOR_LIB/log4j $OPERATOR_LIB/logback
 
 WORKDIR /flink-kubernetes-operator
 RUN groupadd --system --gid=9999 flink && \
@@ -56,6 +56,8 @@ COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/$OPE
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/log4j/ $OPERATOR_LIB/log4j/
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/logback/ $OPERATOR_LIB/logback/
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/licenses ./licenses
 COPY --chown=flink:flink --from=build /app/LICENSE ./LICENSE

@@ -18,12 +18,12 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.ConfigConstants;
-import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
-import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,15 +34,17 @@ import java.util.Set;
 /** Validator utilities. */
 public final class ValidatorUtils {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ValidatorUtils.class);
 
-    public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
+    public static Set<FlinkResourceValidator> discoverValidators(
+            FlinkConfigManager configManager, PluginManager pluginManager) {
         var conf = configManager.getDefaultConfig();
         Set<FlinkResourceValidator> resourceValidators = new HashSet<>();
         DefaultValidator defaultValidator = new DefaultValidator(configManager);
         defaultValidator.configure(conf);
         resourceValidators.add(defaultValidator);
-        PluginUtils.createPluginManagerFromRootFolder(conf)
+        LOG.info("Loading FlinkResourceValidator implementations from plugin directory.");
+        pluginManager
                 .load(FlinkResourceValidator.class)
                 .forEachRemaining(
                         validator -> {
@@ -71,6 +73,11 @@ public final class ValidatorUtils {
                     "Flink version " + version + " is not supported by this operator version",
                     ctx.getJosdkContext().getClient());
             return false;
+        }
+        if (version.isDeprecated()) {
+            LOG.warn(
+                    "Flink version {} is deprecated and may be removed in a future operator release. Plan to upgrade to a non-deprecated version.",
+                    version);
         }
         return true;
     }

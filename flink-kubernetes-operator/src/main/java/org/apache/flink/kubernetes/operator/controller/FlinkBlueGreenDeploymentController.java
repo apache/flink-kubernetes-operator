@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -30,15 +29,12 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.javaoperatorsdk.operator.api.config.informer.InformerEventSourceConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
-import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
-import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,26 +46,35 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDepl
 /**
  * Controller that runs the main reconcile loop for Flink Blue/Green deployments.
  *
- * <p>State Machine Flow
+ * <h2>State Machine Flow</h2>
  *
- * <p>Deployment States
+ * <p>Deployment states:
  *
- * <p>1. INITIALIZING_BLUE - First-time deployment setup 2. ACTIVE_BLUE - Blue environment serving
- * traffic, monitoring for updates 3. TRANSITIONING_TO_GREEN - Deploying Green environment while
- * Blue serves traffic 4. ACTIVE_GREEN - Green environment serving traffic, monitoring for updates
- * 5. TRANSITIONING_TO_BLUE - Deploying Blue environment while Green serves traffic
+ * <ol>
+ *   <li>{@code INITIALIZING_BLUE}: First-time deployment setup.
+ *   <li>{@code ACTIVE_BLUE}: Blue environment serving traffic, monitoring for updates.
+ *   <li>{@code TRANSITIONING_TO_GREEN}: Deploying Green environment while Blue serves traffic.
+ *   <li>{@code ACTIVE_GREEN}: Green environment serving traffic, monitoring for updates.
+ *   <li>{@code TRANSITIONING_TO_BLUE}: Deploying Blue environment while Green serves traffic.
+ * </ol>
  *
- * <p>Orchestration Process
+ * <h2>Orchestration Process</h2>
  *
- * <p>FlinkBlueGreenDeploymentController.reconcile() 1. Create BlueGreenContext with current
- * deployment state 2. Query StateHandlerRegistry for appropriate handler 3. Delegate to specific
- * StateHandler.handle(context) 4. StateHandler invokes BlueGreenDeploymentService operations 5.
- * Return UpdateControl with next reconciliation schedule
+ * <p>{@link #reconcile(FlinkBlueGreenDeployment, Context)} performs:
+ *
+ * <ol>
+ *   <li>Create a {@link BlueGreenContext} with the current deployment state.
+ *   <li>Query {@link BlueGreenStateHandlerRegistry} for the appropriate handler.
+ *   <li>Delegate to {@link BlueGreenStateHandler#handle(BlueGreenContext)}.
+ *   <li>The handler invokes {@link BlueGreenDeploymentService} operations.
+ *   <li>Return an {@link UpdateControl} with the next reconciliation schedule.
+ * </ol>
  */
 @ControllerConfiguration
 public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueGreenDeployment> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
+    private static final Logger LOG =
+            LoggerFactory.getLogger(FlinkBlueGreenDeploymentController.class);
 
     private final FlinkResourceContextFactory ctxFactory;
     private final BlueGreenStateHandlerRegistry handlerRegistry;
@@ -92,18 +97,7 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
     public List<EventSource<?, FlinkBlueGreenDeployment>> prepareEventSources(
             EventSourceContext<FlinkBlueGreenDeployment> context) {
         List<EventSource<?, FlinkBlueGreenDeployment>> eventSources = new ArrayList<>();
-
-        InformerEventSourceConfiguration<FlinkDeployment> config =
-                InformerEventSourceConfiguration.from(
-                                FlinkDeployment.class, FlinkBlueGreenDeployment.class)
-                        .withSecondaryToPrimaryMapper(
-                                Mappers.fromOwnerReferences(context.getPrimaryResourceClass()))
-                        .withNamespacesInheritedFromController()
-                        .withFollowControllerNamespacesChanges(true)
-                        .build();
-
-        eventSources.add(new InformerEventSource<>(config, context));
-
+        eventSources.add(EventSourceUtils.getBlueGreenFlinkDeploymentInformerEventSource(context));
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getBlueGreenIngressInformerEventSource(context));
         }
@@ -119,12 +113,8 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
 
         if (deploymentStatus == null) {
             var context =
-                    new BlueGreenContext(
-                            bgDeployment,
-                            new FlinkBlueGreenDeploymentStatus(),
-                            josdkContext,
-                            null,
-                            ctxFactory);
+                    ctxFactory.getBlueGreenContext(
+                            bgDeployment, new FlinkBlueGreenDeploymentStatus(), josdkContext, null);
             UpdateControl<FlinkBlueGreenDeployment> updateControl =
                     BlueGreenDeploymentService.patchStatusUpdateControl(
                                     context, INITIALIZING_BLUE, null, null)
@@ -134,15 +124,14 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
         } else {
             FlinkBlueGreenDeploymentState currentState = deploymentStatus.getBlueGreenState();
             var context =
-                    new BlueGreenContext(
+                    ctxFactory.getBlueGreenContext(
                             bgDeployment,
                             deploymentStatus,
                             josdkContext,
                             currentState == INITIALIZING_BLUE
                                     ? null
                                     : FlinkBlueGreenDeployments.fromSecondaryResources(
-                                            josdkContext),
-                            ctxFactory);
+                                            josdkContext));
 
             LOG.debug(
                     "Processing state: {} for deployment: {}",
@@ -154,9 +143,5 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
             statusRecorder.patchAndCacheStatus(bgDeployment, josdkContext.getClient());
             return updateControl;
         }
-    }
-
-    public static void logAndThrow(String message) {
-        throw new RuntimeException(message);
     }
 }

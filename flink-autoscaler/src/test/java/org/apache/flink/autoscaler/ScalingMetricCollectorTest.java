@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
+import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
@@ -215,7 +216,9 @@ public class ScalingMetricCollectorTest {
                         + "}";
         JobDetailsInfo jobDetailsInfo = new ObjectMapper().readValue(s, JobDetailsInfo.class);
 
-        var metricsCollector = new RestApiMetricsCollector<>();
+        var metricsCollector =
+                new RestApiMetricsCollector<>(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
 
         var sourceId = JobVertexID.fromHexString("bc764cd8ddf7a0cff126f51c16239658");
         var sinkId = JobVertexID.fromHexString("20ba6b65f97481d5570070de90e4e791");
@@ -349,7 +352,9 @@ public class ScalingMetricCollectorTest {
                         + "}";
         JobDetailsInfo jobDetailsInfo = new ObjectMapper().readValue(s, JobDetailsInfo.class);
 
-        var metricsCollector = new RestApiMetricsCollector<>();
+        var metricsCollector =
+                new RestApiMetricsCollector<>(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
         assertThrows(
                 NotReadyException.class, () -> metricsCollector.getJobTopology(jobDetailsInfo));
     }
@@ -360,7 +365,9 @@ public class ScalingMetricCollectorTest {
                 "{\"jid\":\"a1b1b53c7c71e7199aa8c43bc703fe7f\",\"name\":\"basic-example\",\"isStoppable\":false,\"state\":\"RUNNING\",\"start-time\":1697114719143,\"end-time\":-1,\"duration\":60731,\"maxParallelism\":-1,\"now\":1697114779874,\"timestamps\":{\"CANCELLING\":0,\"INITIALIZING\":1697114719143,\"RUNNING\":1697114719743,\"CANCELED\":0,\"FINISHED\":0,\"FAILED\":0,\"RESTARTING\":0,\"FAILING\":0,\"CREATED\":1697114719343,\"SUSPENDED\":0,\"RECONCILING\":0},\"vertices\":[{\"id\":\"bc764cd8ddf7a0cff126f51c16239658\",\"slotSharingGroupId\":\"a9c52ec4c7200ab4bd141cbae8022105\",\"name\":\"Source: Events Generator Source\",\"maxParallelism\":128,\"parallelism\":2,\"status\":\"RUNNING\",\"start-time\":1697114724603,\"end-time\":-1,\"duration\":55271,\"tasks\":{\"FAILED\":0,\"CANCELED\":0,\"SCHEDULED\":0,\"FINISHED\":0,\"CREATED\":0,\"DEPLOYING\":0,\"CANCELING\":0,\"RECONCILING\":0,\"INITIALIZING\":0,\"RUNNING\":2},\"metrics\":{\"read-bytes\":0,\"read-bytes-complete\":true,\"write-bytes\":1985978,\"write-bytes-complete\":true,\"read-records\":0,\"read-records-complete\":true,\"write-records\":92037,\"write-records-complete\":true,\"accumulated-backpressured-time\":0,\"accumulated-idle-time\":78319,\"accumulated-busy-time\":13347.0}},{\"id\":\"20ba6b65f97481d5570070de90e4e791\",\"slotSharingGroupId\":\"a9c52ec4c7200ab4bd141cbae8022105\",\"name\":\"Flat Map -> Sink: Print to Std. Out\",\"maxParallelism\":128,\"parallelism\":2,\"status\":\"RUNNING\",\"start-time\":1697114724639,\"end-time\":-1,\"duration\":55235,\"tasks\":{\"FAILED\":0,\"CANCELED\":0,\"SCHEDULED\":0,\"FINISHED\":0,\"CREATED\":0,\"DEPLOYING\":0,\"CANCELING\":0,\"RECONCILING\":0,\"INITIALIZING\":0,\"RUNNING\":2},\"metrics\":{\"read-bytes\":2019044,\"read-bytes-complete\":true,\"write-bytes\":0,\"write-bytes-complete\":true,\"read-records\":91881,\"read-records-complete\":true,\"write-records\":0,\"write-records-complete\":true,\"accumulated-backpressured-time\":0,\"accumulated-idle-time\":91352,\"accumulated-busy-time\":273.0}}],\"status-counts\":{\"FAILED\":0,\"CANCELED\":0,\"SCHEDULED\":0,\"FINISHED\":0,\"CREATED\":0,\"DEPLOYING\":0,\"CANCELING\":0,\"RECONCILING\":0,\"INITIALIZING\":0,\"RUNNING\":2},\"plan\":{\"jid\":\"a1b1b53c7c71e7199aa8c43bc703fe7f\",\"name\":\"basic-example\",\"type\":\"STREAMING\",\"nodes\":[{\"id\":\"20ba6b65f97481d5570070de90e4e791\",\"parallelism\":2,\"operator\":\"\",\"operator_strategy\":\"\",\"description\":\"Flat Map<br/>+- Sink: Print to Std. Out<br/>\",\"operator_metadata\":[{},{}],\"inputs\":[{\"num\":0,\"id\":\"bc764cd8ddf7a0cff126f51c16239658\",\"ship_strategy\":\"HASH\",\"exchange\":\"pipelined_bounded\"}],\"optimizer_properties\":{}},{\"id\":\"bc764cd8ddf7a0cff126f51c16239658\",\"parallelism\":2,\"operator\":\"\",\"operator_strategy\":\"\",\"description\":\"Source: Events Generator Source<br/>\",\"operator_metadata\":[{}],\"optimizer_properties\":{}}]}}\n";
         JobDetailsInfo jobDetailsInfo = new ObjectMapper().readValue(s, JobDetailsInfo.class);
 
-        var metricsCollector = new RestApiMetricsCollector();
+        var metricsCollector =
+                new RestApiMetricsCollector(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
         metricsCollector.getJobTopology(jobDetailsInfo);
     }
 
@@ -381,7 +388,9 @@ public class ScalingMetricCollectorTest {
                         List.of(),
                         Map.of(),
                         new JobPlanInfo.RawJson(""));
-        var metricsCollector = new RestApiMetricsCollector<>();
+        var metricsCollector =
+                new RestApiMetricsCollector<>(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
         assertEquals(Instant.ofEpochMilli(3L), metricsCollector.getJobRunningTs(details));
     }
 
@@ -389,7 +398,8 @@ public class ScalingMetricCollectorTest {
     public void testQueryNamesOnTopologyChange() {
         var metricNameQueryCounter = new HashMap<JobVertexID, Integer>();
         var collector =
-                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>() {
+                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        new InMemoryAutoScalerStateStore<>()) {
                     @Override
                     protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
                             RestClusterClient<?> rc, JobID id, JobVertexID jvi, JobTopology t) {
@@ -453,7 +463,8 @@ public class ScalingMetricCollectorTest {
     public void testRequiredMetrics() {
         List<String> metricList = new ArrayList<>();
         RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> testCollector =
-                new RestApiMetricsCollector<>() {
+                new RestApiMetricsCollector<>(
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>()) {
                     @Override
                     protected Collection<String> queryAggregatedMetricNames(
                             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
@@ -475,7 +486,9 @@ public class ScalingMetricCollectorTest {
 
     @Test
     public void testQueryMetricNames() throws Exception {
-        var testCollector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
+        var testCollector =
+                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        new InMemoryAutoScalerStateStore<>());
         var response = new ArrayList<AggregatedMetric>();
         var client =
                 new RestClusterClient<>(
@@ -545,7 +558,10 @@ public class ScalingMetricCollectorTest {
                         new VertexInfo(source, Map.of(), 1, 1),
                         new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1));
 
-        var metricCollector = new TestingMetricsCollector<>(topology);
+        var metricCollector =
+                new TestingMetricsCollector<>(
+                        topology,
+                        new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>());
 
         assertThrows(
                 MetricNotFoundException.class,

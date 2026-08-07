@@ -303,3 +303,83 @@ tests:
   - equal:
       path: spec.template.spec.serviceAccountName
       value: test-service-account
+
+# Logging framework tests
+
+- it: Should use log4j2 logging by default
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: LOGGING_FRAMEWORK
+        value: log4j2
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: LOG_CONFIG
+        value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+
+- it: Should mount log4j config files by default
+  asserts:
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: log4j-operator.properties
+        path: log4j-operator.properties
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: log4j-console.properties
+        path: log4j-console.properties
+
+- it: Should use logback logging when `logging.framework` is set to logback
+  set:
+    logging:
+      framework: logback
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: LOGGING_FRAMEWORK
+        value: logback
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: LOG_CONFIG
+        value: -Dlogback.configurationFile=/opt/flink/conf/logback-operator.xml
+
+- it: Should mount logback config files when `logging.framework` is set to logback
+  set:
+    logging:
+      framework: logback
+  asserts:
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: logback-operator.xml
+        path: logback-operator.xml
+  - contains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: logback-console.xml
+        path: logback-console.xml
+
+- it: Should not mount logback config files when using log4j2
+  asserts:
+  - notContains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: logback-operator.xml
+        path: logback-operator.xml
+
+- it: Should not mount log4j config files when using logback
+  set:
+    logging:
+      framework: logback
+  asserts:
+  - notContains:
+      path: spec.template.spec.volumes[0].configMap.items
+      content:
+        key: log4j-operator.properties
+        path: log4j-operator.properties
+

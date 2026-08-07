@@ -319,6 +319,137 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
     }
 
     @Test
+    public void testCountBasedDisposeRetainsEntryOnFailure() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
+        configManager.updateDefaultConfig(conf);
+
+        var spInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
+        long futureTs = System.currentTimeMillis() * 2;
+        var sp0 =
+                new Savepoint(
+                        futureTs,
+                        "sp0",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        0L);
+        var sp1 =
+                new Savepoint(
+                        futureTs + 1,
+                        "sp1",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        1L);
+        var sp2 =
+                new Savepoint(
+                        futureTs + 2,
+                        "sp2",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        2L);
+        spInfo.updateLastSavepoint(sp0);
+        spInfo.updateLastSavepoint(sp1);
+        spInfo.updateLastSavepoint(sp2);
+
+        flinkService.setDisposeSavepointFailure(true);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
+
+        // sp0 must still be in history because dispose failed — removing it would orphan the files
+        assertThat(spInfo.getSavepointHistory()).containsExactly(sp0, sp1, sp2);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+    }
+
+    @Test
+    public void testAgeBasedDisposeRetainsEntryOnFailure() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                Duration.ofMillis(5));
+        configManager.updateDefaultConfig(conf);
+
+        var spInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
+        var sp1 =
+                new Savepoint(
+                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 1L);
+        var sp2 =
+                new Savepoint(
+                        2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 2L);
+        spInfo.updateLastSavepoint(sp1);
+        spInfo.updateLastSavepoint(sp2);
+
+        flinkService.setDisposeSavepointFailure(true);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
+
+        // sp1 must still be in history because dispose failed — removing it would orphan the files
+        assertThat(spInfo.getSavepointHistory()).containsExactly(sp1, sp2);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+    }
+
+    @Test
+    public void testDisposeRetryOnSubsequentReconcile() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
+        configManager.updateDefaultConfig(conf);
+
+        var spInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
+        long futureTs = System.currentTimeMillis() * 2;
+        var sp0 =
+                new Savepoint(
+                        futureTs,
+                        "sp0",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        0L);
+        var sp1 =
+                new Savepoint(
+                        futureTs + 1,
+                        "sp1",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        1L);
+        var sp2 =
+                new Savepoint(
+                        futureTs + 2,
+                        "sp2",
+                        SnapshotTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        2L);
+        spInfo.updateLastSavepoint(sp0);
+        spInfo.updateLastSavepoint(sp1);
+        spInfo.updateLastSavepoint(sp2);
+
+        // First reconcile: dispose fails (job is down), entry must be retained
+        flinkService.setDisposeSavepointFailure(true);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
+        assertThat(spInfo.getSavepointHistory()).containsExactly(sp0, sp1, sp2);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+
+        // Second reconcile: dispose succeeds, entry must now be removed
+        flinkService.setDisposeSavepointFailure(false);
+        observer.cleanupSavepointHistoryLegacy(getResourceContext(deployment), Set.of());
+        assertThat(spInfo.getSavepointHistory()).containsExactly(sp1, sp2);
+        assertThat(flinkService.getDisposedSavepoints()).containsExactly(sp0.getLocation());
+    }
+
+    @Test
     public void testPeriodicSavepoint() throws Exception {
         var conf = new Configuration();
         conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);

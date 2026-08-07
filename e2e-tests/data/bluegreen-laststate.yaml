@@ -38,9 +38,10 @@ spec:
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
       jobManager:
-        resource:
-          memory: 1G
-          cpu: 1
+        resources:
+          requests:
+            memory: "1G"
+            cpu: "1"
         podTemplate:
           spec:
             containers:
@@ -58,9 +59,10 @@ spec:
                 persistentVolumeClaim:
                   claimName: flink-bg-laststate
       taskManager:
-        resource:
-          memory: 2G
-          cpu: 1
+        resources:
+          requests:
+            memory: "2G"
+            cpu: "1"
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
         parallelism: 1

@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
@@ -25,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
@@ -38,16 +40,24 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATORS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
@@ -67,18 +77,85 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Job scaling evaluator for autoscaler. */
-public class ScalingMetricEvaluator {
+public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
-    public EvaluatedMetrics evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
+    private final Collection<ScalingMetricsEvaluatorPlugin> customEvaluators;
+
+    /**
+     * The most recently evaluated metrics per job. Retained across scaling cycles so the scaling
+     * metric gauges (which are registered only once) always report the latest values.
+     */
+    @VisibleForTesting
+    final Map<KEY, EvaluatedMetrics> lastEvaluatedMetrics = new ConcurrentHashMap<>();
+
+    public ScalingMetricEvaluator(Collection<ScalingMetricsEvaluatorPlugin> customEvaluators) {
+        this.customEvaluators = customEvaluators;
+    }
+
+    /**
+     * The production evaluation entry point. Evaluates the metrics collected during the current
+     * cycle (running the configured custom evaluator plugin, if any), records the result in the
+     * scaling cycle state of the given context, and registers / updates the scaling metric gauges.
+     *
+     * @return {@code true} if the metrics are fully collected and the job is ready for scaling,
+     *     {@code false} if the caller should stop the current scaling cycle early. An upfront
+     *     evaluation is still performed and reported in the latter case.
+     */
+    public boolean evaluate(Context ctx) {
+        var cycleState = ctx.getScalingCycleState();
+        var collectedMetrics = cycleState.getCollectedMetrics();
+
+        var evaluatedMetrics =
+                computeEvaluatedMetrics(
+                        ctx, ctx.getConfiguration(), collectedMetrics, cycleState.getRestartTime());
+        LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
+        cycleState.setEvaluatedMetrics(evaluatedMetrics);
+        lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
+
+        initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+        cycleState
+                .getAutoscalerMetrics()
+                .registerScalingMetrics(
+                        collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                        () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
+
+        if (!collectedMetrics.isFullyCollected()) {
+            // We have done an upfront evaluation, but we are not ready for scaling.
+            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+            return false;
+        }
+        return true;
+    }
+
+    /** Removes any retained evaluation state for the given job. */
+    public void cleanup(KEY jobKey) {
+        lastEvaluatedMetrics.remove(jobKey);
+    }
+
+    /**
+     * Computes the evaluated scaling metrics for all vertices. The configured custom evaluator
+     * plugin is run only when a non-null context is supplied (the plugin's {@link
+     * ScalingMetricsEvaluatorPlugin.Context} is a thin extension of that canonical context, so it
+     * needs the context to exist). Pass {@code null} for plugin-free computation, as the tests do.
+     */
+    @VisibleForTesting
+    EvaluatedMetrics computeEvaluatedMetrics(
+            @Nullable Context autoScalerContext,
+            Configuration conf,
+            CollectedMetricHistory collectedMetrics,
+            Duration restartTime) {
         LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
         var topology = collectedMetrics.getJobTopology();
 
         boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
+
+        var customEvaluationSession =
+                buildCustomEvaluationSession(
+                        autoScalerContext, conf, scalingOutput, processingBacklog);
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
             scalingOutput.put(
@@ -90,11 +167,35 @@ public class ScalingMetricEvaluator {
                             topology,
                             vertex,
                             processingBacklog,
-                            restartTime));
+                            restartTime,
+                            customEvaluationSession));
         }
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
         return new EvaluatedMetrics(scalingOutput, globalMetrics);
+    }
+
+    @Nullable
+    private Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>
+            buildCustomEvaluationSession(
+                    @Nullable Context autoScalerContext,
+                    Configuration conf,
+                    Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
+                    boolean processingBacklog) {
+        if (autoScalerContext == null) {
+            return null;
+        }
+        var customEvaluatorWithConfig = getCustomEvaluatorIfRequired(conf);
+        if (customEvaluatorWithConfig == null) {
+            return null;
+        }
+        var pluginContext =
+                new ScalingMetricsEvaluatorPlugin.Context<KEY>(
+                        autoScalerContext,
+                        customEvaluatorWithConfig.f1,
+                        Collections.unmodifiableMap(scalingOutput),
+                        processingBacklog);
+        return Tuple2.of(customEvaluatorWithConfig.f0, pluginContext);
     }
 
     @VisibleForTesting
@@ -132,7 +233,12 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             JobVertexID vertex,
             boolean processingBacklog,
-            Duration restartTime) {
+            Duration restartTime,
+            @Nullable
+                    Tuple2<
+                                    ScalingMetricsEvaluatorPlugin,
+                                    ScalingMetricsEvaluatorPlugin.Context<KEY>>
+                            customEvaluationSession) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -142,6 +248,7 @@ public class ScalingMetricEvaluator {
         double inputRateAvg = getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
 
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
+
         computeTargetDataRate(
                 topology,
                 vertex,
@@ -158,7 +265,11 @@ public class ScalingMetricEvaluator {
                 TRUE_PROCESSING_RATE,
                 EvaluatedScalingMetric.avg(
                         computeTrueProcessingRate(
-                                busyTimeAvg, inputRateAvg, metricsHistory, vertex, conf)));
+                                busyTimeAvg,
+                                computeTprInputRate(conf, vertex, metricsHistory),
+                                metricsHistory,
+                                vertex,
+                                conf)));
 
         evaluatedMetrics.put(LOAD, EvaluatedScalingMetric.avg(busyTimeAvg / 1000.));
 
@@ -175,6 +286,24 @@ public class ScalingMetricEvaluator {
                 EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()));
 
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
+
+        Optional.ofNullable(customEvaluationSession)
+                .map(
+                        session ->
+                                runCustomEvaluator(
+                                        vertex,
+                                        Collections.unmodifiableMap(evaluatedMetrics),
+                                        session))
+                .filter(customEvaluatedMetrics -> !customEvaluatedMetrics.isEmpty())
+                .ifPresent(
+                        customEvaluatedMetrics -> {
+                            LOG.info(
+                                    "Merging custom evaluated metrics for vertex {}: {}",
+                                    vertex,
+                                    customEvaluatedMetrics);
+                            mergeEvaluatedMetricsMaps(evaluatedMetrics, customEvaluatedMetrics);
+                        });
+
         return evaluatedMetrics;
     }
 
@@ -495,6 +624,42 @@ public class ScalingMetricEvaluator {
     }
 
     /**
+     * Estimate the input record rate used as the {@link ScalingMetric#TRUE_PROCESSING_RATE}
+     * numerator. The busy-time TPR is {@code rate / busyTime}, so to keep the ratio internally
+     * consistent the numerator must be estimated the same way as the busy-time denominator (see
+     * {@link #computeBusyTimeAvg}). The default {@code MAX} (and {@code MIN}) busy-time aggregator
+     * derives busy time from the per-second {@code LOAD} gauge averaged over the window, so we use
+     * the averaged per-second record-rate gauge here too. The {@code AVG} aggregator derives busy
+     * time from the cumulative accumulated busy-time counter via {@link #getRate}, so we keep the
+     * cumulative {@code getRate} in that case.
+     */
+    @VisibleForTesting
+    static double computeTprInputRate(
+            Configuration conf,
+            JobVertexID vertex,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        if (conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR) == MetricAggregator.AVG) {
+            return getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+        }
+        return getAverageWithRateFallback(
+                ScalingMetric.NUM_RECORDS_IN_PER_SECOND,
+                ScalingMetric.NUM_RECORDS_IN,
+                vertex,
+                metricsHistory);
+    }
+
+    public static double getAverageWithRateFallback(
+            ScalingMetric metric,
+            ScalingMetric fallbackMetric,
+            @Nullable JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        double average = getAverage(metric, jobVertexId, metricsHistory);
+        return Double.isInfinite(average) || Double.isNaN(average)
+                ? getRate(fallbackMetric, jobVertexId, metricsHistory)
+                : average;
+    }
+
+    /**
      * Compute the In/Out ratio between the (from, to) vertices. The rate estimates the number of
      * output records produced to the downstream vertex for every input received for the upstream
      * vertex. For example output ratio 2.0 means that we produce approximately 2 outputs to the
@@ -587,5 +752,117 @@ public class ScalingMetricEvaluator {
                 from,
                 to);
         return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
+    }
+
+    /**
+     * Executes the provided custom metric evaluator for the given job vertex. Calls {@link
+     * ScalingMetricsEvaluatorPlugin#evaluateVertexMetrics} to evaluate scaling metrics.
+     *
+     * @param vertex The job vertex being evaluated.
+     * @param evaluatedMetrics Current evaluated metrics.
+     * @param customEvaluationSession A tuple containing the custom metric evaluator and evaluation
+     *     context.
+     * @return A map of scaling metrics, with its corresponding evaluated scaling metric.
+     */
+    @VisibleForTesting
+    protected static <KEY> Map<ScalingMetric, EvaluatedScalingMetric> runCustomEvaluator(
+            JobVertexID vertex,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>
+                    customEvaluationSession) {
+        try {
+            return customEvaluationSession.f0.evaluateVertexMetrics(
+                    vertex, evaluatedMetrics, customEvaluationSession.f1);
+        } catch (Exception e) {
+            LOG.warn(
+                    "Custom metric evaluator {} threw an exception.",
+                    customEvaluationSession.f0.getClass(),
+                    e);
+        }
+
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Resolves the configured custom metric evaluator (if any) from the registered evaluators.
+     *
+     * @param conf The job configuration.
+     * @return A tuple of the resolved {@link ScalingMetricsEvaluatorPlugin} and its
+     *     evaluator-specific configuration, or {@code null} if no custom evaluator is configured or
+     *     resolvable.
+     */
+    @VisibleForTesting
+    protected Tuple2<ScalingMetricsEvaluatorPlugin, Configuration> getCustomEvaluatorIfRequired(
+            Configuration conf) {
+        List<String> instances = conf.get(CUSTOM_EVALUATORS);
+        if (instances == null || instances.isEmpty()) {
+            return null;
+        }
+        if (instances.size() > 1) {
+            LOG.warn(
+                    "Only a single custom metric evaluator is currently supported, but {} were configured via '{}': {}. "
+                            + "Falling back to the first entry ('{}'); the remaining entries will be ignored. "
+                            + "Multi-instance support (with a priority/ordering contract) will be added as a follow-up.",
+                    instances.size(),
+                    CUSTOM_EVALUATORS.key(),
+                    instances,
+                    instances.get(0));
+        }
+        String instance = instances.get(0);
+        String classKey = AutoScalerOptions.customEvaluatorClassKey(instance);
+        String configuredClassName =
+                conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
+        if (configuredClassName == null || configuredClassName.isBlank()) {
+            LOG.warn(
+                    "Custom metric evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
+                            + "No custom metric evaluator will be applied.",
+                    instance,
+                    CUSTOM_EVALUATORS.key(),
+                    classKey);
+            return null;
+        }
+        ScalingMetricsEvaluatorPlugin match = null;
+        for (ScalingMetricsEvaluatorPlugin evaluator : customEvaluators) {
+            if (evaluator.getClass().getName().equals(configuredClassName)) {
+                match = evaluator;
+                break;
+            }
+        }
+        if (match == null) {
+            LOG.warn(
+                    "No registered custom metric evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
+                    configuredClassName,
+                    instance,
+                    classKey,
+                    customEvaluators.stream()
+                            .map(e -> e.getClass().getName())
+                            .collect(Collectors.toList()));
+            return null;
+        }
+        return new Tuple2<>(match, AutoScalerOptions.customEvaluatorConfiguration(conf, instance));
+    }
+
+    @VisibleForTesting
+    protected static void mergeEvaluatedMetricsMaps(
+            Map<ScalingMetric, EvaluatedScalingMetric> actual,
+            @Nullable Map<ScalingMetric, EvaluatedScalingMetric> incoming) {
+        Optional.ofNullable(incoming)
+                .ifPresent(
+                        customEvaluatedMetric ->
+                                customEvaluatedMetric.forEach(
+                                        (scalingMetric, evaluatedScalingMetric) ->
+                                                actual.merge(
+                                                        scalingMetric,
+                                                        evaluatedScalingMetric,
+                                                        ScalingMetricEvaluator
+                                                                ::mergeEvaluatedScalingMetric)));
+    }
+
+    @VisibleForTesting
+    protected static EvaluatedScalingMetric mergeEvaluatedScalingMetric(
+            EvaluatedScalingMetric actual, EvaluatedScalingMetric incoming) {
+        return new EvaluatedScalingMetric(
+                !Double.isNaN(incoming.getCurrent()) ? incoming.getCurrent() : actual.getCurrent(),
+                !Double.isNaN(incoming.getAverage()) ? incoming.getAverage() : actual.getAverage());
     }
 }

@@ -1,9 +1,9 @@
 ---
 title: Operations
-icon: <i class="fa fa-cogs title maindish" aria-hidden="true"></i>
+icon: <i class="fa fa-cogs title dessert" aria-hidden="true"></i>
 bold: true
 bookCollapseSection: true
-weight: 4
+weight: 6
 ---
 <!--
 Licensed to the Apache Software Foundation (ASF) under one

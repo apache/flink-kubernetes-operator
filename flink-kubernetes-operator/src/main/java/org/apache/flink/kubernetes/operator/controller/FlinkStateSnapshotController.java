@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
+import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -28,7 +29,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -89,6 +89,9 @@ public class FlinkStateSnapshotController
     @Override
     public DeleteControl cleanup(
             FlinkStateSnapshot flinkStateSnapshot, Context<FlinkStateSnapshot> josdkContext) {
+        if (flinkStateSnapshot.getStatus() == null) {
+            return DeleteControl.defaultDelete();
+        }
         var ctx = ctxFactory.getFlinkStateSnapshotContext(flinkStateSnapshot, josdkContext);
         try {
             metricManager.onRemove(flinkStateSnapshot);
@@ -128,7 +131,8 @@ public class FlinkStateSnapshotController
                 resource.getStatus().getError(),
                 ctx.getKubernetesClient());
 
-        if (resource.getStatus().getFailures() > resource.getSpec().getBackoffLimit()) {
+        var backoffLimit = resource.getSpec().getBackoffLimit();
+        if (backoffLimit >= 0 && resource.getStatus().getFailures() > backoffLimit) {
             LOG.info(
                     "Snapshot {} failed and won't be retried as failure count exceeded the backoff limit",
                     resource.getMetadata().getName());

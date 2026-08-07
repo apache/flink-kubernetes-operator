@@ -130,16 +130,11 @@ public class SpecUtils {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> T clone(T object) {
         if (object == null) {
             return null;
         }
-        try {
-            return (T)
-                    objectMapper.readValue(
-                            objectMapper.writeValueAsString(object), object.getClass());
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException(e);
-        }
+        return (T) objectMapper.convertValue(object, object.getClass());
     }
 }

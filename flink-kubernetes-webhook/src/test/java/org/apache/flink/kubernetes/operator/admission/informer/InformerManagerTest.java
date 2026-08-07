@@ -57,6 +57,61 @@ public class InformerManagerTest {
     }
 
     @Test
+    public void testSessionJobNamespacedInformerCreated() {
+        var informerManager = new InformerManager(kubernetesClient);
+        informerManager.setNamespaces(DEFAULT_NAMESPACES_SET);
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+
+        informerManager.setNamespaces(Set.of("ns1", "ns2"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns2"));
+
+        informerManager.setNamespaces(Set.of("ns1", "ns2", "ns3"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns2"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns3"));
+    }
+
+    @Test
+    public void testSetNamespacesStopsSessionJobInformers() {
+        var informerManager = new InformerManager(kubernetesClient);
+        informerManager.setNamespaces(DEFAULT_NAMESPACES_SET);
+
+        // Initialize session job informers by calling getFlinkSessionJobInformer
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+
+        // Change namespaces — this should stop existing session job informers and reset them
+        informerManager.setNamespaces(Set.of("ns1", "ns2"));
+
+        // Verify new informers are created for the updated namespaces
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns2"));
+    }
+
+    @Test
+    public void testSetNamespacesStopsBothDepAndSessionJobInformers() {
+        var informerManager = new InformerManager(kubernetesClient);
+        informerManager.setNamespaces(Set.of("ns1"));
+
+        // Initialize both types of informers
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns1"));
+
+        // Change namespaces — should stop and recreate both
+        informerManager.setNamespaces(Set.of("ns2"));
+
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns2"));
+        Assertions.assertNotNull(informerManager.getFlinkSessionJobInformer("ns2"));
+
+        // Old namespace should no longer have informers
+        Assertions.assertThrows(
+                NullPointerException.class, () -> informerManager.getFlinkDepInformer("ns1"));
+        Assertions.assertThrows(
+                NullPointerException.class,
+                () -> informerManager.getFlinkSessionJobInformer("ns1"));
+    }
+
+    @Test
     public void testDynamicNamespaces() {
         InformerManager informerManager = new InformerManager(kubernetesClient);
         Configuration config =

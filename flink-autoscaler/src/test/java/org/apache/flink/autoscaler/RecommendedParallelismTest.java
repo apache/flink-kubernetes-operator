@@ -37,6 +37,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -76,7 +77,8 @@ public class RecommendedParallelismTest {
                 new TestingMetricsCollector<>(
                         new JobTopology(
                                 new VertexInfo(source, Map.of(), 1, 720),
-                                new VertexInfo(sink, Map.of(source, REBALANCE), 1, 720)));
+                                new VertexInfo(sink, Map.of(source, REBALANCE), 1, 720)),
+                        stateStore);
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -94,7 +96,7 @@ public class RecommendedParallelismTest {
         autoscaler =
                 new JobAutoScalerImpl<>(
                         metricsCollector,
-                        new ScalingMetricEvaluator(),
+                        new ScalingMetricEvaluator<>(List.of()),
                         new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         new TestingScalingRealizer<>(),
@@ -111,7 +113,7 @@ public class RecommendedParallelismTest {
         context.getConfiguration().setString(AutoScalerOptions.SCALING_ENABLED.key(), "false");
 
         // initially the last evaluated metrics are empty
-        assertNull(autoscaler.lastEvaluatedMetrics.get(context.getJobKey()));
+        assertNull(autoscaler.metricsEvaluator.lastEvaluatedMetrics.get(context.getJobKey()));
 
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
@@ -210,7 +212,7 @@ public class RecommendedParallelismTest {
         // after restart while the job is not running the evaluated metrics are gone
         autoscaler.scale(context);
         assertCollectedMetricsSize(4);
-        assertNull(autoscaler.lastEvaluatedMetrics.get(context.getJobKey()));
+        assertNull(autoscaler.metricsEvaluator.lastEvaluatedMetrics.get(context.getJobKey()));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source));
         assertEquals(4, scaledParallelism.get(sink));
@@ -245,6 +247,7 @@ public class RecommendedParallelismTest {
     private Double getCurrentMetricValue(JobVertexID jobVertexID, ScalingMetric scalingMetric) {
         var metric =
                 autoscaler
+                        .metricsEvaluator
                         .lastEvaluatedMetrics
                         .get(context.getJobKey())
                         .getVertexMetrics()

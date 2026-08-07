@@ -23,7 +23,7 @@ under the License.
     <parent>
         <groupId>org.apache.flink</groupId>
         <artifactId>flink-kubernetes-operator-parent</artifactId>
-        <version>1.15-SNAPSHOT</version>
+        <version>1.16-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -32,9 +32,12 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
-        <surefire-plugin.version>2.22.2</surefire-plugin.version>
+        <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
+        <surefire.module.config>
+            <!-- required by FlinkOperatorWebhookTest -->
+            --add-opens=java.base/java.util=ALL-UNNAMED
+        </surefire.module.config>
     </properties>
-
 
     <dependencies>
         <dependency>
@@ -79,9 +82,8 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>mockwebserver</artifactId>
-            <version>${okhttp.version}</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -89,6 +91,26 @@ under the License.
     <build>
 
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>create-test-plugin-jar</id>
+                        <phase>process-test-classes</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>test-plugins</finalName>
+                            <attach>false</attach>
+                            <descriptors>
+                                <descriptor>src/test/assembly/test-plugins-assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -115,11 +137,6 @@ under the License.
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>${surefire-plugin.version}</version>
             </plugin>
         </plugins>
     </build>

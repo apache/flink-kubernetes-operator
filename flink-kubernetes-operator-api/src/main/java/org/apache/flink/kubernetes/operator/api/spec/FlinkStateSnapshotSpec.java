@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
@@ -33,7 +32,7 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 @SuperBuilder
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class FlinkStateSnapshotSpec implements Diffable<FlinkStateSnapshotSpec> {
+public class FlinkStateSnapshotSpec {
     /** Source to take a snapshot of. Not required if it's a savepoint and alreadyExists is true. */
     private JobReference jobReference;
 

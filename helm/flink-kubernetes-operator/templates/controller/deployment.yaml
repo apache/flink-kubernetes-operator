@@ -116,8 +116,10 @@ spec:
               value: /opt/flink/conf
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
+            - name: LOGGING_FRAMEWORK
+              value: {{ .Values.logging.framework }}
             - name: LOG_CONFIG
-              value: {{ .Values.jvmArgs.logConfig }}
+              value: {{ include "flink-operator.logConfig" . }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             {{- if .Values.tls.create }}
@@ -198,13 +200,15 @@ spec:
             - name: WEBHOOK_SERVER_PORT
               value: "9443"
             - name: LOG_CONFIG
-              value: {{ .Values.jvmArgs.logConfig }}
+              value: {{ include "flink-operator.logConfig" . }}
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.webhook }}
             - name: FLINK_CONF_DIR
               value: /opt/flink/conf
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
+            - name: LOGGING_FRAMEWORK
+              value: {{ .Values.logging.framework }}
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -247,10 +251,17 @@ spec:
               - key: config.yaml
                 path: config.yaml
             {{- end }}
+            {{- if eq .Values.logging.framework "logback" }}
+              - key: logback-operator.xml
+                path: logback-operator.xml
+              - key: logback-console.xml
+                path: logback-console.xml
+            {{- else }}
               - key: log4j-operator.properties
                 path: log4j-operator.properties
               - key: log4j-console.properties
                 path: log4j-console.properties
+            {{- end }}
         {{- if .Values.operatorVolumes.create }}
               {{- toYaml .Values.operatorVolumes.data | nindent 8 }}
         {{- else }}

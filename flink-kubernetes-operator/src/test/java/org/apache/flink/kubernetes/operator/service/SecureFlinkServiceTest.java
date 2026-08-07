@@ -146,7 +146,7 @@ public class SecureFlinkServiceTest {
         Map<String, String> originalEnv = System.getenv();
         Configuration deployConfig = createOperatorConfig();
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/keystore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
         TestUtils.setEnv(systemEnv);
@@ -167,7 +167,7 @@ public class SecureFlinkServiceTest {
         Configuration deployConfig = createOperatorConfig();
         deployConfig.set(SecurityOptions.SSL_REST_AUTHENTICATION_ENABLED, true);
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/truststore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
         TestUtils.setEnv(systemEnv);
@@ -195,7 +195,7 @@ public class SecureFlinkServiceTest {
         Configuration deployConfig = createOperatorConfig();
         deployConfig.set(SecurityOptions.SSL_REST_AUTHENTICATION_ENABLED, true);
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/truststore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PATH, getAbsolutePath("/keystore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
@@ -216,7 +216,7 @@ public class SecureFlinkServiceTest {
         Map<String, String> originalEnv = System.getenv();
         Configuration deployConfig = createOperatorConfig();
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/truststore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
         TestUtils.setEnv(systemEnv);
@@ -236,7 +236,7 @@ public class SecureFlinkServiceTest {
         Map<String, String> originalEnv = System.getenv();
         Configuration deployConfig = createOperatorConfig();
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/truststore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
         TestUtils.setEnv(systemEnv);
@@ -259,7 +259,7 @@ public class SecureFlinkServiceTest {
         Map<String, String> originalEnv = System.getenv();
         Configuration deployConfig = createOperatorConfig();
         Map<String, String> systemEnv = new HashMap<>(originalEnv);
-        // Set the env var to define the certficates
+        // Set the env var to define the certificates
         systemEnv.put(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH, getAbsolutePath("/truststore.jks"));
         systemEnv.put(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD, "password1234");
         TestUtils.setEnv(systemEnv);

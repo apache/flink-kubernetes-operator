@@ -107,4 +107,10 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
         setConditions(newConditions);
         return newConditions;
     }
+
+    @JsonIgnore
+    @Override
+    public boolean isJmAccessible() {
+        return jobManagerDeploymentStatus.isRestApiAvailable();
+    }
 }

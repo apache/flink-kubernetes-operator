@@ -19,10 +19,10 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -35,10 +35,8 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
-import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
-import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -92,7 +90,7 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public DeleteControl cleanup(FlinkDeployment flinkApp, Context josdkContext) {
+    public DeleteControl cleanup(FlinkDeployment flinkApp, Context<FlinkDeployment> josdkContext) {
         if (canaryResourceManager.handleCanaryResourceDeletion(flinkApp)) {
             return DeleteControl.defaultDelete();
         }
@@ -124,8 +122,8 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context josdkContext)
-            throws Exception {
+    public UpdateControl<FlinkDeployment> reconcile(
+            FlinkDeployment flinkApp, Context<FlinkDeployment> josdkContext) throws Exception {
 
         if (canaryResourceManager.handleCanaryResourceReconciliation(
                 flinkApp, josdkContext.getClient())) {
@@ -192,7 +190,7 @@ public class FlinkDeploymentController
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
         }
-        if (KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class)) {
+        if (flinkConfigManager.isSnapshotCrdInstalled()) {
             eventSources.add(
                     EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
         } else {

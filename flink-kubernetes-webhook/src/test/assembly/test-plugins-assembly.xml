@@ -28,7 +28,8 @@ under the License.
             <outputDirectory>/</outputDirectory>
             <!-- the service impl -->
             <includes>
-                <include>org/apache/flink/kubernetes/operator/admission/TestMutator.java</include>
+                <include>org/apache/flink/kubernetes/operator/mutator/TestMutator.class</include>
+                <include>org/apache/flink/kubernetes/operator/validation/TestValidator.class</include>
             </includes>
         </fileSet>
         <fileSet>

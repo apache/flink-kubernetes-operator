@@ -74,7 +74,7 @@ public class DefaultRequestMutator<T extends KubernetesResource>
         return admissionResponse;
     }
 
-    public static AdmissionResponse admissionResponseFromMutation(
+    private static AdmissionResponse admissionResponseFromMutation(
             KubernetesResource originalResource, KubernetesResource mutatedResource) {
         AdmissionResponse admissionResponse = new AdmissionResponse();
         admissionResponse.setAllowed(true);

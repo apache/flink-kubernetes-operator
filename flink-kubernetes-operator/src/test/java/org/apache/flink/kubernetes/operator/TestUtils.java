@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -53,6 +54,7 @@ import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
+import io.javaoperatorsdk.operator.api.reconciler.ResourceOperations;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
@@ -84,6 +86,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_MODE;
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_STORAGE_PATH;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -212,7 +216,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
             Map<String, String> flinkDepConfig, KubernetesClient client) {
-        return createContextWithReadyFlinkDeployment(flinkDepConfig, client, FlinkVersion.v1_18);
+        return createContextWithReadyFlinkDeployment(flinkDepConfig, client, FlinkVersion.v1_20);
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
@@ -243,6 +247,57 @@ public class TestUtils extends BaseTestUtils {
                 var session = buildSessionCluster();
                 session.getStatus()
                         .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata>
+            Context<T> createContextWithFlinkDeploymentInLifecycleState(
+                    ResourceLifecycleState lifecycleState) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus().setLifecycleState(lifecycleState);
+                session.getStatus()
+                        .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata>
+            Context<T> createContextWithReadyFlinkDeploymentInLifecycleState(
+                    ResourceLifecycleState lifecycleState, Map<String, String> flinkDepConfig) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus().setLifecycleState(lifecycleState);
+                session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                session.getSpec().getFlinkConfiguration().putAllFrom(flinkDepConfig);
+                session.getStatus()
+                        .getReconciliationStatus()
+                        .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                return (Optional<T>) Optional.of(session);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithUnhealthyFlinkDeployment(
+            boolean haEnabled) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus()
+                        .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                if (!haEnabled) {
+                    session.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(HA_MODE.key(), HA_STORAGE_PATH.key());
+                }
                 return (Optional<T>) Optional.of(session);
             }
         };
@@ -377,7 +432,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static Stream<Arguments> flinkVersionsAndUpgradeModes() {
         List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : Set.of(FlinkVersion.v1_16, FlinkVersion.v1_20)) {
+        for (FlinkVersion version : Set.of(FlinkVersion.v1_19, FlinkVersion.v1_20)) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
                 args.add(arguments(version, upgradeMode));
             }
@@ -386,7 +441,7 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return Stream.of(arguments(FlinkVersion.v1_16), arguments(FlinkVersion.v1_20));
+        return Stream.of(arguments(FlinkVersion.v1_19), arguments(FlinkVersion.v1_20));
     }
 
     public static FlinkDeployment createCanaryDeployment() {
@@ -513,8 +568,30 @@ public class TestUtils extends BaseTestUtils {
         }
 
         @Override
+        public <R> Set<R> getSecondaryResources(Class<R> aClass, boolean b) {
+            return Set.of();
+        }
+
+        @Override
+        public <R> Stream<R> getSecondaryResourcesAsStream(Class<R> aClass, boolean b) {
+            return Stream.empty();
+        }
+
+        @Override
         public <T1> Optional<T1> getSecondaryResource(Class<T1> aClass, String s) {
             return Optional.empty();
+        }
+
+        @Override
+        public <R extends HasMetadata> Optional<R> getSecondaryResource(
+                Class<R> expectedType, String eventSourceName, String name, String namespace) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <R> Stream<R> getSecondaryResourcesAsStream(
+                Class<R> expectedType, String eventSourceName) {
+            return Stream.empty();
         }
 
         @Override
@@ -536,6 +613,11 @@ public class TestUtils extends BaseTestUtils {
         @Override
         public KubernetesClient getClient() {
             throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public ResourceOperations<T> resourceOperations() {
+            return null;
         }
 
         @Override

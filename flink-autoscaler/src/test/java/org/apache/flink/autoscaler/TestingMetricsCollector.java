@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
@@ -64,7 +65,9 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     @Setter private Map<JobVertexID, Collection<String>> metricNames = new HashMap<>();
 
-    public TestingMetricsCollector(JobTopology jobTopology) {
+    public TestingMetricsCollector(
+            JobTopology jobTopology, AutoScalerStateStore<KEY, Context> stateStore) {
+        super(stateStore);
         this.jobTopology = jobTopology;
     }
 

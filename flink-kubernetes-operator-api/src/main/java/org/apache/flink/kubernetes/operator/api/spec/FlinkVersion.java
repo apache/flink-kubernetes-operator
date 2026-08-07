@@ -20,6 +20,9 @@ package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 /** Enumeration for supported Flink versions. */
 @Experimental
 public enum FlinkVersion {
@@ -35,8 +38,10 @@ public enum FlinkVersion {
     /** Deprecated since 1.11 operator release. */
     @Deprecated
     v1_16(1, 16),
+    /** Deprecated since 1.13 operator release. */
     @Deprecated
     v1_17(1, 17),
+    /** Deprecated since 1.13 operator release. */
     @Deprecated
     v1_18(1, 18),
     v1_19(1, 19),
@@ -46,6 +51,8 @@ public enum FlinkVersion {
     v2_2(2, 2),
     v2_3(2, 3),
     v2_4(2, 4);
+
+    private static final Set<FlinkVersion> DEPRECATED = computeDeprecated();
 
     /** The major integer from the Flink semver. For example for Flink 1.18.1 this would be 1. */
     private final int majorVersion;
@@ -66,6 +73,24 @@ public enum FlinkVersion {
             return this.minorVersion >= otherVersion.minorVersion;
         }
         return false;
+    }
+
+    private static Set<FlinkVersion> computeDeprecated() {
+        Set<FlinkVersion> deprecated = EnumSet.noneOf(FlinkVersion.class);
+        for (FlinkVersion v : values()) {
+            try {
+                if (FlinkVersion.class.getField(v.name()).isAnnotationPresent(Deprecated.class)) {
+                    deprecated.add(v);
+                }
+            } catch (NoSuchFieldException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        return deprecated;
+    }
+
+    public boolean isDeprecated() {
+        return DEPRECATED.contains(this);
     }
 
     public static boolean isSupported(FlinkVersion version) {

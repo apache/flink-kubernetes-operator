@@ -29,6 +29,9 @@ spec:
   keystores:
     pkcs12:
       create: true
+      {{- if .Values.webhook.keystore.pkcs12Profile }}
+      profile: {{ .Values.webhook.keystore.pkcs12Profile | quote }}
+      {{- end }}
       passwordSecretRef:
       {{- if .Values.webhook.keystore.useDefaultPassword }}
         name: flink-operator-webhook-secret

@@ -23,7 +23,18 @@ import java.time.Duration;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.operatorConfig;
 
-/** Configuration options for metrics. */
+/**
+ * Configuration options for metrics.
+ *
+ * <p>Only declares operator-specific toggles and {@code k8soperator.*} scope formats. Any Flink
+ * {@code metrics.*} key (see <a
+ * href="https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters/">Flink
+ * metric reporters</a>) is also honoured when prefixed with {@code kubernetes.operator.}; at
+ * startup {@link
+ * OperatorMetricUtils#createMetricConfig(org.apache.flink.configuration.Configuration)} strips that
+ * prefix and forwards the result to Flink's metric registry. Reporter options are intentionally not
+ * redeclared here as typed {@link ConfigOption}s to avoid mirroring upstream changes.
+ */
 public class KubernetesOperatorMetricOptions {
 
     public static final ConfigOption<Boolean> OPERATOR_JVM_METRICS_ENABLED =

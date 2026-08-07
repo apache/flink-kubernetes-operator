@@ -44,6 +44,7 @@ import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotRec
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
+import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -122,7 +123,10 @@ public class FlinkStateSnapshotControllerTest {
         statusRecorder = new StatusRecorder<>(metricManager, statusUpdateCounter);
         controller =
                 new FlinkStateSnapshotController(
-                        ValidatorUtils.discoverValidators(configManager),
+                        ValidatorUtils.discoverValidators(
+                                configManager,
+                                OperatorPluginUtils.createPluginManager(
+                                        configManager.getDefaultConfig())),
                         ctxFactory,
                         new StateSnapshotReconciler(ctxFactory, eventRecorder),
                         new StateSnapshotObserver(ctxFactory, eventRecorder),
@@ -148,6 +152,27 @@ public class FlinkStateSnapshotControllerTest {
 
         controller.updateErrorStatus(snapshot, context, new Exception());
         assertThat(snapshot.getStatus().getState()).isEqualTo(FAILED);
+    }
+
+    @Test
+    public void testReconcileBackoffUnlimited() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        // Default backoffLimit is -1, meaning unlimited retries
+        var snapshot = createSavepoint(deployment, false, -1);
+        snapshot.setStatus(new FlinkStateSnapshotStatus());
+
+        flinkService.setTriggerSavepointFailure(true);
+
+        // With unlimited retries, the snapshot should never transition to FAILED
+        for (int i = 0; i < 10; i++) {
+            controller.updateErrorStatus(snapshot, context, new Exception());
+            assertThat(snapshot.getStatus().getState())
+                    .as(
+                            "Snapshot with backoffLimit=-1 should retry indefinitely, but failed after attempt %d",
+                            i + 1)
+                    .isEqualTo(TRIGGER_PENDING);
+        }
     }
 
     @ParameterizedTest
@@ -702,6 +727,20 @@ public class FlinkStateSnapshotControllerTest {
         // Remove checkpoint
         assertDeleteControl(controller.cleanup(checkpoint, context), true, null);
         assertSnapshotMetrics(listener, TestUtils.TEST_NAMESPACE, Map.of(), Map.of());
+    }
+
+    @Test
+    public void testCleanupWithNullStatus() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+
+        var savepoint = createSavepoint(deployment);
+        savepoint.setStatus(null);
+        assertDeleteControl(controller.cleanup(savepoint, context), true, null);
+
+        var checkpoint = createCheckpoint(deployment, CheckpointType.FULL, 0);
+        checkpoint.setStatus(null);
+        assertDeleteControl(controller.cleanup(checkpoint, context), true, null);
     }
 
     private FlinkStateSnapshot createSavepoint(FlinkDeployment deployment) {

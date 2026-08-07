@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
@@ -50,7 +51,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
             var observeConfig = ctx.getObserveConfig();
             savepointObserver.observeSavepointStatus(ctx);
             savepointObserver.observeCheckpointStatus(ctx);
-            if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+            if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)
+                    && !ReconciliationUtils.isJobInTerminalState(ctx.getResource().getStatus())) {
                 clusterHealthObserver.observe(ctx);
             }
         }

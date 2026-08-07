@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -67,6 +68,10 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                     .putAll(COMMON_TM_METRIC_NAMES)
                     .put("Status.JVM.GarbageCollector.All.TimeMsPerSecond", TOTAL_GC_TIME_PER_SEC)
                     .build();
+
+    public RestApiMetricsCollector(AutoScalerStateStore<KEY, Context> stateStore) {
+        super(stateStore);
+    }
 
     @Override
     protected Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> queryAllAggregatedMetrics(
@@ -172,7 +177,7 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
             if (!tmMetrics.isEmpty()) {
                 return tmMetrics;
             } else {
-                // If metrics are missing that means we cant find even the required ones
+                // If metrics are missing that means we can't find even the required ones
                 // Let's error out and retry in the next loop.
                 jobsWithGcMetrics.remove(ctx.getJobKey());
                 throw new RuntimeException("Missing required TM metrics");

@@ -24,6 +24,10 @@ on:
       test:
         required: true
         type: string
+      helm-version:
+        required: false
+        type: string
+        default: "v3.17.3"
       create-namespace:
         type: boolean
         default: false
@@ -43,6 +47,15 @@ jobs:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
           cache: 'maven'
+      - name: Set up Helm ${{ inputs.helm-version }}
+        run: |
+          HELM_VERSION=${{ inputs.helm-version }}
+          curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/helm
+          tar -xzf /tmp/helm.tar.gz -C /tmp/helm
+          sudo mv /tmp/helm/linux-amd64/helm /usr/local/bin/helm
+          helm version
       - name: Start minikube
         run: |
           source e2e-tests/utils.sh
@@ -78,6 +91,9 @@ jobs:
           if [[ "${{ inputs.test }}" == "test_dynamic_config.sh" ]]; then          
            sed -i "s/flink-conf.yaml: |+/config.yaml: |+/" helm/flink-kubernetes-operator/values.yaml
           fi
+          if [[ "${{ inputs.test }}" == "test_logback_logging.sh" ]]; then
+           sed -i 's/framework: "log4j2"/framework: "logback"/' helm/flink-kubernetes-operator/values.yaml
+          fi
           helm --debug install flink-kubernetes-operator -n ${{ inputs.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ steps.namespace-creator.outputs.EXTRA_HELM_INSTALL_ARGS }} 
           kubectl wait --for=condition=Available --timeout=120s -n ${{ inputs.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ inputs.namespace }}
@@ -92,7 +108,7 @@ jobs:
           if [[ ${{ inputs.flink-version }} == v2* ]]; then
             EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/2.0.0/flink-examples-streaming-2.0.0.jar"
           elif [[ "${{ inputs.test }}" == "test_batch_job.sh" ]]; then
-            EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/1.20.1/flink-examples-streaming-1.20.1.jar"
+            EXAMPLES_JAR="https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/1.20.4/flink-examples-streaming-1.20.4.jar"
           fi
           ESCAPED_EXAMPLES_JAR=$(printf '%s\n' "$EXAMPLES_JAR" | sed -e 's/[\/&]/\\&/g')
           
