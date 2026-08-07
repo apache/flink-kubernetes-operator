@@ -112,18 +112,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         return false;
     }
 
-    /**
-     * Fetch runtime configuration from the Flink REST API and cache it when the job is in RUNNING
-     * state and no cached config exists for the current job ID. Uses the context-level memoized
-     * {@link FlinkResourceContext#getRuntimeConfig()} to avoid redundant Guava cache lookups within
-     * the same reconciliation cycle. After caching via {@link
-     * FlinkResourceContext#putRuntimeConfig(Map)}, the runtime values are applied directly to the
-     * already-memoized observe config so subsequent consumers see the merged values without a full
-     * config regeneration.
-     */
     private void fetchAndCacheRuntimeConfig(
             FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
-        if (clusterJobStatus.getJobState() != JobStatus.RUNNING) {
+        if (clusterJobStatus.getJobState().isGloballyTerminalState()) {
             return;
         }
 
