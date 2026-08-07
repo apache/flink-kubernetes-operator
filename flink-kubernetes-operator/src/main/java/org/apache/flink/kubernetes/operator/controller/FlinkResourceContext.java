@@ -40,7 +40,6 @@ import lombok.RequiredArgsConstructor;
 
 import javax.annotation.Nullable;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -116,17 +115,19 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
 
     /**
      * Get the cached runtime configuration for the current job, memoized per context to avoid
-     * repeated cache lookups within a single reconciliation cycle.
+     * repeated cache lookups within a single reconciliation cycle. Only a present result is
+     * memoized so that a later {@link #putRuntimeConfig(Map)} within the same cycle is visible to
+     * subsequent callers.
      *
      * @return Cached runtime config if present.
      */
     public Optional<Map<String, String>> getRuntimeConfig() {
-        if (runtimeConfig != null) {
+        if (runtimeConfig != null && runtimeConfig.isPresent()) {
             return runtimeConfig;
         }
         var jobStatus = resource.getStatus().getJobStatus();
         if (jobStatus == null || jobStatus.getJobId() == null) {
-            return runtimeConfig = Optional.empty();
+            return Optional.empty();
         }
         return runtimeConfig =
                 configManager.getRuntimeConfig(
@@ -136,8 +137,8 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     }
 
     /**
-     * Store runtime configuration in both the global cache and the context-level memoized field so
-     * that subsequent accesses within the same reconciliation cycle avoid an extra cache lookup.
+     * Store runtime configuration in the global cache and refresh the context-level memoized view
+     * so subsequent accesses within the same reconciliation cycle avoid an extra cache lookup.
      *
      * @param config Runtime configuration key-value pairs fetched from the Flink REST API.
      */
@@ -151,7 +152,11 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
                 resource.getMetadata().getName(),
                 jobStatus.getJobId(),
                 config);
-        runtimeConfig = Optional.of(Collections.unmodifiableMap(config));
+        runtimeConfig =
+                configManager.getRuntimeConfig(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        jobStatus.getJobId());
     }
 
     /**

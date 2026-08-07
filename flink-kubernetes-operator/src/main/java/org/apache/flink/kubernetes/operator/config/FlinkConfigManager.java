@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
@@ -424,31 +423,6 @@ public class FlinkConfigManager {
                 .removeIf(
                         key -> namespace.equals(key.getNamespace()) && name.equals(key.getName()));
         LOG.debug("Invalidated runtime configuration cache");
-    }
-
-    /**
-     * Apply any cached runtime configuration overrides to the given configuration. Looks up the
-     * cache using the resource's current job ID from its status.
-     *
-     * @param resource Flink resource (FlinkDeployment or FlinkSessionJob)
-     * @param conf Configuration to apply overrides to
-     */
-    public void applyCachedRuntimeConfig(AbstractFlinkResource<?, ?> resource, Configuration conf) {
-        var jobStatus = resource.getStatus().getJobStatus();
-        if (jobStatus == null || jobStatus.getJobId() == null) {
-            return;
-        }
-        getRuntimeConfig(
-                        resource.getMetadata().getNamespace(),
-                        resource.getMetadata().getName(),
-                        jobStatus.getJobId())
-                .ifPresent(
-                        config -> {
-                            LOG.debug(
-                                    "Applying {} cached runtime configuration overrides",
-                                    config.size());
-                            config.forEach(conf::setString);
-                        });
     }
 
     private void addOperatorConfigsFromSpec(AbstractFlinkSpec spec, Configuration conf) {

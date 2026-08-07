@@ -1001,7 +1001,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
-    public void testRuntimeConfigNotFetchedWhenNotRunning() throws Exception {
+    public void testRuntimeConfigNotFetchedWhenJobNotOnCluster() throws Exception {
         var deployment = initDeployment();
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
@@ -1013,7 +1013,6 @@ public class JobStatusObserverTest extends OperatorTestBase {
         // so fetchAndCacheRuntimeConfig should never be called.
         observer.observe(ctx);
 
-        // Verify runtime config is not cached
         assertFalse(
                 ctx.getConfigManager()
                         .getRuntimeConfig(
@@ -1021,6 +1020,72 @@ public class JobStatusObserverTest extends OperatorTestBase {
                                 deployment.getMetadata().getName(),
                                 jobStatus.getJobId())
                         .isPresent());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = JobStatus.class,
+            names = {"FINISHED", "CANCELED", "FAILED"})
+    public void testRuntimeConfigNotFetchedWhenGloballyTerminal(JobStatus terminalState)
+            throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(terminalState);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        var job =
+                flinkService.listJobs().stream()
+                        .filter(t -> t.f1.getJobId().equals(jobId))
+                        .findAny()
+                        .orElseThrow();
+        job.f1 = new JobStatusMessage(jobId, job.f1.getJobName(), terminalState, 0);
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "8"));
+
+        observer.observe(ctx);
+
+        assertFalse(
+                ctx.getConfigManager()
+                        .getRuntimeConfig(
+                                deployment.getMetadata().getNamespace(),
+                                deployment.getMetadata().getName(),
+                                jobStatus.getJobId())
+                        .isPresent());
+    }
+
+    @Test
+    public void testRuntimeConfigMemoizedWithinReconciliationCycle() throws Exception {
+        var deployment = initDeployment();
+        var jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.setRuntimeJobConfig(jobId, Map.of("parallelism.default", "4"));
+
+        // Populate the memoized context-level view.
+        observer.observe(ctx);
+
+        var firstView = ctx.getRuntimeConfig();
+        assertTrue(firstView.isPresent());
+
+        // Mutate the global cache underneath the context. If the context is honouring its memo,
+        // subsequent getRuntimeConfig() calls must NOT observe this change within the same cycle.
+        ctx.getConfigManager()
+                .putRuntimeConfig(
+                        deployment.getMetadata().getNamespace(),
+                        deployment.getMetadata().getName(),
+                        jobStatus.getJobId(),
+                        Map.of("parallelism.default", "999"));
+
+        assertEquals("4", ctx.getRuntimeConfig().get().get("parallelism.default"));
     }
 
     @Test

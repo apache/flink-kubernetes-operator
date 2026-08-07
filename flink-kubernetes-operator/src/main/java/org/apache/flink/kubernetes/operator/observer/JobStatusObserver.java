@@ -114,6 +114,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
     private void fetchAndCacheRuntimeConfig(
             FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+        // Skip only globally-terminal states (FINISHED/CANCELED/FAILED) where the JM REST API is
+        // gone; non-terminal transitional states (INITIALIZING, RESTARTING, RECONCILING, etc.)
+        // still expose reachable config endpoints and any REST failure is caught below.
         if (clusterJobStatus.getJobState().isGloballyTerminalState()) {
             return;
         }

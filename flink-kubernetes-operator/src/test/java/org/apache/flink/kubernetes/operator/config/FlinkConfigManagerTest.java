@@ -466,40 +466,4 @@ public class FlinkConfigManagerTest {
         assertTrue(configManager.getRuntimeConfig("ns", "other", "job3").isPresent());
     }
 
-    @Test
-    public void testApplyCachedRuntimeConfig() {
-        var configManager = new FlinkConfigManager(new Configuration());
-
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.getStatus().getJobStatus().setJobId("abc123");
-
-        Configuration conf = new Configuration();
-        conf.setString("parallelism.default", "1");
-
-        configManager.applyCachedRuntimeConfig(deployment, conf);
-        assertEquals("1", conf.toMap().get("parallelism.default"));
-
-        configManager.putRuntimeConfig(
-                deployment.getMetadata().getNamespace(),
-                deployment.getMetadata().getName(),
-                "abc123",
-                Map.of("parallelism.default", "8", "extra.key", "extra.val"));
-
-        configManager.applyCachedRuntimeConfig(deployment, conf);
-        assertEquals("8", conf.toMap().get("parallelism.default"));
-        assertEquals("extra.val", conf.toMap().get("extra.key"));
-    }
-
-    @Test
-    public void testApplyCachedRuntimeConfigNoJobId() {
-        var configManager = new FlinkConfigManager(new Configuration());
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.getStatus().getJobStatus().setJobId(null);
-
-        Configuration conf = new Configuration();
-        conf.setString("key", "original");
-
-        configManager.applyCachedRuntimeConfig(deployment, conf);
-        assertEquals("original", conf.toMap().get("key"));
-    }
 }
