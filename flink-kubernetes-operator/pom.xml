@@ -125,7 +125,11 @@ under the License.
         <!-- Logging: SLF4J API and Log4j2 implementation are shaded into the operator JAR.
              Only the SLF4J bindings (log4j-slf4j2-impl / logback-classic + logback-core)
              are excluded and shipped as separate JARs so the entrypoint can pick one.
-             SLF4J 2.x is required: JOSDK and the fabric8 client are compiled against it. -->
+             SLF4J 2.x is required: JOSDK and the fabric8 client are compiled against it.
+
+             The binding artifacts are declared provided purely so their versions are
+             resolved and recorded here; the maven-dependency-plugin below stages them
+             into the image from its own artifactItems, independently of this graph. -->
 
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -213,6 +217,13 @@ under the License.
             <artifactId>flink-test-utils</artifactId>
             <version>${flink.version}</version>
             <scope>test</scope>
+            <exclusions>
+                <!-- SLF4J 1.7 binding; the module already provides log4j-slf4j2-impl. -->
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

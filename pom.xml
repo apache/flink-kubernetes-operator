@@ -118,6 +118,15 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <!-- Pinned so that modules which pick up slf4j-api transitively from Flink
+                 (1.7.36) still get the 2.x API that the log4j-slf4j2-impl and logback
+                 bindings require. A mismatch is silent: SLF4J falls back to a NOP
+                 logger and discards all output. -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
