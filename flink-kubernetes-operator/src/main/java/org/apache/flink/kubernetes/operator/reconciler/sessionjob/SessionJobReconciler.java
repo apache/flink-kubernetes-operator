@@ -76,6 +76,15 @@ public class SessionJobReconciler
             boolean requireHaMetadata)
             throws Exception {
 
+        // Any deploy path produces a new job submission, so any previously cached runtime config
+        // for this resource is stale. Defensive invalidate here keeps every deploy() override
+        // consistent and avoids relying on transitive invalidation by upstream callers.
+        var relatedResource = ctx.getResource();
+        ctx.getConfigManager()
+                .invalidateRuntimeConfig(
+                        relatedResource.getMetadata().getNamespace(),
+                        relatedResource.getMetadata().getName());
+
         eventRecorder.triggerEvent(
                 ctx.getResource(),
                 EventRecorder.Type.Normal,

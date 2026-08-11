@@ -465,5 +465,4 @@ public class FlinkConfigManagerTest {
         assertFalse(configManager.getRuntimeConfig("ns", "app", "job2").isPresent());
         assertTrue(configManager.getRuntimeConfig("ns", "other", "job3").isPresent());
     }
-
 }

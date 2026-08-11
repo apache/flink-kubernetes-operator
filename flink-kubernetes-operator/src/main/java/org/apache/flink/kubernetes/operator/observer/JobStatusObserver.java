@@ -135,10 +135,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                     ctx.getObserveConfig(),
                                     JobID.fromHexString(jobStatus.getJobId()));
             ctx.putRuntimeConfig(runtimeConfig);
-            var currentObserveConfig = ctx.getObserveConfig();
-            if (currentObserveConfig != null) {
-                runtimeConfig.forEach(currentObserveConfig::setString);
-            }
         } catch (Exception e) {
             LOG.warn("Failed to fetch runtime configuration, will retry next cycle", e);
         }

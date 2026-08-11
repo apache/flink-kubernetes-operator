@@ -150,6 +150,11 @@ public class ApplicationReconciler
         var status = relatedResource.getStatus();
         var flinkService = ctx.getFlinkService();
 
+        ctx.getConfigManager()
+                .invalidateRuntimeConfig(
+                        relatedResource.getMetadata().getNamespace(),
+                        relatedResource.getMetadata().getName());
+
         ClusterHealthEvaluator.removeLastValidClusterHealthInfo(
                 relatedResource.getStatus().getClusterInfo());
 

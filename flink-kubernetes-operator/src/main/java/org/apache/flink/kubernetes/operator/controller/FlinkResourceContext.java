@@ -157,6 +157,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
                         resource.getMetadata().getNamespace(),
                         resource.getMetadata().getName(),
                         jobStatus.getJobId());
+        observeConfig = null;
     }
 
     /**
