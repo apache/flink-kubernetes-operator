@@ -51,10 +51,28 @@ defaultConfiguration:
 
 ### YAML Configuration File Format
 
-Operator configuration is delivered through the `defaultConfiguration.flink-conf.yaml` block in the Helm `values.yaml`. The operator's runtime loads that file with Flink's legacy configuration parser, which accepts only flat key-value pairs written with dot notation and does not support nested YAML maps.
+Operator configuration can be delivered in either of Flink's two configuration formats, by defining the matching key under `defaultConfiguration` in the Helm `values.yaml`:
+
+- `flink-conf.yaml` is the legacy format, which accepts only flat key-value pairs written with dot notation and does not support nested YAML maps. This is the format the chart ships by default.
+- `config.yaml` is the YAML 1.2 format defined from Flink 1.19 onward and the only format Flink 2.0 accepts. It supports nested keys (see the [Flink Configuration File](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/config/#flink-configuration-file) documentation):
+
+```yaml
+defaultConfiguration:
+  create: true
+  append: true
+  config.yaml: |+
+    kubernetes.operator:
+      metrics.reporter.slf4j:
+        factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+        interval: 5 MINUTE
+      reconcile.interval: 15 s
+      observer.progress-check.interval: 5 s
+```
+
+When both keys are set, `config.yaml` takes precedence. Either way the resolved configuration is mounted as `config.yaml`, the file name Flink 2.0 requires.
 
 {{< hint info >}}
-Flink 2.0 onward also defines a `config.yaml` format with YAML 1.2 syntax that supports nested keys (see the [Flink Configuration File](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/deployment/config/#flink-configuration-file) documentation). The Helm chart's `values.yaml` shows a `config.yaml` example block, but with the current chart it is not effectively loadable: the ConfigMap template unconditionally renders both `flink-conf.yaml` and `config.yaml` keys, and Flink's `GlobalConfiguration` prefers `flink-conf.yaml` when both are present.
+Prefer the nested form shown above. A flat, dotted-key override of a key that the chart's default `conf/config.yaml` already ships would be a duplicate key under Flink's strict YAML parser and fail at operator startup.
 {{< /hint >}}
 
 ### Flink Version and Namespace Specific Defaults
@@ -101,7 +119,7 @@ Whether dynamic configuration updates are enabled can be verified in the `deploy
 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
 ```
 
-To change config values dynamically, the ConfigMap can be edited directly with `kubectl patch` or `kubectl edit`. For example, the reconcile interval is changed by overriding `kubernetes.operator.reconcile.interval`.
+To change config values dynamically, the ConfigMap can be edited directly with `kubectl patch` or `kubectl edit`. Edits belong to the `config.yaml` key, which is the file the operator mounts. For example, the reconcile interval is changed by overriding `kubernetes.operator.reconcile.interval`.
 
 The update, here to 30 seconds, is confirmed in the operator log:
 

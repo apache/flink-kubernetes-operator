@@ -16,10 +16,6 @@
 # limitations under the License.
 ################################################################################
 
-# Flink job/cluster related configs
-taskmanager.numberOfTaskSlots: 1
-parallelism.default: 1
-
 # These parameters are required for Java 17 support.
 # Flink 1.18 uses env.java.opts.all, if a user supplies their own version of these opts in their FlinkDeployment the options below will be overridden.
 # env.java.default-opts.all is used for 1.19 onwards so users can supply their own opts.all in their Job deployments and have these appended.

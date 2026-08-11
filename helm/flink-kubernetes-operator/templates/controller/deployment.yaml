@@ -244,13 +244,8 @@ spec:
           configMap:
             name: flink-operator-config
             items:
-            {{- if hasKey .Values.defaultConfiguration "flink-conf.yaml" }}
-              - key: flink-conf.yaml
-                path: flink-conf.yaml
-            {{- else }}
               - key: config.yaml
                 path: config.yaml
-            {{- end }}
             {{- if eq .Values.logging.framework "logback" }}
               - key: logback-operator.xml
                 path: logback-operator.xml

@@ -91,7 +91,7 @@ helm install -f custom-values.yaml  flink-kubernetes-operator  helm/flink-kubern
                                   │
                                   │  flink-kubernetes-operator Deployment is created with:
                                   │      ENV: LOG_CONFIG=..., JVM_ARGS=..., OPERATOR_NAMESPACE, ...
-                                  │      Volume items: config.yaml (default) or flink-conf.yaml,
+                                  │      Volume items: config.yaml,
                                   │                    log4j-operator.properties or logback-operator.xml,
                                   │                    log4j-console.properties or logback-console.xml
                                   ▼
@@ -118,10 +118,10 @@ The following notes elaborate on the chart's CRD handling, helper-driven labels,
 
  - `crds/` uses Helm's special CRD handling: applied on `helm install` only, untouched by `helm upgrade` and `helm uninstall`. Based on this, Helm CRD upgrades and deletions are out-of-band today, and they need to be manually executed via `kubectl` commands (`kubectl apply -f crds/`, `kubectl delete crd ...`). See [Upgrading the Operator → Upgrading the CRDs]({{< ref "docs/operations/upgrade#2-upgrading-the-crds" >}}) for the supported procedure.
  - `_helpers.tpl` defines a common label set applied to every chart-rendered resource: `app.kubernetes.io/name`, `app.kubernetes.io/version`, `app.kubernetes.io/managed-by`, and `helm.sh/chart`. The same `app.kubernetes.io/name` label is the operator Deployment's `selector.matchLabels`, so a single `kubectl get all -l app.kubernetes.io/name=<release-name>` reaches every chart-created object.
- - The `flink-operator-config` ConfigMap is created only when `defaultConfiguration.create` is set to `true`, and it carries six data keys (`config.yaml`, `flink-conf.yaml`, `log4j-operator.properties`, `log4j-console.properties`, `logback-operator.xml`, `logback-console.xml`) populated with two different strategies:
-   - Append: chart's `conf/flink-conf.yaml`, `conf/log4j-operator.properties`, and `conf/log4j-console.properties` baselines (when `defaultConfiguration.append=true`), followed by user-supplied `defaultConfiguration."config.yaml"` / `"flink-conf.yaml"` / `"log4j-operator.properties"` / `"log4j-console.properties"` overrides concatenated on top.
+ - The `flink-operator-config` ConfigMap is created only when `defaultConfiguration.create` is set to `true`, and it carries five data keys (`config.yaml`, `log4j-operator.properties`, `log4j-console.properties`, `logback-operator.xml`, `logback-console.xml`) populated with two different strategies:
+   - Append: chart's `conf/config.yaml`, `conf/log4j-operator.properties`, and `conf/log4j-console.properties` baselines (when `defaultConfiguration.append=true`), followed by user-supplied `defaultConfiguration."config.yaml"` / `"log4j-operator.properties"` / `"log4j-console.properties"` overrides concatenated on top. The single `config.yaml` entry resolves `defaultConfiguration."config.yaml"` when set, otherwise `defaultConfiguration."flink-conf.yaml"`.
    - Replace: user-supplied `defaultConfiguration."logback-operator.xml"` / `"logback-console.xml"` if set, otherwise the chart's `conf/logback-*.xml` baseline when `defaultConfiguration.append=true`. The two sources are mutually exclusive, not concatenated.
-   - For the two top-level YAML keys (`config.yaml`, `flink-conf.yaml`), `kubernetes.operator.watched.namespaces` and `kubernetes.operator.health.probe.*` are auto-injected when the matching `values.yaml` fields are set.
+   - In the `config.yaml` entry, `kubernetes.operator.watched.namespaces` and `kubernetes.operator.health.probe.*` are auto-injected when the matching `values.yaml` fields are set.
  - The operator `Deployment` is a standard Pod-spec passthrough configured via `operatorPod.*` and related keys in `values.yaml`:
    - container `name`, `image`, `command`, `ports` (metrics, health-probe), `volumeMounts` (config, artifacts, TLS cert), `env`, `envFrom`, `livenessProbe`, `startupProbe`, `lifecycle.postStart`, and `securityContext`.
    - pod-level scheduling fields `nodeSelector`, `affinity`, `tolerations`, `topologySpreadConstraints`, `priorityClassName`, `serviceAccountName`, `imagePullSecrets`, and optional `initContainers` / `sidecarContainers`.
