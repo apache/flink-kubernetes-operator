@@ -119,7 +119,7 @@ Whether dynamic configuration updates are enabled can be verified in the `deploy
 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
 ```
 
-To change config values dynamically, the ConfigMap can be edited directly with `kubectl patch` or `kubectl edit`. For example, the reconcile interval is changed by overriding `kubernetes.operator.reconcile.interval`.
+To change config values dynamically, the ConfigMap can be edited directly with `kubectl patch` or `kubectl edit`. Edits belong to the `config.yaml` key, which is the file the operator mounts. For example, the reconcile interval is changed by overriding `kubernetes.operator.reconcile.interval`.
 
 The update, here to 30 seconds, is confirmed in the operator log:
 
