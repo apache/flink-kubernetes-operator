@@ -109,7 +109,7 @@ How state is carried across the restart is controlled through `spec.job.upgradeM
 | Production Use         | Not recommended  | Recommended                            | Recommended                                |
 
 {{< hint info >}}
-When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behavior in cases where the job is in an unhealthy state. This is why a checkpoint directory is required.
+When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behavior in cases where the job is in an unhealthy state, restoring from the checkpoint directory. That fallback can be disabled with `kubernetes.operator.job.upgrade.last-state-fallback.enabled`.
 {{< /hint >}}
 
 With `FlinkStateSnapshot` resources enabled, the savepoint taken when suspending in `savepoint` mode is tracked as its own snapshot resource, as described under [Snapshot Management → Upgrade Triggering]({{< ref "docs/managing/snapshot-management#upgrade-triggering" >}}). A `last-state` upgrade creates no snapshot resource, it takes no new snapshot in the first place, reusing the latest checkpoint instead.
