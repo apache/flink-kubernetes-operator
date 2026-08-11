@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -208,6 +209,44 @@ public class FlinkConfigManagerTest {
         var conf =
                 FlinkConfigManager.loadGlobalConfiguration(Optional.of(confOverrideDir.toString()));
         assertEquals(Map.of("foo", "1", "bar", "2"), conf.toMap());
+    }
+
+    /**
+     * The operator configuration uses the config.yaml format while an external override directory
+     * may still be mounted in the legacy flink-conf.yaml format.
+     */
+    @Test
+    public void testLegacyFormatConfigOverrides(
+            @TempDir Path confDir, @TempDir Path confOverrideDir) throws IOException {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Files.write(
+                    confDir.resolve(GlobalConfiguration.FLINK_CONF_FILENAME),
+                    List.of("kubernetes.operator.reconcile.interval: 15 s", "foo: 1"));
+            Files.write(
+                    confOverrideDir.resolve(GlobalConfiguration.LEGACY_FLINK_CONF_FILENAME),
+                    List.of("kubernetes.operator.reconcile.interval: 30 s", "bar: 2"));
+
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(ConfigConstants.ENV_FLINK_CONF_DIR, confDir.toString());
+            TestUtils.setEnv(systemEnv);
+
+            var conf =
+                    FlinkConfigManager.loadGlobalConfiguration(
+                            Optional.of(confOverrideDir.toString()));
+
+            // Overrides in the legacy format are loaded and take precedence
+            assertEquals(
+                    Duration.ofSeconds(30),
+                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
+            assertEquals("2", conf.toMap().get("bar"));
+            // Settings only present in the operator configuration are kept
+            assertEquals("1", conf.toMap().get("foo"));
+            // The operator configuration is loaded last, so its format decides how values parse
+            assertTrue(GlobalConfiguration.isStandardYaml());
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
     }
 
     @Test
