@@ -103,6 +103,13 @@ public class SessionReconciler
             boolean requireHaMetadata)
             throws Exception {
         var cr = ctx.getResource();
+        // Defensive invalidate for consistency with the other deploy() overrides. In practice this
+        // is a no-op for session-mode FlinkDeployments (jobs live on FlinkSessionJob resources
+        // with their own cache keys), but it makes the "every deploy() invalidates" invariant
+        // explicit and safe against future changes to session-cluster caching.
+        ctx.getConfigManager()
+                .invalidateRuntimeConfig(
+                        cr.getMetadata().getNamespace(), cr.getMetadata().getName());
         setOwnerReference(cr, deployConfig);
         ctx.getFlinkService().submitSessionCluster(deployConfig);
         cr.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);

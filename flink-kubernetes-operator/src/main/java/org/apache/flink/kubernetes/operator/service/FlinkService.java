@@ -133,6 +133,12 @@ public interface FlinkService {
             AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
             throws Exception;
 
+    /**
+     * Fetches the merged runtime configuration for a running job by querying the JM config, job
+     * execution config, and checkpoint config REST endpoints. Later layers override earlier ones.
+     */
+    Map<String, String> getRuntimeConfiguration(Configuration conf, JobID jobId) throws Exception;
+
     /** Result of a cancel operation. */
     @AllArgsConstructor
     class CancelResult {

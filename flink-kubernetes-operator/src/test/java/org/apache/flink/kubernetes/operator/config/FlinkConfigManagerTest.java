@@ -467,4 +467,41 @@ public class FlinkConfigManagerTest {
         assertTrue(completed2.get());
         assertTrue(completed3.get());
     }
+
+    @Test
+    public void testRuntimeConfigCachePutAndGet() {
+        var configManager = new FlinkConfigManager(new Configuration());
+
+        assertFalse(configManager.getRuntimeConfig("ns", "app", "job1").isPresent());
+
+        Map<String, String> runtimeConf = Map.of("parallelism.default", "4", "key1", "val1");
+        configManager.putRuntimeConfig("ns", "app", "job1", runtimeConf);
+
+        var cached = configManager.getRuntimeConfig("ns", "app", "job1");
+        assertTrue(cached.isPresent());
+        assertEquals("4", cached.get().get("parallelism.default"));
+        assertEquals("val1", cached.get().get("key1"));
+
+        assertFalse(configManager.getRuntimeConfig("ns", "app", "job2").isPresent());
+        assertFalse(configManager.getRuntimeConfig("ns", "other", "job1").isPresent());
+    }
+
+    @Test
+    public void testRuntimeConfigInvalidate() {
+        var configManager = new FlinkConfigManager(new Configuration());
+
+        configManager.putRuntimeConfig("ns", "app", "job1", Map.of("k1", "v1"));
+        configManager.putRuntimeConfig("ns", "app", "job2", Map.of("k2", "v2"));
+        configManager.putRuntimeConfig("ns", "other", "job3", Map.of("k3", "v3"));
+
+        assertTrue(configManager.getRuntimeConfig("ns", "app", "job1").isPresent());
+        assertTrue(configManager.getRuntimeConfig("ns", "app", "job2").isPresent());
+        assertTrue(configManager.getRuntimeConfig("ns", "other", "job3").isPresent());
+
+        configManager.invalidateRuntimeConfig("ns", "app");
+
+        assertFalse(configManager.getRuntimeConfig("ns", "app", "job1").isPresent());
+        assertFalse(configManager.getRuntimeConfig("ns", "app", "job2").isPresent());
+        assertTrue(configManager.getRuntimeConfig("ns", "other", "job3").isPresent());
+    }
 }

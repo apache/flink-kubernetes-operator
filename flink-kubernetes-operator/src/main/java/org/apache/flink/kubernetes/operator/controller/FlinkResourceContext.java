@@ -40,6 +40,8 @@ import lombok.RequiredArgsConstructor;
 
 import javax.annotation.Nullable;
 
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 /** Context for reconciling a Flink resource. */
@@ -56,6 +58,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
 
     private FlinkOperatorConfiguration operatorConfig;
     private Configuration observeConfig;
+    private Optional<Map<String, String>> runtimeConfig;
     private FlinkService flinkService;
     private KubernetesJobAutoScalerContext autoScalerContext;
 
@@ -103,7 +106,65 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
         if (observeConfig != null) {
             return observeConfig;
         }
-        return observeConfig = createObserveConfig();
+        observeConfig = createObserveConfig();
+        if (observeConfig != null) {
+            getRuntimeConfig().ifPresent(config -> config.forEach(observeConfig::setString));
+        }
+        return observeConfig;
+    }
+
+    /**
+     * Get the cached runtime configuration for the current job, memoized per context to avoid
+     * repeated cache lookups within a single reconciliation cycle. Only a present result is
+     * memoized so that a later {@link #putRuntimeConfig(Map)} within the same cycle is visible to
+     * subsequent callers.
+     *
+     * @return Cached runtime config if present.
+     */
+    public Optional<Map<String, String>> getRuntimeConfig() {
+        if (runtimeConfig != null && runtimeConfig.isPresent()) {
+            return runtimeConfig;
+        }
+        var jobStatus = resource.getStatus().getJobStatus();
+        if (jobStatus == null || jobStatus.getJobId() == null) {
+            return Optional.empty();
+        }
+        return runtimeConfig =
+                configManager.getRuntimeConfig(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        jobStatus.getJobId());
+    }
+
+    /**
+     * Store runtime configuration in the global cache and refresh the context-level memoized view
+     * so subsequent accesses within the same reconciliation cycle avoid an extra cache lookup.
+     *
+     * @param config Runtime configuration key-value pairs fetched from the Flink REST API.
+     */
+    public void putRuntimeConfig(Map<String, String> config) {
+        var jobStatus = resource.getStatus().getJobStatus();
+        if (jobStatus == null || jobStatus.getJobId() == null) {
+            return;
+        }
+        configManager.putRuntimeConfig(
+                resource.getMetadata().getNamespace(),
+                resource.getMetadata().getName(),
+                jobStatus.getJobId(),
+                config);
+        runtimeConfig =
+                configManager.getRuntimeConfig(
+                        resource.getMetadata().getNamespace(),
+                        resource.getMetadata().getName(),
+                        jobStatus.getJobId());
+        observeConfig = null;
+    }
+
+    /**
+     * @return The config manager for this context.
+     */
+    public FlinkConfigManager getConfigManager() {
+        return configManager;
     }
 
     /**

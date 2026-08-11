@@ -91,6 +91,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             if (newJobStatusOpt.isPresent()) {
                 var newJobStatus = newJobStatusOpt.get();
                 updateJobStatus(ctx, newJobStatus);
+                fetchAndCacheRuntimeConfig(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
                 // see if the JM server is up, try to get the exceptions
                 if (!previousJobStatus.isGloballyTerminalState()) {
@@ -109,6 +110,34 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
         }
         return false;
+    }
+
+    private void fetchAndCacheRuntimeConfig(
+            FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+        // Skip only globally-terminal states (FINISHED/CANCELED/FAILED) where the JM REST API is
+        // gone; non-terminal transitional states (INITIALIZING, RESTARTING, RECONCILING, etc.)
+        // still expose reachable config endpoints and any REST failure is caught below.
+        if (clusterJobStatus.getJobState().isGloballyTerminalState()) {
+            return;
+        }
+
+        if (ctx.getRuntimeConfig().isPresent()) {
+            LOG.debug("Runtime configuration already cached");
+            return;
+        }
+
+        LOG.debug("Fetching runtime configuration");
+        var jobStatus = ctx.getResource().getStatus().getJobStatus();
+        try {
+            var runtimeConfig =
+                    ctx.getFlinkService()
+                            .getRuntimeConfiguration(
+                                    ctx.getObserveConfig(),
+                                    JobID.fromHexString(jobStatus.getJobId()));
+            ctx.putRuntimeConfig(runtimeConfig);
+        } catch (Exception e) {
+            LOG.warn("Failed to fetch runtime configuration, will retry next cycle", e);
+        }
     }
 
     /**
