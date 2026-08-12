@@ -485,9 +485,9 @@ public class AutoScalerOptions {
                                     + "For each <name> entry, the implementation class to instantiate must be set via "
                                     + "'job.autoscaler.metrics.custom-evaluator.<name>.class', and additional per-instance "
                                     + "options live under 'job.autoscaler.metrics.custom-evaluator.<name>.<option>'. "
-                                    + "Only a single instance is honored for now: if more than one is configured, the autoscaler "
-                                    + "logs a warning and uses the first entry, ignoring the rest. "
-                                    + "Multi-instance support, including a priority/ordering contract, will be added as a follow-up.");
+                                    + "All configured instances are composed into an ordered chain by ascending "
+                                    + "ScalingMetricsEvaluatorPlugin.priority() (lower runs first). Each evaluator is applied "
+                                    + "on top of the metrics already overridden by the earlier ones.");
 
     /**
      * Documentation-only template option describing the per-instance class FQN key. Not read at
