@@ -389,6 +389,34 @@ public class AbstractFlinkServiceTest {
     }
 
     /**
+     * A session job suspended with a savepoint has its jobId cleared and a terminal state.
+     * Redeploying from that state should recognise the null jobId as an already-missing job instead
+     * of trying to parse it.
+     */
+    @Test
+    public void cancelSessionJobWithStatelessModeAndNoJobId() throws Exception {
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        testingClusterClient.setCancelFunction(
+                jobID -> {
+                    fail("cancel should not be called for a job with no recorded jobId");
+                    return null;
+                });
+        var flinkService = new TestingService(testingClusterClient);
+
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(null);
+        jobStatus.setState(FINISHED);
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        var result = flinkService.cancelSessionJob(job, SuspendMode.STATELESS, new Configuration());
+        assertFalse(result.isPending());
+        assertEquals(FINISHED, jobStatus.getState());
+        assertNull(jobStatus.getJobId());
+    }
+
+    /**
      * Reproduces the operator-upgrade scenario for Session Mode with CANCEL upgrade mode: when a
      * running session job's JobManager has already moved the job into a terminal state (e.g.
      * FAILED) and the operator (after a restart/upgrade) tries to cancel it, the cancellation
