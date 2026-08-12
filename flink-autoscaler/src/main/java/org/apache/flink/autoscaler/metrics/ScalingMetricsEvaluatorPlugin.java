@@ -34,11 +34,17 @@ import java.util.Map;
  * internally evaluated metrics, allowing users to override or augment specific {@link
  * ScalingMetric} values.
  *
- * <p>Only one custom metric evaluator per pipeline is supported for now. If multiple instances are
- * configured, the autoscaler logs a warning and falls back to the first entry, ignoring the rest.
- * Registering multiple implementations via {@code META-INF/services} is fine as they form a
- * registry that different jobs can select from by class FQN, but a single job cannot chain or
- * compose more than one evaluator.
+ * <p>Multiple evaluators can be registered for a single job and are composed into an ordered chain
+ * by ascending {@link #priority()} (lower runs first, matching {@code ScalingExecutorPlugin}). Each
+ * evaluator is applied on top of the metrics already overridden by the earlier ones, so on a
+ * conflicting {@link ScalingMetric} the later (higher-priority-value) evaluator wins. Evaluators
+ * with equal priority have no guaranteed relative ordering.
+ *
+ * <p>Implementations must be stateless. Instances are selected by class FQN, so registering the
+ * same class under several instance names reuses a single object for all of them, invoking it once
+ * per instance and per vertex in every cycle. Per-instance settings must therefore come from {@code
+ * Context#getConfiguration()}, which is scoped to the instance being invoked. A value cached in a
+ * field would instead be shared by every instance.
  *
  * <p>This was introduced as part of <a
  * href="https://cwiki.apache.org/confluence/display/FLINK/FLIP-514%3A+Custom+Evaluator+plugin+for+Flink+Autoscaler">FLIP-514:
@@ -73,6 +79,18 @@ public interface ScalingMetricsEvaluatorPlugin {
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             Context<?> evaluationContext);
+
+    /**
+     * Returns the priority of this evaluator in the chain. Evaluators with lower priority values
+     * are applied first, and later evaluators see the metrics as already overridden by the earlier
+     * ones. The default priority is 0. Evaluators with equal priority have no guaranteed relative
+     * ordering.
+     *
+     * @return the priority value; lower values are applied first.
+     */
+    default int priority() {
+        return 0;
+    }
 
     /**
      * The custom metric evaluator context. It {@code extends} {@link JobAutoScalerContext}, sharing
