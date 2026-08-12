@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -35,8 +36,10 @@ import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEv
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -179,6 +182,32 @@ public class OperatorJosdkMetricsTest {
                                         "Count"))
                         .get()
                         .getCount());
+    }
+
+    @Test
+    void testSnapshotsDoNotRegisterResourceCounters() {
+        var snapshotMetadata =
+                Map.<String, Object>of(
+                        Constants.RESOURCE_GVK_KEY,
+                        GroupVersionKind.gvkFor(FlinkStateSnapshot.class));
+
+        for (var name : List.of("savepoint-1", "savepoint-2")) {
+            var snapshot = new FlinkStateSnapshot();
+            snapshot.getMetadata().setName(name);
+            snapshot.getMetadata().setNamespace("testns");
+            var snapshotId = ResourceID.fromResource(snapshot);
+
+            operatorMetrics.eventReceived(
+                    new ResourceEvent(ResourceAction.ADDED, snapshotId, null), snapshotMetadata);
+            operatorMetrics.reconciliationSubmitted(snapshot, null, snapshotMetadata);
+            operatorMetrics.reconciliationFailed(snapshot, null, null, snapshotMetadata);
+            operatorMetrics.eventReceived(
+                    new ResourceEvent(ResourceAction.DELETED, snapshotId, null), snapshotMetadata);
+            operatorMetrics.cleanupDone(snapshotId, snapshotMetadata);
+            operatorMetrics.reconciliationFinished(snapshot, null, snapshotMetadata);
+        }
+
+        assertThat(listener.size()).isZero();
     }
 
     private Histogram getHistogram(String... names) {
