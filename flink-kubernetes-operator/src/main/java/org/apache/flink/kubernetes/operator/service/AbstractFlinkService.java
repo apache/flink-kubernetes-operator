@@ -379,9 +379,14 @@ public abstract class AbstractFlinkService implements FlinkService {
         try (var clusterClient = getClusterClient(conf)) {
             switch (suspendMode) {
                 case STATELESS:
+                    if (status.isJobCancellable()
+                            && !cancelJobOrError(clusterClient, status, true)) {
+                        // This is async we need to return and re-observe
+                        return CancelResult.pending();
+                    }
+                    break;
                 case CANCEL:
-                    if (!cancelJobOrError(
-                            clusterClient, status, suspendMode == SuspendMode.STATELESS)) {
+                    if (!cancelJobOrError(clusterClient, status, false)) {
                         // This is async we need to return and re-observe
                         return CancelResult.pending();
                     }
