@@ -81,6 +81,22 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- Not inherited: kubernetes-server-mock declares it optional, and this module
+             otherwise only has the client shaded into flink-kubernetes. -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Managed kubernetes-client excludes all httpclient impls; the mock server needs one. -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>
+            <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>

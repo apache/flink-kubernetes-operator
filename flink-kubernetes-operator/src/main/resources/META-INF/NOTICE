@@ -27,7 +27,7 @@ This project bundles the following dependencies under the Apache Software Licens
 - com.zaxxer:HikariCP:jar:5.1.0
 - commons-cli:commons-cli:jar:1.5.0
 - commons-collections:commons-collections:jar:3.2.2
-- commons-io:commons-io:jar:2.17.0
+- commons-io:commons-io:jar:2.22.0
 - io.fabric8:kubernetes-client-api:jar:7.8.0
 - io.fabric8:kubernetes-client:jar:7.8.0
 - io.fabric8:kubernetes-httpclient-okhttp:jar:7.8.0
