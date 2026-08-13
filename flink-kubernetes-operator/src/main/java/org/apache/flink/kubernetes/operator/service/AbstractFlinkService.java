@@ -379,9 +379,13 @@ public abstract class AbstractFlinkService implements FlinkService {
         try (var clusterClient = getClusterClient(conf)) {
             switch (suspendMode) {
                 case STATELESS:
+                    if (!cancelJobOrError(clusterClient, status, true)) {
+                        // This is async we need to return and re-observe
+                        return CancelResult.pending();
+                    }
+                    break;
                 case CANCEL:
-                    if (!cancelJobOrError(
-                            clusterClient, status, suspendMode == SuspendMode.STATELESS)) {
+                    if (!cancelJobOrError(clusterClient, status, false)) {
                         // This is async we need to return and re-observe
                         return CancelResult.pending();
                     }
@@ -416,7 +420,17 @@ public abstract class AbstractFlinkService implements FlinkService {
             RestClusterClient<String> clusterClient,
             CommonStatus<?> status,
             boolean ignoreMissing) {
-        var jobID = JobID.fromHexString(status.getJobStatus().getJobId());
+        var jobIdString = status.getJobStatus().getJobId();
+        if (jobIdString == null) {
+            if (ignoreMissing) {
+                LOG.info("Job already missing");
+                return true;
+            }
+            throw new UpgradeFailureException(
+                    "Cannot find job when trying to cancel",
+                    EventRecorder.Reason.CleanupFailed.name());
+        }
+        var jobID = JobID.fromHexString(jobIdString);
         if (ReconciliationUtils.isJobCancelling(status)) {
             LOG.info("Job already cancelling");
             return false;
