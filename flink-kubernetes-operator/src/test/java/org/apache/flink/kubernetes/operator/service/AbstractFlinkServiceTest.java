@@ -1612,6 +1612,42 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
+    void testMapJobConfigurationDropsOperatorControlledGlobalParameters() {
+        JobConfigInfo configInfo =
+                new JobConfigInfo(
+                        new JobID(),
+                        "test-job",
+                        new JobConfigInfo.ExecutionConfigInfo(
+                                "PIPELINED",
+                                "fixedDelay",
+                                4,
+                                true,
+                                Map.of(
+                                        "user.param",
+                                        "value1",
+                                        "kubernetes.operator.job.upgrade.last-state-fallback.enabled",
+                                        "false",
+                                        "job.autoscaler.enabled",
+                                        "false")));
+
+        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo);
+
+        // A job must not be able to change how the operator manages it.
+        assertNull(
+                result.get("kubernetes.operator.job.upgrade.last-state-fallback.enabled"),
+                "operator keys must not be taken from global job parameters");
+        assertNull(
+                result.get("job.autoscaler.enabled"),
+                "autoscaler keys must not be taken from global job parameters");
+
+        // Unrelated parameters and the mapped execution fields are still present.
+        assertEquals("value1", result.get("user.param"));
+        assertEquals("4", result.get("parallelism.default"));
+        assertEquals("true", result.get("pipeline.object-reuse"));
+        assertEquals(3, result.size());
+    }
+
+    @Test
     void testMapJobConfigurationHandlesNullGracefully() {
         assertTrue(FlinkRuntimeConfigurationUtils.mapJobConfiguration(null).isEmpty());
         assertTrue(
