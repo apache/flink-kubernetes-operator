@@ -85,9 +85,9 @@ under the License.
         <flink.version>1.20.4</flink.version>
         <guava.version>33.4.0-jre</guava.version>
 
-        <slf4j.version>1.7.36</slf4j.version>
+        <slf4j.version>2.0.18</slf4j.version>
         <log4j.version>2.25.4</log4j.version>
-        <logback.version>1.2.13</logback.version>
+        <logback.version>1.5.34</logback.version>
 
         <spotless.version>2.40.0</spotless.version>
         <it.skip>true</it.skip>
@@ -120,6 +120,15 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <!-- Pinned so that modules which pick up slf4j-api transitively from Flink
+                 (1.7.36) still get the 2.x API that the log4j-slf4j2-impl and logback
+                 bindings require. A mismatch is silent: SLF4J falls back to a NOP
+                 logger and discards all output. -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>

@@ -42,10 +42,18 @@ operator_namespace=$(get_operator_pod_namespace)
 operator_pod=$(get_operator_pod_name)
 echo "Current operator pod is ${operator_pod} in namespace ${operator_namespace}"
 
-# Check that there are no SLF4J multiple-bindings warnings
-echo "Checking for SLF4J multiple bindings warnings..."
-if kubectl logs "${operator_pod}" -c flink-kubernetes-operator -n "${operator_namespace}" | grep -q "SLF4J: Class path contains multiple SLF4J bindings"; then
-  echo "ERROR: Found SLF4J multiple bindings warning"
+# Check that there are no SLF4J provider problems. SLF4J 2.x reports "providers"
+# where 1.7.x reported "bindings", so both wordings are matched. The no-provider
+# case is checked too: SLF4J does not fail on a missing backend, it installs a NOP
+# logger and silently discards every log line.
+echo "Checking for SLF4J provider warnings..."
+operator_logs=$(kubectl logs "${operator_pod}" -c flink-kubernetes-operator -n "${operator_namespace}")
+if echo "${operator_logs}" | grep -qE "Class path contains multiple SLF4J (providers|bindings)"; then
+  echo "ERROR: Found SLF4J multiple providers warning"
+  passed=false
+fi
+if echo "${operator_logs}" | grep -qE "No SLF4J providers were found|Failed to load class \"org.slf4j.impl.StaticLoggerBinder\""; then
+  echo "ERROR: SLF4J found no provider and fell back to the NOP logger"
   passed=false
 fi
 
