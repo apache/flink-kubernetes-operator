@@ -170,15 +170,22 @@ The process installs a shutdown hook honoring `kubernetes.operator.termination.t
 
 ### Configuration
 
-The configuration manager loads the operator's settings at startup and derives every Flink-facing configuration from them. Three configurations matter throughout the operator:
+The configuration manager loads the operator's settings at startup and derives every Flink-facing configuration from them. Four configurations matter throughout the operator:
 
 | Config  | Derived From                                                                                                                                                                                                                                                    | Used For                                                                                                     |
 |---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
 | Default | The `flink-operator-config` ConfigMap, refined by per-namespace overrides (`kubernetes.operator.default-configuration.namespace.<namespace>.<key>`) and per-Flink-version overrides (`kubernetes.operator.default-configuration.flink-version.<version>.<key>`) | The operator's own behavior, and the base of everything below                                                |
 | Deploy  | The namespace and Flink version defaults, always merged with the current spec's `flinkConfiguration`, plus operator-managed additions such as the resource generation annotation                                                                                | Submitting and upgrading the Flink cluster                                                                   |
-| Observe | The same recipe applied to the last reconciled spec and its `flinkConfiguration`, with a session job's own `flinkConfiguration` layered on top of its cluster's                                                                                                 | Talking to the running cluster, which must be addressed with the configuration it was actually deployed with |
+| Observe | The same recipe applied to the last reconciled spec and its `flinkConfiguration`, with a session job's own `flinkConfiguration` layered on top of its cluster's, and the runtime configuration layered on top of that                                            | Talking to the running cluster, which must be addressed with the configuration it was actually deployed with |
+| Runtime | The running job itself, read through the JobManager configuration, job execution and checkpoint config REST endpoints                                                                                                                                            | Correcting the observed view wherever the job's effective settings differ from the spec                      |
 
 Deploy and observe are the same derivation applied to different specs: deploy reads the spec being rolled out, observe reads the spec that last reached the cluster. The two differ exactly while an upgrade is in flight, and converge again once the new spec lands.
+
+The runtime configuration exists because a spec is a request, not a record of what the job ended up running with. A job's main method can change settings programmatically, and those take precedence over anything the operator submitted. The job status observer therefore reads them back from the cluster and layers them over the observed configuration, so that decisions such as whether checkpointing is enabled are made against the job's real settings. Its lifecycle differs from the derived configurations above:
+
+- It is fetched once per job, and skipped for jobs in a globally terminal state, whose REST endpoints are already gone.
+- It is cached per resource and job id, under the same cache size and timeout limits as the derived configurations. A new job id, which every redeploy produces, naturally invalidates it.
+- A failed fetch is logged and retried on the next cycle, and the observed configuration stays purely spec-derived until one succeeds.
 
 Three runtime behaviors round out the configuration machinery:
 
@@ -187,7 +194,7 @@ Three runtime behaviors round out the configuration machinery:
 - The watched namespaces come from the same configuration, and with `kubernetes.operator.dynamic.namespaces.enabled`, namespace changes adjust the controllers' informers at runtime.
 
 {{< hint warning >}}
-None of these is the running configuration. The operator derives its view from the spec and its own defaults, while the cluster can pick up settings the operator never sees: a `config.yaml` baked into the image, environment overrides, or properties the job sets programmatically. The configuration a pipeline actually runs with can therefore differ from everything the operator tracks.
+The runtime configuration covers a mapped subset of the job's settings, mainly the default parallelism, object reuse, the job's global parameters, and the checkpointing, state backend and changelog options, and only for as long as the job is running. Whatever falls outside that subset stays invisible to the operator, including a `config.yaml` baked into the image and environment overrides. The configuration a pipeline actually runs with can therefore still differ from what the operator tracks.
 {{< /hint >}}
 
 ### Services

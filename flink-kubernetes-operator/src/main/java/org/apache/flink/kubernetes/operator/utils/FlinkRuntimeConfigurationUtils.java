@@ -17,11 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.StateChangelogOptions;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigInfo;
 
@@ -131,6 +133,10 @@ public class FlinkRuntimeConfigurationUtils {
     /**
      * Extract execution configuration (parallelism, object-reuse, global job parameters) from a
      * {@link JobConfigInfo} REST response.
+     *
+     * <p>Global job parameters are set by the job itself and are merged over the observed
+     * configuration, so keys belonging to the operator's own namespaces are dropped. Otherwise a
+     * job could change how the operator manages it simply by declaring a matching global parameter.
      */
     public static Map<String, String> mapJobConfiguration(JobConfigInfo configurationInfo) {
         Map<String, String> jobConfig = new HashMap<>();
@@ -141,8 +147,24 @@ public class FlinkRuntimeConfigurationUtils {
         jobConfig.put(
                 CoreOptions.DEFAULT_PARALLELISM.key(), String.valueOf(execInfo.getParallelism()));
         jobConfig.put(PipelineOptions.OBJECT_REUSE.key(), String.valueOf(execInfo.isObjectReuse()));
-        jobConfig.putAll(execInfo.getGlobalJobParameters());
+        execInfo.getGlobalJobParameters()
+                .forEach(
+                        (key, value) -> {
+                            if (!isOperatorControlledKey(key)) {
+                                jobConfig.put(key, value);
+                            }
+                        });
         return jobConfig;
+    }
+
+    /**
+     * Whether the key belongs to a namespace owned by the operator, covering both operator and
+     * autoscaler options, including the autoscaler's legacy {@code kubernetes.operator.} prefixed
+     * form.
+     */
+    private static boolean isOperatorControlledKey(String key) {
+        return key.startsWith(KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX)
+                || key.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX);
     }
 
     /**
