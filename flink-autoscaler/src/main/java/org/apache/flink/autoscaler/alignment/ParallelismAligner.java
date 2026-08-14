@@ -280,6 +280,11 @@ public final class ParallelismAligner {
 
     private static boolean invertsDirection(
             ParallelismAlignmentMode.Context<?> ctx, int candidate) {
+        // Exception to the direction check below: the cap is the most subtasks the vertex can
+        // use, so dropping onto it corrects an over-provisioned vertex rather than inverting it.
+        if (candidate == upperBoundForAlignment(ctx) && candidate < ctx.getCurrentParallelism()) {
+            return false;
+        }
         return (isScaleUp(ctx) && candidate <= ctx.getCurrentParallelism())
                 || (!isScaleUp(ctx) && candidate >= ctx.getCurrentParallelism());
     }
