@@ -69,7 +69,12 @@ public enum BuiltInAlignmentMode implements ParallelismAlignmentMode, DescribedE
      */
     private static int alignOrKeepTarget(Context<?> ctx, boolean acceptLoadReducing) {
         int aligned = ParallelismAligner.firstAlignedInRegion(ctx, acceptLoadReducing);
-        return aligned > 0 ? aligned : ctx.getNewParallelism();
+        if (aligned > 0) {
+            return aligned;
+        }
+        // Nothing aligned in the region: keep the target, but never above the cap, since
+        // subtasks past the source partition count are assigned no split.
+        return Math.min(ctx.getNewParallelism(), ParallelismAligner.upperBoundForAlignment(ctx));
     }
 
     private final InlineElement description;

@@ -23,14 +23,19 @@ import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Tests for the built-in and legacy {@link ParallelismAlignmentMode}s and {@link
@@ -120,6 +125,100 @@ class AlignmentModeTest {
         var blocked = ctx(22, 25, 35, 128, 20, 30, List.of(ShipStrategy.HASH));
         assertThat(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD.alignParallelism(blocked, emitter))
                 .isEqualTo(22);
+        assertThat(emitted).hasValue(1);
+    }
+
+    @SuppressWarnings("deprecation")
+    static Stream<ParallelismAlignmentMode> aligningModes() {
+        return Stream.of(
+                BuiltInAlignmentMode.BALANCED,
+                BuiltInAlignmentMode.EVENLY_SPREAD,
+                KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD,
+                KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+    }
+
+    @SuppressWarnings("deprecation")
+    static Stream<KeyGroupOrPartitionsAdjustMode> legacyModes() {
+        return Stream.of(
+                KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD,
+                KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+    }
+
+    /** Every aligning mode against a target above the cap, on both sides of the current value. */
+    static Stream<Arguments> cappedTargets() {
+        return aligningModes()
+                .flatMap(mode -> Stream.of(180, 50, 16, 15).map(target -> arguments(mode, target)));
+    }
+
+    @ParameterizedTest(name = "{0}, target {1}")
+    @MethodSource("cappedTargets")
+    void targetAbovePartitionCountIsCappedInEitherDirection(
+            ParallelismAlignmentMode mode, int target) {
+        // 15 partitions, running at 100: 15 is the ceiling whether the target is above it (180),
+        // below it (50, 16), or already on it (15).
+        assertThat(mode.alignParallelism(ctx(100, target, 15, 180))).isEqualTo(15);
+    }
+
+    @Test
+    void offKeepsTheTargetAbovePartitionCount() {
+        // OFF opts out of alignment altogether, so the over-provisioning is the user's choice.
+        assertThat(BuiltInAlignmentMode.OFF.alignParallelism(ctx(100, 180, 15, 180)))
+                .isEqualTo(180);
+        assertThat(BuiltInAlignmentMode.OFF.alignParallelism(ctx(100, 50, 15, 180))).isEqualTo(50);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("aligningModes")
+    void keyedVertexIsCappedAtItsKeyGroupCount(ParallelismAlignmentMode mode) {
+        // Without source partitions the cap is the key group count. scale() already clamps the
+        // target to maxParallelism, so only sources reach this in practice.
+        assertThat(mode.alignParallelism(ctx(20, 18, 0, 12))).isEqualTo(12);
+    }
+
+    /** Legacy modes only, and only targets that deviate from the cap, so an event is expected. */
+    static Stream<Arguments> legacyCappedTargets() {
+        return legacyModes()
+                .flatMap(mode -> Stream.of(180, 50, 16).map(target -> arguments(mode, target)));
+    }
+
+    @ParameterizedTest(name = "{0}, target {1}")
+    @MethodSource("legacyCappedTargets")
+    @SuppressWarnings("deprecation")
+    void legacyEmitsWheneverCappedAtPartitionCount(
+            KeyGroupOrPartitionsAdjustMode mode, int target) {
+        // Capping is not an inversion, but it still deviates from the target, so the event stays.
+        assertThat(mode.alignParallelism(ctx(100, target, 15, 180), emitter)).isEqualTo(15);
+        assertThat(emitted).hasValue(1);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("legacyModes")
+    @SuppressWarnings("deprecation")
+    void alreadyAtThePartitionCountBlocksAScaleUp(KeyGroupOrPartitionsAdjustMode mode) {
+        // Already on the cap: the candidate is not below current, so the scale-up stays blocked.
+        assertThat(mode.alignParallelism(ctx(15, 20, 15, 180), emitter)).isEqualTo(15);
+        assertThat(emitted).hasValue(1);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void movingUpToTheCapOnAScaleDownIsStillAnInversion() {
+        // The lower limit clamps the fallback up onto the cap (12), above the current 10, so
+        // taking it would invert the scale-down.
+        var c = ctx(10, 8, 12, 128, 12, 12, List.of(ShipStrategy.HASH));
+        assertThat(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD.alignParallelism(c, emitter))
+                .isEqualTo(10);
+        assertThat(emitted).hasValue(1);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void lowerLimitClampAboveCurrentStillBlocksAScaleDown() {
+        // The same inversion, but below the cap (candidate 11, cap 30): the exemption must not
+        // reach it.
+        var c = ctx(10, 8, 35, 128, 11, 30, List.of(ShipStrategy.HASH));
+        assertThat(KeyGroupOrPartitionsAdjustMode.EVENLY_SPREAD.alignParallelism(c, emitter))
+                .isEqualTo(10);
         assertThat(emitted).hasValue(1);
     }
 

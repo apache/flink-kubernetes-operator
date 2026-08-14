@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobVertexScaler.ParallelismChange;
+import org.apache.flink.autoscaler.alignment.BuiltInAlignmentMode;
 import org.apache.flink.autoscaler.alignment.KeyGroupOrPartitionsAdjustMode;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
@@ -1208,6 +1209,48 @@ public class JobVertexScalerTest {
                         Map.of(),
                         null,
                         context));
+    }
+
+    @Test
+    public void testSourceCappedAtPartitionCountWhenOverProvisioned() {
+        final var vertex = new JobVertexID();
+        // 15 partitions, running at 100: both a requested scale-up and scale-down land on 15.
+        // setup() pins the legacy EVENLY_SPREAD, so that one is covered first.
+        assertEquals(15, scaleOverProvisionedSource(vertex, 1.8));
+        assertEquals(15, scaleOverProvisionedSource(vertex, 0.5));
+
+        conf.set(
+                AutoScalerOptions.SCALING_KEY_GROUP_PARTITIONS_ADJUST_MODE,
+                KeyGroupOrPartitionsAdjustMode.MAXIMIZE_UTILISATION);
+        assertEquals(15, scaleOverProvisionedSource(vertex, 1.8));
+        assertEquals(15, scaleOverProvisionedSource(vertex, 0.5));
+
+        // The new key takes precedence over the deprecated one set above.
+        for (var mode :
+                List.of(BuiltInAlignmentMode.BALANCED, BuiltInAlignmentMode.EVENLY_SPREAD)) {
+            conf.set(AutoScalerOptions.ALIGNMENT_MODE, mode.name());
+            assertEquals(15, scaleOverProvisionedSource(vertex, 1.8), mode.name());
+            assertEquals(15, scaleOverProvisionedSource(vertex, 0.5), mode.name());
+        }
+
+        // OFF opts out of alignment, so the computed target is used as-is.
+        conf.set(AutoScalerOptions.ALIGNMENT_MODE, BuiltInAlignmentMode.OFF.name());
+        assertEquals(180, scaleOverProvisionedSource(vertex, 1.8));
+    }
+
+    private int scaleOverProvisionedSource(JobVertexID vertex, double scaleFactor) {
+        return vertexScaler.scale(
+                vertex,
+                100,
+                List.of(),
+                15,
+                180,
+                scaleFactor,
+                1,
+                Integer.MAX_VALUE,
+                Map.of(),
+                null,
+                context);
     }
 
     @Test
