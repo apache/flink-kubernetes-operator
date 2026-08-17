@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.artifact;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -58,7 +59,17 @@ public class ArtifactManager {
         createIfNotExists(targetDir);
         URI uri = new URI(jarURI);
         if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
-            return HttpArtifactFetcher.INSTANCE.fetch(jarURI, flinkConfiguration, targetDir);
+            // Take the scheme/host policy from the operator config (matching DefaultValidator);
+            // clone so the caller's config is not mutated.
+            var operatorConfig = configManager.getOperatorConfiguration();
+            var fetchConfig = flinkConfiguration.clone();
+            fetchConfig.set(
+                    KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES,
+                    operatorConfig.getJarUriAllowedSchemes());
+            fetchConfig.set(
+                    KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS,
+                    operatorConfig.isJarUriDisallowRestrictedHosts());
+            return HttpArtifactFetcher.INSTANCE.fetch(jarURI, fetchConfig, targetDir);
         } else {
             return FileSystemBasedArtifactFetcher.INSTANCE.fetch(
                     jarURI, flinkConfiguration, targetDir);

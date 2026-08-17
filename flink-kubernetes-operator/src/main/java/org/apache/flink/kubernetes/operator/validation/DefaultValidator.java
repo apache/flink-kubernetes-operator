@@ -48,6 +48,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.JarUriValidationUtils;
 import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
@@ -62,20 +63,14 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.net.InetAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
@@ -316,56 +311,8 @@ public class DefaultValidator implements FlinkResourceValidator {
     @VisibleForTesting
     static Optional<String> validateJarURI(
             String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
-        if (jarURI == null) {
-            return Optional.empty();
-        }
-
-        URI uri;
-        try {
-            uri = new URI(jarURI);
-        } catch (URISyntaxException e) {
-            return Optional.of("jarURI is not a valid URI: " + e.getMessage());
-        }
-
-        String scheme = uri.getScheme();
-        if (scheme == null) {
-            return Optional.of("jarURI must include a scheme");
-        }
-
-        Set<String> normalizedAllowedSchemes =
-                allowedSchemes.stream()
-                        .map(s -> s.toLowerCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-        if (!normalizedAllowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
-            return Optional.of(
-                    String.format(
-                            "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
-                            scheme,
-                            normalizedAllowedSchemes,
-                            KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key()));
-        }
-
-        if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && disallowRestrictedHosts) {
-            String host = uri.getHost();
-            if (host == null || host.isEmpty()) {
-                return Optional.of("jarURI must include a host for http/https schemes");
-            }
-            InetAddress addr;
-            try {
-                addr = InetAddress.getByName(host);
-            } catch (UnknownHostException e) {
-                return Optional.of("jarURI host '" + host + "' cannot be resolved");
-            }
-            if (addr.isLoopbackAddress()
-                    || addr.isLinkLocalAddress()
-                    || addr.isSiteLocalAddress()
-                    || addr.isAnyLocalAddress()
-                    || addr.isMulticastAddress()) {
-                return Optional.of("jarURI host '" + host + "' resolves to a restricted address");
-            }
-        }
-        return Optional.empty();
+        return JarUriValidationUtils.validateJarURI(
+                jarURI, allowedSchemes, disallowRestrictedHosts);
     }
 
     private Optional<String> validateSessionJobJarURI(FlinkSessionJob sessionJob) {
