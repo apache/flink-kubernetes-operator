@@ -74,20 +74,29 @@ public final class JarUriValidationUtils {
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");
             }
-            InetAddress addr;
+            InetAddress[] addresses;
             try {
-                addr = InetAddress.getByName(host);
+                // Check every resolved address, not just the first, since a host can resolve to
+                // multiple A/AAAA records.
+                addresses = InetAddress.getAllByName(host);
             } catch (UnknownHostException e) {
                 return Optional.of("jarURI host '" + host + "' cannot be resolved");
             }
-            if (addr.isLoopbackAddress()
-                    || addr.isLinkLocalAddress()
-                    || addr.isSiteLocalAddress()
-                    || addr.isAnyLocalAddress()
-                    || addr.isMulticastAddress()) {
-                return Optional.of("jarURI host '" + host + "' resolves to a restricted address");
+            for (InetAddress addr : addresses) {
+                if (isRestricted(addr)) {
+                    return Optional.of(
+                            "jarURI host '" + host + "' resolves to a restricted address");
+                }
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isRestricted(InetAddress addr) {
+        return addr.isLoopbackAddress()
+                || addr.isLinkLocalAddress()
+                || addr.isSiteLocalAddress()
+                || addr.isAnyLocalAddress()
+                || addr.isMulticastAddress();
     }
 }

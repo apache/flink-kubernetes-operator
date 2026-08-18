@@ -96,53 +96,62 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
             }
             conn.setRequestMethod("GET");
 
-            int status = conn.getResponseCode();
-            if (!isRedirect(status)) {
-                break;
-            }
-
-            String location = conn.getHeaderField("Location");
-            conn.disconnect();
-            if (location == null || location.isEmpty()) {
-                throw new IOException(
-                        "Received redirect (status "
-                                + status
-                                + ") from '"
-                                + currentUri
-                                + "' without a Location header");
-            }
-            if (++redirects > MAX_REDIRECTS) {
-                throw new IOException(
-                        "Too many redirects (>"
-                                + MAX_REDIRECTS
-                                + ") while fetching artifact from '"
-                                + uri
-                                + "'");
-            }
-            URL nextUrl;
+            // Release the connection on every path except the final (non-redirect) one, whose body
+            // is streamed below. This covers getResponseCode() and the redirect handling throwing.
+            boolean keepConnection = false;
             try {
-                nextUrl = new URL(currentUrl, location);
-            } catch (MalformedURLException e) {
-                throw new IOException(
-                        "Refusing to follow redirect from '"
-                                + currentUri
-                                + "' to '"
-                                + location
-                                + "': "
-                                + e.getMessage());
+                int status = conn.getResponseCode();
+                if (!isRedirect(status)) {
+                    keepConnection = true;
+                    break;
+                }
+
+                String location = conn.getHeaderField("Location");
+                if (location == null || location.isEmpty()) {
+                    throw new IOException(
+                            "Received redirect (status "
+                                    + status
+                                    + ") from '"
+                                    + currentUri
+                                    + "' without a Location header");
+                }
+                if (++redirects > MAX_REDIRECTS) {
+                    throw new IOException(
+                            "Too many redirects (>"
+                                    + MAX_REDIRECTS
+                                    + ") while fetching artifact from '"
+                                    + uri
+                                    + "'");
+                }
+                URL nextUrl;
+                try {
+                    nextUrl = new URL(currentUrl, location);
+                } catch (MalformedURLException e) {
+                    throw new IOException(
+                            "Refusing to follow redirect from '"
+                                    + currentUri
+                                    + "' to '"
+                                    + location
+                                    + "': "
+                                    + e.getMessage());
+                }
+                // An HTTP fetch only follows http(s) redirects, even if other schemes (e.g. s3,
+                // hdfs) are in the jarURI allowlist for top-level use.
+                var nextScheme = nextUrl.getProtocol();
+                if (!"http".equalsIgnoreCase(nextScheme) && !"https".equalsIgnoreCase(nextScheme)) {
+                    throw new IOException(
+                            "Refusing to follow redirect from '"
+                                    + currentUri
+                                    + "' to non-http(s) target '"
+                                    + nextUrl
+                                    + "'");
+                }
+                currentUri = nextUrl.toString();
+            } finally {
+                if (!keepConnection) {
+                    conn.disconnect();
+                }
             }
-            // An HTTP fetch only follows http(s) redirects, even if other schemes (e.g. s3, hdfs)
-            // are in the jarURI allowlist for top-level use.
-            var nextScheme = nextUrl.getProtocol();
-            if (!"http".equalsIgnoreCase(nextScheme) && !"https".equalsIgnoreCase(nextScheme)) {
-                throw new IOException(
-                        "Refusing to follow redirect from '"
-                                + currentUri
-                                + "' to non-http(s) target '"
-                                + nextUrl
-                                + "'");
-            }
-            currentUri = nextUrl.toString();
         }
 
         // Name the file from the original jarURI, not the redirect target, so a redirect can't
@@ -151,6 +160,8 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
         File targetFile = new File(targetDir, fileName);
         try (var inputStream = conn.getInputStream()) {
             FileUtils.copyToFile(inputStream, targetFile);
+        } finally {
+            conn.disconnect();
         }
         LOG.debug(
                 "Copied file from {} to {}, cost {} ms",
