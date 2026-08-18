@@ -417,6 +417,28 @@ public class JobAutoScalerImplTest {
     }
 
     @Test
+    void testConfigOverridesDropNonTunableKeys() throws Exception {
+        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null, null, null, eventCollector, scalingRealizer, stateStore);
+
+        ConfigChanges poisoned = new ConfigChanges();
+        poisoned.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), "2 gb");
+        poisoned.addOverride("env.java.opts.all", "-XX:+SomethingEvil");
+        poisoned.getRemovals().add("kubernetes.pod-template-file");
+        stateStore.storeConfigChanges(context, poisoned);
+        stateStore.flush(context);
+
+        autoscaler.applyConfigOverrides(context);
+
+        var event = getEvent();
+        assertThat(event.getConfigChanges().getOverrides())
+                .containsOnlyKeys(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key());
+        assertThat(event.getConfigChanges().getRemovals()).isEmpty();
+    }
+
+    @Test
     void testApplyConfigOverrides() throws Exception {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =

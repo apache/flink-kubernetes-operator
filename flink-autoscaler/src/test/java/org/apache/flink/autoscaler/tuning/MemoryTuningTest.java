@@ -133,6 +133,10 @@ public class MemoryTuningTest {
                                 .next()
                                 .getKey());
 
+        assertThat(configChanges.getOverrides().keySet())
+                .isSubsetOf(MemoryTuning.TUNABLE_CONFIG_KEYS);
+        assertThat(configChanges.getRemovals()).isSubsetOf(MemoryTuning.TUNABLE_CONFIG_KEYS);
+
         assertThat(eventHandler.events.poll().getMessage())
                 .startsWith(
                         "Memory tuning recommends the following configuration (automatic tuning is enabled):");

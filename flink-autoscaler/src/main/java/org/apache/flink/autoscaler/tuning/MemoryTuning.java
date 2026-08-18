@@ -29,6 +29,7 @@ import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.MemorySize;
@@ -49,7 +50,9 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
@@ -65,6 +68,37 @@ public class MemoryTuning {
             new ProcessMemoryUtils<>(getMemoryOptions(), new TaskExecutorFlinkMemoryUtils());
 
     private static final ConfigChanges EMPTY_CONFIG = new ConfigChanges();
+
+    /**
+     * The Flink configuration keys memory tuning is allowed to override or remove. Used to filter
+     * the {@link ConfigChanges} read back from the autoscaler state, which is writable by any
+     * workload in the namespace, so that a poisoned entry cannot inject arbitrary Flink
+     * configuration (for example {@code env.java.opts} or a pod template) into a managed
+     * deployment.
+     */
+    public static final Set<String> TUNABLE_CONFIG_KEYS = collectTunableConfigKeys();
+
+    private static Set<String> collectTunableConfigKeys() {
+        // Must stay in sync with the keys tuneTaskManagerMemory emits
+        ConfigOption<?>[] options = {
+            TaskManagerOptions.TOTAL_PROCESS_MEMORY,
+            TaskManagerOptions.TOTAL_FLINK_MEMORY,
+            TaskManagerOptions.TASK_HEAP_MEMORY,
+            TaskManagerOptions.FRAMEWORK_HEAP_MEMORY,
+            TaskManagerOptions.MANAGED_MEMORY_FRACTION,
+            TaskManagerOptions.MANAGED_MEMORY_SIZE,
+            TaskManagerOptions.NETWORK_MEMORY_MIN,
+            TaskManagerOptions.NETWORK_MEMORY_MAX,
+            TaskManagerOptions.JVM_OVERHEAD_FRACTION,
+            TaskManagerOptions.JVM_METASPACE
+        };
+        Set<String> keys = new HashSet<>();
+        for (ConfigOption<?> option : options) {
+            keys.add(option.key());
+            option.fallbackKeys().forEach(fallbackKey -> keys.add(fallbackKey.getKey()));
+        }
+        return Set.copyOf(keys);
+    }
 
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not

@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -116,38 +117,20 @@ public class KubernetesAutoScalerStateStore
     @Override
     public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(
             KubernetesJobAutoScalerContext jobContext) {
-        Optional<String> serializedScalingHistory =
-                configMapStore.getSerializedState(jobContext, SCALING_HISTORY_KEY);
-        if (serializedScalingHistory.isEmpty()) {
-            return new HashMap<>();
-        }
-        try {
-            return deserializeScalingHistory(serializedScalingHistory.get());
-        } catch (JacksonException e) {
-            LOG.error(
-                    "Could not deserialize scaling history, possibly the format changed. Discarding...",
-                    e);
-            configMapStore.removeSerializedState(jobContext, SCALING_HISTORY_KEY);
-            return new HashMap<>();
-        }
+        return readState(
+                jobContext,
+                SCALING_HISTORY_KEY,
+                KubernetesAutoScalerStateStore::deserializeScalingHistory,
+                HashMap::new);
     }
 
     @Override
     public ScalingTracking getScalingTracking(KubernetesJobAutoScalerContext jobContext) {
-        Optional<String> serializedRescalingHistory =
-                configMapStore.getSerializedState(jobContext, SCALING_TRACKING_KEY);
-        if (serializedRescalingHistory.isEmpty()) {
-            return new ScalingTracking();
-        }
-        try {
-            return deserializeScalingTracking(serializedRescalingHistory.get());
-        } catch (JacksonException e) {
-            LOG.error(
-                    "Could not deseri alize rescaling history, possibly the format changed. Discarding...",
-                    e);
-            configMapStore.removeSerializedState(jobContext, SCALING_TRACKING_KEY);
-            return new ScalingTracking();
-        }
+        return readState(
+                jobContext,
+                SCALING_TRACKING_KEY,
+                KubernetesAutoScalerStateStore::deserializeScalingTracking,
+                ScalingTracking::new);
     }
 
     @Override
@@ -167,20 +150,11 @@ public class KubernetesAutoScalerStateStore
     @Override
     public SortedMap<Instant, CollectedMetrics> getCollectedMetrics(
             KubernetesJobAutoScalerContext jobContext) {
-        Optional<String> serializedEvaluatedMetricsOpt =
-                configMapStore.getSerializedState(jobContext, COLLECTED_METRICS_KEY);
-        if (serializedEvaluatedMetricsOpt.isEmpty()) {
-            return new TreeMap<>();
-        }
-        try {
-            return deserializeEvaluatedMetrics(serializedEvaluatedMetricsOpt.get());
-        } catch (JacksonException e) {
-            LOG.error(
-                    "Could not deserialize metric history, possibly the format changed. Discarding...",
-                    e);
-            configMapStore.removeSerializedState(jobContext, COLLECTED_METRICS_KEY);
-            return new TreeMap<>();
-        }
+        return readState(
+                jobContext,
+                COLLECTED_METRICS_KEY,
+                KubernetesAutoScalerStateStore::deserializeEvaluatedMetrics,
+                TreeMap::new);
     }
 
     @Override
@@ -200,19 +174,21 @@ public class KubernetesAutoScalerStateStore
     @Nonnull
     @Override
     public Map<String, String> getParallelismOverrides(KubernetesJobAutoScalerContext jobContext) {
-        return configMapStore
-                .getSerializedState(jobContext, PARALLELISM_OVERRIDES_KEY)
-                .map(KubernetesAutoScalerStateStore::deserializeParallelismOverrides)
-                .orElse(new HashMap<>());
+        return readState(
+                jobContext,
+                PARALLELISM_OVERRIDES_KEY,
+                KubernetesAutoScalerStateStore::sanitizeParallelismOverrides,
+                HashMap::new);
     }
 
     @Nonnull
     @Override
     public ConfigChanges getConfigChanges(KubernetesJobAutoScalerContext jobContext) {
-        return configMapStore
-                .getSerializedState(jobContext, CONFIG_OVERRIDES_KEY)
-                .map(KubernetesAutoScalerStateStore::deserializeConfigOverrides)
-                .orElse(new ConfigChanges());
+        return readState(
+                jobContext,
+                CONFIG_OVERRIDES_KEY,
+                KubernetesAutoScalerStateStore::deserializeConfigOverrides,
+                ConfigChanges::new);
     }
 
     @Override
@@ -243,20 +219,46 @@ public class KubernetesAutoScalerStateStore
     @Nonnull
     @Override
     public DelayedScaleDown getDelayedScaleDown(KubernetesJobAutoScalerContext jobContext) {
-        Optional<String> delayedScaleDown =
-                configMapStore.getSerializedState(jobContext, DELAYED_SCALE_DOWN);
-        if (delayedScaleDown.isEmpty()) {
-            return new DelayedScaleDown();
-        }
+        return readState(
+                jobContext,
+                DELAYED_SCALE_DOWN,
+                KubernetesAutoScalerStateStore::deserializeDelayedScaleDown,
+                DelayedScaleDown::new);
+    }
 
+    /** Deserializes a single stored state value, allowed to fail on untrusted input. */
+    @FunctionalInterface
+    private interface StateDeserializer<T> {
+        T deserialize(String serialized) throws Exception;
+    }
+
+    /**
+     * Reads and deserializes one autoscaler state entry, treating the stored value as untrusted.
+     * The autoscaler ConfigMap is writable by any workload in the namespace, so any failure while
+     * reading an entry (unexpected schema, corrupt or oversized payload, invalid value) discards
+     * that entry and falls back to empty, rather than propagating into the reconcile loop or being
+     * acted upon. {@code Exception} is caught deliberately so no deserialization path can escape
+     * this boundary.
+     */
+    private <T> T readState(
+            KubernetesJobAutoScalerContext jobContext,
+            String key,
+            StateDeserializer<T> deserializer,
+            Supplier<T> emptyValue) {
+        Optional<String> serialized = configMapStore.getSerializedState(jobContext, key);
+        if (serialized.isEmpty()) {
+            return emptyValue.get();
+        }
         try {
-            return deserializeDelayedScaleDown(delayedScaleDown.get());
-        } catch (JacksonException e) {
-            LOG.warn(
-                    "Could not deserialize delayed scale down, possibly the format changed. Discarding...",
+            return deserializer.deserialize(serialized.get());
+        } catch (Exception e) {
+            LOG.error(
+                    "Discarding invalid autoscaler state '{}' for {}.",
+                    key,
+                    jobContext.getJobKey(),
                     e);
-            configMapStore.removeSerializedState(jobContext, DELAYED_SCALE_DOWN);
-            return new DelayedScaleDown();
+            configMapStore.removeSerializedState(jobContext, key);
+            return emptyValue.get();
         }
     }
 
@@ -312,6 +314,36 @@ public class KubernetesAutoScalerStateStore
         return ConfigurationUtils.convertValue(overrides, Map.class);
     }
 
+    /**
+     * Deserializes the parallelism overrides and drops any entry whose value is not a positive
+     * integer, since a vertex parallelism below one is never valid and the stored value is
+     * untrusted. A malformed map as a whole still fails deserialization and is discarded upstream.
+     */
+    private static Map<String, String> sanitizeParallelismOverrides(String serialized) {
+        Map<String, String> overrides = deserializeParallelismOverrides(serialized);
+        Map<String, String> sanitized = new HashMap<>();
+        overrides.forEach(
+                (vertexId, parallelism) -> {
+                    if (isPositiveInt(parallelism)) {
+                        sanitized.put(vertexId, parallelism);
+                    } else {
+                        LOG.warn(
+                                "Dropping invalid parallelism override {}={} from autoscaler state.",
+                                vertexId,
+                                parallelism);
+                    }
+                });
+        return sanitized;
+    }
+
+    private static boolean isPositiveInt(String value) {
+        try {
+            return Integer.parseInt(value.trim()) > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     @Nullable
     private static String serializeConfigOverrides(ConfigChanges configChanges) {
         try {
@@ -322,14 +354,9 @@ public class KubernetesAutoScalerStateStore
         }
     }
 
-    @Nullable
-    private static ConfigChanges deserializeConfigOverrides(String configOverrides) {
-        try {
-            return YAML_MAPPER.readValue(configOverrides, new TypeReference<>() {});
-        } catch (Exception e) {
-            LOG.error("Failed to deserialize ConfigOverrides", e);
-            return null;
-        }
+    private static ConfigChanges deserializeConfigOverrides(String configOverrides)
+            throws JacksonException {
+        return YAML_MAPPER.readValue(configOverrides, new TypeReference<>() {});
     }
 
     private static String serializeDelayedScaleDown(DelayedScaleDown delayedScaleDown)
