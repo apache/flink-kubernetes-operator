@@ -32,13 +32,16 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.zip.GZIPOutputStream;
 
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
@@ -219,6 +222,42 @@ public class KubernetesAutoScalerStateStoreTest
                         configMapStore.getSerializedState(
                                 ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
                 .isPresent();
+        Assertions.assertEquals(new TreeMap<>(), getTrimmedScalingHistory(stateStore, ctx, now));
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
+                .isEmpty();
+    }
+
+    @Test
+    void testDiscardOversizedCompressedHistory() throws Exception {
+        // Craft a gzip "bomb": a tiny compressed payload (all zero bytes compress extremely
+        // well) that decompresses to more than MAX_DECOMPRESSED_BYTES, simulating a
+        // maliciously crafted ConfigMap entry. The store must reject it via bounded reading
+        // instead of decompressing it fully into memory.
+        var bomb = new ByteArrayOutputStream();
+        try (var gzip = new GZIPOutputStream(bomb)) {
+            byte[] chunk = new byte[1024 * 1024];
+            int chunks = (KubernetesAutoScalerStateStore.MAX_DECOMPRESSED_BYTES / chunk.length) + 1;
+            for (int i = 0; i < chunks; i++) {
+                gzip.write(chunk);
+            }
+        }
+        String bombPayload = Base64.getEncoder().encodeToString(bomb.toByteArray());
+
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY, bombPayload);
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY, bombPayload);
+
+        var now = Instant.now();
+
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
+                .isEmpty();
+
         Assertions.assertEquals(new TreeMap<>(), getTrimmedScalingHistory(stateStore, ctx, now));
         assertThat(
                         configMapStore.getSerializedState(
