@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package autoscaling;
+package org.apache.flink.examples.autoscaling;
 
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
