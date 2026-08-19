@@ -266,6 +266,32 @@ public class KubernetesAutoScalerStateStoreTest
     }
 
     @Test
+    void testDiscardMalformedConfigOverrides() throws Exception {
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.CONFIG_OVERRIDES_KEY, "not-config-changes");
+        assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isEmpty();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.CONFIG_OVERRIDES_KEY))
+                .isEmpty();
+    }
+
+    @Test
+    void testParallelismOverridesFailClosedAndSanitized() throws Exception {
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY, "###");
+        assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
+
+        var v1 = new JobVertexID().toString();
+        var v2 = new JobVertexID().toString();
+        var v3 = new JobVertexID().toString();
+        stateStore.storeParallelismOverrides(ctx, Map.of(v1, "4", v2, "-3", v3, "x"));
+        stateStore.flush(ctx);
+        assertThat(stateStore.getParallelismOverrides(ctx))
+                .containsExactlyInAnyOrderEntriesOf(Map.of(v1, "4"));
+    }
+
+    @Test
     protected void testDiscardAllState() throws Exception {
         super.testDiscardAllState();
 

@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.util.Preconditions;
 
@@ -35,7 +36,9 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 
@@ -165,8 +168,38 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
 
         ConfigChanges configChanges = stateStore.getConfigChanges(ctx);
+        dropNonTunableKeys(ctx, configChanges);
         LOG.debug("Applying config overrides: {}", configChanges);
         scalingRealizer.realizeConfigOverrides(ctx, configChanges);
+    }
+
+    /**
+     * Drops any override or removal key that is not one memory tuning is allowed to set. The config
+     * overrides are read back from the autoscaler state, which is writable by any workload in the
+     * namespace, so without this filter a poisoned entry could inject arbitrary Flink configuration
+     * (for example {@code env.java.opts} or a pod template) into the managed deployment spec.
+     */
+    private void dropNonTunableKeys(Context ctx, ConfigChanges configChanges) {
+        Set<String> allowed = MemoryTuning.TUNABLE_CONFIG_KEYS;
+        Set<String> droppedOverrides =
+                configChanges.getOverrides().keySet().stream()
+                        .filter(key -> !allowed.contains(key))
+                        .collect(Collectors.toSet());
+        Set<String> droppedRemovals =
+                configChanges.getRemovals().stream()
+                        .filter(key -> !allowed.contains(key))
+                        .collect(Collectors.toSet());
+        if (droppedOverrides.isEmpty() && droppedRemovals.isEmpty()) {
+            return;
+        }
+        LOG.warn(
+                "Ignoring unexpected autoscaler config-override keys for {}: overrides={}, removals={}. "
+                        + "Only memory-tuning keys are applied.",
+                ctx.getJobKey(),
+                droppedOverrides,
+                droppedRemovals);
+        configChanges.getOverrides().keySet().removeAll(droppedOverrides);
+        configChanges.getRemovals().removeAll(droppedRemovals);
     }
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)
