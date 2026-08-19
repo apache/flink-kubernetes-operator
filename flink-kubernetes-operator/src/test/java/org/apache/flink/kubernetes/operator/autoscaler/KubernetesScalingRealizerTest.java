@@ -24,6 +24,7 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -305,6 +306,39 @@ public class KubernetesScalingRealizerTest {
         assertThat(tuned.getLimits().get("memory").toString())
                 .isEqualTo(String.valueOf(memoryOverride.getBytes()));
         assertThat(tuned.getRequests()).isNullOrEmpty();
+    }
+
+    @Test
+    public void testSourceAssignmentRebalanceUsesStableRestartNonce() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+        resource.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        var realizer = new KubernetesScalingRealizer();
+
+        assertThat(realizer.realizeSourceAssignmentRebalance(ctx, 123L)).hasValue(123L);
+        assertThat(resource.getSpec().getRestartNonce()).isEqualTo(123L);
+
+        resource.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
+        assertThat(realizer.realizeSourceAssignmentRebalance(ctx, 123L)).hasValue(123L);
+        assertThat(resource.getSpec().getRestartNonce()).isEqualTo(123L);
+
+        resource.getSpec().setRestartNonce(456L);
+        assertThat(realizer.realizeSourceAssignmentRebalance(ctx, 789L)).hasValue(456L);
+        assertThat(resource.getSpec().getRestartNonce()).isEqualTo(456L);
+    }
+
+    @Test
+    public void testSourceAssignmentRebalanceRequiresLastState() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        ctx.getResource().getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+
+        assertThat(new KubernetesScalingRealizer().realizeSourceAssignmentRebalance(ctx, 123L))
+                .isEmpty();
+        assertThat(ctx.getResource().getSpec().getRestartNonce()).isNull();
     }
 
     private void assertOverridesDoNotChange(

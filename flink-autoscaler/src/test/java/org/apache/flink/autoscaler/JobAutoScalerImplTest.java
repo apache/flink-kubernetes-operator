@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
@@ -41,6 +42,7 @@ import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.mock.Whitebox;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,10 +54,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.TreeMap;
 
 import static java.util.Map.entry;
@@ -136,6 +140,91 @@ public class JobAutoScalerImplTest {
                         jobVertexID.toHexString(),
                         ScalingMetric.LOAD.name()),
                 "Expected scaling metric LOAD was not reported. Reporting is broken");
+    }
+
+    @Test
+    void testSourceAssignmentHoleMustPersistAcrossMetricsWindowBeforeRecovery() throws Exception {
+        var conf = context.getConfiguration();
+        conf.set(SCALING_ENABLED, true);
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
+        conf.set(AutoScalerOptions.UTILIZATION_MIN, 0.0);
+        conf.set(AutoScalerOptions.UTILIZATION_MAX, 1.0);
+
+        JobVertexID source = new JobVertexID();
+        var sourceInfo = new VertexInfo(source, Map.of(), 10, 1000);
+        var jobTopology = new JobTopology(sourceInfo);
+        var metricsCollector =
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(
+                        jobTopology, stateStore);
+        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
+
+        var testMetrics =
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(600)
+                        .pendingRecords(0L)
+                        .build();
+        sourceInfo.setIoMetrics(testMetrics.toIoMetrics());
+        var sourceMetrics = new HashMap<>(testMetrics.toFlinkMetrics());
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                new AggregatedMetric("", 1., 12., 1.2, 12., Double.NaN));
+        metricsCollector.setCurrentMetrics(Map.of(source, sourceMetrics));
+
+        var recoveryRequests = new ArrayList<Long>();
+        var recoveryRealizer =
+                new TestingScalingRealizer<JobID, JobAutoScalerContext<JobID>>() {
+                    @Override
+                    public OptionalLong realizeSourceAssignmentRebalance(
+                            JobAutoScalerContext<JobID> ctx, long requestId) {
+                        recoveryRequests.add(requestId);
+                        return OptionalLong.of(requestId);
+                    }
+                };
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        metricsCollector,
+                        new ScalingMetricEvaluator<>(Collections.emptyList()),
+                        new ScalingExecutor<>(eventCollector, stateStore),
+                        eventCollector,
+                        recoveryRealizer,
+                        stateStore);
+
+        var initialTime = Instant.now();
+        autoscaler.setClock(Clock.fixed(initialTime, ZoneId.systemDefault()));
+        autoscaler.scale(context);
+
+        // A single empty-reader sample is transient until it fills the existing metrics window.
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                new AggregatedMetric("", 0., 12., 1.2, 12., Double.NaN));
+        autoscaler.setClock(Clock.fixed(initialTime.plusSeconds(1), ZoneId.systemDefault()));
+        autoscaler.scale(context);
+        assertThat(recoveryRequests).isEmpty();
+        assertThat(stateStore.getDelayedScaleDown(context).getSourceAssignmentRebalanceRequestId())
+                .isNull();
+
+        // Once only hole samples remain in the one-second window, recover at the same P.
+        autoscaler.setClock(Clock.fixed(initialTime.plusSeconds(2), ZoneId.systemDefault()));
+        autoscaler.scale(context);
+        assertThat(recoveryRequests).hasSize(1);
+        assertThat(stateStore.getDelayedScaleDown(context).getSourceAssignmentRebalanceRequestId())
+                .isEqualTo(recoveryRequests.get(0));
+        assertThat(stateStore.getParallelismOverrides(context)).isEmpty();
+        assertThat(stateStore.getScalingHistory(context)).isEmpty();
+
+        autoscaler.setClock(Clock.fixed(initialTime.plusSeconds(3), ZoneId.systemDefault()));
+        autoscaler.scale(context);
+        assertThat(recoveryRequests).hasSize(2).containsOnly(recoveryRequests.get(0));
+        assertThat(eventCollector.events)
+                .filteredOn(
+                        event ->
+                                event.getReason()
+                                        .equals(ScalingExecutor.SOURCE_ASSIGNMENT_REBALANCE_REASON))
+                .hasSize(1);
     }
 
     @SuppressWarnings("unchecked")

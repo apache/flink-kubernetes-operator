@@ -22,12 +22,34 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Test for {@link DelayedScaleDown}. */
 public class DelayedScaleDownTest {
+
+    @Test
+    void testNewTriggeredSourceAssignmentHoleGetsFreshRequestId() {
+        var delayedScaleDown = new DelayedScaleDown();
+        var firstSource = new JobVertexID();
+        var secondSource = new JobVertexID();
+
+        long firstRequestId =
+                delayedScaleDown.getOrCreateSourceAssignmentRebalanceRequestId(
+                        Set.of(firstSource), 123L);
+        delayedScaleDown.markSourceAssignmentRebalanceTriggered();
+
+        long secondRequestId =
+                delayedScaleDown.getOrCreateSourceAssignmentRebalanceRequestId(
+                        Set.of(firstSource, secondSource), 123L);
+
+        assertThat(secondRequestId).isGreaterThan(firstRequestId);
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceVertices())
+                .containsExactlyInAnyOrder(firstSource.toHexString(), secondSource.toHexString());
+        assertThat(delayedScaleDown.isSourceAssignmentRebalanceTriggered()).isFalse();
+    }
 
     private final JobVertexID vertex = new JobVertexID();
 

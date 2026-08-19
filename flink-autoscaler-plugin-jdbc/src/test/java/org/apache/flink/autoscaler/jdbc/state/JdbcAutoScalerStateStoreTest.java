@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.jdbc.testutils.databases.derby.DerbyTestBase;
 import org.apache.flink.autoscaler.state.AbstractAutoScalerStateStoreTest;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -98,5 +99,47 @@ class JdbcAutoScalerStateStoreTest
                         jdbcStateStore.getSerializedState(
                                 ctx.getJobKey().toString(), StateType.SCALING_HISTORY))
                 .isEmpty();
+    }
+
+    @Test
+    void testOldDelayedScaleDownStateStillDeserializes() throws Exception {
+        jdbcStateStore.putSerializedState(
+                ctx.getJobKey().toString(),
+                StateType.DELAYED_SCALE_DOWN,
+                "{\"delayedVertices\":{}}");
+
+        var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
+        assertThat(delayedScaleDown.getDelayedVertices()).isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceVertices()).isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+        assertThat(delayedScaleDown.isSourceAssignmentRebalanceTriggered()).isFalse();
+    }
+
+    @Test
+    void testSourceAssignmentRecoveryLatchRoundTrips() throws Exception {
+        var vertex = new JobVertexID();
+        jdbcStateStore.putSerializedState(
+                ctx.getJobKey().toString(),
+                StateType.DELAYED_SCALE_DOWN,
+                "{\"delayedVertices\":{},"
+                        + "\"sourceAssignmentRebalanceVertices\":[\""
+                        + vertex.toHexString()
+                        + "\"],"
+                        + "\"sourceAssignmentRebalanceRequestId\":123,"
+                        + "\"sourceAssignmentRebalanceTriggered\":true}");
+
+        var delayedScaleDown = stateStore.getDelayedScaleDown(ctx);
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceVertices())
+                .containsExactly(vertex.toHexString());
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isEqualTo(123L);
+        assertThat(delayedScaleDown.isSourceAssignmentRebalanceTriggered()).isTrue();
+
+        stateStore.storeDelayedScaleDown(ctx, delayedScaleDown);
+        stateStore.flush(ctx);
+        var roundTripped = createPhysicalAutoScalerStateStore().getDelayedScaleDown(ctx);
+        assertThat(roundTripped.getSourceAssignmentRebalanceVertices())
+                .containsExactly(vertex.toHexString());
+        assertThat(roundTripped.getSourceAssignmentRebalanceRequestId()).isEqualTo(123L);
+        assertThat(roundTripped.isSourceAssignmentRebalanceTriggered()).isTrue();
     }
 }

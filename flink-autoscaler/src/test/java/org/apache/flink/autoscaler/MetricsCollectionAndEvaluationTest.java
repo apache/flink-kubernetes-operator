@@ -34,6 +34,7 @@ import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -291,6 +292,104 @@ public class MetricsCollectionAndEvaluationTest {
                                         + ".persistent_//public/default/testTopic-partition-4.m962n.numMsgsReceived")));
         collectedMetrics = collect();
         assertEquals(5, collectedMetrics.getJobTopology().get(source2).getNumSourcePartitions());
+    }
+
+    @Test
+    public void testActiveSplitGaugeIsOptInAndDoesNotReplaceLegacyPartitionCount()
+            throws Exception {
+        setDefaultMetrics(metricsCollector);
+        metricsCollector.setMetricNames(
+                Map.of(
+                        source1,
+                        List.of(
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.removed.KafkaSourceReader.topic.testTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).kafkaCluster.removed.KafkaSourceReader.topic.testTopic.partition.1.currentOffset")));
+
+        var sourceMetrics =
+                new HashMap<>(
+                        TestMetrics.builder()
+                                .numRecordsIn(0)
+                                .numRecordsOut(0)
+                                .numRecordsInPerSec(500.)
+                                .maxBusyTimePerSec(1000)
+                                .pendingRecords(0L)
+                                .build()
+                                .toFlinkMetrics());
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                aggregatedActiveSplitCounts(1, 0, 2));
+        metricsCollector.setCurrentMetrics(Map.of(source1, sourceMetrics));
+
+        var collectedMetrics = collect();
+        assertEquals(2, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
+        assertFalse(
+                latestVertexMetrics(collectedMetrics, source1)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+
+        context.getConfiguration()
+                .set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
+        collectedMetrics = collect();
+        assertEquals(2, collectedMetrics.getJobTopology().get(source1).getNumSourcePartitions());
+        assertEquals(
+                1.0,
+                latestVertexMetrics(collectedMetrics, source1)
+                        .get(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+        assertEquals(
+                0.0,
+                latestVertexMetrics(collectedMetrics, source1)
+                        .get(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT));
+
+        sourceMetrics.remove(FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT);
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(2)));
+        collectedMetrics = collect();
+        assertFalse(
+                latestVertexMetrics(collectedMetrics, source1)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                aggregatedActiveSplitCounts(1, 0, 1));
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(3)));
+        collectedMetrics = collect();
+        assertFalse(
+                latestVertexMetrics(collectedMetrics, source1)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                aggregatedActiveSplitCounts(0, 0, 2));
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(4)));
+        collectedMetrics = collect();
+        assertEquals(
+                0.0,
+                latestVertexMetrics(collectedMetrics, source1)
+                        .get(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+        assertEquals(
+                0.0,
+                latestVertexMetrics(collectedMetrics, source1)
+                        .get(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT));
+
+        sourceMetrics.put(
+                FlinkMetric.DYNAMIC_SOURCE_ACTIVE_SPLIT_COUNT,
+                aggregatedActiveSplitCounts(1.5, 0, 2));
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(5)));
+        collectedMetrics = collect();
+        assertFalse(
+                latestVertexMetrics(collectedMetrics, source1)
+                        .containsKey(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT));
+    }
+
+    private static Map<ScalingMetric, Double> latestVertexMetrics(
+            CollectedMetricHistory collectedMetrics, JobVertexID vertex) {
+        var metricHistory = collectedMetrics.getMetricHistory();
+        return metricHistory.get(metricHistory.lastKey()).getVertexMetrics().get(vertex);
+    }
+
+    private static AggregatedMetric aggregatedActiveSplitCounts(
+            double sum, double min, int reportingReaders) {
+        double avg = reportingReaders == 0 ? 0 : sum / reportingReaders;
+        return new AggregatedMetric("", min, sum, avg, sum, Double.NaN);
     }
 
     @Test

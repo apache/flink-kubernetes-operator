@@ -52,12 +52,14 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CUSTOM_EVALUATORS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MAX;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_MIN;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_TARGET;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
@@ -285,6 +287,22 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
                 NUM_SOURCE_PARTITIONS,
                 EvaluatedScalingMetric.of(vertexInfo.getNumSourcePartitions()));
 
+        if (conf.get(DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED)) {
+            Optional.ofNullable(latestVertexMetrics.get(ACTIVE_SOURCE_SPLIT_COUNT))
+                    .filter(
+                            value ->
+                                    value >= vertexInfo.getParallelism()
+                                            || hasPersistentActiveSplitDeficit(
+                                                    vertex,
+                                                    vertexInfo.getParallelism(),
+                                                    metricsHistory))
+                    .ifPresent(
+                            value ->
+                                    evaluatedMetrics.put(
+                                            ACTIVE_SOURCE_SPLIT_COUNT,
+                                            EvaluatedScalingMetric.of(value)));
+        }
+
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
 
         Optional.ofNullable(customEvaluationSession)
@@ -305,6 +323,33 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
                         });
 
         return evaluatedMetrics;
+    }
+
+    /**
+     * Check whether every retained sample reports fewer active splits than readers.
+     *
+     * <p>The collector only adds complete, valid active split aggregates. Requiring the optional
+     * metric in every sample also keeps older jobs and incomplete windows on the legacy path.
+     */
+    private static boolean hasPersistentActiveSplitDeficit(
+            JobVertexID vertex,
+            int parallelism,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        return metricsHistory.values().stream()
+                .allMatch(
+                        collectedMetrics -> {
+                            var metrics = collectedMetrics.getVertexMetrics().get(vertex);
+                            if (metrics == null) {
+                                return false;
+                            }
+
+                            var activeSplitCount = metrics.get(ACTIVE_SOURCE_SPLIT_COUNT);
+                            return activeSplitCount != null
+                                    && Double.isFinite(activeSplitCount)
+                                    && activeSplitCount > 0
+                                    && activeSplitCount == Math.rint(activeSplitCount)
+                                    && activeSplitCount < parallelism;
+                        });
     }
 
     /**

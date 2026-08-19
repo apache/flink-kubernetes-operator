@@ -27,11 +27,15 @@ import lombok.Data;
 import lombok.Getter;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -125,12 +129,28 @@ public class DelayedScaleDown {
 
     @Getter private final Map<JobVertexID, VertexDelayedScaleDownInfo> delayedVertices;
 
+    /**
+     * Dynamic-source vertices covered by one same-parallelism recovery request.
+     *
+     * <p>The request stays latched until those vertices report a persistent non-hole topology.
+     * Keeping this tiny bit of durable state prevents a persistent assignment hole from restarting
+     * the job on every autoscaler pass.
+     */
+    @Getter private final Set<String> sourceAssignmentRebalanceVertices;
+
+    /** Stable restart nonce for the currently latched source-assignment recovery. */
+    @Nullable @Getter private Long sourceAssignmentRebalanceRequestId;
+
+    /** Whether the current recovery request has been accepted by the realizer. */
+    @Getter private boolean sourceAssignmentRebalanceTriggered;
+
     // Have any scale down request been updated? It doesn't need to be stored, it is only used to
     // determine whether DelayedScaleDown needs to be stored.
     @JsonIgnore @Getter private boolean updated = false;
 
     public DelayedScaleDown() {
         this.delayedVertices = new HashMap<>();
+        this.sourceAssignmentRebalanceVertices = new HashSet<>();
     }
 
     /** Trigger a scale down, and return the corresponding {@link VertexDelayedScaleDownInfo}. */
@@ -162,12 +182,84 @@ public class DelayedScaleDown {
         }
     }
 
+    /**
+     * Create or reuse one stable recovery request for the current assignment hole.
+     *
+     * <p>A pending job-level restart can cover new holes before the realizer accepts it. Once
+     * accepted, a newly observed uncovered hole needs a fresh nonce so the realizer performs one
+     * more recovery.
+     */
+    long getOrCreateSourceAssignmentRebalanceRequestId(
+            Set<JobVertexID> vertices, long candidateRequestId) {
+        if (sourceAssignmentRebalanceRequestId == null) {
+            sourceAssignmentRebalanceRequestId = Math.max(1L, candidateRequestId);
+            sourceAssignmentRebalanceVertices.clear();
+            vertices.forEach(vertex -> sourceAssignmentRebalanceVertices.add(vertex.toHexString()));
+            sourceAssignmentRebalanceTriggered = false;
+            updated = true;
+        } else if (!sourceAssignmentRebalanceTriggered) {
+            boolean changed = false;
+            for (JobVertexID vertex : vertices) {
+                changed |= sourceAssignmentRebalanceVertices.add(vertex.toHexString());
+            }
+            if (changed) {
+                // One pending job-level restart covers all holes observed before it is accepted.
+                updated = true;
+            }
+        } else if (vertices.stream()
+                .map(JobVertexID::toHexString)
+                .anyMatch(vertex -> !sourceAssignmentRebalanceVertices.contains(vertex))) {
+            sourceAssignmentRebalanceRequestId =
+                    Math.max(sourceAssignmentRebalanceRequestId + 1, candidateRequestId);
+            sourceAssignmentRebalanceVertices.clear();
+            vertices.forEach(vertex -> sourceAssignmentRebalanceVertices.add(vertex.toHexString()));
+            sourceAssignmentRebalanceTriggered = false;
+            updated = true;
+        }
+        return sourceAssignmentRebalanceRequestId;
+    }
+
+    /** Adopt a pending restart nonce already present on the resource. */
+    void replaceSourceAssignmentRebalanceRequestId(long requestId) {
+        if (!Objects.equals(sourceAssignmentRebalanceRequestId, requestId)) {
+            sourceAssignmentRebalanceRequestId = requestId;
+            updated = true;
+        }
+    }
+
+    /** Mark the current recovery request as accepted so it is only reported once. */
+    void markSourceAssignmentRebalanceTriggered() {
+        if (!sourceAssignmentRebalanceTriggered) {
+            sourceAssignmentRebalanceTriggered = true;
+            updated = true;
+        }
+    }
+
+    /** Clear the recovery latch after a persistent non-hole topology is observed. */
+    void clearSourceAssignmentRebalance() {
+        if (sourceAssignmentRebalanceRequestId == null
+                && sourceAssignmentRebalanceVertices.isEmpty()
+                && !sourceAssignmentRebalanceTriggered) {
+            return;
+        }
+        sourceAssignmentRebalanceVertices.clear();
+        sourceAssignmentRebalanceRequestId = null;
+        sourceAssignmentRebalanceTriggered = false;
+        updated = true;
+    }
+
     // Clear all delayed scale down when rescale happens.
     void clearAll() {
-        if (delayedVertices.isEmpty()) {
+        if (delayedVertices.isEmpty()
+                && sourceAssignmentRebalanceRequestId == null
+                && sourceAssignmentRebalanceVertices.isEmpty()
+                && !sourceAssignmentRebalanceTriggered) {
             return;
         }
         delayedVertices.clear();
+        sourceAssignmentRebalanceVertices.clear();
+        sourceAssignmentRebalanceRequestId = null;
+        sourceAssignmentRebalanceTriggered = false;
         updated = true;
     }
 }

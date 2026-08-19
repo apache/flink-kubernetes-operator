@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
+import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -53,6 +54,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -221,6 +223,175 @@ public class ScalingExecutorTest {
                                 jobTopology,
                                 new DelayedScaleDown()))
                 .hasSize(2);
+    }
+
+    @Test
+    public void testDynamicSourceAssignmentHoleUsesOneStableRecoveryRequest() {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        var source = new JobVertexID();
+        var jobTopology = new JobTopology(new VertexInfo(source, Map.of(), 10, 1000, false, null));
+        var delayedScaleDown = new DelayedScaleDown();
+        var now = Instant.now();
+        var persistentHoleHistory =
+                sourceAssignmentMetricHistory(source, new double[] {12, 0}, new double[] {12, 0});
+
+        // A transient latest hole must not trigger same-parallelism recovery.
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(
+                                        source, new double[] {12, 1}, new double[] {12, 0}),
+                                delayedScaleDown,
+                                now))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+
+        // N < P in an earlier sample is not a persistent same-parallelism hole.
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(
+                                        source, new double[] {5, 0}, new double[] {12, 0}),
+                                delayedScaleDown,
+                                now))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+
+        // Missing optional metrics anywhere in the window fail closed.
+        var incompleteHistory =
+                sourceAssignmentMetricHistory(source, new double[] {12, 0}, new double[] {12, 0});
+        incompleteHistory
+                .get(Instant.EPOCH)
+                .getVertexMetrics()
+                .get(source)
+                .remove(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT);
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context, jobTopology, incompleteHistory, delayedScaleDown, now))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+
+        var request =
+                scalingExecutor.getSourceAssignmentRebalanceRequest(
+                        context, jobTopology, persistentHoleHistory, delayedScaleDown, now);
+        assertThat(request).isPresent();
+        assertThat(request.orElseThrow().getVertices()).containsExactly(source);
+        long requestId = request.orElseThrow().getRequestId();
+
+        delayedScaleDown.markSourceAssignmentRebalanceTriggered();
+        var retry =
+                scalingExecutor.getSourceAssignmentRebalanceRequest(
+                        context,
+                        jobTopology,
+                        persistentHoleHistory,
+                        delayedScaleDown,
+                        now.plusSeconds(1));
+        assertThat(retry).isPresent();
+        assertThat(retry.orElseThrow().getRequestId()).isEqualTo(requestId);
+
+        // Missing optional metrics do not clear the latch and cannot request a new restart.
+        var missingLatestHistory = sourceAssignmentMetricHistory(source, new double[] {12, 0});
+        missingLatestHistory
+                .get(missingLatestHistory.lastKey())
+                .getVertexMetrics()
+                .get(source)
+                .remove(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT);
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                missingLatestHistory,
+                                delayedScaleDown,
+                                now.plusSeconds(2)))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isEqualTo(requestId);
+
+        // One transient non-hole sample must not clear a latch for the continuous hole.
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(
+                                        source, new double[] {12, 0}, new double[] {0, 0}),
+                                delayedScaleDown,
+                                now.plusSeconds(3)))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isEqualTo(requestId);
+
+        // A full-window zero-split topology clears the latch and allows a later distinct hole.
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(
+                                        source, new double[] {0, 0}, new double[] {0, 0}),
+                                delayedScaleDown,
+                                now.plusSeconds(4)))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+
+        var nextRequest =
+                scalingExecutor.getSourceAssignmentRebalanceRequest(
+                        context,
+                        jobTopology,
+                        persistentHoleHistory,
+                        delayedScaleDown,
+                        now.plusSeconds(5));
+        assertThat(nextRequest).isPresent();
+        assertThat(nextRequest.orElseThrow().getRequestId()).isNotEqualTo(requestId);
+
+        // N < P is a partition-cap case, not a same-parallelism restart.
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(source, new double[] {5, 0}),
+                                new DelayedScaleDown(),
+                                now.plusSeconds(6)))
+                .isEmpty();
+    }
+
+    @Test
+    public void testDynamicSourceAssignmentRecoveryIsDisabledByDefault() {
+        var source = new JobVertexID();
+        var jobTopology = new JobTopology(new VertexInfo(source, Map.of(), 10, 1000, false, null));
+        var delayedScaleDown = new DelayedScaleDown();
+        delayedScaleDown.getOrCreateSourceAssignmentRebalanceRequestId(
+                List.of(source).stream().collect(Collectors.toSet()), 123L);
+
+        assertThat(
+                        scalingExecutor.getSourceAssignmentRebalanceRequest(
+                                context,
+                                jobTopology,
+                                sourceAssignmentMetricHistory(source, new double[] {12, 0}),
+                                delayedScaleDown,
+                                Instant.now()))
+                .isEmpty();
+        assertThat(delayedScaleDown.getSourceAssignmentRebalanceRequestId()).isNull();
+    }
+
+    @Test
+    public void testDynamicSourcePartitionCapProducesActiveSplitOverride() throws Exception {
+        conf.set(AutoScalerOptions.DYNAMIC_SOURCE_TOPOLOGY_CORRECTION_ENABLED, true);
+        var source = new JobVertexID();
+        var jobTopology = new JobTopology(new VertexInfo(source, Map.of(), 10, 1000, false, null));
+        var sourceMetrics = evaluated(10, 100, 100);
+        sourceMetrics.put(ScalingMetric.NUM_SOURCE_PARTITIONS, EvaluatedScalingMetric.of(100));
+        sourceMetrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, EvaluatedScalingMetric.of(5));
+        var metrics = new EvaluatedMetrics(Map.of(source, sourceMetrics), dummyGlobalMetrics);
+
+        assertTrue(
+                scalingExecutor.scaleResource(
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        scalingTracking,
+                        Instant.now(),
+                        jobTopology,
+                        new DelayedScaleDown()));
+        assertThat(getScaledParallelism(stateStore, context)).containsEntry(source, 5);
     }
 
     @Test
@@ -1051,6 +1222,20 @@ public class ScalingExecutorTest {
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double target, double trueProcessingRate) {
         return evaluated(parallelism, target, trueProcessingRate, 0.);
+    }
+
+    private static SortedMap<Instant, CollectedMetrics> sourceAssignmentMetricHistory(
+            JobVertexID source, double[]... observations) {
+        var history = new TreeMap<Instant, CollectedMetrics>();
+        for (int i = 0; i < observations.length; i++) {
+            var metrics = new HashMap<ScalingMetric, Double>();
+            metrics.put(ScalingMetric.ACTIVE_SOURCE_SPLIT_COUNT, observations[i][0]);
+            metrics.put(ScalingMetric.MIN_ACTIVE_SOURCE_SPLIT_COUNT, observations[i][1]);
+            history.put(
+                    Instant.EPOCH.plusSeconds(i),
+                    new CollectedMetrics(Map.of(source, metrics), Map.of()));
+        }
+        return history;
     }
 
     protected static <KEY, Context extends JobAutoScalerContext<KEY>>

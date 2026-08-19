@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 
 import java.util.Map;
+import java.util.OptionalLong;
 
 /**
  * The Scaling Realizer is responsible for applying scaling actions, i.e. actually rescaling the
@@ -47,4 +48,16 @@ public interface ScalingRealizer<KEY, Context extends JobAutoScalerContext<KEY>>
      * @throws Exception Error during realize config overrides.
      */
     void realizeConfigOverrides(Context context, ConfigChanges configChanges) throws Exception;
+
+    /**
+     * Request a controlled same-parallelism recovery for dynamic-source split reassignment.
+     *
+     * <p>The request id is stable for one continuous assignment hole. Implementations should apply
+     * it idempotently and return the effective id when the request is accepted. The default keeps
+     * existing realizers backward compatible.
+     */
+    default OptionalLong realizeSourceAssignmentRebalance(Context context, long requestId)
+            throws Exception {
+        return OptionalLong.empty();
+    }
 }
