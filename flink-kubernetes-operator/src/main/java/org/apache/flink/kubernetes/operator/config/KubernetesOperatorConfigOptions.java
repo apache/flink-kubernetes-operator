@@ -761,6 +761,17 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.");
 
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Map<String, String>> OPERATOR_EVENT_LABELS =
+            operatorConfig("events.labels")
+                    .mapType()
+                    .defaultValue(new HashMap<>())
+                    .withDescription(
+                            "Labels to be added to the metadata of every Kubernetes event created by the operator. "
+                                    + "Keys and values must be valid Kubernetes label keys/values, otherwise event creation will fail. "
+                                    + "Expected format: labelKey1:labelValue1,labelKey2:labelValue2. "
+                                    + "Changing this requires an operator restart.");
+
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
             operatorConfig("ingress.manage")
