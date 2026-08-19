@@ -335,7 +335,8 @@ public class ArtifactManagerTest {
                                                     "http://127.0.0.1:%d/download/file.jar", port),
                                             new Configuration(),
                                             tempDir.toString()));
-            Assertions.assertTrue(ex.getMessage().contains("exceeds the configured maximum size"));
+            Assertions.assertTrue(ex.getMessage().contains("exceeds the configured limit"));
+            Assertions.assertTrue(ex.getMessage().contains("downloaded size"), ex.getMessage());
             Assertions.assertFalse(new File(tempDir.toFile(), "file.jar").exists());
         } finally {
             if (httpServer != null) {

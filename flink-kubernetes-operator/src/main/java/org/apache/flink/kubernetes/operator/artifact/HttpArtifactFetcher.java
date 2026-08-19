@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -196,7 +197,7 @@ public class HttpArtifactFetcher {
         String fileName = FilenameUtils.getName(originalUrl.getPath());
         File targetFile = new File(targetDir, fileName);
         try (var inputStream = conn.getInputStream()) {
-            copyBounded(inputStream, targetFile, maxArtifactSize, deadline);
+            copyBounded(inputStream, targetFile, maxArtifactSize, deadline, uri, totalTimeout);
         } catch (Exception e) {
             targetFile.delete();
             throw e;
@@ -219,7 +220,12 @@ public class HttpArtifactFetcher {
      * timeout without ever finishing.
      */
     private static void copyBounded(
-            InputStream inputStream, File targetFile, long maxBytes, long deadline)
+            InputStream inputStream,
+            File targetFile,
+            long maxBytes,
+            long deadline,
+            String uri,
+            Duration totalTimeout)
             throws IOException {
         FileUtils.forceMkdirParent(targetFile);
         byte[] buffer = new byte[COPY_BUFFER_SIZE];
@@ -230,14 +236,21 @@ public class HttpArtifactFetcher {
                 total += read;
                 if (total > maxBytes) {
                     throw new IOException(
-                            "Refusing to fetch artifact: exceeds the configured maximum size of "
+                            "Refusing to fetch artifact from '"
+                                    + uri
+                                    + "': downloaded size "
+                                    + total
+                                    + " bytes exceeds the configured limit of "
                                     + maxBytes
                                     + " bytes");
                 }
                 if (System.currentTimeMillis() > deadline) {
                     throw new IOException(
-                            "Timed out while downloading artifact: exceeded the configured total "
-                                    + "fetch timeout");
+                            "Timed out (> "
+                                    + totalTimeout
+                                    + ") while fetching artifact from '"
+                                    + uri
+                                    + "'");
                 }
                 outputStream.write(buffer, 0, read);
             }
