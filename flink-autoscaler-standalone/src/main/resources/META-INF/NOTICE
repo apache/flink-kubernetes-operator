@@ -6,6 +6,11 @@ The Apache Software Foundation (http://www.apache.org/).
 
 This project bundles the following dependencies under the Apache Software License 2.0 (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
+- com.google.errorprone:error_prone_annotations:jar:2.36.0
+- com.google.guava:failureaccess:jar:1.0.2
+- com.google.guava:guava:jar:33.4.0-jre
+- com.google.guava:listenablefuture:jar:9999.0-empty-to-avoid-conflict-with-guava
+- com.google.j2objc:j2objc-annotations:jar:3.0.0
 - com.squareup.okhttp3:okhttp:jar:4.12.0
 - com.squareup.okio:okio-jvm:jar:3.6.0
 - com.squareup.okio:okio:jar:3.6.0
@@ -38,3 +43,8 @@ See bundled license files for details.
 
 - com.esotericsoftware.kryo:kryo:2.24.0
 - com.esotericsoftware.minlog:minlog:1.2
+
+This project bundles the following dependencies under the MIT License.
+See bundled license files for details.
+
+- org.checkerframework:checker-qual:jar:3.43.0
