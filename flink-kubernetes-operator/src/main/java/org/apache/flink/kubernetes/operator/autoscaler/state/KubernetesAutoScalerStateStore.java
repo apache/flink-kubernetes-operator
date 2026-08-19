@@ -39,7 +39,6 @@ import org.apache.flink.shaded.jackson2.org.yaml.snakeyaml.LoaderOptions;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +48,7 @@ import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -79,6 +79,11 @@ public class KubernetesAutoScalerStateStore
     @VisibleForTesting protected static final String DELAYED_SCALE_DOWN = "delayedScaleDown";
 
     @VisibleForTesting protected static final int MAX_CM_BYTES = 1000000;
+
+    /* Caps decompressed value size against gzip bombs. Legit values are a few MB at most
+     * (MAX_CM_BYTES compressed, ~2.5-4x ratio); this is well below the YAML loader's limit,
+     * which guards the parser, not decompression memory. */
+    @VisibleForTesting protected static final int MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024;
 
     protected static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(yamlFactory())
@@ -388,13 +393,29 @@ public class KubernetesAutoScalerStateStore
         try {
             byte[] bytes = Base64.getDecoder().decode(compressed);
             try (var zi = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
-                return IOUtils.toString(zi, StandardCharsets.UTF_8);
+                return readBounded(zi, MAX_DECOMPRESSED_BYTES);
             }
         } catch (Exception e) {
             LOG.warn("Error while decompressing scaling data, treating as uncompressed");
             // Fall back to non-compressed for migration
             return compressed;
         }
+    }
+
+    private static String readBounded(InputStream in, int maxBytes) throws IOException {
+        var out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int totalRead = 0;
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            totalRead += read;
+            if (totalRead > maxBytes) {
+                throw new IOException(
+                        "Refusing to decompress data larger than " + maxBytes + " bytes");
+            }
+            out.write(buffer, 0, read);
+        }
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     private static YAMLFactory yamlFactory() {
