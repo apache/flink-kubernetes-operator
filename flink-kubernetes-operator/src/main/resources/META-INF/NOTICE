@@ -53,7 +53,9 @@ This project bundles the following dependencies under the Apache Software Licens
 - io.fabric8:kubernetes-model-resource:jar:7.8.0
 - io.fabric8:kubernetes-model-scheduling:jar:7.8.0
 - io.fabric8:kubernetes-model-storageclass:jar:7.8.0
+- io.fabric8:kubernetes-httpclient-jdk:7.8.0
 - io.fabric8:zjsonpatch:jar:7.8.0
+- io.github.java-diff-utils:java-diff-utils:4.17
 - io.javaoperatorsdk:operator-framework-core:jar:5.5.0
 - io.javaoperatorsdk:operator-framework:jar:5.5.0
 - org.apache.commons:commons-compress:jar:1.26.0
@@ -63,7 +65,6 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.apache.logging.log4j:log4j-1.2-api:jar:2.25.4
 - org.apache.logging.log4j:log4j-api:jar:2.25.4
 - org.apache.logging.log4j:log4j-core:jar:2.25.4
-- org.checkerframework:checker-qual:jar:3.43.0
 - org.javassist:javassist:jar:3.24.0-GA
 - org.jetbrains.kotlin:kotlin-stdlib-common:jar:1.8.21
 - org.jetbrains.kotlin:kotlin-stdlib-jdk7:jar:1.8.21
@@ -77,11 +78,14 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.xerial.snappy:snappy-java:jar:1.1.10.4
 - org.yaml:snakeyaml:jar:2.5
 - tools.profiler:async-profiler:jar:2.9
-- io.github.java-diff-utils:java-diff-utils:4.15
-- io.fabric8:kubernetes-httpclient-jdk:7.8.0
 
 This project bundles the following dependencies under the BSD License.
 See bundled license files for details.
 
 - com.esotericsoftware.kryo:kryo:jar:2.24.0
 - com.esotericsoftware.minlog:minlog:jar:1.2
+
+This project bundles the following dependencies under the MIT License.
+See bundled license files for details.
+
+- org.checkerframework:checker-qual:jar:3.43.0
