@@ -18,19 +18,25 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
@@ -38,14 +44,34 @@ import java.util.function.Predicate;
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
 
+    private static final Logger LOG = LoggerFactory.getLogger(EventRecorder.class);
+
     private final BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListenerFlinkResource;
     private final BiConsumer<FlinkStateSnapshot, Event> eventListenerFlinkStateSnapshot;
+
+    /**
+     * Labels added to the metadata of every event created by this recorder.
+     *
+     * <p>Paths that do not set any dedupe labels themselves must pass this map as is, never null:
+     * labels are replaced on every update, so passing the (possibly empty) map is what clears the
+     * dedupe labels of a previous update. The autoscaler relies on this to re-emit a scaling report
+     * within the dedupe interval after switching back to scaling enabled mode.
+     */
+    private final Map<String, String> commonLabels;
 
     public EventRecorder(
             BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListenerFlinkResource,
             BiConsumer<FlinkStateSnapshot, Event> eventListenerFlinkStateSnapshot) {
+        this(eventListenerFlinkResource, eventListenerFlinkStateSnapshot, Map.of());
+    }
+
+    public EventRecorder(
+            BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListenerFlinkResource,
+            BiConsumer<FlinkStateSnapshot, Event> eventListenerFlinkStateSnapshot,
+            Map<String, String> commonLabels) {
         this.eventListenerFlinkResource = eventListenerFlinkResource;
         this.eventListenerFlinkStateSnapshot = eventListenerFlinkStateSnapshot;
+        this.commonLabels = Map.copyOf(commonLabels);
     }
 
     public boolean triggerSnapshotEvent(
@@ -64,7 +90,8 @@ public class EventRecorder {
                 component,
                 e -> eventListenerFlinkStateSnapshot.accept(resource, e),
                 null,
-                null);
+                null,
+                commonLabels);
     }
 
     public boolean triggerEvent(
@@ -118,7 +145,8 @@ public class EventRecorder {
                 component,
                 e -> eventListenerFlinkResource.accept(resource, e),
                 messageKey,
-                null);
+                null,
+                commonLabels);
     }
 
     /**
@@ -149,7 +177,8 @@ public class EventRecorder {
                 component,
                 e -> eventListenerFlinkResource.accept(resource, e),
                 messageKey,
-                interval);
+                interval,
+                commonLabels);
     }
 
     public boolean triggerEventOnce(
@@ -168,7 +197,8 @@ public class EventRecorder {
                 message,
                 component,
                 e -> eventListenerFlinkResource.accept(resource, e),
-                messageKey);
+                messageKey,
+                mergeWithCommonLabels(null));
     }
 
     public boolean triggerEventWithAnnotations(
@@ -189,7 +219,8 @@ public class EventRecorder {
                 component,
                 e -> eventListenerFlinkResource.accept(resource, e),
                 messageKey,
-                annotations);
+                annotations,
+                mergeWithCommonLabels(null));
     }
 
     /**
@@ -226,7 +257,47 @@ public class EventRecorder {
                 messageKey,
                 interval,
                 dedupePredicate,
-                labels);
+                mergeWithCommonLabels(labels));
+    }
+
+    /**
+     * Merge the caller provided labels with the globally configured ones. Caller provided labels
+     * take precedence as they may carry functional information such as dedupe state.
+     *
+     * @return the merged labels or null if there is nothing to set.
+     */
+    @Nullable
+    private Map<String, String> mergeWithCommonLabels(@Nullable Map<String, String> labels) {
+        if (commonLabels.isEmpty()) {
+            return labels;
+        }
+        if (labels == null || labels.isEmpty()) {
+            return commonLabels;
+        }
+        var merged = new HashMap<>(commonLabels);
+        merged.putAll(labels);
+        return merged;
+    }
+
+    /**
+     * Drop label entries that Kubernetes would reject. A single invalid entry coming from the
+     * operator config would otherwise fail the creation of every event.
+     */
+    @VisibleForTesting
+    static Map<String, String> validateLabels(Map<String, String> labels) {
+        var valid = new HashMap<String, String>();
+        labels.forEach(
+                (key, value) -> {
+                    // Label keys follow the same syntax as annotation keys
+                    if (!K8sAnnotationsSanitizer.isValidAnnotationKey(key)) {
+                        LOG.warn("Ignoring event label with invalid key: {}", key);
+                    } else if (!K8sAnnotationsSanitizer.isValidLabelValue(value)) {
+                        LOG.warn("Ignoring event label {} with invalid value: {}", key, value);
+                    } else {
+                        valid.put(key, value);
+                    }
+                });
+        return valid;
     }
 
     public boolean triggerEvent(
@@ -241,6 +312,20 @@ public class EventRecorder {
 
     public static EventRecorder create(
             KubernetesClient client, Collection<FlinkResourceListener> listeners) {
+        return create(client, listeners, new Configuration());
+    }
+
+    public static EventRecorder create(
+            KubernetesClient client,
+            Collection<FlinkResourceListener> listeners,
+            Configuration operatorConfig) {
+
+        var commonLabels =
+                validateLabels(
+                        operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EVENT_LABELS));
+        if (!commonLabels.isEmpty()) {
+            LOG.info("Adding labels {} to all operator generated events", commonLabels);
+        }
 
         BiConsumer<AbstractFlinkResource<?, ?>, Event> biConsumerFlinkResource =
                 (resource, event) -> {
@@ -295,7 +380,8 @@ public class EventRecorder {
                     AuditUtils.logContext(ctx);
                 };
 
-        return new EventRecorder(biConsumerFlinkResource, biConsumerFlinkStateSnapshot);
+        return new EventRecorder(
+                biConsumerFlinkResource, biConsumerFlinkStateSnapshot, commonLabels);
     }
 
     /** The type of the events. */
