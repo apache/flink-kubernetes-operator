@@ -88,6 +88,19 @@ public class ArtifactManagerTest {
         return new ArtifactManager(new FlinkConfigManager(configuration));
     }
 
+    private ArtifactManager artifactManagerWithSocketTimeout(
+            Duration socketTimeout, Duration totalTimeout) {
+        Configuration configuration = new Configuration();
+        configuration.setString(
+                KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
+                tempDir.toAbsolutePath().toString());
+        configuration.set(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("http"));
+        configuration.set(KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS, false);
+        configuration.set(KubernetesOperatorConfigOptions.JAR_FETCH_SOCKET_TIMEOUT, socketTimeout);
+        configuration.set(KubernetesOperatorConfigOptions.JAR_FETCH_TOTAL_TIMEOUT, totalTimeout);
+        return new ArtifactManager(new FlinkConfigManager(configuration));
+    }
+
     @Test
     public void testGenerateJarDir() {
         var sessionJob = TestUtils.buildSessionJob();
@@ -378,6 +391,63 @@ public class ArtifactManagerTest {
     }
 
     @Test
+    public void testHttpFetchTimesOutOnConnectToUnreachableHost() {
+        // Connect to a blackholed address (TEST-NET-1, RFC 5737) whose SYNs are dropped, so the
+        // TCP connect never completes. The 1s connect timeout must bound it far below the 60s
+        // total timeout, proving the per-connection timeout (not just the total) is in effect.
+        var strictManager =
+                artifactManagerWithSocketTimeout(Duration.ofSeconds(1), Duration.ofSeconds(60));
+
+        var fetchStart = System.currentTimeMillis();
+        var ex =
+                Assertions.assertThrows(
+                        IOException.class,
+                        () ->
+                                strictManager.fetch(
+                                        "http://192.0.2.1:81/job.jar",
+                                        new Configuration(),
+                                        tempDir.toString()));
+        var elapsed = System.currentTimeMillis() - fetchStart;
+        Assertions.assertTrue(
+                ex.getMessage().toLowerCase().contains("connect timed out"), ex.getMessage());
+        Assertions.assertTrue(elapsed < 30_000, "fetch took " + elapsed + " ms");
+    }
+
+    @Test
+    public void testHttpFetchTimesOutOnReadWhenServerStallsAfterHeaders() throws Exception {
+        // The server sends response headers then never sends the body, so a client read blocks.
+        // The 1s read timeout must bound the stalled read far below the 60s total timeout,
+        // proving the per-read socket timeout (not just the total) is in effect.
+        var strictManager =
+                artifactManagerWithSocketTimeout(Duration.ofSeconds(1), Duration.ofSeconds(60));
+        HttpServer httpServer = null;
+        try {
+            httpServer = startHttpServer();
+            var port = httpServer.getAddress().getPort();
+            httpServer.createContext("/download/file.jar", new StallAfterHeadersHttpHandler());
+
+            var fetchStart = System.currentTimeMillis();
+            var ex =
+                    Assertions.assertThrows(
+                            IOException.class,
+                            () ->
+                                    strictManager.fetch(
+                                            String.format(
+                                                    "http://127.0.0.1:%d/download/file.jar", port),
+                                            new Configuration(),
+                                            tempDir.toString()));
+            var elapsed = System.currentTimeMillis() - fetchStart;
+            Assertions.assertTrue(
+                    ex.getMessage().toLowerCase().contains("read timed out"), ex.getMessage());
+            Assertions.assertTrue(elapsed < 30_000, "fetch took " + elapsed + " ms");
+        } finally {
+            if (httpServer != null) {
+                httpServer.stop(0);
+            }
+        }
+    }
+
+    @Test
     public void testOperatorConfigControlsFetchLimits() throws Exception {
         // The size-cap policy comes from the operator config; a value set in the per-job config
         // does not override it.
@@ -556,6 +626,26 @@ public class ArtifactManagerTest {
                     body.flush();
                     Thread.sleep(50);
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        }
+    }
+
+    /**
+     * Handler that sends response headers declaring a body, then stalls without sending any body
+     * bytes, so a client read blocks until the socket read timeout fires.
+     */
+    public static class StallAfterHeadersHttpHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            // Declare a fixed-length body but never write it; the client's read blocks on the body.
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, 1024);
+            try {
+                Thread.sleep(5_000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } finally {
