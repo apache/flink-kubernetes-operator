@@ -27,12 +27,19 @@ import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.Socket;
 import java.net.URL;
 import java.time.Duration;
 import java.util.Map;
@@ -41,7 +48,9 @@ import java.util.Map;
  * Download the jar from the http resource. The scheme allowlist, restricted-host policy, fetch
  * timeouts and size cap come from the trusted operator configuration passed to {@link #fetch}, not
  * the (possibly tenant-influenced) {@code flinkConfiguration}, which only supplies the HTTP
- * headers.
+ * headers. The host is resolved once during validation and the connection is pinned to that
+ * resolved address for each redirect hop, so it cannot be re-resolved to a different address
+ * between the check and the connection.
  */
 public class HttpArtifactFetcher {
 
@@ -53,6 +62,11 @@ public class HttpArtifactFetcher {
 
     // Chunk size used when streaming the response body to disk.
     private static final int COPY_BUFFER_SIZE = 8 * 1024;
+
+    static {
+        // "Host" is a restricted header the JDK silently drops unless this is set.
+        System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
+    }
 
     public File fetch(
             String uri,
@@ -93,25 +107,38 @@ public class HttpArtifactFetcher {
                                 + uri
                                 + "'");
             }
-            var validationError =
-                    JarUriValidationUtils.validateJarURI(
+            var validation =
+                    JarUriValidationUtils.validateAndResolve(
                             currentUri, allowedSchemes, disallowRestrictedHosts);
-            if (validationError.isPresent()) {
+            if (validation.getError().isPresent()) {
                 throw new IOException(
                         "Refusing to fetch artifact from '"
                                 + currentUri
                                 + "': "
-                                + validationError.get());
+                                + validation.getError().get());
             }
 
             currentUrl = new URL(currentUri);
             if (originalUrl == null) {
                 originalUrl = currentUrl;
             }
-            conn = (HttpURLConnection) currentUrl.openConnection();
+            // Connect to the resolved address directly; re-resolving here would reopen the
+            // restricted-host check's DNS-rebinding gap.
+            var pinnedAddress = validation.getResolvedAddress();
+            URL connectUrl =
+                    pinnedAddress.isPresent()
+                            ? pinnedUrl(currentUrl, pinnedAddress.get())
+                            : currentUrl;
+            conn = (HttpURLConnection) connectUrl.openConnection();
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(socketTimeoutMillis);
             conn.setReadTimeout(socketTimeoutMillis);
+            if (pinnedAddress.isPresent()) {
+                conn.setRequestProperty("Host", hostHeaderValue(currentUrl));
+                if (conn instanceof HttpsURLConnection httpsConn) {
+                    pinTlsHostname(httpsConn, currentUrl.getHost());
+                }
+            }
             // Only send the configured headers to the original host; drop them on a cross-host
             // redirect.
             if (headers != null && originalUrl.getHost().equalsIgnoreCase(currentUrl.getHost())) {
@@ -263,5 +290,89 @@ public class HttpArtifactFetcher {
                 || status == HttpURLConnection.HTTP_SEE_OTHER
                 || status == 307 // Temporary Redirect
                 || status == 308; // Permanent Redirect
+    }
+
+    private static URL pinnedUrl(URL logicalUrl, InetAddress pinnedAddress)
+            throws MalformedURLException {
+        String hostLiteral =
+                pinnedAddress instanceof Inet6Address
+                        ? "[" + pinnedAddress.getHostAddress() + "]"
+                        : pinnedAddress.getHostAddress();
+        return new URL(
+                logicalUrl.getProtocol(), hostLiteral, logicalUrl.getPort(), logicalUrl.getFile());
+    }
+
+    private static String hostHeaderValue(URL logicalUrl) {
+        return logicalUrl.getPort() == -1
+                ? logicalUrl.getHost()
+                : logicalUrl.getHost() + ":" + logicalUrl.getPort();
+    }
+
+    // Forces SNI and certificate verification to use originalHostname instead of the pinned IP
+    // literal httpsConn's URL now carries, so pinning doesn't break TLS.
+    private static void pinTlsHostname(HttpsURLConnection httpsConn, String originalHostname) {
+        httpsConn.setSSLSocketFactory(
+                new HostnamePreservingSSLSocketFactory(
+                        httpsConn.getSSLSocketFactory(), originalHostname));
+        httpsConn.setHostnameVerifier(
+                (hostname, session) ->
+                        HttpsURLConnection.getDefaultHostnameVerifier()
+                                .verify(originalHostname, session));
+    }
+
+    // SSLSocketFactory that runs the TLS handshake against a fixed hostname regardless of what
+    // host the underlying socket actually connected to.
+    private static final class HostnamePreservingSSLSocketFactory extends SSLSocketFactory {
+        private final SSLSocketFactory delegate;
+        private final String hostname;
+
+        HostnamePreservingSSLSocketFactory(SSLSocketFactory delegate, String hostname) {
+            this.delegate = delegate;
+            this.hostname = hostname;
+        }
+
+        @Override
+        public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+                throws IOException {
+            var sslSocket = (SSLSocket) delegate.createSocket(s, hostname, port, autoClose);
+            // Without this, the default HostnameVerifier fails even for a matching hostname.
+            var params = sslSocket.getSSLParameters();
+            params.setEndpointIdentificationAlgorithm("HTTPS");
+            sslSocket.setSSLParameters(params);
+            return sslSocket;
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public Socket createSocket(String host, int port) throws IOException {
+            return delegate.createSocket(host, port);
+        }
+
+        @Override
+        public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+                throws IOException {
+            return delegate.createSocket(host, port, localHost, localPort);
+        }
+
+        @Override
+        public Socket createSocket(InetAddress host, int port) throws IOException {
+            return delegate.createSocket(host, port);
+        }
+
+        @Override
+        public Socket createSocket(
+                InetAddress address, int port, InetAddress localAddress, int localPort)
+                throws IOException {
+            return delegate.createSocket(address, port, localAddress, localPort);
+        }
     }
 }
