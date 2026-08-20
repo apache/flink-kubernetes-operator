@@ -31,6 +31,7 @@ import org.apache.flink.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.utils.PartitionMetricNameParser;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -65,8 +66,6 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -306,35 +305,20 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     private void updateKafkaPulsarSourceNumPartitions(
             Context ctx, JobID jobId, JobTopology topology) throws Exception {
         try (var restClient = ctx.getRestClusterClient()) {
-            Pattern partitionRegex =
-                    Pattern.compile(
-                            "^.*?(\\.kafkaCluster\\.(?<kafkaCluster>.+))?\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
-                                    + "|^.*\\.PulsarConsumer\\.(?<pulsarTopic>.+)-partition-(?<pulsarId>\\d+)\\..*\\.numMsgsReceived$");
             for (var vertexInfo : topology.getVertexInfos().values()) {
-                if (vertexInfo.getInputs().isEmpty()) {
+                if (topology.isSource(vertexInfo.getId())) {
                     var sourceVertex = vertexInfo.getId();
                     var numPartitions =
                             queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
                                     .map(
                                             v -> {
-                                                Matcher matcher = partitionRegex.matcher(v);
-                                                if (matcher.matches()) {
-                                                    String kafkaTopic = matcher.group("kafkaTopic");
-                                                    String kafkaCluster =
-                                                            matcher.group("kafkaCluster");
-                                                    String kafkaId = matcher.group("kafkaId");
-                                                    String pulsarTopic =
-                                                            matcher.group("pulsarTopic");
-                                                    String pulsarId = matcher.group("pulsarId");
-                                                    return kafkaTopic != null
-                                                            ? kafkaCluster
-                                                                    + "-"
-                                                                    + kafkaTopic
-                                                                    + "-"
-                                                                    + kafkaId
-                                                            : pulsarTopic + "-" + pulsarId;
-                                                }
-                                                return null;
+                                                String key =
+                                                        PartitionMetricNameParser
+                                                                .parseKafkaPartitionKey(v);
+                                                return key != null
+                                                        ? key
+                                                        : PartitionMetricNameParser
+                                                                .parsePulsarPartitionKey(v);
                                             })
                                     .filter(Objects::nonNull)
                                     .collect(Collectors.toSet())
