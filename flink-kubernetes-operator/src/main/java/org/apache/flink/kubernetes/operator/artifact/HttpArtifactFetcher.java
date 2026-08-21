@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -292,8 +293,8 @@ public class HttpArtifactFetcher {
                 || status == 308; // Permanent Redirect
     }
 
-    private static URL pinnedUrl(URL logicalUrl, InetAddress pinnedAddress)
-            throws MalformedURLException {
+    @VisibleForTesting
+    static URL pinnedUrl(URL logicalUrl, InetAddress pinnedAddress) throws MalformedURLException {
         String hostLiteral =
                 pinnedAddress instanceof Inet6Address
                         ? "[" + pinnedAddress.getHostAddress() + "]"
@@ -302,7 +303,8 @@ public class HttpArtifactFetcher {
                 logicalUrl.getProtocol(), hostLiteral, logicalUrl.getPort(), logicalUrl.getFile());
     }
 
-    private static String hostHeaderValue(URL logicalUrl) {
+    @VisibleForTesting
+    static String hostHeaderValue(URL logicalUrl) {
         return logicalUrl.getPort() == -1
                 ? logicalUrl.getHost()
                 : logicalUrl.getHost() + ":" + logicalUrl.getPort();
