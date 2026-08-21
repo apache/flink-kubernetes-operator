@@ -22,14 +22,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-/**
- * Tests for {@link JarUriValidationUtils#validateAndResolve}. Uses IP literals (never real
- * hostnames) so resolution is hermetic: {@code InetAddress.getAllByName} parses a literal address
- * directly without a DNS lookup, so these don't depend on network access or DNS behavior.
- */
+/** Tests for {@link JarUriValidationUtils#validateAndResolve}. */
 public class JarUriValidationUtilsTest {
 
-    // TEST-NET-3 (RFC 5737): a public, non-restricted IPv4 literal reserved for documentation.
     private static final String PUBLIC_IP = "203.0.113.5";
 
     @Test
@@ -57,8 +52,6 @@ public class JarUriValidationUtilsTest {
 
     @Test
     public void testStillResolvesRestrictedHostWhenPolicyDisabled() {
-        // Resolution (for pinning) runs regardless of disallowRestrictedHosts; only the
-        // restricted-address rejection is conditional on that flag.
         var result =
                 JarUriValidationUtils.validateAndResolve(
                         "https://127.0.0.1/job.jar", List.of("https"), false);
@@ -87,9 +80,7 @@ public class JarUriValidationUtilsTest {
 
     @Test
     public void testRejectsInvalidInputsTheSameWayValidateJarUriDoes() {
-        // These checks are duplicated from validateJarURI rather than shared, so
-        // validateAndResolve needs its own (lighter) coverage of the same shapes that
-        // DefaultValidatorTest already exercises for validateJarURI.
+        // validateJarURI's own checks are duplicated here, not shared, so this isn't redundant.
         record Case(String jarUri, String expectedErrorSubstring) {}
         var cases =
                 List.of(

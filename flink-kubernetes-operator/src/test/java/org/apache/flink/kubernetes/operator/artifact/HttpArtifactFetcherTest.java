@@ -23,12 +23,7 @@ import org.junit.jupiter.api.Test;
 import java.net.InetAddress;
 import java.net.URL;
 
-/**
- * Tests for {@link HttpArtifactFetcher}'s address-pinning helpers. These exercise the pinning logic
- * directly against constructed {@link InetAddress}es (no DNS lookups, no network), since a live
- * HTTP round trip through {@code localhost}/{@code 127.0.0.1} can't distinguish a pinned connection
- * from an unpinned one: both read identically.
- */
+/** Tests for {@link HttpArtifactFetcher}'s address-pinning helpers. */
 public class HttpArtifactFetcherTest {
 
     @Test

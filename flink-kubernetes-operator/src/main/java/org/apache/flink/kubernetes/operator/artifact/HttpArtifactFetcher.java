@@ -65,8 +65,7 @@ public class HttpArtifactFetcher {
     private static final int COPY_BUFFER_SIZE = 8 * 1024;
 
     static {
-        // "Host" is a restricted header the JDK silently drops unless this is set. Process-wide:
-        // unlocks every restricted header for any HttpURLConnection in this process, not just ours.
+        // "Host" is a restricted header the JDK silently drops unless this is set.
         System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
     }
 
