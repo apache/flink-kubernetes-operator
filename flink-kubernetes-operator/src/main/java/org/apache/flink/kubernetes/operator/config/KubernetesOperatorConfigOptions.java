@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.annotation.docs.Documentation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 
@@ -396,6 +397,39 @@ public class KubernetesOperatorConfigOptions {
                             "If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, "
                                     + "site-local, wildcard or multicast addresses are rejected during validation. "
                                     + "Disable only if the operator legitimately needs to fetch from such addresses.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<Duration> JAR_FETCH_SOCKET_TIMEOUT =
+            operatorConfig("user.artifacts.http.socket-timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(30))
+                    .withDescription(
+                            "The connect and socket read timeout for downloading a FlinkSessionJob jarURI "
+                                    + "over http(s). Bounds how long the reconcile thread can be blocked "
+                                    + "establishing the connection, or waiting for the next byte, from an "
+                                    + "unresponsive artifact host.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<Duration> JAR_FETCH_TOTAL_TIMEOUT =
+            operatorConfig("user.artifacts.http.total-timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(5))
+                    .withDescription(
+                            "The total wall-clock budget for downloading a FlinkSessionJob jarURI over "
+                                    + "http(s), covering all redirects and the full body transfer. Unlike "
+                                    + "the socket timeout, this bounds the overall download even against "
+                                    + "a slow host that keeps trickling data fast enough to avoid tripping "
+                                    + "it.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<MemorySize> JAR_ARTIFACT_MAX_SIZE =
+            operatorConfig("user.artifacts.max-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(1024))
+                    .withDescription(
+                            "The maximum size of a FlinkSessionJob jarURI artifact fetched over http(s). "
+                                    + "The download is rejected once it exceeds this size, whether or not the "
+                                    + "server declares a Content-Length up front.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> SNAPSHOT_RESOURCE_ENABLED =

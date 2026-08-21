@@ -80,5 +80,23 @@
             <td>Boolean</td>
             <td>If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, site-local, wildcard or multicast addresses are rejected during validation. Disable only if the operator legitimately needs to fetch from such addresses.</td>
         </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.http.socket-timeout</h5></td>
+            <td style="word-wrap: break-word;">30 s</td>
+            <td>Duration</td>
+            <td>The connect and socket read timeout for downloading a FlinkSessionJob jarURI over http(s). Bounds how long the reconcile thread can be blocked establishing the connection, or waiting for the next byte, from an unresponsive artifact host.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.http.total-timeout</h5></td>
+            <td style="word-wrap: break-word;">5 min</td>
+            <td>Duration</td>
+            <td>The total wall-clock budget for downloading a FlinkSessionJob jarURI over http(s), covering all redirects and the full body transfer. Unlike the socket timeout, this bounds the overall download even against a slow host that keeps trickling data fast enough to avoid tripping it.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.max-size</h5></td>
+            <td style="word-wrap: break-word;">1 gb</td>
+            <td>MemorySize</td>
+            <td>The maximum size of a FlinkSessionJob jarURI artifact fetched over http(s). The download is rejected once it exceeds this size, whether or not the server declares a Content-Length up front.</td>
+        </tr>
     </tbody>
 </table>
