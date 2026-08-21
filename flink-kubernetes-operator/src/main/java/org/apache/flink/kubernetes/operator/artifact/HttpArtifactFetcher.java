@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.artifact;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.utils.JarUriValidationUtils;
 
@@ -27,18 +28,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.Map;
 
 /**
- * Download the jar from the http resource. The scheme allowlist and restricted-host policy are read
- * from the given configuration; {@link ArtifactManager} sets them from the operator configuration
- * before calling.
+ * Download the jar from the http resource. The scheme allowlist, restricted-host policy, fetch
+ * timeouts and size cap come from the trusted operator configuration passed to {@link #fetch}, not
+ * the (possibly tenant-influenced) {@code flinkConfiguration}, which only supplies the HTTP
+ * headers.
  */
-public class HttpArtifactFetcher implements ArtifactFetcher {
+public class HttpArtifactFetcher {
 
     public static final Logger LOG = LoggerFactory.getLogger(HttpArtifactFetcher.class);
     public static final HttpArtifactFetcher INSTANCE = new HttpArtifactFetcher();
@@ -46,18 +51,26 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
     // Maximum number of redirects to follow before giving up.
     private static final int MAX_REDIRECTS = 5;
 
-    @Override
-    public File fetch(String uri, Configuration flinkConfiguration, File targetDir)
+    // Chunk size used when streaming the response body to disk.
+    private static final int COPY_BUFFER_SIZE = 8 * 1024;
+
+    public File fetch(
+            String uri,
+            Configuration flinkConfiguration,
+            FlinkOperatorConfiguration operatorConfig,
+            File targetDir)
             throws Exception {
         var start = System.currentTimeMillis();
 
-        // Scheme allowlist and restricted-host policy, set by ArtifactManager from the operator
-        // configuration.
-        var allowedSchemes =
-                flinkConfiguration.get(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES);
-        var disallowRestrictedHosts =
-                flinkConfiguration.get(
-                        KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS);
+        var allowedSchemes = operatorConfig.getJarUriAllowedSchemes();
+        var disallowRestrictedHosts = operatorConfig.isJarUriDisallowRestrictedHosts();
+        var socketTimeoutMillis = (int) operatorConfig.getJarFetchSocketTimeout().toMillis();
+        var totalTimeout = operatorConfig.getJarFetchTotalTimeout();
+        var maxArtifactSize = operatorConfig.getJarArtifactMaxSize().getBytes();
+        // Overall wall-clock deadline for the whole fetch (all redirects + the body transfer).
+        // This bounds the reconcile thread even against a host that keeps trickling data slowly
+        // enough to never trip the socket timeout on its own.
+        var deadline = start + totalTimeout.toMillis();
 
         // merged session job level header and cluster level header, session job level header take
         // precedence.
@@ -72,6 +85,14 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
         HttpURLConnection conn;
         int redirects = 0;
         while (true) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new IOException(
+                        "Timed out (> "
+                                + totalTimeout
+                                + ") while fetching artifact from '"
+                                + uri
+                                + "'");
+            }
             var validationError =
                     JarUriValidationUtils.validateJarURI(
                             currentUri, allowedSchemes, disallowRestrictedHosts);
@@ -89,6 +110,8 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
             }
             conn = (HttpURLConnection) currentUrl.openConnection();
             conn.setInstanceFollowRedirects(false);
+            conn.setConnectTimeout(socketTimeoutMillis);
+            conn.setReadTimeout(socketTimeoutMillis);
             // Only send the configured headers to the original host; drop them on a cross-host
             // redirect.
             if (headers != null && originalUrl.getHost().equalsIgnoreCase(currentUrl.getHost())) {
@@ -154,12 +177,30 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
             }
         }
 
+        // Fail fast if the server declares a size beyond the cap; a malicious/misconfigured
+        // server can still lie about this, so the copy below enforces the cap regardless.
+        long declaredLength = conn.getContentLengthLong();
+        if (declaredLength > maxArtifactSize) {
+            conn.disconnect();
+            throw new IOException(
+                    "Refusing to fetch artifact from '"
+                            + uri
+                            + "': declared size "
+                            + declaredLength
+                            + " bytes exceeds the configured limit of "
+                            + maxArtifactSize
+                            + " bytes");
+        }
+
         // Name the file from the original jarURI, not the redirect target, so a redirect can't
         // change it (e.g. drop the .jar extension the JobManager upload requires).
         String fileName = FilenameUtils.getName(originalUrl.getPath());
         File targetFile = new File(targetDir, fileName);
         try (var inputStream = conn.getInputStream()) {
-            FileUtils.copyToFile(inputStream, targetFile);
+            copyBounded(inputStream, targetFile, maxArtifactSize, deadline, uri, totalTimeout);
+        } catch (Exception e) {
+            targetFile.delete();
+            throw e;
         } finally {
             conn.disconnect();
         }
@@ -169,6 +210,51 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
                 targetFile,
                 System.currentTimeMillis() - start);
         return targetFile;
+    }
+
+    /**
+     * Streams {@code inputStream} to {@code targetFile}, aborting if the total bytes written exceed
+     * {@code maxBytes} or {@code deadline} (wall-clock millis) passes. Each individual {@link
+     * InputStream#read} is already bounded by the connection's read timeout, so the deadline check
+     * here is what catches a host that trickles data just fast enough to keep each read below that
+     * timeout without ever finishing.
+     */
+    private static void copyBounded(
+            InputStream inputStream,
+            File targetFile,
+            long maxBytes,
+            long deadline,
+            String uri,
+            Duration totalTimeout)
+            throws IOException {
+        FileUtils.forceMkdirParent(targetFile);
+        byte[] buffer = new byte[COPY_BUFFER_SIZE];
+        long total = 0;
+        try (var outputStream = new FileOutputStream(targetFile)) {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                total += read;
+                if (total > maxBytes) {
+                    throw new IOException(
+                            "Refusing to fetch artifact from '"
+                                    + uri
+                                    + "': downloaded size "
+                                    + total
+                                    + " bytes exceeds the configured limit of "
+                                    + maxBytes
+                                    + " bytes");
+                }
+                if (System.currentTimeMillis() > deadline) {
+                    throw new IOException(
+                            "Timed out (> "
+                                    + totalTimeout
+                                    + ") while fetching artifact from '"
+                                    + uri
+                                    + "'");
+                }
+                outputStream.write(buffer, 0, read);
+            }
+        }
     }
 
     private static boolean isRedirect(int status) {

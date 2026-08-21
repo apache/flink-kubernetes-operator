@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
@@ -84,6 +85,9 @@ public class FlinkOperatorConfiguration {
     Duration jobSubmissionTimeout;
     List<String> jarUriAllowedSchemes;
     boolean jarUriDisallowRestrictedHosts;
+    Duration jarFetchSocketTimeout;
+    Duration jarFetchTotalTimeout;
+    MemorySize jarArtifactMaxSize;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -221,6 +225,15 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS);
 
+        Duration jarFetchSocketTimeout =
+                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_FETCH_SOCKET_TIMEOUT);
+
+        Duration jarFetchTotalTimeout =
+                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_FETCH_TOTAL_TIMEOUT);
+
+        MemorySize jarArtifactMaxSize =
+                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_MAX_SIZE);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -256,7 +269,10 @@ public class FlinkOperatorConfiguration {
                 manageIngress,
                 jobSubmissionTimeout,
                 jarUriAllowedSchemes,
-                jarUriDisallowRestrictedHosts);
+                jarUriDisallowRestrictedHosts,
+                jarFetchSocketTimeout,
+                jarFetchTotalTimeout,
+                jarArtifactMaxSize);
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {
