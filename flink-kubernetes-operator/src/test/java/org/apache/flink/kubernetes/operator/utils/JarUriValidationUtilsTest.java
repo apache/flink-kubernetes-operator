@@ -68,18 +68,6 @@ public class JarUriValidationUtilsTest {
     }
 
     @Test
-    public void testRejectsDisallowedScheme() {
-        var result =
-                JarUriValidationUtils.validateAndResolve(
-                        "https://" + PUBLIC_IP + "/job.jar", List.of("s3"), true);
-
-        Assertions.assertTrue(result.getError().isPresent());
-        Assertions.assertTrue(
-                result.getError().get().contains("not in the allowlist"), result.getError().get());
-        Assertions.assertTrue(result.getResolvedAddress().isEmpty());
-    }
-
-    @Test
     public void testPassesThroughNonHttpSchemeWithoutResolving() {
         var result =
                 JarUriValidationUtils.validateAndResolve(
@@ -98,34 +86,25 @@ public class JarUriValidationUtilsTest {
     }
 
     @Test
-    public void testRejectsMalformedUri() {
-        var result =
-                JarUriValidationUtils.validateAndResolve("ht tp://bad uri", List.of("https"), true);
-
-        Assertions.assertTrue(result.getError().isPresent());
-        Assertions.assertTrue(
-                result.getError().get().contains("is not a valid URI"), result.getError().get());
-    }
-
-    @Test
-    public void testRejectsMissingScheme() {
-        var result =
-                JarUriValidationUtils.validateAndResolve(
-                        "/no/scheme/job.jar", List.of("https"), true);
-
-        Assertions.assertTrue(result.getError().isPresent());
-        Assertions.assertTrue(
-                result.getError().get().contains("must include a scheme"), result.getError().get());
-    }
-
-    @Test
-    public void testRejectsMissingHostForHttpScheme() {
-        var result =
-                JarUriValidationUtils.validateAndResolve(
-                        "https:///job.jar", List.of("https"), true);
-
-        Assertions.assertTrue(result.getError().isPresent());
-        Assertions.assertTrue(
-                result.getError().get().contains("must include a host"), result.getError().get());
+    public void testRejectsInvalidInputsTheSameWayValidateJarUriDoes() {
+        // These checks are duplicated from validateJarURI rather than shared, so
+        // validateAndResolve needs its own (lighter) coverage of the same shapes that
+        // DefaultValidatorTest already exercises for validateJarURI.
+        record Case(String jarUri, String expectedErrorSubstring) {}
+        var cases =
+                List.of(
+                        new Case("s3://bucket/job.jar", "not in the allowlist"),
+                        new Case("ht tp://bad uri", "is not a valid URI"),
+                        new Case("/no/scheme/job.jar", "must include a scheme"),
+                        new Case("https:///job.jar", "must include a host"));
+        for (var c : cases) {
+            var result =
+                    JarUriValidationUtils.validateAndResolve(c.jarUri(), List.of("https"), true);
+            Assertions.assertTrue(result.getError().isPresent(), c.jarUri());
+            Assertions.assertTrue(
+                    result.getError().get().contains(c.expectedErrorSubstring()),
+                    result.getError().get());
+            Assertions.assertTrue(result.getResolvedAddress().isEmpty(), c.jarUri());
+        }
     }
 }
