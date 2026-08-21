@@ -66,6 +66,12 @@ For a `FlinkSessionJob`, the operator itself downloads the job artifact referenc
 - `kubernetes.operator.user.artifacts.disallow-restricted-hosts` (default `true`): rejects `http` and `https` URIs whose host resolves to a loopback, link-local, site-local, wildcard, or multicast address, so a session job cannot point the operator at cluster-internal endpoints.
 - `kubernetes.operator.user.artifacts.http.header`: custom HTTP headers sent when fetching artifacts over `http` and `https`, typically carrying the credentials of the artifact store.
 
+The fetch itself runs synchronously on the reconcile thread, so a slow or unresponsive artifact host could otherwise pin that thread and, with enough concurrent session jobs, exhaust the bounded reconcile pool (`kubernetes.operator.reconcile.parallelism`). Two settings bound the reconcile thread's exposure to such a host, and one bounds the response size:
+
+- `kubernetes.operator.user.artifacts.http.socket-timeout` (default `30 s`): the connect and per-read socket timeout for the underlying HTTP connection.
+- `kubernetes.operator.user.artifacts.http.total-timeout` (default `5 min`): the overall wall-clock budget for the whole fetch, covering all redirects and the full body transfer. This is what bounds a host that trickles data just slowly enough to keep individual reads under the socket timeout without the transfer ever completing.
+- `kubernetes.operator.user.artifacts.max-size` (default `1 gb`): the maximum artifact size. The download is rejected once it exceeds this, whether or not the server declares a `Content-Length` up front.
+
 Application-mode deployments are not affected: their `jarURI` is resolved inside the job's own cluster, not by the operator.
 
 ## Secrets in Configuration
