@@ -210,7 +210,8 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT);
         int reportedExceptionEventsMaxStackTraceLength =
                 operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES);
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH);
 
         boolean manageIngress =
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_MANAGE_INGRESS);
