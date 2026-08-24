@@ -217,7 +217,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             }
 
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
-            int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
+            int maxStackTraceLength =
+                    operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
 
             int count = 0;
             for (var exception : exceptions) {
@@ -226,7 +227,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 if (!exceptionTime.isAfter(lastRecorded) || count++ >= maxEvents) {
                     break;
                 }
-                emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
+                emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLength);
             }
 
             if (count > maxEvents) {
@@ -244,7 +245,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             FlinkResourceContext<R> ctx,
             JobExceptionsInfoWithHistory.RootExceptionInfo exception,
             Instant exceptionTime,
-            int maxStackTraceLines) {
+            int maxStackTraceLength) {
         Map<String, String> annotations = new HashMap<>();
         if (exceptionTime != null) {
             annotations.put(EXCEPTION_TIMESTAMP, exceptionTime.toString());
@@ -267,15 +268,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         StringBuilder eventMessage = new StringBuilder();
         String stacktrace = exception.getStacktrace();
         if (stacktrace != null && !stacktrace.isBlank()) {
-            String[] lines = stacktrace.split("\n");
-            for (int i = 0; i < Math.min(maxStackTraceLines, lines.length); i++) {
-                eventMessage.append(lines[i]).append("\n");
-            }
-            if (lines.length > maxStackTraceLines) {
+            if (stacktrace.length() > maxStackTraceLength) {
                 eventMessage
+                        .append(stacktrace, 0, maxStackTraceLength)
                         .append("... (")
-                        .append(lines.length - maxStackTraceLines)
-                        .append(" more lines)");
+                        .append(stacktrace.length() - maxStackTraceLength)
+                        .append(" more characters)");
+            } else {
+                eventMessage.append(stacktrace);
             }
         }
 

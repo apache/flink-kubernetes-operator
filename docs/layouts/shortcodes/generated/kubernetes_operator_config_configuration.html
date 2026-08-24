@@ -123,10 +123,10 @@
             <td>Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.events.exceptions.stacktrace-lines</h5></td>
-            <td style="word-wrap: break-word;">5</td>
+            <td><h5>kubernetes.operator.events.exceptions.stacktrace.max.length</h5></td>
+            <td style="word-wrap: break-word;">2048</td>
             <td>Integer</td>
-            <td>Maximum number of stack trace lines to include in exception-related Kubernetes event messages.</td>
+            <td>Maximum number of characters of stack trace text to include in exception-related Kubernetes event messages. The stack trace is truncated once it reaches this size, regardless of how many lines it spans, so a single pathological line with no line breaks cannot bypass the cap.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.exception.field.max.length</h5></td>

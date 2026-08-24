@@ -471,8 +471,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
         jobStatus.setState(JobStatus.RUNNING);
         Map<String, String> configuration = new HashMap<>();
         configuration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES.key(),
-                "2");
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                        .key(),
+                "12");
         Configuration operatorConfig = Configuration.fromMap(configuration);
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
                 getResourceContext(deployment, operatorConfig);
@@ -486,7 +487,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
         ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
 
         long exceptionTime = 4000L;
-        String longTrace = "line1\nline2\nline3\nline4";
+        String longTrace =
+                "line1\nline2\nline3\nline4"; // 23 characters total, ("line1\nline2\n") fit within
+        // the cap
         flinkService.addExceptionHistory(jobId, "StackTraceCheck", longTrace, exceptionTime);
 
         // Ensure jobFailedErr is null before the observe call
@@ -505,7 +508,51 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertTrue(msg.contains("line1"));
         assertTrue(msg.contains("line2"));
         assertFalse(msg.contains("line3"));
-        assertTrue(msg.contains("... (2 more lines)"));
+        assertTrue(msg.contains("... (11 more characters)"));
+    }
+
+    @Test
+    public void testStackTraceTruncationBySizeNotLineCount() throws Exception {
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+        Map<String, String> configuration = new HashMap<>();
+        configuration.put(
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                        .key(),
+                "100");
+        Configuration operatorConfig = Configuration.fromMap(configuration);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(deployment, operatorConfig);
+
+        var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        ctx.getExceptionCacheEntry().setInitialized(true);
+        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
+        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
+
+        long exceptionTime = 4000L;
+        // A single unbroken line of 5000 characters, assess that it gets truncated
+        String singleHugeLine = "x".repeat(5000);
+        flinkService.addExceptionHistory(jobId, "HugeSingleLine", singleHugeLine, exceptionTime);
+
+        flinkService.setJobFailedErr(null);
+        observer.observe(ctx);
+
+        var events =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems();
+        assertEquals(1, events.size());
+        String msg = events.get(0).getMessage();
+        assertTrue(msg.length() < singleHugeLine.length());
+        assertTrue(msg.contains("... (4900 more characters)"));
     }
 
     @Test
@@ -755,8 +802,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
         jobStatus.setState(JobStatus.RUNNING);
         Map<String, String> configuration = new HashMap<>();
         configuration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES.key(),
-                "2");
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                        .key(),
+                "12");
         Configuration operatorConfig = Configuration.fromMap(configuration);
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
                 getResourceContext(
@@ -797,7 +845,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertTrue(msg.contains("line1"));
         assertTrue(msg.contains("line2"));
         assertFalse(msg.contains("line3"));
-        assertTrue(msg.contains("... (2 more lines)"));
+        assertTrue(msg.contains("... (11 more characters)"));
     }
 
     @Test
