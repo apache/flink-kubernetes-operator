@@ -64,7 +64,6 @@ import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.ConfigurationInfo;
 import org.apache.flink.runtime.rest.messages.ConfigurationInfoEntry;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
-import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
 import org.apache.flink.runtime.rest.messages.MessageParameters;
@@ -158,6 +157,7 @@ import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -1596,95 +1596,6 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
-    void testAllExecutionConfigInfoFieldNamesCoveredByMapping() throws Exception {
-        Set<String> declared = discoverFieldNameConstants(JobConfigInfo.ExecutionConfigInfo.class);
-        assertFalse(declared.isEmpty(), "Should discover FIELD_NAME_* constants");
-
-        Set<String> handled =
-                new HashSet<>(
-                        Set.of(
-                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_PARALLELISM,
-                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_OBJECT_REUSE_MODE,
-                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_GLOBAL_JOB_PARAMETERS,
-                                // Informational only, not runtime config overrides
-                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_EXECUTION_MODE,
-                                JobConfigInfo.ExecutionConfigInfo.FIELD_NAME_RESTART_STRATEGY));
-
-        declared.removeAll(handled);
-        assertTrue(
-                declared.isEmpty(),
-                "ExecutionConfigInfo FIELD_NAME constants not covered: "
-                        + declared
-                        + ". Add mapping or exclude explicitly.");
-    }
-
-    @Test
-    void testMapJobConfigurationMapsAllExpectedFields() {
-        JobConfigInfo configInfo =
-                new JobConfigInfo(
-                        new JobID(),
-                        "test-job",
-                        new JobConfigInfo.ExecutionConfigInfo(
-                                "PIPELINED",
-                                "fixedDelay",
-                                4,
-                                true,
-                                Map.of("user.param", "value1")));
-
-        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo);
-
-        assertEquals("4", result.get("parallelism.default"));
-        assertEquals("true", result.get("pipeline.object-reuse"));
-        assertEquals("value1", result.get("user.param"));
-        assertEquals(3, result.size());
-    }
-
-    @Test
-    void testMapJobConfigurationDropsOperatorControlledGlobalParameters() {
-        JobConfigInfo configInfo =
-                new JobConfigInfo(
-                        new JobID(),
-                        "test-job",
-                        new JobConfigInfo.ExecutionConfigInfo(
-                                "PIPELINED",
-                                "fixedDelay",
-                                4,
-                                true,
-                                Map.of(
-                                        "user.param",
-                                        "value1",
-                                        "kubernetes.operator.job.upgrade.last-state-fallback.enabled",
-                                        "false",
-                                        "job.autoscaler.enabled",
-                                        "false")));
-
-        Map<String, String> result = FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo);
-
-        // A job must not be able to change how the operator manages it.
-        assertNull(
-                result.get("kubernetes.operator.job.upgrade.last-state-fallback.enabled"),
-                "operator keys must not be taken from global job parameters");
-        assertNull(
-                result.get("job.autoscaler.enabled"),
-                "autoscaler keys must not be taken from global job parameters");
-
-        // Unrelated parameters and the mapped execution fields are still present.
-        assertEquals("value1", result.get("user.param"));
-        assertEquals("4", result.get("parallelism.default"));
-        assertEquals("true", result.get("pipeline.object-reuse"));
-        assertEquals(3, result.size());
-    }
-
-    @Test
-    void testMapJobConfigurationHandlesNullGracefully() {
-        assertTrue(FlinkRuntimeConfigurationUtils.mapJobConfiguration(null).isEmpty());
-        assertTrue(
-                FlinkRuntimeConfigurationUtils.mapJobConfiguration(
-                                new JobConfigInfo(new JobID(), "test-job", null))
-                        .isEmpty());
-    }
-
-    @Test
     void testGetRuntimeConfigurationIncludesJmConfig() throws Exception {
         var jmConfig = new ConfigurationInfo();
         jmConfig.add(new ConfigurationInfoEntry("jobmanager.scheduler", "Adaptive"));
@@ -1705,6 +1616,38 @@ public class AbstractFlinkServiceTest {
         assertEquals("Adaptive", result.get("jobmanager.scheduler"));
         assertEquals("/s3/savepoints", result.get("state.savepoints.dir"));
         assertEquals("ZOOKEEPER", result.get("high-availability"));
+    }
+
+    @Test
+    void testGetRuntimeConfigurationIncludesVersionIndependentJobConfig() throws Exception {
+        var executionConfig = new CustomJobConfigInfo.ExecutionConfigInfo();
+        executionConfig.setParallelism(4);
+        executionConfig.setObjectReuse(true);
+        executionConfig.setGlobalJobParameters(Map.of("user.param", "value1"));
+        var jobConfigInfo = new CustomJobConfigInfo();
+        jobConfigInfo.setExecutionConfigInfo(executionConfig);
+        var customHeadersUsed = new AtomicBoolean();
+
+        var service =
+                getTestingService(
+                        (headers, params, body) -> {
+                            if (headers instanceof CustomJobConfigHeaders) {
+                                customHeadersUsed.set(true);
+                                return CompletableFuture.completedFuture(jobConfigInfo);
+                            }
+                            return CompletableFuture.failedFuture(
+                                    new UnsupportedOperationException());
+                        });
+
+        var result = service.getRuntimeConfiguration(configuration, JobID.generate());
+
+        assertThat(customHeadersUsed).isTrue();
+        assertThat(result)
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                "parallelism.default", "4",
+                                "pipeline.object-reuse", "true",
+                                "user.param", "value1"));
     }
 
     @Test

@@ -68,8 +68,6 @@ import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
-import org.apache.flink.runtime.rest.messages.JobConfigHeaders;
-import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
@@ -993,11 +991,11 @@ public abstract class AbstractFlinkService implements FlinkService {
             throws Exception {
         LOG.debug("Fetching job configuration");
         try (var clusterClient = getClusterClient(conf)) {
-            var jobConfigHeaders = JobConfigHeaders.getInstance();
+            var jobConfigHeaders = CustomJobConfigHeaders.getInstance();
             var parameters = new JobMessageParameters();
             parameters.jobPathParameter.resolve(jobId);
 
-            JobConfigInfo configurationInfo =
+            CustomJobConfigInfo configurationInfo =
                     clusterClient
                             .sendRequest(
                                     jobConfigHeaders, parameters, EmptyRequestBody.getInstance())

@@ -24,7 +24,7 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.StateChangelogOptions;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.runtime.rest.messages.JobConfigInfo;
+import org.apache.flink.kubernetes.operator.service.CustomJobConfigInfo;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointConfigInfo;
 
 import org.slf4j.Logger;
@@ -132,28 +132,36 @@ public class FlinkRuntimeConfigurationUtils {
 
     /**
      * Extract execution configuration (parallelism, object-reuse, global job parameters) from a
-     * {@link JobConfigInfo} REST response.
+     * {@link CustomJobConfigInfo} REST response.
      *
      * <p>Global job parameters are set by the job itself and are merged over the observed
      * configuration, so keys belonging to the operator's own namespaces are dropped. Otherwise a
      * job could change how the operator manages it simply by declaring a matching global parameter.
      */
-    public static Map<String, String> mapJobConfiguration(JobConfigInfo configurationInfo) {
+    public static Map<String, String> mapJobConfiguration(CustomJobConfigInfo configurationInfo) {
         Map<String, String> jobConfig = new HashMap<>();
         if (configurationInfo == null || configurationInfo.getExecutionConfigInfo() == null) {
             return jobConfig;
         }
         var execInfo = configurationInfo.getExecutionConfigInfo();
-        jobConfig.put(
-                CoreOptions.DEFAULT_PARALLELISM.key(), String.valueOf(execInfo.getParallelism()));
-        jobConfig.put(PipelineOptions.OBJECT_REUSE.key(), String.valueOf(execInfo.isObjectReuse()));
-        execInfo.getGlobalJobParameters()
-                .forEach(
-                        (key, value) -> {
-                            if (!isOperatorControlledKey(key)) {
-                                jobConfig.put(key, value);
-                            }
-                        });
+        if (execInfo.getParallelism() != null) {
+            jobConfig.put(
+                    CoreOptions.DEFAULT_PARALLELISM.key(),
+                    String.valueOf(execInfo.getParallelism()));
+        }
+        if (execInfo.getObjectReuse() != null) {
+            jobConfig.put(
+                    PipelineOptions.OBJECT_REUSE.key(), String.valueOf(execInfo.getObjectReuse()));
+        }
+        if (execInfo.getGlobalJobParameters() != null) {
+            execInfo.getGlobalJobParameters()
+                    .forEach(
+                            (key, value) -> {
+                                if (!isOperatorControlledKey(key)) {
+                                    jobConfig.put(key, value);
+                                }
+                            });
+        }
         return jobConfig;
     }
 
