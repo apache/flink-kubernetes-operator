@@ -36,7 +36,22 @@ under the License.
             <!-- required by JobTopologyTest -->
             --add-opens=java.base/java.lang=ALL-UNNAMED
         </surefire.module.config>
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <kafka.connector.version>3.3.0-1.20</kafka.connector.version>
+        <pulsar.connector.version>4.2.0-1.20</pulsar.connector.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -142,6 +157,57 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-java</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Kafka/Pulsar source IT tests -->
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-base</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-kafka</artifactId>
+            <version>${kafka.connector.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-pulsar</artifactId>
+            <version>${pulsar.connector.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-pulsar</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- commons-compress (pulled in by testcontainers) needs Charsets at runtime, but
+             does not declare commons-codec as a dependency itself. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.17.0</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -156,6 +222,18 @@ under the License.
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+
+            <!-- The Kafka/Pulsar connector jars pull in several real JPMS modules (jackson,
+                 commons-io, log4j, ...), which makes failsafe put this module's own packaged jar
+                 on the module path as an automatic module; that module then can't see
+                 flink-runtime's classpath (unnamed-module) classes. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                </configuration>
             </plugin>
         </plugins>
     </build>
