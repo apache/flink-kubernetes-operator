@@ -39,7 +39,8 @@ public class ConfigChanges {
     @Getter private final Set<String> removals = new HashSet<>();
 
     public <T> ConfigChanges addOverride(ConfigOption<T> configOption, T value) {
-        overrides.put(configOption.key(), ConfigurationUtils.convertValue(value, String.class));
+        overrides.put(
+                configOption.key(), ConfigurationUtils.convertValue(value, String.class, false));
         return this;
     }
 

@@ -168,21 +168,50 @@ public class KubernetesScalingRealizer
     private static String getOverrideString(
             KubernetesJobAutoScalerContext context, Map<String, String> newOverrides) {
         if (context.getResource().getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            return ConfigurationUtils.convertValue(newOverrides, String.class);
+            // Use the legacy parser as it is understood by every supported Flink versions
+            return toLegacyOverrideString(newOverrides);
         }
 
         var conf = context.getResourceContext().getObserveConfig();
-        var currentOverrides =
-                conf.getOptional(PipelineOptions.PARALLELISM_OVERRIDES).orElse(Map.of());
+        String currentString = conf.getValue(PipelineOptions.PARALLELISM_OVERRIDES);
+        var currentOverrides = parseDialectTolerant(currentString);
 
         // Check that the overrides actually changed and not just the String representation.
         // This way we prevent reconciling a NOOP config change which would unnecessarily redeploy
         // the pipeline.
         if (currentOverrides.equals(newOverrides)) {
-            // If overrides are identical, use the previous string as-is.
-            return conf.getValue(PipelineOptions.PARALLELISM_OVERRIDES);
-        } else {
-            return ConfigurationUtils.convertValue(newOverrides, String.class);
+            if (currentString == null || parsesAsLegacyDialect(currentString, newOverrides)) {
+                return currentString;
+            }
+        }
+        return toLegacyOverrideString(newOverrides);
+    }
+
+    /**
+     * Parse a stored override string accepting both dialects, regardless of the dialect flag the
+     * observe {@code Configuration} instance happens to carry: the standard parser falls back to
+     * the legacy pattern, so it understands every format an operator version may have written.
+     */
+    private static Map<String, String> parseDialectTolerant(@Nullable String value) {
+        if (value == null) {
+            return Map.of();
+        }
+        try {
+            return ConfigurationUtils.convertValue(value, Map.class, true);
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    private static String toLegacyOverrideString(Map<String, String> overrides) {
+        return ConfigurationUtils.convertValue(overrides, String.class, false);
+    }
+
+    private static boolean parsesAsLegacyDialect(String value, Map<String, String> expected) {
+        try {
+            return expected.equals(ConfigurationUtils.convertValue(value, Map.class, false));
+        } catch (Exception e) {
+            return false;
         }
     }
 }

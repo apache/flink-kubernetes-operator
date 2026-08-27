@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
+import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -60,6 +61,61 @@ public class KubernetesScalingRealizerTest {
                         // Currently no enforced order inside the overrides string
                         overrides -> assertThat(overrides).isEqualTo("a:1,b:2"),
                         overrides -> assertThat(overrides).isEqualTo("b:2,a:1"));
+    }
+
+    @Test
+    public void testApplyOverridesUsesLegacyDialectWhenOperatorRunsStandardYaml() {
+        boolean previousDialect = GlobalConfiguration.isStandardYaml();
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            KubernetesJobAutoScalerContext ctx =
+                    TestingKubernetesAutoscalerUtils.createContext("test", null);
+
+            new KubernetesScalingRealizer()
+                    .realizeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
+
+            String overrides =
+                    ctx.getResource()
+                            .getSpec()
+                            .getFlinkConfiguration()
+                            .asFlatMap()
+                            .get(PipelineOptions.PARALLELISM_OVERRIDES.key());
+            Map<String, String> legacyParsed =
+                    ConfigurationUtils.convertValue(overrides, Map.class, false);
+            assertThat(legacyParsed).isEqualTo(Map.of("a", "1", "b", "2"));
+        } finally {
+            GlobalConfiguration.setStandardYaml(previousDialect);
+        }
+    }
+
+    @Test
+    public void testStandardDialectOverrideStringIsHealedOnReconcile() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "{a: '1', b: '2'}");
+        resource.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
+
+        LinkedHashMap<String, String> newOverrides = new LinkedHashMap<>();
+        newOverrides.put("a", "1");
+        newOverrides.put("b", "2");
+        new KubernetesScalingRealizer().realizeParallelismOverrides(ctx, newOverrides);
+
+        assertThat(
+                        ctx.getResource()
+                                .getSpec()
+                                .getFlinkConfiguration()
+                                .asFlatMap()
+                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                .isEqualTo("a:1,b:2");
     }
 
     @Test
