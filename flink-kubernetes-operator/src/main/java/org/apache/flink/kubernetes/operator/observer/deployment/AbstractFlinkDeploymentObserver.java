@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
@@ -80,13 +81,20 @@ public abstract class AbstractFlinkDeploymentObserver
     private void observeClusterInfo(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkApp = ctx.getResource();
         try {
-            Map<String, String> clusterInfo =
+            var clusterInfo =
                     ctx.getFlinkService()
                             .getClusterInfo(
                                     ctx.getObserveConfig(),
                                     flinkApp.getStatus().getJobStatus().getJobId());
-            flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
+            flinkApp.getStatus().getClusterInfo().putAll(clusterInfo.getInfo());
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
+
+            var labelSelector =
+                    FlinkUtils.getTaskManagerLabelSelector(flinkApp.getMetadata().getName());
+            flinkApp.getStatus()
+                    .setTaskManager(
+                            new TaskManagerInfo(
+                                    labelSelector, clusterInfo.getTaskManagerReplicas()));
         } catch (Exception e) {
             logger.warn("Exception while fetching cluster info", e);
         }

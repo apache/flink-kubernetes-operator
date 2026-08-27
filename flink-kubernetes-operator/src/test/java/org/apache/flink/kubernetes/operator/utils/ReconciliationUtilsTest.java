@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -62,6 +63,20 @@ public class ReconciliationUtilsTest {
         assertFalse(updateControl.isPatchResource());
         assertFalse(updateControl.isPatchStatus());
         assertNotEquals(0, updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void taskManagerReplicasPreservedAcrossReconciles() {
+        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
+        app.getSpec().getJob().setState(JobState.RUNNING);
+        app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+
+        var labelSelector = FlinkUtils.getTaskManagerLabelSelector(app.getMetadata().getName());
+        app.getStatus().setTaskManager(new TaskManagerInfo(labelSelector, 7));
+
+        ReconciliationUtils.updateStatusForDeployedSpec(app, new Configuration());
+
+        assertEquals(new TaskManagerInfo(labelSelector, 7), app.getStatus().getTaskManager());
     }
 
     @Test
