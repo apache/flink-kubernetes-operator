@@ -307,7 +307,7 @@ public class KubernetesAutoScalerStateStore
     }
 
     private static String serializeParallelismOverrides(Map<String, String> overrides) {
-        return ConfigurationUtils.convertValue(overrides, String.class);
+        return ConfigurationUtils.convertValue(overrides, String.class, false);
     }
 
     private static Map<String, String> deserializeParallelismOverrides(String overrides) {
