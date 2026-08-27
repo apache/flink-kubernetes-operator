@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.AbstractAutoScalerStateStoreTest;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -289,6 +290,24 @@ public class KubernetesAutoScalerStateStoreTest
         stateStore.flush(ctx);
         assertThat(stateStore.getParallelismOverrides(ctx))
                 .containsExactlyInAnyOrderEntriesOf(Map.of(v1, "4"));
+    }
+
+    @Test
+    void testParallelismOverridesStoredInLegacyDialect() throws Exception {
+        boolean previousDialect = GlobalConfiguration.isStandardYaml();
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            stateStore.storeParallelismOverrides(ctx, Map.of("a", "1"));
+            stateStore.flush(ctx);
+            assertThat(
+                            configMapStore.getSerializedState(
+                                    ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY))
+                    .hasValue("a:1");
+            assertThat(stateStore.getParallelismOverrides(ctx))
+                    .containsExactlyInAnyOrderEntriesOf(Map.of("a", "1"));
+        } finally {
+            GlobalConfiguration.setStandardYaml(previousDialect);
+        }
     }
 
     @Test
