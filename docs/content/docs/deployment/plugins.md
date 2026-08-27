@@ -287,7 +287,7 @@ The autoscaler exposes one extension seam per phase of its loop: custom evaluato
 
 `ScalingMetricsEvaluatorPlugin` is a pluggable component for providing custom scaling-metric evaluation logic on top of the metrics evaluated internally by the autoscaler. Custom metric evaluators are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
 
-For each evaluation cycle, the autoscaler invokes the custom metric evaluator selected via the `job.autoscaler.metrics.custom-evaluators` configuration option once per job vertex. The metrics returned by the custom evaluator are merged on top of the internally evaluated metrics, overriding or augmenting specific `ScalingMetric` values (e.g. `TARGET_DATA_RATE`, `TRUE_PROCESSING_RATE`, `CATCH_UP_DATA_RATE`).
+For each evaluation cycle, the autoscaler invokes every custom metric evaluator selected via the `job.autoscaler.metrics.custom-evaluators` configuration option once per job vertex. Plugins are chained in priority order (lower `priority()` values run first) and each plugin receives the metrics as already overridden by the previous one. The metrics returned by each plugin are merged on top of the internally evaluated metrics, overriding or augmenting specific `ScalingMetric` values (e.g. `TARGET_DATA_RATE`, `TRUE_PROCESSING_RATE`, `CATCH_UP_DATA_RATE`), so on a conflicting metric the later plugin wins.
 
 All `job.autoscaler.*` keys related to custom metric evaluators also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.metrics.custom-evaluators`). The canonical key takes precedence on overlap.
 
@@ -307,6 +307,12 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
     /** Custom metric evaluator implementation of {@link ScalingMetricsEvaluatorPlugin}. */
     public class CustomEvaluator implements ScalingMetricsEvaluatorPlugin {
+
+        @Override
+        public int priority() {
+            // Lower values run earlier in the chain. Later evaluators see this one's overrides.
+            return 0;
+        }
 
         @Override
         public Map<ScalingMetric, EvaluatedScalingMetric> evaluateVertexMetrics(
@@ -336,15 +342,13 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
 3. Use the Maven tool to package the project and generate the custom metric evaluator JAR.
 
-4. Select the custom metric evaluator via configuration. The evaluator whose implementation class FQN matches the configured `job.autoscaler.metrics.custom-evaluator.<name>.class` value will be invoked, and any other `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are merged on top of the job configuration with the `job.autoscaler.metrics.custom-evaluator.<instance>.` prefix stripped, and exposed via `Context.getConfiguration()`, taking precedence over the job-level value of the same key. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN.
+4. Select one or more custom metric evaluators via configuration. Each instance whose implementation class FQN matches the configured `job.autoscaler.metrics.custom-evaluator.<name>.class` value will be invoked, and any other `job.autoscaler.metrics.custom-evaluator.<name>.*` entries are merged on top of the job configuration with the `job.autoscaler.metrics.custom-evaluator.<instance>.` prefix stripped, and exposed via `Context.getConfiguration()`, taking precedence over the job-level value of the same key. The configuration shape mirrors Flink's metric-reporter idiom: a list of named instances, plus a `.class` and free-form options under each instance namespace. Selection is purely by class FQN, and multiple instances (of the same or different plugin classes) can be registered, each receiving its own scoped configuration. The chain is applied in `priority()` order.
     ```yaml
-    job.autoscaler.metrics.custom-evaluators: my-evaluator
-    job.autoscaler.metrics.custom-evaluator.my-evaluator.class: org.apache.flink.autoscaler.custom.CustomEvaluator
-    job.autoscaler.metrics.custom-evaluator.my-evaluator.target-data-rate: 100000.0
+    job.autoscaler.metrics.custom-evaluators: rates,overrides
+    job.autoscaler.metrics.custom-evaluator.rates.class: org.apache.flink.autoscaler.custom.CustomEvaluator
+    job.autoscaler.metrics.custom-evaluator.rates.target-data-rate: 100000.0
+    job.autoscaler.metrics.custom-evaluator.overrides.class: org.apache.flink.autoscaler.custom.AnotherEvaluator
     ```
-   {{< hint warning >}}
-   **Only one custom metric evaluator per pipeline is supported for now**. Currently, `job.autoscaler.metrics.custom-evaluators` is parsed as a list, but if more than one entry is configured the autoscaler logs a warning and falls back to the first entry, ignoring the rest. Registering multiple implementations via `META-INF/services` is fine as they form a registry that different jobs can select from by class FQN, but a single job cannot chain or compose more than one evaluator. Multi-instance support, including a priority/ordering contract aligned with the [Custom Scaling Executors](#custom-scaling-executors) chain, will be added as a follow-up.
-   {{< /hint >}}
 
 5. Deploy the evaluator.
 
@@ -367,13 +371,24 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
         Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
         ```text
-        o.a.f.k.o.u.AutoscalerUtils [INFO ] Discovered custom metric evaluator from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.custom.CustomEvaluator.
+        o.a.f.k.o.u.AutoscalerUtils [INFO ] Discovered custom metric evaluator for autoscaler from plugin directory[/opt/flink/plugins]: org.apache.flink.autoscaler.custom.CustomEvaluator.
         ```
 
     - **Standalone autoscaler** - simply place the custom metric evaluator JAR on the classpath of the `flink-autoscaler-standalone` process. It will be picked up automatically via Java's `ServiceLoader` and discovery will be logged:
         ```text
         o.a.f.a.s.u.AutoscalerUtils [INFO ] Discovered custom metric evaluator via ServiceLoader: org.apache.flink.autoscaler.custom.CustomEvaluator.
         ```
+
+   {{< hint info >}}
+   Once configured, on every evaluation cycle `ScalingMetricEvaluator` resolves the chain against the per-job `Configuration`, sorts it by ascending `priority()`, and emits an INFO log line listing the evaluator plugins that will be applied in order. This is useful for verifying that all expected instances were picked up and chained correctly:
+   ```text
+   o.a.f.a.ScalingMetricEvaluator [INFO ] Custom metric evaluators resolved and sorted by priority: [[name=rates, class=org.apache.flink.autoscaler.custom.CustomEvaluator, priority=0], [name=overrides, class=org.apache.flink.autoscaler.custom.AnotherEvaluator, priority=100]]
+   ```
+   Plugins with equal priority have no guaranteed relative ordering.
+   {{< /hint >}}
+   {{< hint warning >}}
+   Evaluator implementations must be stateless. Instances are selected by class FQN, so registering the same class under several names reuses a single object for all of them. Per-instance settings must therefore come from `Context.getConfiguration()`, which is scoped to the instance being invoked. A value cached in a field would instead be shared by every instance.
+   {{< /hint >}}
 
 ### Custom Parallelism Alignment Modes
 
@@ -564,4 +579,8 @@ The following steps demonstrate how to develop and use a custom scaling executor
    ```text
    o.a.f.a.ScalingExecutor [INFO ] Custom scaling executors resolved and sorted by priority: [[name=cap, class=org.apache.flink.autoscaler.custom.CustomScalingExecutor, priority=0], [name=audit, class=org.apache.flink.autoscaler.custom.AuditScalingExecutor, priority=100]]
    ```
+   Plugins with equal priority have no guaranteed relative ordering.
+   {{< /hint >}}
+   {{< hint warning >}}
+   Scaling executor implementations must be stateless. Instances are selected by class FQN, so registering the same class under several names reuses a single object for all of them. Per-instance settings must therefore come from `Context.getConfiguration()`, which is scoped to the instance being invoked. A value cached in a field would instead be shared by every instance.
    {{< /hint >}}

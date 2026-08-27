@@ -40,12 +40,16 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -153,8 +157,8 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
 
         boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
 
-        var customEvaluationSession =
-                buildCustomEvaluationSession(
+        var customEvaluationSessions =
+                buildCustomEvaluationSessions(
                         autoScalerContext, conf, scalingOutput, processingBacklog);
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
@@ -168,34 +172,39 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
                             vertex,
                             processingBacklog,
                             restartTime,
-                            customEvaluationSession));
+                            customEvaluationSessions));
         }
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
         return new EvaluatedMetrics(scalingOutput, globalMetrics);
     }
 
-    @Nullable
-    private Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>
-            buildCustomEvaluationSession(
+    private List<Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>>
+            buildCustomEvaluationSessions(
                     @Nullable Context autoScalerContext,
                     Configuration conf,
                     Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
                     boolean processingBacklog) {
         if (autoScalerContext == null) {
-            return null;
+            return Collections.emptyList();
         }
-        var customEvaluatorWithConfig = getCustomEvaluatorIfRequired(conf);
-        if (customEvaluatorWithConfig == null) {
-            return null;
+        var evaluators = resolveCustomEvaluators(conf);
+        if (evaluators.isEmpty()) {
+            return Collections.emptyList();
         }
-        var pluginContext =
-                new ScalingMetricsEvaluatorPlugin.Context<KEY>(
-                        autoScalerContext,
-                        customEvaluatorWithConfig.f1,
-                        Collections.unmodifiableMap(scalingOutput),
-                        processingBacklog);
-        return Tuple2.of(customEvaluatorWithConfig.f0, pluginContext);
+        var sharedVertexMetrics = Collections.unmodifiableMap(scalingOutput);
+        List<Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>>
+                sessions = new ArrayList<>();
+        for (var entry : evaluators) {
+            var pluginContext =
+                    new ScalingMetricsEvaluatorPlugin.Context<KEY>(
+                            autoScalerContext,
+                            AutoScalerOptions.customEvaluatorConfiguration(conf, entry.getKey()),
+                            sharedVertexMetrics,
+                            processingBacklog);
+            sessions.add(Tuple2.of(entry.getValue(), pluginContext));
+        }
+        return sessions;
     }
 
     @VisibleForTesting
@@ -234,11 +243,8 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
             JobVertexID vertex,
             boolean processingBacklog,
             Duration restartTime,
-            @Nullable
-                    Tuple2<
-                                    ScalingMetricsEvaluatorPlugin,
-                                    ScalingMetricsEvaluatorPlugin.Context<KEY>>
-                            customEvaluationSession) {
+            List<Tuple2<ScalingMetricsEvaluatorPlugin, ScalingMetricsEvaluatorPlugin.Context<KEY>>>
+                    customEvaluationSessions) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -287,22 +293,19 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
 
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
 
-        Optional.ofNullable(customEvaluationSession)
-                .map(
-                        session ->
-                                runCustomEvaluator(
-                                        vertex,
-                                        Collections.unmodifiableMap(evaluatedMetrics),
-                                        session))
-                .filter(customEvaluatedMetrics -> !customEvaluatedMetrics.isEmpty())
-                .ifPresent(
-                        customEvaluatedMetrics -> {
-                            LOG.info(
-                                    "Merging custom evaluated metrics for vertex {}: {}",
-                                    vertex,
-                                    customEvaluatedMetrics);
-                            mergeEvaluatedMetricsMaps(evaluatedMetrics, customEvaluatedMetrics);
-                        });
+        for (var session : customEvaluationSessions) {
+            var customEvaluatedMetrics =
+                    runCustomEvaluator(
+                            vertex, Collections.unmodifiableMap(evaluatedMetrics), session);
+            if (!customEvaluatedMetrics.isEmpty()) {
+                LOG.info(
+                        "Merging custom evaluated metrics from evaluator {} for vertex {}: {}",
+                        session.f0.getClass().getName(),
+                        vertex,
+                        customEvaluatedMetrics);
+                mergeEvaluatedMetricsMaps(evaluatedMetrics, customEvaluatedMetrics);
+            }
+        }
 
         return evaluatedMetrics;
     }
@@ -784,62 +787,78 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
     }
 
     /**
-     * Resolves the configured custom metric evaluator (if any) from the registered evaluators.
-     *
-     * @param conf The job configuration.
-     * @return A tuple of the resolved {@link ScalingMetricsEvaluatorPlugin} and its
-     *     evaluator-specific configuration, or {@code null} if no custom evaluator is configured or
-     *     resolvable.
+     * Resolves the ordered chain of custom metric evaluator instances configured for the given
+     * {@link Configuration}, against the registered evaluators. Returns an ordered, possibly-empty
+     * list of {@code (instance-name, evaluator)} pairs sorted by ascending {@link
+     * ScalingMetricsEvaluatorPlugin#priority()}. The instance name is the user-chosen {@code
+     * <name>} from {@code job.autoscaler.metrics.custom-evaluators} and is required downstream to
+     * look up the scoped per-instance {@link Configuration}.
      */
     @VisibleForTesting
-    protected Tuple2<ScalingMetricsEvaluatorPlugin, Configuration> getCustomEvaluatorIfRequired(
+    protected Collection<Map.Entry<String, ScalingMetricsEvaluatorPlugin>> resolveCustomEvaluators(
             Configuration conf) {
         List<String> instances = conf.get(CUSTOM_EVALUATORS);
         if (instances == null || instances.isEmpty()) {
-            return null;
+            return Collections.emptyList();
         }
-        if (instances.size() > 1) {
-            LOG.warn(
-                    "Only a single custom metric evaluator is currently supported, but {} were configured via '{}': {}. "
-                            + "Falling back to the first entry ('{}'); the remaining entries will be ignored. "
-                            + "Multi-instance support (with a priority/ordering contract) will be added as a follow-up.",
-                    instances.size(),
-                    CUSTOM_EVALUATORS.key(),
-                    instances,
-                    instances.get(0));
-        }
-        String instance = instances.get(0);
-        String classKey = AutoScalerOptions.customEvaluatorClassKey(instance);
-        String configuredClassName =
-                conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
-        if (configuredClassName == null || configuredClassName.isBlank()) {
-            LOG.warn(
-                    "Custom metric evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. "
-                            + "No custom metric evaluator will be applied.",
-                    instance,
-                    CUSTOM_EVALUATORS.key(),
-                    classKey);
-            return null;
-        }
-        ScalingMetricsEvaluatorPlugin match = null;
-        for (ScalingMetricsEvaluatorPlugin evaluator : customEvaluators) {
-            if (evaluator.getClass().getName().equals(configuredClassName)) {
-                match = evaluator;
-                break;
+        List<Map.Entry<String, ScalingMetricsEvaluatorPlugin>> resolved = new ArrayList<>();
+        Set<String> seenInstanceNames = new HashSet<>();
+        for (String instance : instances) {
+            if (!seenInstanceNames.add(instance)) {
+                LOG.warn(
+                        "Custom metric evaluator instance name '{}' is configured more than once; ignoring duplicates.",
+                        instance);
+                continue;
             }
+            String classKey = AutoScalerOptions.customEvaluatorClassKey(instance);
+            String configuredClassName =
+                    conf.get(AutoScalerOptions.customEvaluatorClassOption(instance));
+            if (configuredClassName == null || configuredClassName.isBlank()) {
+                LOG.warn(
+                        "Custom metric evaluator instance '{}' is configured in '{}' but no implementation class is set via '{}'. Ignoring.",
+                        instance,
+                        CUSTOM_EVALUATORS.key(),
+                        classKey);
+                continue;
+            }
+            ScalingMetricsEvaluatorPlugin match = null;
+            for (ScalingMetricsEvaluatorPlugin evaluator : customEvaluators) {
+                if (evaluator.getClass().getName().equals(configuredClassName)) {
+                    match = evaluator;
+                    break;
+                }
+            }
+            if (match == null) {
+                LOG.warn(
+                        "No registered custom metric evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
+                        configuredClassName,
+                        instance,
+                        classKey,
+                        customEvaluators.stream()
+                                .map(e -> e.getClass().getName())
+                                .collect(Collectors.toList()));
+                continue;
+            }
+            resolved.add(Map.entry(instance, match));
         }
-        if (match == null) {
-            LOG.warn(
-                    "No registered custom metric evaluator matches class '{}' configured for instance '{}' via '{}'. Discovered evaluators: {}.",
-                    configuredClassName,
-                    instance,
-                    classKey,
-                    customEvaluators.stream()
-                            .map(e -> e.getClass().getName())
-                            .collect(Collectors.toList()));
-            return null;
+        if (resolved.isEmpty()) {
+            return Collections.emptyList();
         }
-        return new Tuple2<>(match, AutoScalerOptions.customEvaluatorConfiguration(conf, instance));
+        resolved.sort(Comparator.comparingInt(e -> e.getValue().priority()));
+        LOG.info(
+                "Custom metric evaluators resolved and sorted by priority: {}",
+                resolved.stream()
+                        .map(
+                                e ->
+                                        "[name="
+                                                + e.getKey()
+                                                + ", class="
+                                                + e.getValue().getClass().getName()
+                                                + ", priority="
+                                                + e.getValue().priority()
+                                                + "]")
+                        .collect(Collectors.toList()));
+        return Collections.unmodifiableList(resolved);
     }
 
     @VisibleForTesting
