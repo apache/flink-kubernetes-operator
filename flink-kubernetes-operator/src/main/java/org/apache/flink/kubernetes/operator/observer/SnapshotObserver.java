@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -53,7 +54,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
@@ -70,6 +73,8 @@ public class SnapshotObserver<
             s -> DateTimeUtils.parseKubernetes(s.getMetadata().getCreationTimestamp());
     private static final Set<SnapshotTriggerType> CLEAN_UP_SNAPSHOT_TRIGGER_TYPES =
             Set.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE);
+    private static final Set<FlinkStateSnapshotStatus.State> CLEAN_UP_SNAPSHOT_STATES =
+            Set.of(COMPLETED, FAILED, ABANDONED);
 
     private final EventRecorder eventRecorder;
 
@@ -278,6 +283,12 @@ public class SnapshotObserver<
         var snapshotList =
                 snapshots.stream()
                         .filter(s -> !s.isMarkedForDeletion())
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && s.getStatus().getState() != null
+                                                && CLEAN_UP_SNAPSHOT_STATES.contains(
+                                                        s.getStatus().getState()))
                         .filter(
                                 s ->
                                         CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
