@@ -30,9 +30,9 @@ import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.client.CustomResource;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -43,7 +43,7 @@ public class TestingMetricListener {
     private static final String NAME = "test-op-name";
     private static final String HOST = "test-op-host";
     private final KubernetesOperatorMetricGroup metricGroup;
-    private final Map<String, Metric> metrics = new HashMap();
+    private final Map<String, Metric> metrics = new ConcurrentHashMap<>();
     private final ScheduledExecutorService executor;
     private Configuration configuration;
     private ViewUpdater viewUpdater;
@@ -66,6 +66,10 @@ public class TestingMetricListener {
                                         viewUpdater.notifyOfAddedView((View) metric);
                                     }
                                 })
+                        .setUnregisterConsumer(
+                                (metric, name, group) ->
+                                        this.metrics.remove(
+                                                group.getMetricIdentifier(name), metric))
                         .build();
         this.metricGroup =
                 KubernetesOperatorMetricGroup.create(

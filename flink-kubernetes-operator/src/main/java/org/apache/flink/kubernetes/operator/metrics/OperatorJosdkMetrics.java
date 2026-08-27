@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -39,8 +40,7 @@ import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
 
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,13 +60,8 @@ public class OperatorJosdkMetrics implements Metrics {
     private final FlinkConfigManager configManager;
     private final Clock clock;
 
-    private final Map<ResourceID, KubernetesResourceNamespaceMetricGroup> resourceNsMetricGroups =
-            new ConcurrentHashMap<>();
-    private final Map<ResourceID, KubernetesResourceMetricGroup> resourceMetricGroups =
-            new ConcurrentHashMap<>();
-
+    private final Map<ResourceKey, ResourceMetrics> resourceMetrics = new ConcurrentHashMap<>();
     private final Map<List<String>, Histogram> histograms = new ConcurrentHashMap<>();
-    private final Map<List<String>, Counter> counters = new ConcurrentHashMap<>();
 
     public OperatorJosdkMetrics(
             KubernetesOperatorMetricGroup operatorMetricGroup, FlinkConfigManager configManager) {
@@ -92,41 +87,58 @@ public class OperatorJosdkMetrics implements Metrics {
     public void eventReceived(Event event, Map<String, Object> metadata) {
         if (event instanceof ResourceEvent) {
             var action = ((ResourceEvent) event).getAction();
-            counter(getResourceMg(event.getRelatedCustomResourceID(), metadata), RESOURCE, EVENT)
-                    .inc();
-            counter(
-                            getResourceMg(event.getRelatedCustomResourceID(), metadata),
-                            RESOURCE,
-                            EVENT,
-                            action.name())
-                    .inc();
+            resourceMetrics.compute(
+                    getResourceKey(event.getRelatedCustomResourceID(), metadata),
+                    (key, metrics) -> {
+                        if (metrics == null) {
+                            metrics = newResourceMetrics(key);
+                        }
+                        metrics.counter(RESOURCE, EVENT).inc();
+                        metrics.counter(RESOURCE, EVENT, action.name()).inc();
+                        return metrics;
+                    });
         }
     }
 
     @Override
     public void cleanupDone(ResourceID resourceID, Map<String, Object> metadata) {
-        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "cleanup").inc();
+        resourceMetrics.computeIfPresent(
+                getResourceKey(resourceID, metadata),
+                (key, metrics) -> {
+                    metrics.close();
+                    return null;
+                });
     }
 
     @Override
     public void reconciliationSubmitted(
             HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
-        var resourceID = ResourceID.fromResource(resource);
-        counter(getResourceMg(resourceID, metadata), RECONCILIATION).inc();
-
-        if (retryInfoNullable != null) {
-            counter(getResourceMg(resourceID, metadata), RECONCILIATION, "retries").inc();
-        }
+        resourceMetrics.compute(
+                getResourceKey(ResourceID.fromResource(resource), metadata),
+                (key, metrics) -> {
+                    if (metrics == null) {
+                        metrics = newResourceMetrics(key);
+                    }
+                    metrics.counter(RECONCILIATION).inc();
+                    if (retryInfoNullable != null) {
+                        metrics.counter(RECONCILIATION, "retries").inc();
+                    }
+                    return metrics;
+                });
     }
 
     @Override
     public void reconciliationFinished(
             HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
-        counter(
-                        getResourceMg(ResourceID.fromResource(resource), metadata),
-                        RECONCILIATION,
-                        "finished")
-                .inc();
+        // Update-only: a completion callback may race a concurrent delete and arrive after
+        // cleanupDone(). If the key was already removed, computeIfPresent skips the lambda so
+        // metrics are never re-registered for a cleaned-up resource.
+        resourceMetrics.computeIfPresent(
+                getResourceKey(ResourceID.fromResource(resource), metadata),
+                (key, metrics) -> {
+                    metrics.counter(RECONCILIATION, "finished").inc();
+                    return metrics;
+                });
     }
 
     @Override
@@ -135,11 +147,13 @@ public class OperatorJosdkMetrics implements Metrics {
             RetryInfo retryInfoNullable,
             Exception exception,
             Map<String, Object> metadata) {
-        counter(
-                        getResourceMg(ResourceID.fromResource(resource), metadata),
-                        RECONCILIATION,
-                        "failed")
-                .inc();
+        // Update-only, see reconciliationFinished().
+        resourceMetrics.computeIfPresent(
+                getResourceKey(ResourceID.fromResource(resource), metadata),
+                (key, metrics) -> {
+                    metrics.counter(RECONCILIATION, "failed").inc();
+                    return metrics;
+                });
     }
 
     private Histogram histogram(ControllerExecution<?> execution, String name) {
@@ -147,8 +161,13 @@ public class OperatorJosdkMetrics implements Metrics {
         return histograms.computeIfAbsent(
                 groups,
                 k -> {
-                    var group =
-                            getResourceNsMg(execution.resourceID(), execution.metadata())
+                    var key = getResourceKey(execution.resourceID(), execution.metadata());
+                    MetricGroup group =
+                            operatorMetricGroup
+                                    .createResourceNamespaceGroup(
+                                            configManager.getDefaultConfig(),
+                                            key.resourceClass(),
+                                            key.resourceID().getNamespace().orElse("default"))
                                     .addGroup(OPERATOR_SDK_GROUP);
                     for (String mg : groups) {
                         group = group.addGroup(mg);
@@ -169,39 +188,27 @@ public class OperatorJosdkMetrics implements Metrics {
         return TimeUnit.NANOSECONDS.toSeconds(clock.relativeTimeNanos() - startTime);
     }
 
-    private Counter counter(MetricGroup parent, String... names) {
-        var key = new ArrayList<String>(parent.getScopeComponents().length + names.length);
-        Arrays.stream(parent.getScopeComponents()).forEach(key::add);
-        Arrays.stream(names).forEach(key::add);
-
-        return counters.computeIfAbsent(
-                key,
-                s -> {
-                    MetricGroup group = parent.addGroup(OPERATOR_SDK_GROUP);
-                    for (String name : names) {
-                        group = group.addGroup(name);
-                    }
-                    var finalGroup = group;
-                    return OperatorMetricUtils.synchronizedCounter(finalGroup.counter("Count"));
-                });
-    }
-
-    private KubernetesResourceNamespaceMetricGroup getResourceNsMg(
-            ResourceID resourceID, Map<String, Object> metadata) {
+    private ResourceKey getResourceKey(ResourceID resourceID, Map<String, Object> metadata) {
         Class<? extends CustomResource<?, ?>> resourceClass =
                 getResourceClass(metadata)
                         .orElseThrow(
                                 () ->
                                         new RuntimeException(
                                                 "Unknown resource kind for " + resourceID));
+        return new ResourceKey(resourceClass, resourceID);
+    }
 
-        return resourceNsMetricGroups.computeIfAbsent(
-                resourceID,
-                rid ->
-                        operatorMetricGroup.createResourceNamespaceGroup(
+    private ResourceMetrics newResourceMetrics(ResourceKey key) {
+        var resourceID = key.resourceID();
+        var resourceGroup =
+                operatorMetricGroup
+                        .createResourceNamespaceGroup(
                                 configManager.getDefaultConfig(),
-                                resourceClass,
-                                rid.getNamespace().orElse("default")));
+                                key.resourceClass(),
+                                resourceID.getNamespace().orElse("default"))
+                        .createResourceGroup(
+                                configManager.getDefaultConfig(), resourceID.getName());
+        return new ResourceMetrics(resourceGroup);
     }
 
     private Optional<Class<? extends CustomResource<?, ?>>> getResourceClass(
@@ -229,13 +236,42 @@ public class OperatorJosdkMetrics implements Metrics {
         return Optional.of(resourceClass);
     }
 
-    private KubernetesResourceMetricGroup getResourceMg(
-            ResourceID resourceID, Map<String, Object> metadata) {
-        return resourceMetricGroups.computeIfAbsent(
-                resourceID,
-                rid ->
-                        getResourceNsMg(rid, metadata)
-                                .createResourceGroup(
-                                        configManager.getDefaultConfig(), rid.getName()));
+    @VisibleForTesting
+    int getResourceMetricsCacheSize() {
+        return resourceMetrics.size();
+    }
+
+    /** Cache key that fully identifies a reconciled resource by its kind and {@link ResourceID}. */
+    private record ResourceKey(
+            Class<? extends CustomResource<?, ?>> resourceClass, ResourceID resourceID) {}
+
+    /** Holds the metric group and counters owned by a single reconciled resource. */
+    private static final class ResourceMetrics {
+        private final KubernetesResourceMetricGroup group;
+        // Only accessed from within resourceMetrics.compute*/computeIfPresent lambdas, which are
+        // serialized per ResourceKey by the backing ConcurrentHashMap, so a plain HashMap is safe.
+        private final Map<List<String>, Counter> counters = new HashMap<>();
+
+        private ResourceMetrics(KubernetesResourceMetricGroup group) {
+            this.group = group;
+        }
+
+        private Counter counter(String... names) {
+            return counters.computeIfAbsent(
+                    List.of(names),
+                    k -> {
+                        MetricGroup metricGroup = group.addGroup(OPERATOR_SDK_GROUP);
+                        for (String name : names) {
+                            metricGroup = metricGroup.addGroup(name);
+                        }
+                        return OperatorMetricUtils.synchronizedCounter(
+                                metricGroup.counter("Count"));
+                    });
+        }
+
+        private void close() {
+            group.close();
+            counters.clear();
+        }
     }
 }
