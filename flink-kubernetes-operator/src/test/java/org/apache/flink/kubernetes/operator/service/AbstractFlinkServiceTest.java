@@ -64,6 +64,8 @@ import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.ConfigurationInfo;
 import org.apache.flink.runtime.rest.messages.ConfigurationInfoEntry;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.runtime.rest.messages.JobConfigHeaders;
+import org.apache.flink.runtime.rest.messages.JobConfigInfo;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
 import org.apache.flink.runtime.rest.messages.MessageParameters;
@@ -1620,19 +1622,17 @@ public class AbstractFlinkServiceTest {
 
     @Test
     void testGetRuntimeConfigurationIncludesVersionIndependentJobConfig() throws Exception {
-        var executionConfig = new CustomJobConfigInfo.ExecutionConfigInfo();
-        executionConfig.setParallelism(4);
-        executionConfig.setObjectReuse(true);
-        executionConfig.setGlobalJobParameters(Map.of("user.param", "value1"));
-        var jobConfigInfo = new CustomJobConfigInfo();
-        jobConfigInfo.setExecutionConfigInfo(executionConfig);
-        var customHeadersUsed = new AtomicBoolean();
+        var executionConfig =
+                new JobConfigInfo.ExecutionConfigInfo(
+                        null, "fixedDelay", 4, true, Map.of("user.param", "value1"));
+        var jobConfigInfo = new JobConfigInfo(new JobID(), "test-job", executionConfig);
+        var jobConfigHeadersUsed = new AtomicBoolean();
 
         var service =
                 getTestingService(
                         (headers, params, body) -> {
-                            if (headers instanceof CustomJobConfigHeaders) {
-                                customHeadersUsed.set(true);
+                            if (headers instanceof JobConfigHeaders) {
+                                jobConfigHeadersUsed.set(true);
                                 return CompletableFuture.completedFuture(jobConfigInfo);
                             }
                             return CompletableFuture.failedFuture(
@@ -1641,7 +1641,7 @@ public class AbstractFlinkServiceTest {
 
         var result = service.getRuntimeConfiguration(configuration, JobID.generate());
 
-        assertThat(customHeadersUsed).isTrue();
+        assertThat(jobConfigHeadersUsed).isTrue();
         assertThat(result)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(

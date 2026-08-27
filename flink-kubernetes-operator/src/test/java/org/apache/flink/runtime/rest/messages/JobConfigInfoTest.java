@@ -16,8 +16,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.service;
+package org.apache.flink.runtime.rest.messages;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.kubernetes.operator.utils.FlinkRuntimeConfigurationUtils;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
 
@@ -30,14 +31,17 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Tests for {@link CustomJobConfigInfo}. */
-class CustomJobConfigInfoTest {
+/** Tests for the shadowed multi-version compatible {@link JobConfigInfo}. */
+class JobConfigInfoTest {
 
     @ParameterizedTest
     @MethodSource("flinkJobConfigResponses")
     void testJobConfigurationCompatibilityAcrossFlinkVersions(String json) throws Exception {
         var configInfo = parseJobConfig(json);
 
+        assertThat(configInfo.getJobId())
+                .isEqualTo(JobID.fromHexString("bc8cc01941f17a4fb5f8873b45512e19"));
+        assertThat(configInfo.getJobName()).isEqualTo("test-job");
         assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo))
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
@@ -47,22 +51,21 @@ class CustomJobConfigInfoTest {
     }
 
     @Test
-    void testMapJobConfigurationDropsOperatorControlledGlobalParameters() throws Exception {
-        var configInfo =
-                parseJobConfig(
-                        """
-                        {
-                          "execution-config": {
-                            "job-parallelism": 4,
-                            "object-reuse-mode": true,
-                            "user-config": {
-                              "user.param": "value1",
-                              "kubernetes.operator.job.upgrade.last-state-fallback.enabled": "false",
-                              "job.autoscaler.enabled": "false"
-                            }
-                          }
-                        }
-                        """);
+    void testMapJobConfigurationDropsOperatorControlledGlobalParameters() {
+        var executionConfig =
+                new JobConfigInfo.ExecutionConfigInfo(
+                        null,
+                        "fixedDelay",
+                        4,
+                        true,
+                        Map.of(
+                                "user.param",
+                                "value1",
+                                "kubernetes.operator.job.upgrade.last-state-fallback.enabled",
+                                "false",
+                                "job.autoscaler.enabled",
+                                "false"));
+        var configInfo = new JobConfigInfo(new JobID(), "test-job", executionConfig);
 
         assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(configInfo))
                 .containsExactlyInAnyOrderEntriesOf(
@@ -73,26 +76,18 @@ class CustomJobConfigInfoTest {
     }
 
     @Test
-    void testMapJobConfigurationHandlesMissingFields() throws Exception {
-        var userConfigOnly =
+    void testMapJobConfigurationHandlesMissingExecutionConfig() throws Exception {
+        var withoutExecutionConfig =
                 parseJobConfig(
                         """
                         {
-                          "execution-config": {
-                            "user-config": {
-                              "user.param": "value1"
-                            }
-                          }
+                          "jid": "bc8cc01941f17a4fb5f8873b45512e19",
+                          "name": "test-job"
                         }
                         """);
 
-        assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(userConfigOnly))
-                .containsExactly(Map.entry("user.param", "value1"));
-        assertThat(
-                        FlinkRuntimeConfigurationUtils.mapJobConfiguration(
-                                parseJobConfig("{\"execution-config\":{}}")))
-                .isEmpty();
-        assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(parseJobConfig("{}")))
+        assertThat(withoutExecutionConfig.getExecutionConfigInfo()).isNull();
+        assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(withoutExecutionConfig))
                 .isEmpty();
         assertThat(FlinkRuntimeConfigurationUtils.mapJobConfiguration(null)).isEmpty();
     }
@@ -134,13 +129,8 @@ class CustomJobConfigInfoTest {
                 """);
     }
 
-    private static CustomJobConfigInfo parseJobConfig(String json) throws Exception {
-        var flexible =
-                RestMapperUtils.getFlexibleObjectMapper()
-                        .readValue(json, CustomJobConfigInfo.class);
-        var strict =
-                RestMapperUtils.getStrictObjectMapper().readValue(json, CustomJobConfigInfo.class);
-        assertThat(strict).isEqualTo(flexible);
-        return flexible;
+    /** Parses the response the same way {@code RestClient} does. */
+    private static JobConfigInfo parseJobConfig(String json) throws Exception {
+        return RestMapperUtils.getFlexibleObjectMapper().readValue(json, JobConfigInfo.class);
     }
 }
