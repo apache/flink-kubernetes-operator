@@ -17,12 +17,17 @@
 
 package org.apache.flink.kubernetes.operator.api;
 
+import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubeapitest.junit.EnableKubeAPIServer;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @EnableKubeAPIServer
 class FlinkConfigurationYamlSupportTest {
@@ -39,6 +45,8 @@ class FlinkConfigurationYamlSupportTest {
             "src/test/resources/pre-flink-configuration-yaml-crd.yml";
     public static final String NEW_CRD_PATH =
             "../helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml";
+    public static final String SNAPSHOT_CRD_PATH =
+            "../helm/flink-kubernetes-operator/crds/flinkstatesnapshots.flink.apache.org-v1.yml";
 
     static KubernetesClient client;
 
@@ -66,6 +74,65 @@ class FlinkConfigurationYamlSupportTest {
                         .get();
         assertThat(deployment.getSpec().getFlinkConfiguration()).hasSize(3);
         assertThat(deployment.getSpec().getFlinkConfiguration().asFlatMap()).hasSize(5);
+    }
+
+    /**
+     * Verifies that the validation constraints declared via CRD-generator annotations are enforced
+     * by the API server at admission time, rather than only by {@code
+     * DefaultValidator} during reconciliation. Covers {@code @Min(1)} on the JobManager/TaskManager
+     * replicas, {@code @Required} on {@code flinkVersion} and the ingress template, and
+     * {@code @Min(-1)} on the snapshot {@code backoffLimit}.
+     */
+    @Test
+    void crdRejectsInvalidSpecValues() {
+        applyCRD(NEW_CRD_PATH);
+
+        // A fully specified deployment satisfies all the schema constraints.
+        client.resource(validDeployment("valid-dep")).create();
+
+        // @Min(1) on JobManagerSpec.replicas
+        var jmReplicas = validDeployment("invalid-jm-replicas");
+        jmReplicas.getSpec().getJobManager().setReplicas(0);
+        assertRejected(jmReplicas);
+
+        // @Min(1) on TaskManagerSpec.replicas
+        var tmReplicas = validDeployment("invalid-tm-replicas");
+        tmReplicas.getSpec().getTaskManager().setReplicas(0);
+        assertRejected(tmReplicas);
+
+        // @Required on FlinkDeploymentSpec.flinkVersion
+        var noVersion = validDeployment("invalid-no-version");
+        noVersion.getSpec().setFlinkVersion(null);
+        assertRejected(noVersion);
+
+        // @Required on IngressSpec.template (an ingress without a template)
+        var noTemplate = validDeployment("invalid-ingress");
+        noTemplate.getSpec().setIngress(new IngressSpec());
+        assertRejected(noTemplate);
+
+        // @Min(-1) on FlinkStateSnapshotSpec.backoffLimit (-1 is the unlimited-retries sentinel)
+        applyCRD(SNAPSHOT_CRD_PATH);
+        client.resource(validSnapshot("valid-snapshot")).create();
+        var badBackoff = validSnapshot("invalid-backoff");
+        badBackoff.getSpec().setBackoffLimit(-2);
+        assertRejected(badBackoff);
+    }
+
+    private FlinkDeployment validDeployment(String name) {
+        var deployment = BaseTestUtils.buildApplicationCluster();
+        deployment.getMetadata().setName(name);
+        deployment.getMetadata().setNamespace("default");
+        return deployment;
+    }
+
+    private FlinkStateSnapshot validSnapshot(String name) {
+        return BaseTestUtils.buildFlinkStateSnapshotSavepoint(
+                name, "default", "test-path", true, null);
+    }
+
+    private void assertRejected(HasMetadata resource) {
+        assertThatThrownBy(() -> client.resource(resource).create())
+                .isInstanceOf(KubernetesClientException.class);
     }
 
     private GenericKubernetesResource applyResource(String path) {
