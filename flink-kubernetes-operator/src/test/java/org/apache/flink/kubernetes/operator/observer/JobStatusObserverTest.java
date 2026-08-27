@@ -57,6 +57,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for the {@link JobStatusObserver}. */
@@ -89,9 +90,17 @@ public class JobStatusObserverTest extends OperatorTestBase {
         observer.observe(
                 getResourceContext(
                         job, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient)));
-        assertEquals(
-                JobStatusObserver.JOB_NOT_FOUND_ERR,
-                flinkResourceEventCollector.events.poll().getMessage());
+        if (fromStatus.isGloballyTerminalState()) {
+            assertTrue(flinkResourceEventCollector.events.isEmpty());
+            assertEquals(fromStatus, jobStatus.getState());
+            assertNull(status.getError());
+        } else {
+            assertEquals(
+                    JobStatusObserver.JOB_NOT_FOUND_ERR,
+                    flinkResourceEventCollector.events.poll().getMessage());
+            assertEquals(JobStatus.RECONCILING, jobStatus.getState());
+            assertEquals(JobStatusObserver.JOB_NOT_FOUND_ERR, status.getError());
+        }
         assertEquals(
                 expectedAfter,
                 status.getReconciliationStatus()
@@ -909,6 +918,80 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertEquals(
                 now.minus(Duration.ofMinutes(1)).truncatedTo(ChronoUnit.MILLIS),
                 ctx.getExceptionCacheEntry().getLastTimestamp());
+    }
+
+    @Test
+    void testFinishedJobStateSurvivesJobManagerRestart() throws Exception {
+        // A restarted JobManager serves the job overview from an empty in-memory job store, so a
+        // job that already finished reads as missing even though the HA store still considers it
+        // completed and does not resubmit it. The observed terminal state must be kept, otherwise
+        // the deployment is stranded in RECONCILING and the terminal JobManager is never cleaned
+        // up.
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+
+        // Let the observer record the terminal state from the cluster
+        flinkService.cancelJob(jobId, true);
+        assertTrue(observer.observe(ctx));
+        assertEquals(JobStatus.FINISHED, jobStatus.getState());
+        flinkResourceEventCollector.events.clear();
+
+        // The JobManager restart drops the finished job from the store it is served from
+        flinkService.clearJobsInTerminalState();
+        assertFalse(observer.observe(ctx));
+
+        assertEquals(JobStatus.FINISHED, jobStatus.getState());
+        assertNull(status.getError());
+        assertTrue(flinkResourceEventCollector.events.isEmpty());
+    }
+
+    @Test
+    void testFailedJobStateSurvivesJobManagerRestart() throws Exception {
+        // Same as the finished case, but a failed job must additionally keep the recorded failure
+        // reason instead of having it replaced by the job not found error.
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+
+        flinkService.markApplicationJobFailedWithError(jobId, "job failure");
+        assertTrue(observer.observe(ctx));
+        assertEquals(JobStatus.FAILED, jobStatus.getState());
+        var failureError = status.getError();
+        flinkResourceEventCollector.events.clear();
+
+        flinkService.clearJobsInTerminalState();
+        assertFalse(observer.observe(ctx));
+
+        assertEquals(JobStatus.FAILED, jobStatus.getState());
+        assertEquals(failureError, status.getError());
+        assertTrue(flinkResourceEventCollector.events.isEmpty());
+    }
+
+    @Test
+    void testMissingTerminalJobStillUnblocksPendingUpgrade() throws Exception {
+        // Keeping the terminal job state must not keep a pending upgrade in the UPGRADING state,
+        // the reconciliation state is still reset so the upgrade can be retried.
+        var deployment = initDeployment();
+        var status = deployment.getStatus();
+        status.getJobStatus().setState(JobStatus.FINISHED);
+        status.getReconciliationStatus().setState(ReconciliationState.UPGRADING);
+
+        observer.observe(getResourceContext(deployment));
+
+        assertEquals(ReconciliationState.DEPLOYED, status.getReconciliationStatus().getState());
     }
 
     private static Stream<Arguments> cancellingArgs() {
