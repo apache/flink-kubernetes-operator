@@ -1262,6 +1262,35 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testRestartUnhealthyStatelessJobWithHaEnabled() throws Exception {
+        // FLINK-38049: stateless jobs with HA enabled should not fall back to last-state on restart
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        // buildApplicationCluster() defaults to STATELESS upgrade mode with HA enabled
+        Assertions.assertEquals(UpgradeMode.STATELESS, getJobSpec(deployment).getUpgradeMode());
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        var clusterHealthInfo = new ClusterHealthInfo();
+        clusterHealthInfo.setTimeStamp(System.currentTimeMillis());
+        clusterHealthInfo.setNumRestarts(2);
+        clusterHealthInfo.setHealthResult(ClusterHealthResult.error("unhealthy"));
+        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
+                deployment.getStatus().getClusterInfo(), clusterHealthInfo);
+
+        reconciler.reconcile(deployment, context);
+
+        // Job must be resubmitted in stateless mode: no savepoint path
+        var jobs = flinkService.listJobs();
+        Assertions.assertEquals(1, jobs.size());
+        Assertions.assertNull(jobs.get(0).f0);
+    }
+
+    @Test
     public void testReconcileIfUpgradeModeNotAvailable() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.SAVEPOINT);
