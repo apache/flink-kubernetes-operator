@@ -301,17 +301,23 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     protected void onTargetJobNotFound(FlinkResourceContext<R> ctx) {
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-
-        eventRecorder.triggerEvent(
-                resource,
-                EventRecorder.Type.Warning,
-                EventRecorder.Reason.Missing,
-                EventRecorder.Component.Job,
-                JOB_NOT_FOUND_ERR,
-                ctx.getKubernetesClient());
+        var alreadyTerminal = ReconciliationUtils.isJobInTerminalState(resource.getStatus());
+        if (alreadyTerminal) {
+            LOG.info(
+                    "Job not found but it was already observed in the {} state, keeping the observed state",
+                    jobStatus.getState());
+        } else {
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.Missing,
+                    EventRecorder.Component.Job,
+                    JOB_NOT_FOUND_ERR,
+                    ctx.getKubernetesClient());
+        }
 
         if (resource instanceof FlinkSessionJob
-                && !ReconciliationUtils.isJobInTerminalState(resource.getStatus())
+                && !alreadyTerminal
                 && resource.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
             // We also mark jobs that were previously not terminated as suspended if
             // stateless upgrade mode is used. In these cases we want to simply restart the job.
@@ -321,8 +327,10 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // upgrading state and retry the upgrade (if possible)
             resource.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
         }
-        jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING);
-        resource.getStatus().setError(JOB_NOT_FOUND_ERR);
+        if (!alreadyTerminal) {
+            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING);
+            resource.getStatus().setError(JOB_NOT_FOUND_ERR);
+        }
     }
 
     /**
