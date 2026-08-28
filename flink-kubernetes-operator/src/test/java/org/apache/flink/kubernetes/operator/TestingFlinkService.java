@@ -55,7 +55,6 @@ import org.apache.flink.runtime.client.DuplicateJobSubmissionException;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -106,6 +105,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
@@ -240,12 +240,11 @@ public class TestingFlinkService extends AbstractFlinkService {
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
-                        conf.getString(KubernetesConfigOptions.CLUSTER_ID),
+                        conf.get(KubernetesConfigOptions.CLUSTER_ID),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 
-        jobs.add(
-                Tuple3.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage, conf));
+        jobs.add(Tuple3.of(conf.get(SAVEPOINT_PATH), jobStatusMessage, conf));
     }
 
     protected void validateHaMetadataExists(Configuration conf) {
@@ -300,7 +299,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
-                        conf.getString(KubernetesConfigOptions.CLUSTER_ID),
+                        conf.get(KubernetesConfigOptions.CLUSTER_ID),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 

@@ -290,8 +290,7 @@ public class FlinkOperator {
         registerSessionJobController();
         registerSnapshotController();
         registerBlueGreenController();
-        operator.installShutdownHook(
-                baseConfig.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT));
+        operator.installShutdownHook();
         operator.start();
         if (operatorHealthService != null) {
             HealthProbe.INSTANCE.setRuntimeInfo(operator.getRuntimeInfo());

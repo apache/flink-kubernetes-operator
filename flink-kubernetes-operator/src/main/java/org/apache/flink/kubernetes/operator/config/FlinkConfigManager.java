@@ -44,6 +44,7 @@ import lombok.Builder;
 import lombok.SneakyThrows;
 import lombok.Value;
 import org.apache.commons.lang3.ObjectUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -138,8 +139,9 @@ public class FlinkConfigManager {
                                                 (Configuration) removalNotification.getValue()))
                         .build(
                                 new CacheLoader<>() {
+                                    @NotNull
                                     @Override
-                                    public Configuration load(Key k) {
+                                    public Configuration load(@NotNull Key k) {
                                         return generateConfig(k);
                                     }
                                 });
@@ -160,7 +162,7 @@ public class FlinkConfigManager {
                 cacheTimeout.toMillis(),
                 TimeUnit.MILLISECONDS);
 
-        if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
+        if (defaultConfig.get(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
             scheduleConfigWatcher(executorService);
         }
     }

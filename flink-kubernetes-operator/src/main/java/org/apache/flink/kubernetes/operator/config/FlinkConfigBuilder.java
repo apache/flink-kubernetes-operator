@@ -19,15 +19,18 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.configuration.ExternalizedCheckpointRetention;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.StateRecoveryOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
@@ -44,10 +47,7 @@ import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfi
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
-import org.apache.flink.streaming.api.environment.CheckpointConfig;
-import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
@@ -164,17 +164,17 @@ public class FlinkConfigBuilder {
         if (jobSpec.getUpgradeMode() == UpgradeMode.LAST_STATE) {
             setDefaultConf(
                     conf,
-                    ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
+                    CheckpointingOptions.CHECKPOINTING_INTERVAL,
                     DEFAULT_CHECKPOINTING_INTERVAL);
         }
         setDefaultConf(
                 conf,
-                ExecutionCheckpointingOptions.EXTERNALIZED_CHECKPOINT,
-                CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+                CheckpointingOptions.EXTERNALIZED_CHECKPOINT_RETENTION,
+                ExternalizedCheckpointRetention.RETAIN_ON_CANCELLATION);
 
         if (jobSpec.getAllowNonRestoredState() != null) {
             conf.set(
-                    SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
+                    StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
                     jobSpec.getAllowNonRestoredState());
         }
 
@@ -193,7 +193,7 @@ public class FlinkConfigBuilder {
                     createLogConfigFiles(
                             spec.getLogConfiguration().get(CONFIG_FILE_LOG4J_NAME),
                             spec.getLogConfiguration().get(CONFIG_FILE_LOGBACK_NAME));
-            effectiveConfig.setString(CONF_DIR, confDir);
+            effectiveConfig.set(CONF_DIR, confDir);
         }
         return this;
     }
@@ -575,10 +575,10 @@ public class FlinkConfigBuilder {
     protected Configuration build() {
 
         // Set cluster config
-        effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
-        effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
+        effectiveConfig.set(KubernetesConfigOptions.NAMESPACE, namespace);
+        effectiveConfig.set(KubernetesConfigOptions.CLUSTER_ID, clusterId);
         if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
-            effectiveConfig.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
+            effectiveConfig.set(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
         }
         return effectiveConfig;
     }
@@ -642,7 +642,7 @@ public class FlinkConfigBuilder {
 
         if (!spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_17)) {
             String legacyKey = isJM ? "kubernetes.jobmanager.cpu" : "kubernetes.taskmanager.cpu";
-            conf.setDouble(legacyKey, cpu);
+            conf.set(ConfigOptions.key(legacyKey).doubleType().noDefaultValue(), cpu);
         }
     }
 

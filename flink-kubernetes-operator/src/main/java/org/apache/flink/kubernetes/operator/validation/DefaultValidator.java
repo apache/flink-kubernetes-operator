@@ -251,7 +251,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
             if (StringUtils.isNullOrWhitespaceOnly(
-                    configuration.getString(CheckpointingOptions.CHECKPOINTS_DIRECTORY))) {
+                    configuration.get(CheckpointingOptions.CHECKPOINTS_DIRECTORY))) {
                 return Optional.of(
                         String.format(
                                 "Checkpoint directory[%s] must be defined for last-state and savepoint upgrade modes",
@@ -260,7 +260,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
 
         if (StringUtils.isNullOrWhitespaceOnly(
-                configuration.getString(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
+                configuration.get(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
             if (job.getUpgradeMode() == UpgradeMode.SAVEPOINT) {
                 return Optional.of(
                         String.format(
