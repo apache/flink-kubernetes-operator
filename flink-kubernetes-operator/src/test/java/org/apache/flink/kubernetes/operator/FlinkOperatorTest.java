@@ -56,7 +56,7 @@ class FlinkOperatorTest {
         // We need to set this property so the operator can configure the lease namespace
         System.setProperty(Config.KUBERNETES_NAMESPACE_SYSTEM_PROPERTY, "test_namespace");
 
-        operatorConfig.setInteger(
+        operatorConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, testParallelism);
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR, testSelector);
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR, false);

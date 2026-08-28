@@ -258,7 +258,11 @@ public class FlinkUtils {
             }
         }
         if (shouldUpdate) {
-            kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
+            kubernetesClient
+                    .resourceList(configMaps)
+                    .inNamespace(namespace)
+                    .resources()
+                    .forEach(Resource::update);
         }
     }
 
@@ -363,13 +367,13 @@ public class FlinkUtils {
 
     public static Double calculateClusterCpuUsage(Configuration conf, int taskManagerReplicas) {
         var jmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU)
-                        * conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU)
+                        * conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
                         * conf.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS);
 
         var tmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU, 1)
-                        * conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU, 1.0)
+                        * conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
                         * taskManagerReplicas;
 
         return tmTotalCpu + jmTotalCpu;
@@ -390,8 +394,7 @@ public class FlinkUtils {
                 Math.round(
                         clusterSpec.getTaskManagerMemoryMB()
                                 * Math.pow(1024, 2)
-                                * conf.getDouble(
-                                        KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
+                                * conf.get(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
                                 * taskManagerReplicas);
 
         return tmTotalMemory + jmTotalMemory;

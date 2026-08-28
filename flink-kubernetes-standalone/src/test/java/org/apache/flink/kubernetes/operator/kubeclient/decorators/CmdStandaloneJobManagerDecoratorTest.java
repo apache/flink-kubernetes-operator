@@ -32,7 +32,6 @@ import org.apache.flink.runtime.entrypoint.ClusterConfiguration;
 import org.apache.flink.runtime.entrypoint.EntrypointClusterConfigurationParserFactory;
 import org.apache.flink.runtime.entrypoint.parser.CommandLineParser;
 import org.apache.flink.runtime.entrypoint.parser.ParserResultFactory;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +39,8 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -56,7 +57,7 @@ public class CmdStandaloneJobManagerDecoratorTest {
     @BeforeEach
     public void setup() {
         configuration = new Configuration();
-        configuration.setString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
+        configuration.set(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
         jmParameters =
                 new StandaloneKubernetesJobManagerParameters(
                         configuration,
@@ -87,8 +88,8 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, testMainClass);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
+        configuration.set(SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+        configuration.set(SAVEPOINT_PATH, "/tmp/savepoint/path");
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
         assertThat(decoratedPod.getMainContainer().getCommand())

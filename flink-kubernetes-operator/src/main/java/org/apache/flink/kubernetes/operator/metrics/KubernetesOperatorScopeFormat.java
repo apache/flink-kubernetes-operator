@@ -39,7 +39,7 @@ public class KubernetesOperatorScopeFormat extends ScopeFormat {
     }
 
     public static KubernetesOperatorScopeFormat fromConfig(Configuration config) {
-        String format = config.getString(SCOPE_NAMING_KUBERNETES_OPERATOR);
+        String format = config.get(SCOPE_NAMING_KUBERNETES_OPERATOR);
         return new KubernetesOperatorScopeFormat(format);
     }
 }

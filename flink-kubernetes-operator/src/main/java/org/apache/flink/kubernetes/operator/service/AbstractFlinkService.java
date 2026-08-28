@@ -110,7 +110,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
-import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -471,7 +470,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         String savepointDirectory = conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY);
         var savepointFormatType =
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
-        long timeout = conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT).getSeconds();
+        long timeout = conf.get(CheckpointingOptions.CHECKPOINTING_TIMEOUT).getSeconds();
         String savepointPath;
         if (ReconciliationUtils.isJobRunning(status)) {
             LOG.info("Suspending job with savepoint");
@@ -480,7 +479,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         clusterClient
                                 .stopWithSavepoint(
                                         jobID,
-                                        conf.getBoolean(
+                                        conf.get(
                                                 KubernetesOperatorConfigOptions
                                                         .DRAIN_ON_SAVEPOINT_DELETION),
                                         savepointDirectory,
@@ -491,7 +490,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         String.format(
                                 "Timed out stopping the job %s with savepoint, "
                                         + "please configure a larger timeout via '%s'",
-                                jobID, ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
+                                jobID, CheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
                         EventRecorder.Reason.SavepointError.name(),
                         exception);
             } catch (Exception e) {
@@ -882,8 +881,8 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
-        final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
-        final String clusterId = conf.getString(KubernetesConfigOptions.CLUSTER_ID);
+        final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+        final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         return getJmPodList(namespace, clusterId);
     }
 
@@ -891,7 +890,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     public RestClusterClient<String> getClusterClient(Configuration conf) throws Exception {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-        final int port = conf.getInteger(RestOptions.PORT);
+        final int port = conf.get(RestOptions.PORT);
         Configuration operatorRestConf = conf;
         if (SecurityOptions.isRestSSLEnabled(conf)) {
             operatorRestConf = getOperatorRestConfig(conf);
@@ -1089,7 +1088,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         JarUploadHeaders headers = JarUploadHeaders.getInstance();
         String clusterId = spec.getDeploymentName();
         String namespace = objectMeta.getNamespace();
-        int port = conf.getInteger(RestOptions.PORT);
+        int port = conf.get(RestOptions.PORT);
         String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),

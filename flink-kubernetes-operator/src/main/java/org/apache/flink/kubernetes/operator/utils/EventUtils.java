@@ -271,7 +271,7 @@ public class EventUtils {
 
     private static Optional<Event> createOrReplaceEvent(KubernetesClient client, Event event) {
         try {
-            Event createdEvent = client.resource(event).createOrReplace();
+            Event createdEvent = client.resource(event).createOr(r -> r.unlock().update());
             return Optional.of(createdEvent);
         } catch (KubernetesClientException e) {
             if (e.getCode() == HttpURLConnection.HTTP_FORBIDDEN) {
