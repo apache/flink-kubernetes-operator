@@ -89,6 +89,8 @@ Even with standbys the running job still restarts when the leader JobManager fai
 
 To work around a JobResultStore resource leak in Flink ([FLINK-27569](https://issues.apache.org/jira/browse/FLINK-27569)), the operator adjusts two settings whenever an application deployment runs with HA storage configured: `job-result-store.delete-on-commit` is turned off unless set explicitly, and `job-result-store.storage-path` is pointed at a unique directory under the HA storage path on every cluster launch. The directories of earlier launches are never removed automatically, so they accumulate and must be cleaned up manually, always retaining the most recent one:
 
+From Flink 2.3 the operator randomises `application-result-store.storage-path` in the same way ([FLINK-40467](https://issues.apache.org/jira/browse/FLINK-40467)), so that a terminal application result left by an earlier deployment cannot stop the replacement cluster from submitting the new job. Those directories accumulate under `application-result-store/` and need the same manual cleanup.
+
 ```shell
 ls -lth /tmp/flink/ha/job-result-store/basic-checkpoint-ha-example/
 total 0
