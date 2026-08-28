@@ -130,6 +130,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
+import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.APPLICATION_RESULT_STORE_STORAGE_PATH;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.getLastSnapshotStatus;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -799,6 +800,41 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
+    }
+
+    /**
+     * The application result store lives under the HA storage path and survives the HA metadata
+     * deletion performed on upgrade, so a terminal entry left by the previous deployment would
+     * otherwise be recovered by the replacement cluster, which then skips submitting the new job.
+     */
+    @Test
+    public void testRandomApplicationResultStorePath() throws Exception {
+        FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
+        final String haStoragePath = "file:///flink-data/ha";
+        flinkApp.getSpec()
+                .getFlinkConfiguration()
+                .put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), haStoragePath);
+
+        ObjectMeta deployMeta = flinkApp.getMetadata();
+        FlinkDeploymentStatus status = flinkApp.getStatus();
+        FlinkDeploymentSpec spec = flinkApp.getSpec();
+        Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
+
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler
+                .getReconciler()
+                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+        String path1 = deployConfig.get(APPLICATION_RESULT_STORE_STORAGE_PATH);
+        assertThat(path1).startsWith(haStoragePath);
+
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED);
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler
+                .getReconciler()
+                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+        String path2 = deployConfig.get(APPLICATION_RESULT_STORE_STORAGE_PATH);
+        assertThat(path2).startsWith(haStoragePath).isNotEqualTo(path1);
     }
 
     @Test
