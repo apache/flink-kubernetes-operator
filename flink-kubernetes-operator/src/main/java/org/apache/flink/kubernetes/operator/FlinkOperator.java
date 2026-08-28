@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFactory;
+import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerPlugins;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -91,6 +92,7 @@ public class FlinkOperator {
     private final EventRecorder eventRecorder;
     private final Configuration baseConfig;
     private final PluginManager pluginManager;
+    private final AutoscalerPlugins autoscalerPlugins;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this(conf, null);
@@ -118,6 +120,7 @@ public class FlinkOperator {
         this.operator = createOperator();
         this.validators = ValidatorUtils.discoverValidators(configManager, pluginManager);
         this.listeners = ListenerUtils.discoverListeners(configManager, pluginManager);
+        this.autoscalerPlugins = AutoscalerPlugins.discover(pluginManager);
         this.eventRecorder = EventRecorder.create(client, listeners);
         this.ctxFactory =
                 new FlinkResourceContextFactory(configManager, metricGroup, eventRecorder);
@@ -190,7 +193,7 @@ public class FlinkOperator {
                 ClusterResourceManager.of(configManager.getDefaultConfig(), client);
         var autoscaler =
                 AutoscalerFactory.create(
-                        client, eventRecorder, clusterResourceManager, pluginManager);
+                        client, eventRecorder, clusterResourceManager, autoscalerPlugins);
         var reconcilerFactory = new ReconcilerFactory(eventRecorder, statusRecorder, autoscaler);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
@@ -214,7 +217,7 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var autoscaler = AutoscalerFactory.create(client, eventRecorder, null, pluginManager);
+        var autoscaler = AutoscalerFactory.create(client, eventRecorder, null, autoscalerPlugins);
         var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder, autoscaler);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
