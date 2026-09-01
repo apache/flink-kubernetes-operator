@@ -168,7 +168,7 @@ public class KubernetesScalingRealizer
     private static String getOverrideString(
             KubernetesJobAutoScalerContext context, Map<String, String> newOverrides) {
         if (context.getResource().getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            return ConfigurationUtils.convertValue(newOverrides, String.class);
+            return serializeOverrides(newOverrides);
         }
 
         var conf = context.getResourceContext().getObserveConfig();
@@ -179,10 +179,29 @@ public class KubernetesScalingRealizer
         // This way we prevent reconciling a NOOP config change which would unnecessarily redeploy
         // the pipeline.
         if (currentOverrides.equals(newOverrides)) {
-            // If overrides are identical, use the previous string as-is.
-            return conf.getValue(PipelineOptions.PARALLELISM_OVERRIDES);
-        } else {
-            return ConfigurationUtils.convertValue(newOverrides, String.class);
+            // If overrides are identical, keep the previous string as-is — but only if every
+            // Flink version can read it (see serializeOverrides).
+            String previous = conf.getValue(PipelineOptions.PARALLELISM_OVERRIDES);
+            if (isLegacyParseable(previous)) {
+                return previous;
+            }
+        }
+        return serializeOverrides(newOverrides);
+    }
+
+    private static String serializeOverrides(Map<String, String> overrides) {
+        return ConfigurationUtils.convertValue(overrides, String.class, false);
+    }
+
+    private static boolean isLegacyParseable(@Nullable String overrideString) {
+        if (overrideString == null) {
+            return false;
+        }
+        try {
+            ConfigurationUtils.convertValue(overrideString, Map.class, false);
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 }

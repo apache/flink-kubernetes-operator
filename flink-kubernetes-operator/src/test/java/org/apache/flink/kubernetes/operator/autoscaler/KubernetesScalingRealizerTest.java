@@ -63,6 +63,64 @@ public class KubernetesScalingRealizerTest {
     }
 
     @Test
+    public void testOverridesSerializedInLegacyFormatUnderStandardYaml() {
+        // The operator JVM may run in standard-YAML mode (config.yaml based operator conf), but
+        // the override string must stay in the legacy k:v,k:v format: a Flink 1.x JobManager
+        // loading a legacy flink-conf.yaml cannot parse the standard-YAML flow representation
+        // ({k: 'v'}) and crashes on startup.
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            KubernetesJobAutoScalerContext ctx =
+                    TestingKubernetesAutoscalerUtils.createContext("test", null);
+
+            new KubernetesScalingRealizer()
+                    .realizeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
+
+            assertThat(
+                            ctx.getResource()
+                                    .getSpec()
+                                    .getFlinkConfiguration()
+                                    .asFlatMap()
+                                    .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                    .isIn("a:1,b:2", "b:2,a:1");
+        } finally {
+            GlobalConfiguration.setStandardYaml(false);
+        }
+    }
+
+    @Test
+    public void testBrokenStandardYamlOverrideStringIsRewritten() {
+        // A previously deployed flow-format string (produced by a standard-YAML-mode operator)
+        // must be rewritten to the legacy format even when the override map itself is unchanged,
+        // so that a crash-looping legacy-mode job can recover.
+        GlobalConfiguration.setStandardYaml(true);
+        try {
+            KubernetesJobAutoScalerContext ctx =
+                    TestingKubernetesAutoscalerUtils.createContext("test", null);
+            FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+            resource.getSpec()
+                    .getFlinkConfiguration()
+                    .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "{a: '1', b: '2'}");
+            resource.getStatus()
+                    .getReconciliationStatus()
+                    .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
+
+            new KubernetesScalingRealizer()
+                    .realizeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
+
+            assertThat(
+                            resource.getSpec()
+                                    .getFlinkConfiguration()
+                                    .asFlatMap()
+                                    .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                    .isIn("a:1,b:2", "b:2,a:1");
+        } finally {
+            GlobalConfiguration.setStandardYaml(false);
+        }
+    }
+
+    @Test
     public void testAutoscalerOverridesStringDoesNotChangeUnlessOverridesChange() {
         // Create an overrides map which returns the keys in a deterministic order
         LinkedHashMap<String, String> newOverrides = new LinkedHashMap<>();

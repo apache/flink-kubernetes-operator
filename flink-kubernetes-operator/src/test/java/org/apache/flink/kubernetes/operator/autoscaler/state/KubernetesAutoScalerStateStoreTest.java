@@ -84,6 +84,30 @@ public class KubernetesAutoScalerStateStoreTest
     }
 
     @Test
+    void testParallelismOverridesSerializedInLegacyFormatUnderStandardYaml() throws Exception {
+        // Even when the operator JVM runs in standard-YAML mode, the stored override string must
+        // stay in the legacy k:v,k:v format so it can be read back (and deployed) in a form every
+        // Flink version can parse — the flow representation ({k: 'v'}) breaks legacy-mode parsers.
+        org.apache.flink.configuration.GlobalConfiguration.setStandardYaml(true);
+        try {
+            stateStore.storeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
+            stateStore.flush(ctx);
+
+            var serialized =
+                    configMapStore.getSerializedState(
+                            ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY);
+            Assertions.assertTrue(serialized.isPresent());
+            Assertions.assertTrue(
+                    serialized.get().equals("a:1,b:2") || serialized.get().equals("b:2,a:1"),
+                    "Expected legacy map format but got: " + serialized.get());
+            Assertions.assertEquals(
+                    Map.of("a", "1", "b", "2"), stateStore.getParallelismOverrides(ctx));
+        } finally {
+            org.apache.flink.configuration.GlobalConfiguration.setStandardYaml(false);
+        }
+    }
+
+    @Test
     void testCompressionMigration() throws Exception {
         var jobUpdateTs = Instant.now();
         var v1 = new JobVertexID();
