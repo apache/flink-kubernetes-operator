@@ -45,6 +45,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -166,7 +167,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     @Override
     public boolean scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
         var observeConfig = ctx.getObserveConfig();
-        var jobSpec = ctx.getResource().getSpec();
+        var jobSpec = ctx.getResource().getSpec().getJob();
         var meta = ctx.getResource().getMetadata();
         if (observeConfig.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
                 && jobSpec != null) {
@@ -179,17 +180,17 @@ public class StandaloneFlinkService extends AbstractFlinkService {
         var name = StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId);
         var deployment =
                 kubernetesClient.apps().deployments().inNamespace(namespace).withName(name);
-
-        if (deployment == null || deployment.get() == null) {
+        var deploymentCR = deployment.get();
+        if (deploymentCR == null) {
             LOG.warn("TM Deployment ({}) not found", name);
             return false;
         }
 
-        var actualReplicas = deployment.get().getSpec().getReplicas();
+        var actualReplicas = deploymentCR.getSpec().getReplicas();
         var desiredReplicas =
                 deployConfig.get(
                         StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
-        if (actualReplicas != desiredReplicas) {
+        if (!Objects.equals(actualReplicas, desiredReplicas)) {
             LOG.info(
                     "Scaling TM replicas: actual({}) -> desired({})",
                     actualReplicas,
