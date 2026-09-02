@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -143,39 +144,55 @@ public class SessionReconciler
 
     // Detects jobs which are not in globally terminated states
     @VisibleForTesting
-    Set<JobID> getNonTerminalJobs(FlinkResourceContext<FlinkDeployment> ctx) {
+    Optional<Set<JobID>> getNonTerminalJobs(FlinkResourceContext<FlinkDeployment> ctx) {
         LOG.debug("Starting nonTerminal jobs detection for session cluster");
-        try {
-            // Get all jobs running in the Flink cluster
-            var flinkService = ctx.getFlinkService();
-            var clusterClient = flinkService.getClusterClient(ctx.getObserveConfig());
+        var flinkService = ctx.getFlinkService();
+        try (var clusterClient = flinkService.getClusterClient(ctx.getObserveConfig())) {
             var allJobs =
                     clusterClient
                             .sendRequest(
                                     JobsOverviewHeaders.getInstance(),
                                     EmptyMessageParameters.getInstance(),
                                     EmptyRequestBody.getInstance())
-                            .get()
+                            .get(
+                                    ctx.getOperatorConfig().getFlinkClientTimeout().toMillis(),
+                                    TimeUnit.MILLISECONDS)
                             .getJobs();
 
-            // running job Ids
+            if (allJobs == null) {
+                return Optional.of(Set.of());
+            }
+
             Set<JobID> nonTerminalJobIds =
                     allJobs.stream()
                             .filter(job -> !job.getStatus().isGloballyTerminalState())
                             .map(JobDetails::getJobId)
                             .collect(Collectors.toSet());
 
-            return nonTerminalJobIds;
+            return Optional.of(nonTerminalJobIds);
         } catch (Exception e) {
             LOG.warn("Failed to detect nonTerminal jobs in session cluster", e);
-            return Set.of();
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return Optional.empty();
         }
     }
 
     @Override
     public DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
-        var sessionJobs = ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class);
         var deployment = ctx.getResource();
+        var status = deployment.getStatus();
+
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
+            LOG.info("Session cluster was never deployed, deleting immediately");
+            var conf = ctx.getDeployConfig(deployment.getSpec());
+            ctx.getFlinkService()
+                    .deleteClusterDeployment(deployment.getMetadata(), status, conf, true);
+            return DeleteControl.defaultDelete();
+        }
+
+        var sessionJobs = ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class);
 
         boolean blockOnSessionJobs =
                 ctx.getObserveConfig()
@@ -207,21 +224,39 @@ public class SessionReconciler
                 ctx.getObserveConfig()
                         .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
         if (blockOnSessionJobs && blockOnUnmanagedJobs) {
-            Set<JobID> nonTerminalJobs = getNonTerminalJobs(ctx);
-            if (!nonTerminalJobs.isEmpty()) {
+            Optional<Set<JobID>> nonTerminalJobs = getNonTerminalJobs(ctx);
+            if (nonTerminalJobs.isEmpty()) {
                 var error =
-                        String.format(
-                                "The session cluster has non terminated jobs %s that should be cancelled first",
-                                nonTerminalJobs.stream()
-                                        .map(JobID::toHexString)
-                                        .collect(Collectors.toList()));
-                eventRecorder.triggerEvent(
+                        "Could not determine whether the session cluster has running jobs; blocking deletion to avoid stopping unmanaged jobs without a checkpoint";
+                if (eventRecorder.triggerEvent(
                         deployment,
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.CleanupFailed,
                         EventRecorder.Component.Operator,
                         error,
-                        ctx.getKubernetesClient());
+                        ctx.getKubernetesClient())) {
+                    LOG.warn(error);
+                }
+                return DeleteControl.noFinalizerRemoval()
+                        .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
+            }
+            var runningJobs = nonTerminalJobs.get();
+            if (!runningJobs.isEmpty()) {
+                var error =
+                        String.format(
+                                "The session cluster has non terminated jobs %s that should be cancelled first",
+                                runningJobs.stream()
+                                        .map(JobID::toHexString)
+                                        .collect(Collectors.toList()));
+                if (eventRecorder.triggerEvent(
+                        deployment,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.CleanupFailed,
+                        EventRecorder.Component.Operator,
+                        error,
+                        ctx.getKubernetesClient())) {
+                    LOG.warn(error);
+                }
                 return DeleteControl.noFinalizerRemoval()
                         .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
             }
