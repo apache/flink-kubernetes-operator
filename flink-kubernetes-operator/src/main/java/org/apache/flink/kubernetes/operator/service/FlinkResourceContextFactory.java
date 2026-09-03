@@ -86,10 +86,12 @@ public class FlinkResourceContextFactory {
         this.operatorMetricGroup = operatorMetricGroup;
         this.eventRecorder = eventRecorder;
         this.artifactManager = new ArtifactManager(configManager);
+        int parallelism = configManager.getOperatorConfiguration().getReconcilerMaxParallelism();
+        var threadFactory = new ExecutorThreadFactory("Flink-RestClusterClient-IO");
         this.clientExecutorService =
-                Executors.newFixedThreadPool(
-                        configManager.getOperatorConfiguration().getReconcilerMaxParallelism(),
-                        new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+                parallelism == -1
+                        ? Executors.newCachedThreadPool(threadFactory)
+                        : Executors.newFixedThreadPool(parallelism, threadFactory);
     }
 
     public FlinkStateSnapshotContext getFlinkStateSnapshotContext(
