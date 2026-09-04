@@ -154,11 +154,7 @@ public abstract class AbstractFlinkResourceReconciler<
             }
             triggerSpecChangeEvent(cr, specDiff, ctx.getKubernetesClient());
 
-            // Try scaling if this is not an upgrade/redeploy change
-            boolean scaled =
-                    diffType != DiffType.SAVEPOINT_REDEPLOY
-                            && diffType != DiffType.UPGRADE
-                            && scale(ctx, deployConfig);
+            boolean scaled = diffType == DiffType.SCALE && scale(ctx, deployConfig);
 
             // Reconcile spec change unless scaling was enough
             if (scaled || reconcileSpecChange(diffType, ctx, deployConfig, lastReconciledSpec)) {
@@ -354,8 +350,7 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * @param ctx Resource context.
      * @param deployConfig Configuration to be deployed.
-     * @return True if the scaling is successful
-     * @throws Exception
+     * @return True if the in-place scaling is successful
      */
     private boolean scale(FlinkResourceContext<CR> ctx, Configuration deployConfig)
             throws Exception {

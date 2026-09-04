@@ -62,6 +62,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
@@ -965,6 +966,71 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(1, rescaleCounter.get());
         assertEquals(3, flinkResourceEventCollector.events.size());
         assertFalse(reconStatus.isLastReconciledSpecStable());
+    }
+
+    @Test
+    public void testResumedUpgradeDoesNotTriggerInPlaceScaling() throws Exception {
+        var scaleCounter = new AtomicInteger(0);
+        var cancelCounter = new AtomicInteger(0);
+        var deployCounter = new AtomicInteger(0);
+
+        var nativeService =
+                new NativeFlinkService(
+                        kubernetesClient, null, executorService, operatorConfig, eventRecorder) {
+                    @Override
+                    public boolean scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
+                        scaleCounter.incrementAndGet();
+                        return true;
+                    }
+
+                    @Override
+                    public CancelResult cancelJob(
+                            FlinkDeployment deployment,
+                            SuspendMode suspendMode,
+                            Configuration conf) {
+                        cancelCounter.incrementAndGet();
+                        deployment.getStatus().getJobStatus().setState(FINISHED);
+                        return CancelResult.completed(null);
+                    }
+
+                    @Override
+                    protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) {
+                        deployCounter.incrementAndGet();
+                    }
+                };
+
+        var ctxFactory =
+                new TestingFlinkResourceContextFactory(
+                        configManager, operatorMetricGroup, nativeService, eventRecorder);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getMetadata().setGeneration(1L);
+
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        // Simulate an upgrade such as the spec diff is IGNORE while the reconciliation state is
+        // UPGRADING
+        deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.UPGRADING);
+
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+
+        // The first reconcile starts the upgrade (suspend job) and does not trigger in-place
+        // scaling
+        assertEquals(0, scaleCounter.get());
+        assertEquals(1, cancelCounter.get());
+        assertEquals(0, deployCounter.get());
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // The second reconcile completes the upgrade (redeploy job)
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        assertEquals(0, scaleCounter.get());
+        assertEquals(1, cancelCounter.get());
+        assertEquals(1, deployCounter.get());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
     }
 
     @Test
