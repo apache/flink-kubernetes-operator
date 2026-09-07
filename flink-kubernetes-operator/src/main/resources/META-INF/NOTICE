@@ -84,6 +84,7 @@ See bundled license files for details.
 
 - com.esotericsoftware.kryo:kryo:jar:2.24.0
 - com.esotericsoftware.minlog:minlog:jar:1.2
+- com.esotericsoftware.reflectasm:reflectasm:jar:1.09
 
 This project bundles the following dependencies under the MIT License.
 See bundled license files for details.
