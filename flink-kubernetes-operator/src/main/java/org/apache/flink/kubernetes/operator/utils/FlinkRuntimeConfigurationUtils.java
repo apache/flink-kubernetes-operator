@@ -162,7 +162,7 @@ public class FlinkRuntimeConfigurationUtils {
      * autoscaler options, including the autoscaler's legacy {@code kubernetes.operator.} prefixed
      * form.
      */
-    private static boolean isOperatorControlledKey(String key) {
+    public static boolean isOperatorControlledKey(String key) {
         return key.startsWith(KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX)
                 || key.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX);
     }
