@@ -21,12 +21,15 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 class ConfigMapView {
@@ -36,7 +39,10 @@ class ConfigMapView {
     enum State {
         /** ConfigMap is only stored locally, not created in Kubernetes yet. */
         NEEDS_CREATE,
-        /** ConfigMap exists in Kubernetes but there are newer local changes. */
+        /**
+         * ConfigMap exists in Kubernetes but there are newer local changes. Falls back to
+         * NEEDS_CREATE if the ConfigMap was already deleted when flushing.
+         */
         NEEDS_UPDATE,
         /** ConfigMap view reflects the actual contents of Kubernetes ConfigMap. */
         UP_TO_DATE
@@ -46,14 +52,18 @@ class ConfigMapView {
 
     private ConfigMap configMap;
 
+    private final String ownerUid;
+
     private final Function<ConfigMap, Resource<ConfigMap>> resourceRetriever;
 
     public ConfigMapView(
             ConfigMap configMapSkeleton,
             Function<ConfigMap, Resource<ConfigMap>> resourceRetriever) {
+        this.ownerUid = ownerUidOf(configMapSkeleton);
         var existingConfigMap = resourceRetriever.apply(configMapSkeleton).get();
         if (existingConfigMap != null) {
             refreshConfigMap(existingConfigMap);
+            takeOverIfLeftByPreviousOwner(configMapSkeleton);
         } else {
             this.configMap = configMapSkeleton;
             this.state = State.NEEDS_CREATE;
@@ -89,13 +99,54 @@ class ConfigMapView {
         if (state == State.UP_TO_DATE) {
             return;
         }
-        Resource<ConfigMap> resource = resourceRetriever.apply(configMap);
         if (state == State.NEEDS_UPDATE) {
-            refreshConfigMap(resource.update());
-        } else if (state == State.NEEDS_CREATE) {
-            LOG.info("Creating config map {}", configMap.getMetadata().getName());
-            refreshConfigMap(resource.create());
+            try {
+                refreshConfigMap(resourceRetriever.apply(configMap).update());
+                return;
+            } catch (KubernetesClientException e) {
+                if (e.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
+                    throw e;
+                }
+                // The ConfigMap was deleted in the meantime, typically by the Kubernetes garbage
+                // collector after the owning resource was replaced. So, we fallback to create it
+                // with the current local state in order to not lose the current autoscaling
+                // cycle of computations.
+                LOG.info(
+                        "ConfigMap {} no longer exists, recreating it",
+                        configMap.getMetadata().getName());
+                configMap.getMetadata().setResourceVersion(null);
+                configMap.getMetadata().setUid(null);
+                state = State.NEEDS_CREATE;
+            }
         }
+        LOG.info("Creating ConfigMap {}", configMap.getMetadata().getName());
+        refreshConfigMap(resourceRetriever.apply(configMap).create());
+    }
+
+    /**
+     * A ConfigMap left behind by a previous instance of the resource is taken over rather than left
+     * to the Kubernetes garbage collector, because in this way it may still reference a stale
+     * object that can generate a 404 error at flushing time. Its contents are also dropped because
+     * they reference a resource that is no longer existing.
+     */
+    private void takeOverIfLeftByPreviousOwner(ConfigMap configMapSkeleton) {
+        if (Objects.equals(ownerUid, ownerUidOf(configMap))) {
+            return;
+        }
+        configMap
+                .getMetadata()
+                .setOwnerReferences(configMapSkeleton.getMetadata().getOwnerReferences());
+        configMap.getData().clear();
+        requireUpdate();
+    }
+
+    String getOwnerUid() {
+        return ownerUid;
+    }
+
+    private static String ownerUidOf(ConfigMap configMap) {
+        var ownerReferences = configMap.getMetadata().getOwnerReferences();
+        return ownerReferences.isEmpty() ? null : ownerReferences.get(0).getUid();
     }
 
     private void refreshConfigMap(ConfigMap configMap) {
@@ -113,5 +164,10 @@ class ConfigMapView {
     @VisibleForTesting
     public Map<String, String> getDataReadOnly() {
         return Collections.unmodifiableMap(configMap.getData());
+    }
+
+    @VisibleForTesting
+    protected ConfigMap getConfigMap() {
+        return configMap;
     }
 }
