@@ -28,6 +28,28 @@ attach_header () {
 	echo "Added apache header to $FILE"
 }
 
+create_helm_provenance () {
+	CHART_DIR=$1
+	CHART_ARCHIVE=$2
+	PROV_FILE=${CHART_ARCHIVE}.prov
+	MESSAGE_FILE=$(mktemp)
+
+	CHART_CHECKSUM=$(${SHA256SUM} ${CHART_ARCHIVE} | awk '{print $1}')
+
+	# The clear-signed message consists of the chart metadata and the checksums of the
+	# packaged chart, separated by the YAML document end marker (a plain "---" is not
+	# allowed inside a PGP clear-signed message).
+	helm show chart ${CHART_DIR} > ${MESSAGE_FILE}
+	echo "..." >> ${MESSAGE_FILE}
+	echo "files:" >> ${MESSAGE_FILE}
+	echo "  $(basename ${CHART_ARCHIVE}): sha256:${CHART_CHECKSUM}" >> ${MESSAGE_FILE}
+
+	gpg --armor --clearsign --output ${PROV_FILE} ${MESSAGE_FILE}
+	rm ${MESSAGE_FILE}
+
+	echo "Created Helm provenance file ${PROV_FILE}"
+}
+
 
 ##
 ## Variables with defaults (if not overwritten by environment)
@@ -60,8 +82,10 @@ fi
 
 if [ "$(uname)" == "Darwin" ]; then
     SHASUM="shasum -a 512"
+    SHA256SUM="shasum -a 256"
 else
     SHASUM="sha512sum"
+    SHA256SUM="sha256sum"
 fi
 
 ###########################
@@ -102,7 +126,16 @@ cd ${CLONE_DIR}
 perl -pi -e "s#^  repository: .*#  repository: ghcr.io/apache/flink-kubernetes-operator#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/values.yaml
 perl -pi -e "s#^  tag: .*#  tag: \"${commit_hash}\"#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/values.yaml
 
-tar czf ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz -C flink-kubernetes-operator-${RELEASE_VERSION}/helm flink-kubernetes-operator
+# Package the chart with tar instead of `helm package`. The latter rewrites Chart.yaml and
+# drops the Apache license header, see FLINK-27747.
+helm_chart_dir=flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator
+helm_chart=${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+tar czf ${helm_chart} -C flink-kubernetes-operator-${RELEASE_VERSION}/helm flink-kubernetes-operator
+
+# Attach the Helm provenance file (.prov) so that users can verify the chart with
+# `helm verify` / `helm install --verify`. `helm package --sign` cannot be used for the
+# same reason `helm package` cannot be used above.
+create_helm_provenance ${helm_chart_dir} ${helm_chart}
 
 helm repo index ${RELEASE_DIR}
 attach_header ${RELEASE_DIR}/index.yaml $apache_header
@@ -123,6 +156,6 @@ ${SHASUM} index.yaml > index.yaml.sha512
 
 rm -rf ${CLONE_DIR}
 
-echo "Done. Source release package and signatures created under ${RELEASE_DIR}/."
+echo "Done. Source release package, signatures and Helm provenance created under ${RELEASE_DIR}/."
 
 cd ${CURR_DIR}

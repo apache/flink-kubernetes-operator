@@ -52,6 +52,21 @@ In this case the namespace in the examples needs to be adjusted accordingly, or 
 If the operator webhooks are enabled (the default), cert-manager must be installed before the operator, as described under [Cert Manager]({{< ref "docs/deployment/helm/cert-manager" >}}).
 {{< /hint >}}
 
+## Verifying the Helm chart
+
+Released chart archives are published together with a
+[Helm provenance file](https://helm.sh/docs/topics/provenance/)
+(`flink-kubernetes-operator-<OPERATOR-VERSION>-helm.tgz.prov`), which is signed with the Apache Flink
+release key. The provenance file can be used to verify the origin and the integrity of the chart:
+
+```
+helm verify --keyring <path-to-keyring> flink-kubernetes-operator-<OPERATOR-VERSION>-helm.tgz
+```
+
+`<path-to-keyring>` is a binary PGP keyring that contains the release key. It can be created from the
+[Apache Flink release signing keys](https://downloads.apache.org/flink/KEYS) with
+`gpg --no-default-keyring --keyring flink.gpg --import KEYS`.
+
 ## Overriding Configuration Parameters During Helm Install
 
 Helm provides different ways to override the default installation parameters (contained in `values.yaml`) for the Helm chart.
