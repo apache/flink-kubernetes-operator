@@ -317,6 +317,7 @@ function start_minikube_if_not_running {
         # Please update the docs when changing kubernetes version
         minikube start \
         --kubernetes-version=v1.28.0 \
+        --container-runtime=docker \
         --extra-config=kubelet.image-gc-high-threshold=99 \
         --extra-config=kubelet.image-gc-low-threshold=98 \
         --extra-config=kubelet.minimum-container-ttl-duration=120m \
