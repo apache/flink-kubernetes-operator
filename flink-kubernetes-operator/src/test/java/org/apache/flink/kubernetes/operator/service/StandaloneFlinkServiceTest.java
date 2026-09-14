@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.util.concurrent.Executors;
 
@@ -49,6 +50,8 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Duration;
 import java.util.List;
@@ -136,119 +139,49 @@ public class StandaloneFlinkServiceTest {
         assertEquals(0, deployments.size());
     }
 
-    @Test
-    public void testTMReplicaScaleApplication() {
-        flinkDeployment.getSpec().setJob(new JobSpec());
+    @ParameterizedTest
+    @CsvSource({"true,true,true", "true,false,false", "false,false,true"})
+    public void testTMReplicaScale(
+            boolean applicationCluster, boolean reactiveMode, boolean expectScaled) {
         var clusterId = flinkDeployment.getMetadata().getName();
         var namespace = flinkDeployment.getMetadata().getNamespace();
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-
-        // Add parallelism change, verify it is honoured in reactive mode
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER_MODE.key(),
-                        SchedulerExecutionMode.REACTIVE.name());
-        flinkDeployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
-        flinkDeployment.getSpec().getTaskManager().setReplicas(5);
-        var ctx =
-                new FlinkResourceContextFactory(
-                                configManager,
-                                TestUtils.createTestMetricGroup(new Configuration()),
-                                null)
-                        .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
-        assertTrue(
-                flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
-        assertEquals(
-                5,
-                kubernetesClient
-                        .apps()
-                        .deployments()
-                        .inNamespace(namespace)
-                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                        .get()
-                        .getSpec()
-                        .getReplicas());
-
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .remove(JobManagerOptions.SCHEDULER_MODE.key());
+        if (applicationCluster) {
+            flinkDeployment.getSpec().setJob(new JobSpec());
+        }
+        if (reactiveMode) {
+            flinkDeployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(
+                            JobManagerOptions.SCHEDULER_MODE.key(),
+                            SchedulerExecutionMode.REACTIVE.name());
+        }
         flinkDeployment
                 .getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
-        ctx =
-                new FlinkResourceContextFactory(
-                                configManager,
-                                TestUtils.createTestMetricGroup(new Configuration()),
-                                null)
-                        .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
+        var ctx = getResourceContext();
 
-        // Add replicas and verify that the scaling is not honoured as reactive mode not enabled
-        flinkDeployment.getSpec().getTaskManager().setReplicas(10);
-        assertFalse(
+        flinkDeployment.getSpec().getTaskManager().setReplicas(200);
+        assertEquals(
+                expectScaled,
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
-    }
+        if (!expectScaled) {
+            return;
+        }
+        assertEquals(200, getTMReplicas(clusterId, namespace));
 
-    @Test
-    public void testTMReplicaScaleSession() {
-        var clusterId = flinkDeployment.getMetadata().getName();
-        var namespace = flinkDeployment.getMetadata().getNamespace();
-        flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-        // Add replicas
-        flinkDeployment.getSpec().getTaskManager().setReplicas(3);
-        flinkDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        JobManagerOptions.SCHEDULER_MODE.key(),
-                        SchedulerExecutionMode.REACTIVE.name());
-        flinkDeployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
-
-        var ctx =
-                new FlinkResourceContextFactory(
-                                configManager,
-                                TestUtils.createTestMetricGroup(new Configuration()),
-                                null)
-                        .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
+        flinkDeployment.getSpec().getTaskManager().setReplicas(300);
         assertTrue(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
+        assertEquals(300, getTMReplicas(clusterId, namespace));
 
-        assertEquals(
-                3,
-                kubernetesClient
-                        .apps()
-                        .deployments()
-                        .inNamespace(namespace)
-                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                        .get()
-                        .getSpec()
-                        .getReplicas());
-
-        // Scale the replica count of the task managers
-        flinkDeployment.getSpec().getTaskManager().setReplicas(10);
-        createDeployments(flinkDeployment);
+        var requestsBefore = mockServer.getRequestCount();
         assertTrue(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
-
-        assertEquals(
-                10,
-                kubernetesClient
-                        .apps()
-                        .deployments()
-                        .inNamespace(namespace)
-                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                        .get()
-                        .getSpec()
-                        .getReplicas());
+        assertEquals(1, mockServer.getRequestCount() - requestsBefore);
+        assertEquals(300, getTMReplicas(clusterId, namespace));
     }
 
     @Test
@@ -430,5 +363,22 @@ public class StandaloneFlinkServiceTest {
                 .resource(tmDeployment)
                 .inNamespace(cr.getMetadata().getNamespace())
                 .createOrReplace();
+    }
+
+    private FlinkResourceContext<FlinkDeployment> getResourceContext() {
+        return new FlinkResourceContextFactory(
+                        configManager, TestUtils.createTestMetricGroup(new Configuration()), null)
+                .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
+    }
+
+    private Integer getTMReplicas(String clusterId, String namespace) {
+        return kubernetesClient
+                .apps()
+                .deployments()
+                .inNamespace(namespace)
+                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                .get()
+                .getSpec()
+                .getReplicas();
     }
 }
