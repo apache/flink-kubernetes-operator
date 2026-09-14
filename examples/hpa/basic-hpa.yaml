@@ -16,6 +16,34 @@
 # limitations under the License.
 ################################################################################
 
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: basic-hpa-example
+spec:
+  image: flink:2.2
+  flinkVersion: v2_2
+  mode: standalone
+  flinkConfiguration:
+    scheduler-mode: REACTIVE
+    taskmanager.numberOfTaskSlots: "2"
+  serviceAccount: flink
+  jobManager:
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "0.5"
+  taskManager:
+    replicas: 1
+    resources:
+      requests:
+        memory: "2048m"
+        cpu: "0.5"
+  job:
+    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    upgradeMode: stateless
+
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -34,4 +62,4 @@ spec:
   scaleTargetRef:
     apiVersion: flink.apache.org/v1beta1
     kind: FlinkDeployment
-    name: basic
+    name: basic-hpa-example

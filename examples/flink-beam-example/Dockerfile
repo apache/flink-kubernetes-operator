@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 
-FROM flink:1.16
+FROM flink:2.2
 
 RUN mkdir /opt/flink/usrlib
 ADD target/flink-beam-example-*.jar /opt/flink/usrlib/beam-runner.jar

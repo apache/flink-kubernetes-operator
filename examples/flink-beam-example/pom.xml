@@ -31,7 +31,7 @@ under the License.
     <name>Flink Beam Example</name>
 
     <properties>
-        <beam.version>2.73.0</beam.version>
+        <beam.version>2.76.0</beam.version>
     </properties>
 
     <repositories>
@@ -69,7 +69,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.beam</groupId>
-            <artifactId>beam-runners-flink-1.19</artifactId>
+            <artifactId>beam-runners-flink-2.2</artifactId>
             <version>${beam.version}</version>
         </dependency>
 
