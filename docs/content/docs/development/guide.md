@@ -89,6 +89,12 @@ eval $(minikube docker-env) && docker build . -t <repo>/flink-kubernetes-operato
 
 `eval $(minikube docker-env --unset)` switches back to the local daemon afterwards. Since minikube is itself a Docker container, `minikube ssh` opens a shell inside it for low-level inspection, checking the loaded images or adding a hostPath mount for example.
 
+minikube 1.39 and later default to containerd, which does not support building images through `minikube docker-env`. Building through `docker-env` needs a cluster on the Docker runtime, as used by the end-to-end tests, and minikube cannot change the runtime of an existing cluster. The recommended approach is to remove the existing cluster with `minikube delete` and to start a new one with:
+
+```bash
+minikube start --kubernetes-version=v1.28.0 --container-runtime=docker
+```
+
 ### Installing the Operator Locally
 
 The admission webhook runs by default and needs cert-manager for its TLS certificate, installed once per cluster:
