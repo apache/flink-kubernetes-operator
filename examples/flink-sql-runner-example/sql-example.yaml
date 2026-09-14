@@ -22,7 +22,7 @@ metadata:
   name: sql-example
 spec:
   image: flink-sql-runner-example:latest
-  flinkVersion: v1_20
+  flinkVersion: v2_2
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: 1
   serviceAccount: flink

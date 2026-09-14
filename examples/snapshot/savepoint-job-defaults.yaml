@@ -25,4 +25,5 @@ spec:
   jobReference:
     kind: FlinkDeployment
     name: example-deployment
-  savepoint: {}  # This will use the savepoint path configured in the job config.
+  savepoint:
+    formatType: NATIVE
