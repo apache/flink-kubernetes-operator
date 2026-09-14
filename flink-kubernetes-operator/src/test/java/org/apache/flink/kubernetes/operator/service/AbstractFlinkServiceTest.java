@@ -239,9 +239,12 @@ public class AbstractFlinkServiceTest {
         flinkService.submitJobToSessionCluster(
                 job.getMetadata(), job.getSpec(), JobID.generate(), deployConf, null);
 
-        // Make sure that deploy conf was passed to jar run
+        // Make sure that deploy conf was passed to jar run, without the operator keys
+        assertTrue(deployConf.contains(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER));
         if (flinkVersion.isEqualOrNewer(FlinkVersion.v1_17)) {
-            assertEquals(deployConf.toMap(), jarRuns.get(0).getFlinkConfiguration().toMap());
+            assertEquals(
+                    AbstractFlinkService.removeOperatorConfigs(deployConf).toMap(),
+                    jarRuns.get(0).getFlinkConfiguration().toMap());
         } else {
             assertTrue(jarRuns.get(0).getFlinkConfiguration().toMap().isEmpty());
         }
@@ -1618,6 +1621,31 @@ public class AbstractFlinkServiceTest {
         assertEquals("Adaptive", result.get("jobmanager.scheduler"));
         assertEquals("/s3/savepoints", result.get("state.savepoints.dir"));
         assertEquals("ZOOKEEPER", result.get("high-availability"));
+    }
+
+    @Test
+    void testGetRuntimeConfigurationDropsOperatorControlledJmConfig() throws Exception {
+        var jmConfig = new ConfigurationInfo();
+        jmConfig.add(new ConfigurationInfoEntry("jobmanager.scheduler", "Adaptive"));
+        jmConfig.add(
+                new ConfigurationInfoEntry(
+                        "kubernetes.operator.job.upgrade.last-state-fallback.enabled", "false"));
+        jmConfig.add(new ConfigurationInfoEntry("job.autoscaler.enabled", "false"));
+
+        var service =
+                getTestingService(
+                        (headers, params, body) -> {
+                            if (headers instanceof JobManagerJobConfigurationHeaders) {
+                                return CompletableFuture.completedFuture((ResponseBody) jmConfig);
+                            }
+                            return CompletableFuture.failedFuture(
+                                    new UnsupportedOperationException());
+                        });
+
+        var result = service.getRuntimeConfiguration(configuration, JobID.generate());
+
+        assertThat(result)
+                .containsExactlyInAnyOrderEntriesOf(Map.of("jobmanager.scheduler", "Adaptive"));
     }
 
     @Test
