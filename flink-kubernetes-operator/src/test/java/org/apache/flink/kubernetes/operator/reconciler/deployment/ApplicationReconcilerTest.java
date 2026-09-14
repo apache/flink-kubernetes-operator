@@ -131,6 +131,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
+import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.APPLICATION_RESULT_STORE_DELETE_ON_COMMIT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.APPLICATION_RESULT_STORE_STORAGE_PATH;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.getLastSnapshotStatus;
@@ -836,6 +837,45 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
         String path2 = deployConfig.get(APPLICATION_RESULT_STORE_STORAGE_PATH);
         assertThat(path2).startsWith(haStoragePath).isNotEqualTo(path1);
+    }
+
+    /**
+     * A terminal application result must outlive its cleanup, otherwise a JobManager restart before
+     * the cluster is shut down finds no record of the application and runs it again.
+     */
+    @Test
+    public void testApplicationResultStoreRetainsResults() throws Exception {
+        var deployConfig = deployWithHaStorage(Map.of());
+        assertThat(deployConfig.get(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT)).isFalse();
+    }
+
+    @Test
+    public void testApplicationResultStoreDeleteOnCommitNotOverridden() throws Exception {
+        var deployConfig =
+                deployWithHaStorage(
+                        Map.of(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT.key(), "true"));
+        assertThat(deployConfig.get(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT)).isTrue();
+    }
+
+    /** Deploys an application cluster with HA storage configured, plus any extra config. */
+    private Configuration deployWithHaStorage(Map<String, String> extraConfig) throws Exception {
+        final FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
+        flinkApp.getSpec()
+                .getFlinkConfiguration()
+                .put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "file:///flink-data/ha");
+        flinkApp.getSpec().getFlinkConfiguration().putAllFrom(extraConfig);
+
+        final Configuration deployConfig =
+                configManager.getDeployConfig(flinkApp.getMetadata(), flinkApp.getSpec());
+        reconciler
+                .getReconciler()
+                .deploy(
+                        getResourceContext(flinkApp),
+                        flinkApp.getSpec(),
+                        deployConfig,
+                        Optional.empty(),
+                        false);
+        return deployConfig;
     }
 
     @Test

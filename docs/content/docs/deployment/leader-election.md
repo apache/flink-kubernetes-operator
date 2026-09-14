@@ -89,8 +89,6 @@ Even with standbys the running job still restarts when the leader JobManager fai
 
 To work around a JobResultStore resource leak in Flink ([FLINK-27569](https://issues.apache.org/jira/browse/FLINK-27569)), the operator adjusts two settings whenever an application deployment runs with HA storage configured: `job-result-store.delete-on-commit` is turned off unless set explicitly, and `job-result-store.storage-path` is pointed at a unique directory under the HA storage path on every cluster launch. The directories of earlier launches are never removed automatically, so they accumulate and must be cleaned up manually, always retaining the most recent one:
 
-From Flink 2.3 the operator randomises `application-result-store.storage-path` in the same way ([FLINK-40467](https://issues.apache.org/jira/browse/FLINK-40467)), so that a terminal application result left by an earlier deployment cannot stop the replacement cluster from submitting the new job. Those directories accumulate under `application-result-store/` and need the same manual cleanup.
-
 ```shell
 ls -lth /tmp/flink/ha/job-result-store/basic-checkpoint-ha-example/
 total 0
@@ -98,6 +96,8 @@ drwxr-xr-x 2 9999 9999 40 May 12 09:51 119e0203-c3a9-4121-9a60-d58839576f01 <- m
 drwxr-xr-x 2 9999 9999 60 May 12 09:46 a6031ec7-ab3e-4b30-ba77-6498e58e6b7f
 drwxr-xr-x 2 9999 9999 60 May 11 15:11 b6fb2a9c-d1cd-4e65-a9a1-e825c4b47543
 ```
+
+From Flink 2.3 the operator applies the same two settings to the ApplicationResultStore ([FLINK-40467](https://issues.apache.org/jira/browse/FLINK-40467)): `application-result-store.delete-on-commit` is turned off unless set explicitly, and `application-result-store.storage-path` is pointed at a unique directory on every cluster launch. This means a terminal application result left by an earlier deployment can no longer stop the replacement cluster from submitting its new job, and a JobManager restart no longer re-runs the `main()` method of an application that has already finished. Those directories accumulate under `application-result-store/` and need the same manual cleanup.
 
 ### Limitations
 

@@ -83,6 +83,15 @@ public class ApplicationReconciler
                     .stringType()
                     .noDefaultValue();
 
+    /**
+     * Mirrors {@code ApplicationResultStoreOptions#DELETE_ON_COMMIT}, introduced in Flink 2.3. The
+     * option is unknown and ignored in earlier versions.
+     */
+    static final ConfigOption<Boolean> APPLICATION_RESULT_STORE_DELETE_ON_COMMIT =
+            ConfigOptions.key("application-result-store.delete-on-commit")
+                    .booleanType()
+                    .defaultValue(true);
+
     public ApplicationReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
@@ -287,12 +296,20 @@ public class ApplicationReconciler
 
     private static void setRandomApplicationResultStorePath(Configuration effectiveConfig) {
         if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
+
+            // With shutdown-on-application-finish disabled, a JobManager that restarts
+            // after an application has terminated would find no result and run the
+            // application's main() again. Retaining the entry avoids that.
+            if (!effectiveConfig.contains(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT)) {
+                effectiveConfig.set(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT, false);
+            }
+
             // The application result store shares the HA storage path, which outlives
             // the HA metadata deleted on upgrade. Dirty entries are recovered unkeyed,
             // so a terminal entry left behind by a previous deployment makes the
             // replacement cluster skip submitting the new job.
             // Giving each deployment a unique path makes sure that nothing stale is
-            // recovered.
+            // recovered, including entries retained above.
             effectiveConfig.set(
                     APPLICATION_RESULT_STORE_STORAGE_PATH,
                     effectiveConfig.getString(HighAvailabilityOptions.HA_STORAGE_PATH)
