@@ -25,12 +25,15 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.HttpURLConnection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -75,16 +78,22 @@ public class ConfigMapStore {
     public void flush(KubernetesJobAutoScalerContext jobContext) {
         ConfigMapView configMapView = cache.get(jobContext.getJobKey());
         if (configMapView == null) {
-            LOG.debug("The configMap doesn't exist, so skip the flush.");
+            LOG.debug("The autoscaler ConfigMap doesn't exist, so skip the flush.");
             return;
         }
         try {
             configMapView.flush();
         } catch (Exception e) {
-            LOG.error(
-                    "Error while updating autoscaler info configmap, invalidating to clear the cache",
-                    e);
             removeInfoFromCache(jobContext.getJobKey());
+            if (isNotFound(e)) {
+                LOG.warn(
+                        "Autoscaler ConfigMap of {} no longer exists, it will be recreated on the next cycle.",
+                        jobContext.getJobKey().getName());
+                return;
+            }
+            LOG.error(
+                    "Error while updating autoscaler ConfigMap, invalidating to clear the cache.",
+                    e);
             throw e;
         }
     }
@@ -93,9 +102,19 @@ public class ConfigMapStore {
         cache.remove(resourceID);
     }
 
+    private static boolean isNotFound(Exception e) {
+        return e instanceof KubernetesClientException
+                && ((KubernetesClientException) e).getCode() == HttpURLConnection.HTTP_NOT_FOUND;
+    }
+
     private ConfigMapView getConfigMap(KubernetesJobAutoScalerContext jobContext) {
-        return cache.computeIfAbsent(
-                jobContext.getJobKey(), (id) -> getConfigMapFromKubernetes(jobContext));
+        var ownerUid = jobContext.getResource().getMetadata().getUid();
+        return cache.compute(
+                jobContext.getJobKey(),
+                (id, cached) ->
+                        cached != null && Objects.equals(ownerUid, cached.getOwnerUid())
+                                ? cached
+                                : getConfigMapFromKubernetes(jobContext));
     }
 
     @VisibleForTesting

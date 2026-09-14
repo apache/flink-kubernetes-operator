@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -138,6 +139,87 @@ public class ConfigMapStoreTest {
 
         // Make sure we can get the new version
         assertThat(configMapStore.getSerializedState(ctx, "a")).contains("2");
+    }
+
+    @Test
+    void testCacheInvalidatedWhenOwnerUidChanges() {
+        var ctx = createContext("cr1", kubernetesClient);
+        ctx.getResource().getMetadata().setUid("uid-1");
+
+        configMapStore.putSerializedState(ctx, "a", "1");
+        configMapStore.flush(ctx);
+        var requestCount = mockWebServer.getRequestCount();
+
+        assertThat(configMapStore.getSerializedState(ctx, "a")).contains("1");
+        assertEquals(requestCount, mockWebServer.getRequestCount());
+
+        ctx.getResource().getMetadata().setUid("uid-2");
+        assertThat(configMapStore.getSerializedState(ctx, "a")).isEmpty();
+        assertEquals(requestCount + 1, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void testRecreatedResourceTakesOverTheConfigMapLeftBehind() {
+        var ctx = createContext("cr1", kubernetesClient);
+        ctx.getResource().getMetadata().setUid("uid-1");
+        configMapStore.putSerializedState(ctx, "old", "state");
+        configMapStore.flush(ctx);
+
+        ctx.getResource().getMetadata().setUid("uid-2");
+
+        configMapStore.putSerializedState(ctx, "x", "1");
+        configMapStore.putSerializedState(ctx, "y", "2");
+        configMapStore.flush(ctx);
+
+        var stored = configMapStore.getConfigMapFromKubernetes(ctx);
+        assertThat(stored.getDataReadOnly()).containsEntry("x", "1").containsEntry("y", "2");
+        assertThat(stored.getDataReadOnly()).doesNotContainKey("old");
+        assertThat(stored.getOwnerUid()).isEqualTo("uid-2");
+    }
+
+    @Test
+    void testFlushRecreatesConfigMapDeletedExternally() {
+        var ctx = createContext("cr1", kubernetesClient);
+
+        configMapStore.putSerializedState(ctx, "a", "1");
+        configMapStore.flush(ctx);
+
+        kubernetesClient
+                .configMaps()
+                .inNamespace(ctx.getResource().getMetadata().getNamespace())
+                .withName("autoscaler-cr1")
+                .delete();
+
+        configMapStore.putSerializedState(ctx, "a", "2");
+        assertDoesNotThrow(() -> configMapStore.flush(ctx));
+        assertThat(configMapStore.getCache()).containsKey(ctx.getJobKey());
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly())
+                .containsEntry("a", "2");
+    }
+
+    @Test
+    void testTakeOverSurvivesTheCollectorWinningTheRace() {
+        var ctx = createContext("cr1", kubernetesClient);
+        ctx.getResource().getMetadata().setUid("uid-1");
+        configMapStore.putSerializedState(ctx, "old", "state");
+        configMapStore.flush(ctx);
+
+        ctx.getResource().getMetadata().setUid("uid-2");
+        configMapStore.putSerializedState(ctx, "x", "1");
+
+        kubernetesClient
+                .configMaps()
+                .inNamespace(ctx.getResource().getMetadata().getNamespace())
+                .withName("autoscaler-cr1")
+                .delete();
+
+        configMapStore.putSerializedState(ctx, "y", "2");
+        assertDoesNotThrow(() -> configMapStore.flush(ctx));
+
+        var stored = configMapStore.getConfigMapFromKubernetes(ctx);
+        assertThat(stored.getDataReadOnly()).containsEntry("x", "1").containsEntry("y", "2");
+        assertThat(stored.getDataReadOnly()).doesNotContainKey("old");
+        assertThat(stored.getOwnerUid()).isEqualTo("uid-2");
     }
 
     @Test
