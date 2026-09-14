@@ -97,6 +97,8 @@ drwxr-xr-x 2 9999 9999 60 May 12 09:46 a6031ec7-ab3e-4b30-ba77-6498e58e6b7f
 drwxr-xr-x 2 9999 9999 60 May 11 15:11 b6fb2a9c-d1cd-4e65-a9a1-e825c4b47543
 ```
 
+From Flink 2.3 the operator applies the same two settings to the ApplicationResultStore ([FLINK-40467](https://issues.apache.org/jira/browse/FLINK-40467)): `application-result-store.delete-on-commit` is turned off unless set explicitly, and `application-result-store.storage-path` is pointed at a unique directory on every cluster launch. This means a terminal application result left by an earlier deployment can no longer stop the replacement cluster from submitting its new job, and a JobManager restart no longer re-runs the `main()` method of an application that has already finished. Those directories accumulate under `application-result-store/` and need the same manual cleanup.
+
 ### Limitations
 
 The following are known limitations of the operator's Flink Job HA integration:
