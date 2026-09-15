@@ -50,7 +50,8 @@ public class AutoscalerFactoryTest {
                                 new FlinkResourceEventCollector(),
                                 new FlinkStateSnapshotEventCollector()),
                         new ClusterResourceManager(Duration.ZERO, kubernetesClient),
-                        OperatorPluginUtils.createPluginManager(new Configuration()));
+                        AutoscalerPlugins.discover(
+                                OperatorPluginUtils.createPluginManager(new Configuration())));
         Assertions.assertTrue(autoScaler instanceof JobAutoScalerImpl);
     }
 }
