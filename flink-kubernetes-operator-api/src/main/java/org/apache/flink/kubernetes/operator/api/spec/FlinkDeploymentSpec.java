@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.SchemaFrom;
+import io.fabric8.generator.annotation.Required;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.AllArgsConstructor;
@@ -52,7 +53,7 @@ public class FlinkDeploymentSpec extends AbstractFlinkSpec {
     private String serviceAccount;
 
     /** Flink image version. */
-    private FlinkVersion flinkVersion;
+    @Required private FlinkVersion flinkVersion;
 
     /** Ingress specs. */
     private IngressSpec ingress;

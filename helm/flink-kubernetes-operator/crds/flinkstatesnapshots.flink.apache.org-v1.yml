@@ -33,6 +33,7 @@ spec:
           spec:
             properties:
               backoffLimit:
+                minimum: -1.0
                 type: "integer"
               checkpoint:
                 type: "object"
