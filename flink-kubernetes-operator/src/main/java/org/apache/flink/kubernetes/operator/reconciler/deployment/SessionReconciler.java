@@ -178,8 +178,7 @@ public class SessionReconciler
         var deployment = ctx.getResource();
 
         boolean blockOnSessionJobs =
-                ctx.getObserveConfig()
-                        .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS);
+                ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS);
 
         if (blockOnSessionJobs && !sessionJobs.isEmpty()) {
             var error =
@@ -204,8 +203,7 @@ public class SessionReconciler
         // Check for non-terminated jobs if the option is enabled (Enabled by default) , after
         // sessionJobs are deleted
         boolean blockOnUnmanagedJobs =
-                ctx.getObserveConfig()
-                        .getBoolean(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
+                ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS);
         if (blockOnSessionJobs && blockOnUnmanagedJobs) {
             Set<JobID> nonTerminalJobs = getNonTerminalJobs(ctx);
             if (!nonTerminalJobs.isEmpty()) {

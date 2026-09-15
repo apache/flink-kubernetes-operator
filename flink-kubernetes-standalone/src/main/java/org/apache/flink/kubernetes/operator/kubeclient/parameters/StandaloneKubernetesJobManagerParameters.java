@@ -25,13 +25,15 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 
 /**
  * A Utility class that helps to parse, verify and manage the Kubernetes parameters that are used
@@ -81,19 +83,19 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
         if (!isApplicationCluster()) {
             return null;
         }
-        return flinkConfig.getString(ApplicationConfiguration.APPLICATION_MAIN_CLASS);
+        return flinkConfig.get(ApplicationConfiguration.APPLICATION_MAIN_CLASS);
     }
 
     public Boolean getAllowNonRestoredState() {
-        if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE)) {
-            return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE);
+        if (flinkConfig.contains(SAVEPOINT_IGNORE_UNCLAIMED_STATE)) {
+            return flinkConfig.get(SAVEPOINT_IGNORE_UNCLAIMED_STATE);
         }
         return null;
     }
 
     public String getSavepointPath() {
-        if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_PATH)) {
-            return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_PATH);
+        if (flinkConfig.contains(SAVEPOINT_PATH)) {
+            return flinkConfig.get(SAVEPOINT_PATH);
         }
         return null;
     }
