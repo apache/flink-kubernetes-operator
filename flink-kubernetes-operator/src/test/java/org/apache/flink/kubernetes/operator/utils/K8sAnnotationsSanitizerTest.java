@@ -120,4 +120,23 @@ public class K8sAnnotationsSanitizerTest {
         assertThat(sanitized.get("valid-key")).isEqualTo("some value");
         assertThat(sanitized.get("example.com/valid-name")).isEqualTo("value with newlines");
     }
+
+    @Test
+    public void testIsValidLabelValue() {
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("")).isTrue();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("prod")).isTrue();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("a")).isTrue();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("a.b-c_d")).isTrue();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("A1")).isTrue();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("a".repeat(63))).isTrue();
+
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue(null)).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("a".repeat(64))).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("not valid")).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("-lead")).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("trail-")).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue(".lead")).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("foo@bar")).isFalse();
+        assertThat(K8sAnnotationsSanitizer.isValidLabelValue("foo/bar")).isFalse();
+    }
 }

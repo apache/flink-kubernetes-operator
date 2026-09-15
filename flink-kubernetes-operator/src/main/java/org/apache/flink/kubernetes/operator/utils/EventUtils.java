@@ -40,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -83,6 +84,30 @@ public class EventUtils {
             Consumer<Event> eventListener,
             @Nullable String messageKey,
             @Nullable Duration interval) {
+        return createOrUpdateEventWithInterval(
+                client,
+                target,
+                type,
+                reason,
+                message,
+                component,
+                eventListener,
+                messageKey,
+                interval,
+                Map.of());
+    }
+
+    public static boolean createOrUpdateEventWithInterval(
+            KubernetesClient client,
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey,
+            @Nullable Duration interval,
+            @Nullable Map<String, String> labels) {
         return createOrUpdateEventWithLabels(
                 client,
                 target,
@@ -94,7 +119,7 @@ public class EventUtils {
                 messageKey,
                 interval,
                 null,
-                Map.of());
+                labels);
     }
 
     public static Event findExistingEvent(
@@ -120,6 +145,34 @@ public class EventUtils {
             Consumer<Event> eventListener,
             @Nullable String messageKey,
             @Nullable Map<String, String> annotations) {
+        return createWithAnnotations(
+                client,
+                target,
+                type,
+                reason,
+                message,
+                component,
+                eventListener,
+                messageKey,
+                annotations,
+                null);
+    }
+
+    /**
+     * Create or update an event for the target resource. If the event already exists, it will be
+     * updated with the new annotations, message and the count will be increased.
+     */
+    public static boolean createWithAnnotations(
+            KubernetesClient client,
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey,
+            @Nullable Map<String, String> annotations,
+            @Nullable Map<String, String> labels) {
         String eventName =
                 generateEventName(
                         target, type, reason, messageKey != null ? messageKey : message, component);
@@ -130,11 +183,13 @@ public class EventUtils {
             existing.setCount(existing.getCount() + 1);
             existing.setMessage(message);
             setAnnotations(existing, annotations);
+            setLabels(existing, labels);
             createOrReplaceEvent(client, existing).ifPresent(eventListener);
             return false;
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
             setAnnotations(event, annotations);
+            setLabels(event, labels);
             createOrReplaceEvent(client, event).ifPresent(eventListener);
             return true;
         }
@@ -149,6 +204,20 @@ public class EventUtils {
             EventRecorder.Component component,
             Consumer<Event> eventListener,
             @Nullable String messageKey) {
+        return createIfNotExists(
+                client, target, type, reason, message, component, eventListener, messageKey, null);
+    }
+
+    public static boolean createIfNotExists(
+            KubernetesClient client,
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey,
+            @Nullable Map<String, String> labels) {
 
         String eventName =
                 generateEventName(
@@ -159,6 +228,7 @@ public class EventUtils {
             return false;
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
+            setLabels(event, labels);
             createOrReplaceEvent(client, event).ifPresent(eventListener);
             return true;
         }
@@ -208,14 +278,14 @@ public class EventUtils {
         createOrReplaceEvent(client, existing).ifPresent(eventListener);
     }
 
-    private static void setLabels(Event existing, @Nullable Map<String, String> labels) {
+    private static void setLabels(Event event, @Nullable Map<String, String> labels) {
         if (labels == null) {
             return;
         }
-        if (existing.getMetadata() == null) {
-            existing.setMetadata(new ObjectMeta());
+        if (event.getMetadata() == null) {
+            event.setMetadata(new ObjectMeta());
         }
-        existing.getMetadata().setLabels(labels);
+        event.getMetadata().setLabels(new HashMap<>(labels));
     }
 
     private static void setAnnotations(Event existing, @Nullable Map<String, String> annotations) {

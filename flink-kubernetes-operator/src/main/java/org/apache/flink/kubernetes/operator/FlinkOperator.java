@@ -118,7 +118,7 @@ public class FlinkOperator {
         this.operator = createOperator();
         this.validators = ValidatorUtils.discoverValidators(configManager, pluginManager);
         this.listeners = ListenerUtils.discoverListeners(configManager, pluginManager);
-        this.eventRecorder = EventRecorder.create(client, listeners);
+        this.eventRecorder = EventRecorder.create(this.client, listeners, baseConfig);
         this.ctxFactory =
                 new FlinkResourceContextFactory(configManager, metricGroup, eventRecorder);
         LOG.info("Initializing file system factories from plugin directory.");

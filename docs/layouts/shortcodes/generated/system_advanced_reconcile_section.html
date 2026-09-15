@@ -21,6 +21,12 @@
             <td>Maximum number of stack trace lines to include in exception-related Kubernetes event messages.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.events.labels</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>Map</td>
+            <td>Labels to be added to the metadata of every Kubernetes event created by the operator. Keys and values must be valid Kubernetes label keys/values, otherwise event creation will fail. Expected format: labelKey1:labelValue1,labelKey2:labelValue2. Changing this requires an operator restart.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.ingress.manage</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
