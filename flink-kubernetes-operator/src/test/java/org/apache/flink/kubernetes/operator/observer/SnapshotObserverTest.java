@@ -51,6 +51,7 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshot
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.MANUAL;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.UPGRADE;
@@ -163,10 +164,10 @@ public class SnapshotObserverTest extends OperatorTestBase {
 
         var testDataSavepoints =
                 List.of(
-                        createSnapshot(SAVEPOINT, 0, PERIODIC, IN_PROGRESS),
-                        createSnapshot(SAVEPOINT, 1, PERIODIC, IN_PROGRESS),
-                        createSnapshot(SAVEPOINT, 2, PERIODIC, IN_PROGRESS),
-                        createSnapshot(SAVEPOINT, 3, PERIODIC, IN_PROGRESS));
+                        createSnapshot(SAVEPOINT, 0, PERIODIC, ABANDONED),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, ABANDONED),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, ABANDONED),
+                        createSnapshot(SAVEPOINT, 3, PERIODIC, ABANDONED));
 
         var removedSavepoints =
                 observer.getFlinkStateSnapshotsToCleanUp(
@@ -176,6 +177,41 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         testDataSavepoints.get(0),
                         testDataSavepoints.get(1),
                         testDataSavepoints.get(2));
+    }
+
+    @Test
+    public void testSnapshotWithoutStatusIsNotCleanedUp() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var completedSnapshot = createSnapshot(SAVEPOINT, 0, PERIODIC, COMPLETED);
+        var snapshotWithoutStatus = createSnapshot(SAVEPOINT, 1, PERIODIC, IN_PROGRESS);
+        snapshotWithoutStatus.setStatus(null);
+
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        List.of(completedSnapshot, snapshotWithoutStatus),
+                        conf,
+                        operatorConfig,
+                        SAVEPOINT);
+        assertThat(removedSavepoints).isEmpty();
+    }
+
+    @Test
+    public void testActiveSnapshotsAreNotCleanedUp() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+
+        var snapshots =
+                List.of(
+                        createSnapshot(SAVEPOINT, 0, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, 1, PERIODIC, TRIGGER_PENDING),
+                        createSnapshot(SAVEPOINT, 2, PERIODIC, IN_PROGRESS));
+
+        var removedSavepoints =
+                observer.getFlinkStateSnapshotsToCleanUp(
+                        snapshots, conf, operatorConfig, SAVEPOINT);
+        assertThat(removedSavepoints).isEmpty();
     }
 
     @Test
