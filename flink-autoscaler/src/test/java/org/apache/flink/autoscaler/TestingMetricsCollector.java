@@ -101,7 +101,10 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     @Override
     protected Collection<String> queryAggregatedMetricNames(
-            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
+            RestClusterClient<?> restClient,
+            JobID jobID,
+            JobVertexID jobVertexID,
+            Duration timeout) {
         return metricNames.getOrDefault(jobVertexID, Collections.emptyList());
     }
 
