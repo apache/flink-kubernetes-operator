@@ -163,10 +163,18 @@ public class BlueGreenDeploymentService {
                                 .rescheduleAfter(getReconciliationReschedInterval(context));
                     }
 
-                    setLastReconciledSpec(context);
                     try {
-                        return startTransition(
-                                context, currentBlueGreenDeploymentType, currentFlinkDeployment);
+                        var result =
+                                startTransition(
+                                        context,
+                                        currentBlueGreenDeploymentType,
+                                        currentFlinkDeployment);
+                        // Only stamp lastReconciledSpec after the transition
+                        // succeeds. If stamped before and the transition
+                        // fails/aborts, lastReconciledSpec drifts from the
+                        // active child's actual spec
+                        setLastReconciledSpec(context);
+                        return result;
                     } catch (Exception e) {
                         var error = "Could not start Transition. Details: " + e.getMessage();
                         context.getDeploymentStatus().setSavepointTriggerId(null);
@@ -181,10 +189,12 @@ public class BlueGreenDeploymentService {
                             "Savepoint redeploy triggered for '{}', using initialSavepointPath: {}",
                             context.getBgDeployment().getMetadata().getName(),
                             Objects.toString(jobSpec.getInitialSavepointPath(), "<none>"));
-                    setLastReconciledSpec(context);
                     try {
-                        return startSavepointRedeployTransition(
-                                context, currentBlueGreenDeploymentType);
+                        var result =
+                                startSavepointRedeployTransition(
+                                        context, currentBlueGreenDeploymentType);
+                        setLastReconciledSpec(context);
+                        return result;
                     } catch (Exception e) {
                         var error =
                                 "Could not start Savepoint Redeploy Transition. Details: "
