@@ -30,6 +30,7 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -271,7 +272,7 @@ public class EventUtils {
 
     private static Optional<Event> createOrReplaceEvent(KubernetesClient client, Event event) {
         try {
-            Event createdEvent = client.resource(event).createOrReplace();
+            Event createdEvent = client.resource(event).unlock().createOr(NonDeletingOperation::update);
             return Optional.of(createdEvent);
         } catch (KubernetesClientException e) {
             if (e.getCode() == HttpURLConnection.HTTP_FORBIDDEN) {

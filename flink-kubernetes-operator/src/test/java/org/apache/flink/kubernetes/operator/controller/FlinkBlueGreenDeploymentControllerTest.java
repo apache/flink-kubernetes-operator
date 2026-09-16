@@ -42,7 +42,6 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
@@ -67,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
@@ -1721,7 +1721,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // TODO: is this correct? Doing this to give the TestingFlinkService awareness of the job
         JobSpec jobSpec = deployment.getSpec().getJob();
         Configuration conf = new Configuration();
-        conf.set(SavepointConfigOptions.SAVEPOINT_PATH, TEST_CHECKPOINT_PATH);
+        conf.set(SAVEPOINT_PATH, TEST_CHECKPOINT_PATH);
         flinkService.submitApplicationCluster(jobSpec, conf, false);
         var jobId = flinkService.listJobs().get(0).f1.getJobId().toString();
         deployment.getStatus().getJobStatus().setJobId(jobId);

@@ -68,11 +68,11 @@ public class FlinkUtilsZookeeperHATest {
 
         // Generate configuration for the Curator
         configuration = new Configuration();
-        configuration.setString(
+        configuration.set(
                 HighAvailabilityOptions.HA_MODE, HighAvailabilityMode.ZOOKEEPER.toString());
-        configuration.setString(
+        configuration.set(
                 HighAvailabilityOptions.HA_ZOOKEEPER_QUORUM, testingServer.getConnectString());
-        configuration.setString(
+        configuration.set(
                 HighAvailabilityOptions.HA_STORAGE_PATH,
                 temporaryFolder.resolve("ha").toAbsolutePath().toString());
 

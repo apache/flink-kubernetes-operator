@@ -44,7 +44,6 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.Preconditions;
 
@@ -59,6 +58,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
@@ -160,15 +160,15 @@ public class ApplicationReconciler
 
         if (savepoint.isPresent()) {
             // Savepoint deployment
-            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
+            deployConfig.set(SAVEPOINT_PATH, savepoint.get());
         } else if (requireHaMetadata && flinkService.atLeastOneCheckpoint(deployConfig)) {
             // Last state deployment, explicitly set a dummy savepoint path to avoid accidental
             // incorrect state restore in case the HA metadata is deleted by the user
-            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, LAST_STATE_DUMMY_SP_PATH);
+            deployConfig.set(SAVEPOINT_PATH, LAST_STATE_DUMMY_SP_PATH);
             status.getJobStatus().setUpgradeSavepointPath(LAST_STATE_DUMMY_SP_PATH);
         } else {
             // Stateless deployment, remove any user configured savepoint path
-            deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
+            deployConfig.removeConfig(SAVEPOINT_PATH);
         }
 
         setOwnerReference(relatedResource, deployConfig);
@@ -265,9 +265,9 @@ public class ApplicationReconciler
 
             effectiveConfig.set(
                     JobResultStoreOptions.STORAGE_PATH,
-                    effectiveConfig.getString(HighAvailabilityOptions.HA_STORAGE_PATH)
+                    effectiveConfig.get(HighAvailabilityOptions.HA_STORAGE_PATH)
                             + "/job-result-store/"
-                            + effectiveConfig.getString(KubernetesConfigOptions.CLUSTER_ID)
+                            + effectiveConfig.get(KubernetesConfigOptions.CLUSTER_ID)
                             + "/"
                             + UUID.randomUUID());
         }
@@ -334,7 +334,7 @@ public class ApplicationReconciler
 
         boolean restartNeeded = false;
 
-        if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+        if (observeConfig.get(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
             var clusterInfo = deployment.getStatus().getClusterInfo();
             ClusterHealthInfo clusterHealthInfo =
                     ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
@@ -404,7 +404,7 @@ public class ApplicationReconciler
         } else {
             var observeConfig = ctx.getObserveConfig();
             var suspendMode =
-                    observeConfig.getBoolean(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                    observeConfig.get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
                             ? SuspendMode.SAVEPOINT
                             : SuspendMode.STATELESS;
             cancelJob(ctx, suspendMode);

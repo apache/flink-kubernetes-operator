@@ -188,7 +188,7 @@ public abstract class AbstractFlinkResourceReconciler<
         var resource = ctx.getResource();
         boolean autoscalerEnabled =
                 resource.getSpec().getJob() != null
-                        && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
+                        && ctx.getObserveConfig().get(AUTOSCALER_ENABLED);
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
 
         var reconStatus = resource.getStatus().getReconciliationStatus();
