@@ -21,21 +21,14 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
 import org.apache.flink.autoscaler.RestApiMetricsCollector;
 import org.apache.flink.autoscaler.ScalingExecutor;
-import org.apache.flink.autoscaler.ScalingExecutorPlugin;
 import org.apache.flink.autoscaler.ScalingMetricEvaluator;
-import org.apache.flink.autoscaler.alignment.ParallelismAlignmentMode;
-import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
-import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
-import org.apache.flink.kubernetes.operator.utils.AutoscalerUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
-
-import java.util.Collection;
 
 /** The factory of {@link JobAutoScaler}. */
 public class AutoscalerFactory {
@@ -44,28 +37,20 @@ public class AutoscalerFactory {
             KubernetesClient client,
             EventRecorder eventRecorder,
             ClusterResourceManager clusterResourceManager,
-            PluginManager pluginManager) {
+            AutoscalerPlugins plugins) {
 
         var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
         var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
 
-        // Autoscaler SPI integrations sharing the operator's process-wide plugin manager.
-        Collection<ScalingMetricsEvaluatorPlugin> customEvaluators =
-                AutoscalerUtils.discoverCustomEvaluators(pluginManager);
-        Collection<ScalingExecutorPlugin<ResourceID>> customExecutors =
-                AutoscalerUtils.discoverCustomScalingExecutors(pluginManager);
-        Collection<ParallelismAlignmentMode> customAlignmentModes =
-                AutoscalerUtils.discoverCustomAlignmentModes(pluginManager);
-
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(stateStore),
-                new ScalingMetricEvaluator<>(customEvaluators),
+                new ScalingMetricEvaluator<>(plugins.getEvaluators()),
                 new ScalingExecutor<>(
                         eventHandler,
                         stateStore,
                         clusterResourceManager,
-                        customExecutors,
-                        customAlignmentModes),
+                        plugins.getScalingExecutors(),
+                        plugins.getAlignmentModes()),
                 eventHandler,
                 new KubernetesScalingRealizer(),
                 stateStore);
