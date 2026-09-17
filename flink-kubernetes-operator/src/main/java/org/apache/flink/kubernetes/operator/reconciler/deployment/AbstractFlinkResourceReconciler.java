@@ -358,12 +358,7 @@ public abstract class AbstractFlinkResourceReconciler<
         var scaled = ctx.getFlinkService().scale(ctx, deployConfig);
 
         if (scaled) {
-            var resource = ctx.getResource();
-            ctx.getConfigManager()
-                    .invalidateRuntimeConfig(
-                            resource.getMetadata().getNamespace(),
-                            resource.getMetadata().getName());
-            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
+            ReconciliationUtils.updateStatusForDeployedSpec(ctx.getResource(), deployConfig, clock);
         }
 
         return scaled;
