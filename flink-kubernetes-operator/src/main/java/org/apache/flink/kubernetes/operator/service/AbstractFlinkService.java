@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -166,6 +167,7 @@ import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_H
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
 import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.util.ExceptionUtils.findThrowable;
 
 /**
@@ -981,13 +983,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     TimeUnit.SECONDS);
 
             Map<String, String> jmConfig = new HashMap<>();
-            configurationInfo.forEach(
-                    entry -> {
-                        if (!FlinkRuntimeConfigurationUtils.isOperatorControlledKey(
-                                entry.getKey())) {
-                            jmConfig.put(entry.getKey(), entry.getValue());
-                        }
-                    });
+            configurationInfo.forEach(entry -> jmConfig.put(entry.getKey(), entry.getValue()));
             LOG.debug("Fetched {} JobManager configuration entries", jmConfig.size());
             return jmConfig;
         }
@@ -1068,8 +1064,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     ? RestoreMode.DEFAULT
                                     : null,
                             conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
-                                    ? configToMapWithVersionDialect(
-                                            removeOperatorConfigs(conf), flinkVersion)
+                                    ? configToMapWithVersionDialect(conf, flinkVersion)
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
@@ -1181,7 +1176,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected static Configuration removeOperatorConfigs(Configuration config) {
         Configuration newConfig = new Configuration(config);
         for (String key : config.keySet()) {
-            if (FlinkRuntimeConfigurationUtils.isOperatorControlledKey(key)) {
+            if (key.startsWith(K8S_OP_CONF_PREFIX)
+                    || key.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                 newConfig.removeKey(key);
             }
         }
