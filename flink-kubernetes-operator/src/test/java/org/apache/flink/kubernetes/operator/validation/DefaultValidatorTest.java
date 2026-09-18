@@ -769,14 +769,17 @@ public class DefaultValidatorTest {
     public void testJarUriHostValidation() {
         var defaultAllowed = List.of("https");
 
-        // Cloud-metadata link-local, loopback, site-local and wildcard addresses must be rejected.
+        // Cloud-metadata link-local, loopback, site-local, wildcard and IPv6 ULA addresses
+        // (fc00::/7, e.g. AWS's fd00:ec2::254) must be rejected.
         for (String restricted :
                 List.of(
                         "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
                         "https://127.0.0.1/job.jar",
                         "https://localhost/job.jar",
                         "https://10.0.0.1/job.jar",
-                        "https://192.168.1.1/job.jar")) {
+                        "https://192.168.1.1/job.jar",
+                        "https://[fd00:ec2::254]/job.jar",
+                        "https://[fc00::1]/job.jar")) {
             var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
             assertTrue(error.isPresent(), "expected error for " + restricted);
             assertTrue(
