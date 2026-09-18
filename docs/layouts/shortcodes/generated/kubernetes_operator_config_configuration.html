@@ -480,7 +480,13 @@
             <td><h5>kubernetes.operator.user.artifacts.allowed-schemes</h5></td>
             <td style="word-wrap: break-word;">"https"</td>
             <td>List&lt;String&gt;</td>
-            <td>Comma separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. Only 'https' is allowed by default. Operators that need to fetch artifacts via other schemes (such as 's3' or 'hdfs') can extend this list. Scheme matching is case-insensitive.</td>
+            <td>Semicolon separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. Only 'https' is allowed by default. Operators that need to fetch artifacts via other schemes (such as 's3' or 'hdfs') can extend this list. Scheme matching is case-insensitive.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.allowed-uri-prefixes</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>List&lt;String&gt;</td>
+            <td>Semicolon separated list of jarURI prefixes that are exempt from the 'kubernetes.operator.user.artifacts.disallow-restricted-hosts' check, even when it is enabled. Use this to allow a trusted internal artifact store (e.g. an in-cluster Service or an on-prem Artifactory instance) that would otherwise be rejected for resolving to a private address. Each prefix is an absolute URI such as 'https://artifacts.internal:8443/releases/'. A jarURI is exempted when its scheme, host and port equal those of a prefix and its path equals the prefix path or lies under it; a jarURI with user info or with '.' or '..' path segments is never exempted. Prefixes that are blank, carry user info, a query or a fragment are ignored. The scheme allowlist is still enforced.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.base.dir</h5></td>
