@@ -399,6 +399,21 @@ public class KubernetesOperatorConfigOptions {
                                     + "Disable only if the operator legitimately needs to fetch from such addresses.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<List<String>> JAR_URI_ALLOWED_URI_PREFIXES =
+            operatorConfig("user.artifacts.allowed-uri-prefixes")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withDescription(
+                            "Comma separated list of jarURI prefixes that are exempt from the '"
+                                    + JAR_URI_DISALLOW_RESTRICTED_HOSTS.key()
+                                    + "' check, even when it is enabled. Use this to allow a trusted "
+                                    + "internal artifact store (e.g. an in-cluster Service or an on-prem "
+                                    + "Artifactory instance) that would otherwise be rejected for resolving "
+                                    + "to a private address. A jarURI is exempted when it starts with one "
+                                    + "of the configured prefixes; the scheme allowlist is still enforced.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> JAR_FETCH_SOCKET_TIMEOUT =
             operatorConfig("user.artifacts.http.socket-timeout")
                     .durationType()
