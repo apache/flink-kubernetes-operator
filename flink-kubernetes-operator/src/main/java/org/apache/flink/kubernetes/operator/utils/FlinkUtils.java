@@ -59,6 +59,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -245,7 +246,7 @@ public class FlinkUtils {
                 FlinkUtils.getFlinkKubernetesHaConfigmaps(clusterId, namespace, kubernetesClient)
                         .list();
 
-        boolean shouldUpdate = false;
+        List<ConfigMap> modifiedConfigMaps = new ArrayList<>();
         for (ConfigMap configMap : configMaps.getItems()) {
             if (configMap.getData() == null || configMap.getData().isEmpty()) {
                 continue;
@@ -253,13 +254,11 @@ public class FlinkUtils {
             final boolean isDeleted =
                     configMap.getData().entrySet().removeIf(FlinkUtils::isJobGraphKey);
             if (isDeleted) {
-                shouldUpdate = true;
+                modifiedConfigMaps.add(configMap);
                 LOG.info("Job graph in ConfigMap {} is deleted", configMap.getMetadata().getName());
             }
         }
-        if (shouldUpdate) {
-            kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
-        }
+        modifiedConfigMaps.forEach(cm -> kubernetesClient.resource(cm).inNamespace(namespace).update());
     }
 
     public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
@@ -363,13 +362,13 @@ public class FlinkUtils {
 
     public static Double calculateClusterCpuUsage(Configuration conf, int taskManagerReplicas) {
         var jmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU)
-                        * conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU)
+                        * conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
                         * conf.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS);
 
         var tmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU, 1)
-                        * conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU, 1.0)
+                        * conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
                         * taskManagerReplicas;
 
         return tmTotalCpu + jmTotalCpu;
@@ -390,8 +389,7 @@ public class FlinkUtils {
                 Math.round(
                         clusterSpec.getTaskManagerMemoryMB()
                                 * Math.pow(1024, 2)
-                                * conf.getDouble(
-                                        KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
+                                * conf.get(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
                                 * taskManagerReplicas);
 
         return tmTotalMemory + jmTotalMemory;
