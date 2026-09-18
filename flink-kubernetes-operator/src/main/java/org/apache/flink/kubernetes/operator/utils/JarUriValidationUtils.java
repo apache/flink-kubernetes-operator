@@ -82,7 +82,10 @@ public final class JarUriValidationUtils {
     private JarUriValidationUtils() {}
 
     public static Optional<String> validateJarURI(
-            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+            String jarURI,
+            Collection<String> allowedSchemes,
+            boolean disallowRestrictedHosts,
+            Collection<String> allowedUriPrefixes) {
         if (jarURI == null) {
             return Optional.empty();
         }
@@ -113,7 +116,8 @@ public final class JarUriValidationUtils {
         }
 
         if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && disallowRestrictedHosts) {
+                && disallowRestrictedHosts
+                && !isExempt(uri, allowedUriPrefixes)) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");
@@ -134,6 +138,69 @@ public final class JarUriValidationUtils {
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isExempt(URI uri, Collection<String> allowedUriPrefixes) {
+        if (uri.getRawUserInfo() != null || hasDotSegment(uri.getPath())) {
+            return false;
+        }
+        return allowedUriPrefixes.stream().anyMatch(prefix -> matchesPrefix(uri, prefix));
+    }
+
+    private static boolean matchesPrefix(URI uri, String prefix) {
+        URI prefixUri;
+        try {
+            prefixUri = new URI(prefix.trim());
+        } catch (URISyntaxException e) {
+            return false;
+        }
+        if (prefixUri.getScheme() == null
+                || prefixUri.getHost() == null
+                || prefixUri.getRawUserInfo() != null
+                || prefixUri.getRawQuery() != null
+                || prefixUri.getRawFragment() != null
+                || hasDotSegment(prefixUri.getPath())) {
+            return false;
+        }
+        if (!prefixUri.getScheme().equalsIgnoreCase(uri.getScheme())
+                || !prefixUri.getHost().equalsIgnoreCase(uri.getHost())
+                || effectivePort(prefixUri) != effectivePort(uri)) {
+            return false;
+        }
+        String prefixPath = prefixUri.getPath();
+        if (prefixPath.isEmpty() || prefixPath.equals("/")) {
+            return true;
+        }
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        String prefixDir = prefixPath.endsWith("/") ? prefixPath : prefixPath + "/";
+        return path.equals(prefixPath) || path.startsWith(prefixDir);
+    }
+
+    private static int effectivePort(URI uri) {
+        if (uri.getPort() != -1) {
+            return uri.getPort();
+        }
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            return 443;
+        }
+        if ("http".equalsIgnoreCase(uri.getScheme())) {
+            return 80;
+        }
+        return -1;
+    }
+
+    private static boolean hasDotSegment(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (String segment : path.split("/", -1)) {
+            int paramStart = segment.indexOf(';');
+            String name = paramStart == -1 ? segment : segment.substring(0, paramStart);
+            if (name.equals(".") || name.equals("..")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isRestricted(InetAddress addr) {
