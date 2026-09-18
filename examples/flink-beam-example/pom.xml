@@ -64,6 +64,16 @@ under the License.
                     <groupId>org.springframework</groupId>
                     <artifactId>spring-jcl</artifactId>
                 </exclusion>
+                <!-- Both are unused by the example and ship malformed upstream POMs (missing
+                     dependency versions), so excluding them avoids resolver warnings and slims the uber-JAR. -->
+                <exclusion>
+                    <groupId>org.apache.beam</groupId>
+                    <artifactId>beam-sdks-java-extensions-ml</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.beam</groupId>
+                    <artifactId>beam-sdks-java-io-components</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -118,7 +128,6 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.1.1</version>
                 <executions>
                     <!-- Run shade goal on package phase -->
                     <execution>
@@ -137,19 +146,102 @@ under the License.
                             </artifactSet>
                             <filters>
                                 <filter>
-                                    <!-- Do not copy the signatures in the META-INF folder.
-                                    Otherwise, this might cause SecurityExceptions when using the JAR. -->
                                     <artifact>*:*</artifact>
                                     <excludes>
-                                        <exclude>META-INF/versions/9/module-info.class</exclude>
+                                        <!-- JPMS module descriptors: the uber-JAR is not modular. -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/**/module-info.class</exclude>
+                                        <!-- Signature files of signed input jars. -->
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!-- Per-dependency Maven build metadata. -->
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <!-- Per-dependency LICENSE/NOTICE/DEPENDENCIES files
+                                        (multiple casings & paths used across the Beam dep tree). -->
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                        <exclude>META-INF/LICENSE.txt</exclude>
+                                        <exclude>META-INF/license.txt</exclude>
+                                        <exclude>META-INF/NOTICE</exclude>
+                                        <exclude>META-INF/NOTICE.txt</exclude>
+                                        <exclude>META-INF/license/**</exclude>
+                                        <exclude>META-INF/licenses/**</exclude>
+                                        <exclude>LICENSE</exclude>
+                                        <exclude>LICENSE.txt</exclude>
+                                        <exclude>LICENSE-*.txt</exclude>
+                                        <exclude>about.html</exclude>
+                                        <!-- Kotlin compilation metadata + Kotlin Multiplatform
+                                        common-source metadata (shipped by some wire artifacts);
+                                        none is consumed at runtime by the JVM. -->
+                                        <exclude>META-INF/*.kotlin_module</exclude>
+                                        <exclude>META-INF/kotlin-project-structure-metadata.json</exclude>
+                                        <exclude>commonMain/**</exclude>
+                                        <!-- ProGuard rules and GraalVM native-image hints. -->
+                                        <exclude>META-INF/proguard/**</exclude>
+                                        <exclude>META-INF/native-image/**</exclude>
+                                        <!-- Build-time git/version metadata. -->
+                                        <exclude>arrow-git.properties</exclude>
+                                        <!-- Netty release metadata; one wins anyway. -->
+                                        <exclude>META-INF/io.netty.versions.properties</exclude>
+                                        <!-- Mozilla public-suffix list shipped by httpclient and
+                                        beam-vendor-grpc; harmless duplicate. -->
+                                        <exclude>mozilla/public-suffix-list.txt</exclude>
+                                        <!-- A fresh manifest is produced by the
+                                        ManifestResourceTransformer below. -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- Superseded by kotlinpoet-jvm, which Beam also pulls in. Drop it so kotlinpoet-jvm wins. -->
+                                    <artifact>com.squareup:kotlinpoet</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- Same as kotlinpoet. The *-jvm artifacts are canonical, the no-suffix ones are stale metadata. -->
+                                    <artifact>com.squareup.wire:wire-runtime</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>com.squareup.wire:wire-schema</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- Drop the wire-schema classes duplicated here. wire-schema-jvm is canonical. -->
+                                    <artifact>com.squareup.wire:wire-compiler</artifact>
+                                    <excludes>
+                                        <exclude>com/squareup/wire/schema/DirectedAcyclicGraph*.class</exclude>
+                                        <exclude>com/squareup/wire/schema/PartitionedSchema*.class</exclude>
+                                        <exclude>com/squareup/wire/schema/Target*.class</exclude>
+                                        <exclude>com/squareup/wire/schema/WireRun*.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- Drop the google.protobuf.* .proto descriptors here. protobuf-java is canonical. -->
+                                    <artifact>com.squareup.wire:wire-schema-jvm</artifact>
+                                    <excludes>
+                                        <exclude>google/protobuf/*.proto</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <!-- Re-bundles beam-runners-core-java classes. Drop them so beam-runners-core-java wins. -->
+                                    <artifact>org.apache.beam:beam-sdks-java-harness</artifact>
+                                    <excludes>
+                                        <exclude>org/apache/beam/runners/core/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- Produce a fresh MANIFEST.MF for the uber-JAR; the inputs'
+                                manifests are dropped via the filter above. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>
                             </transformers>
                         </configuration>
                     </execution>
