@@ -607,13 +607,15 @@ public abstract class AbstractJobReconciler<
                 ctx.getResource().getStatus().getJobStatus().getSavepointInfo().getLastSavepoint();
         var lastSavepointKnown = upgradeStatePath != null || savepointLegacy != null;
 
-        if (requireHaMetadata) {
+        boolean statelessResubmit =
+                ctx.getResource().getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS;
+        boolean useHaMetadata = requireHaMetadata && !statelessResubmit;
+        if (useHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        } else if (ctx.getResource().getSpec().getJob().getUpgradeMode() != UpgradeMode.STATELESS
-                && lastSavepointKnown) {
+        } else if (!statelessResubmit && lastSavepointKnown) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
-        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
+        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), useHaMetadata);
     }
 
     private void redeployWithSavepoint(
