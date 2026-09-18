@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.fabric8.crd.generator.annotation.SchemaFrom;
+import io.fabric8.generator.annotation.Min;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -57,6 +58,7 @@ public class TaskManagerSpec implements Diffable<TaskManagerSpec> {
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
     @SpecDiff(value = DiffType.SCALE, mode = KubernetesDeploymentMode.STANDALONE)
     @SpecReplicas
+    @Min(1)
     private Integer replicas;
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */

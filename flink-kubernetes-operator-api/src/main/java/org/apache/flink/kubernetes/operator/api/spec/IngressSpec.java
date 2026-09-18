@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.generator.annotation.Required;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressTLS;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,7 +40,7 @@ import java.util.Map;
 public class IngressSpec {
 
     /** Ingress template for the JobManager service. */
-    private String template;
+    @Required private String template;
 
     /** Ingress className for the Flink deployment. */
     private String className;
