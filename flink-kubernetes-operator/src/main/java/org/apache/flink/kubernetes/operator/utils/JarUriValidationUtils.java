@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -93,10 +94,17 @@ public final class JarUriValidationUtils {
     }
 
     private static boolean isRestricted(InetAddress addr) {
-        return addr.isLoopbackAddress()
+        if (addr.isLoopbackAddress()
                 || addr.isLinkLocalAddress()
                 || addr.isSiteLocalAddress()
                 || addr.isAnyLocalAddress()
-                || addr.isMulticastAddress();
+                || addr.isMulticastAddress()) {
+            return true;
+        }
+        if (addr instanceof Inet6Address) {
+            byte[] a = addr.getAddress();
+            return (a[0] & 0xfe) == 0xfc;
+        }
+        return false;
     }
 }
