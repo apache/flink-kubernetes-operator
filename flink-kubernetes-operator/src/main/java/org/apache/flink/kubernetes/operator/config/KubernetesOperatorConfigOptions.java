@@ -383,7 +383,7 @@ public class KubernetesOperatorConfigOptions {
                     .asList()
                     .defaultValues("https")
                     .withDescription(
-                            "Comma separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. "
+                            "Semicolon separated list of URI schemes that are allowed for the FlinkSessionJob jarURI. "
                                     + "Only 'https' is allowed by default. Operators that need to fetch artifacts "
                                     + "via other schemes (such as 's3' or 'hdfs') can extend this list. "
                                     + "Scheme matching is case-insensitive.");
@@ -397,6 +397,26 @@ public class KubernetesOperatorConfigOptions {
                             "If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, "
                                     + "site-local, wildcard or multicast addresses are rejected during validation. "
                                     + "Disable only if the operator legitimately needs to fetch from such addresses.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<List<String>> JAR_URI_ALLOWED_URI_PREFIXES =
+            operatorConfig("user.artifacts.allowed-uri-prefixes")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withDescription(
+                            "Semicolon separated list of jarURI prefixes that are exempt from the '"
+                                    + JAR_URI_DISALLOW_RESTRICTED_HOSTS.key()
+                                    + "' check, even when it is enabled. Use this to allow a trusted "
+                                    + "internal artifact store (e.g. an in-cluster Service or an on-prem "
+                                    + "Artifactory instance) that would otherwise be rejected for resolving "
+                                    + "to a private address. Each prefix is an absolute URI such as "
+                                    + "'https://artifacts.internal:8443/releases/'. A jarURI is exempted when "
+                                    + "its scheme, host and port equal those of a prefix and its path equals "
+                                    + "the prefix path or lies under it; a jarURI with user info or with '.' "
+                                    + "or '..' path segments is never exempted. Prefixes that are blank, carry "
+                                    + "user info, a query or a fragment are ignored. The scheme allowlist is "
+                                    + "still enforced.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> JAR_FETCH_SOCKET_TIMEOUT =
