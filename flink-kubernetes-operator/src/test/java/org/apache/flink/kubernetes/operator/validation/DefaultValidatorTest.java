@@ -769,19 +769,69 @@ public class DefaultValidatorTest {
     public void testJarUriHostValidation() {
         var defaultAllowed = List.of("https");
 
-        // Cloud-metadata link-local, loopback, site-local and wildcard addresses must be rejected.
         for (String restricted :
                 List.of(
                         "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
                         "https://127.0.0.1/job.jar",
                         "https://localhost/job.jar",
                         "https://10.0.0.1/job.jar",
-                        "https://192.168.1.1/job.jar")) {
+                        "https://172.16.0.1/job.jar",
+                        "https://192.168.1.1/job.jar",
+                        "https://0.0.0.0/job.jar",
+                        "https://0.1.2.3/job.jar",
+                        "https://100.100.100.200/job.jar",
+                        "https://192.0.0.1/job.jar",
+                        "https://192.0.2.1/job.jar",
+                        "https://192.88.99.1/job.jar",
+                        "https://198.18.0.1/job.jar",
+                        "https://198.19.255.255/job.jar",
+                        "https://198.51.100.1/job.jar",
+                        "https://203.0.113.1/job.jar",
+                        "https://224.0.0.1/job.jar",
+                        "https://240.0.0.1/job.jar",
+                        "https://255.255.255.255/job.jar",
+                        "https://[::]/job.jar",
+                        "https://[::1]/job.jar",
+                        "https://[fd00:ec2::254]/job.jar",
+                        "https://[fc00::1]/job.jar",
+                        "https://[fe80::1]/job.jar",
+                        "https://[fec0::1]/job.jar",
+                        "https://[ff02::1]/job.jar",
+                        "https://[100::1]/job.jar",
+                        "https://[2001:2::1]/job.jar",
+                        "https://[2001:db8::1]/job.jar",
+                        "https://[3fff::1]/job.jar",
+                        "https://[5f00::1]/job.jar",
+                        "https://[64:ff9b:1::1]/job.jar",
+                        "https://[::ffff:169.254.169.254]/job.jar",
+                        "https://[::169.254.169.254]/job.jar",
+                        "https://[64:ff9b::a9fe:a9fe]/job.jar",
+                        "https://[64:ff9b::10.0.0.1]/job.jar",
+                        "https://[2002:a9fe:a9fe::1]/job.jar",
+                        "https://[2002:0a00:0001::1]/job.jar",
+                        "https://[2001:0:4136:e378:8000:63bf:5601:5656]/job.jar")) {
             var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
             assertTrue(error.isPresent(), "expected error for " + restricted);
             assertTrue(
                     error.get().contains("resolves to a restricted address"),
                     "unexpected message for " + restricted + ": " + error.get());
+        }
+
+        for (String globallyReachable :
+                List.of(
+                        "https://8.8.8.8/job.jar",
+                        "https://100.63.255.255/job.jar",
+                        "https://100.128.0.1/job.jar",
+                        "https://172.32.0.1/job.jar",
+                        "https://198.17.255.255/job.jar",
+                        "https://198.20.0.1/job.jar",
+                        "https://[2606:4700:4700::1111]/job.jar",
+                        "https://[64:ff9b::808:808]/job.jar",
+                        "https://[2002:808:808::1]/job.jar")) {
+            Assertions.assertEquals(
+                    Optional.empty(),
+                    DefaultValidator.validateJarURI(globallyReachable, defaultAllowed, true),
+                    "expected no error for " + globallyReachable);
         }
 
         // Disabling the restricted-host check allows loopback.
