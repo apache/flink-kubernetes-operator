@@ -394,9 +394,13 @@ public class KubernetesOperatorConfigOptions {
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
-                            "If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, "
-                                    + "site-local, wildcard or multicast addresses are rejected during validation. "
-                                    + "Disable only if the operator legitimately needs to fetch from such addresses.");
+                            "If enabled, FlinkSessionJob jarURI hosts that resolve to an address that is not "
+                                    + "globally reachable are rejected during validation: the IANA special-purpose "
+                                    + "IPv4 and IPv6 ranges (such as loopback, private, link-local, shared address "
+                                    + "space, unique local, documentation and benchmarking ranges), multicast, and "
+                                    + "IPv6 addresses that embed such an IPv4 address (IPv4-mapped, IPv4-compatible, "
+                                    + "NAT64, 6to4 and Teredo). Disable only if the operator legitimately needs to "
+                                    + "fetch from such addresses.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> JAR_FETCH_SOCKET_TIMEOUT =
