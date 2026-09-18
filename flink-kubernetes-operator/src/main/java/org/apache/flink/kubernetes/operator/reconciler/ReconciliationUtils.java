@@ -50,6 +50,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -169,12 +171,12 @@ public class ReconciliationUtils {
 
                 if (target instanceof FlinkDeployment) {
                     // For application deployments we update the taskmanager info
-                    ((FlinkDeploymentStatus) status)
-                            .setTaskManager(
-                                    getTaskManagerInfo(
-                                            target.getMetadata().getName(),
-                                            conf,
-                                            stateAfterReconcile));
+                    var deploymentStatus = (FlinkDeploymentStatus) status;
+                    deploymentStatus.setTaskManager(
+                            getTaskManagerInfo(
+                                    target.getMetadata().getName(),
+                                    stateAfterReconcile,
+                                    deploymentStatus.getTaskManager()));
                 }
                 reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec, target);
                 if (spec.getJob().getState() == JobState.SUSPENDED) {
@@ -240,10 +242,12 @@ public class ReconciliationUtils {
     }
 
     private static TaskManagerInfo getTaskManagerInfo(
-            String name, Configuration conf, JobState jobState) {
-        var labelSelector = "component=taskmanager,app=" + name;
+            String name, JobState jobState, @Nullable TaskManagerInfo current) {
         if (jobState == JobState.RUNNING) {
-            return new TaskManagerInfo(labelSelector, FlinkUtils.getNumTaskManagers(conf));
+            // Preserve the last observed replica count across reconciles so the scale subresource
+            // does not transiently report 0 after upgrades; observation will refresh it.
+            int replicas = current != null ? current.getReplicas() : 0;
+            return new TaskManagerInfo(FlinkUtils.getTaskManagerLabelSelector(name), replicas);
         } else {
             return new TaskManagerInfo("", 0);
         }
