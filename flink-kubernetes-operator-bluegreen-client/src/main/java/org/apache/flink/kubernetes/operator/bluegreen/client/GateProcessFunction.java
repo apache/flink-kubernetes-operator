@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
@@ -79,9 +79,14 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         this.configMapName = configMapName;
     }
 
+    // Override open(OpenContext), not open(Configuration). Flink 2.x's RichFunction only invokes
+    // open(OpenContext); the deprecated open(Configuration) is no longer called (and was removed
+    // from AbstractRichFunction), so overriding it leaves baseContext uninitialized -> NPE in
+    // processElement. OpenContext exists in 1.19/1.20/2.x and is the invoked method in all three,
+    // so this override is correct across the Flink 1.x/2.x major boundary.
     @Override
-    public void open(Configuration parameters) throws Exception {
-        super.open(parameters);
+    public void open(OpenContext openContext) throws Exception {
+        super.open(openContext);
 
         setKubernetesEnvironment();
         processConfigMap(gateKubernetesService.parseConfigMap());
@@ -263,7 +268,9 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
     // Temporary "utility" function for development
     protected void logInfo(String message) {
-        int subtaskIdx = getRuntimeContext().getIndexOfThisSubtask();
+        // Via getTaskInfo() rather than RuntimeContext.getIndexOfThisSubtask() directly, which
+        // Flink 2.x removed from RuntimeContext (present on TaskInfo in both 1.x and 2.x).
+        int subtaskIdx = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask();
         logger.error("[BlueGreen Gate-" + subtaskIdx + "]:" + message);
     }
 }
