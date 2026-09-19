@@ -45,6 +45,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -55,6 +56,7 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -120,6 +122,15 @@ public class FlinkBlueGreenDeploymentControllerTest {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController = new TestingFlinkBlueGreenDeploymentController(configManager, flinkService);
+        // ADVANCED-mode tests declare a gate strategy, which now requires OPERATOR_IMAGE (the
+        // operator injects the gate-agent init-container from it). Provide a stub so the injection
+        // path runs; production reads the env the Helm chart sets.
+        BlueGreenTransitionUtils.setOperatorImageOverride("test-operator-image:latest");
+    }
+
+    @AfterEach
+    public void tearDown() {
+        BlueGreenTransitionUtils.setOperatorImageOverride(null);
     }
 
     @ParameterizedTest
