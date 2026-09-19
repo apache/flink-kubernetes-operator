@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
@@ -57,6 +58,22 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 public class BlueGreenTransitionUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(BlueGreenTransitionUtils.class);
+
+    /**
+     * Test override for the {@code OPERATOR_IMAGE} env lookup used by {@link
+     * #prepareTransitionMetadata}. {@code null} means read the environment (the production path).
+     */
+    private static String operatorImageOverride = null;
+
+    /**
+     * Overrides the {@code OPERATOR_IMAGE} env lookup for tests (including tests in other
+     * packages). Pass {@code null} to restore the production path of reading the environment
+     * variable.
+     */
+    @VisibleForTesting
+    public static void setOperatorImageOverride(String operatorImage) {
+        operatorImageOverride = operatorImage;
+    }
 
     @SneakyThrows
     public static TransitionMode getTransitionMode(BlueGreenContext context) {
@@ -103,29 +120,11 @@ public class BlueGreenTransitionUtils {
         // Auto-inject agent config and init container when a gate strategy is declared
         ConfigObjectNode flinkConfig = flinkDeployment.getSpec().getFlinkConfiguration();
         if (flinkConfig.has("bluegreen.gate.strategy")) {
-            if (!flinkConfig.has("bluegreen.gate.injection.enabled")) {
-                flinkConfig.put("bluegreen.gate.injection.enabled", "true");
-            }
-
-            final String agentFlag = "-javaagent:/opt/flink/lib/bluegreen-agent.jar";
-            String existingOpts =
-                    flinkConfig.has("env.java.opts.jobmanager")
-                            ? flinkConfig.get("env.java.opts.jobmanager").asText()
-                            : "";
-            if (!existingOpts.contains(agentFlag)) {
-                flinkConfig.put(
-                        "env.java.opts.jobmanager",
-                        existingOpts.isEmpty() ? agentFlag : existingOpts + " " + agentFlag);
-            }
-
-            String operatorImage = System.getenv("OPERATOR_IMAGE");
-            if (operatorImage != null && !operatorImage.isEmpty()) {
-                injectAgentInitContainer(flinkDeployment, operatorImage);
-            } else {
-                LOG.warn(
-                        "[BlueGreen] OPERATOR_IMAGE env var not set — "
-                                + "agent JAR init-container will not be injected");
-            }
+            String operatorImage =
+                    operatorImageOverride != null
+                            ? operatorImageOverride
+                            : System.getenv("OPERATOR_IMAGE");
+            injectGateAgent(flinkDeployment, flinkConfig, operatorImage);
         }
     }
 
@@ -274,6 +273,55 @@ public class BlueGreenTransitionUtils {
         return Optional.empty();
     }
 
+    /**
+     * Wires the Blue/Green gate agent into the JobManager for ADVANCED-mode gate injection: enables
+     * gate injection, adds the {@code -javaagent} flag, and injects the init-container that pulls
+     * the agent jar from the operator image.
+     *
+     * <p>The agent can only be delivered when we know the operator image (the init-container copies
+     * the jar from {@code /opt/flink/artifacts} in that image). If {@code operatorImage} is
+     * null/empty we cannot deliver it, and adding the {@code -javaagent} flag anyway would
+     * guarantee a cryptic JobManager crash ("bluegreen-agent.jar" missing). We fail loudly instead
+     * of silently wiring a doomed deployment — a missing OPERATOR_IMAGE means the operator's Helm
+     * chart is misconfigured.
+     */
+    @VisibleForTesting
+    static void injectGateAgent(
+            FlinkDeployment flinkDeployment, ConfigObjectNode flinkConfig, String operatorImage) {
+        if (operatorImage == null || operatorImage.isEmpty()) {
+            String strategy =
+                    flinkConfig.has("bluegreen.gate.strategy")
+                            ? flinkConfig.get("bluegreen.gate.strategy").asText()
+                            : "(unset)";
+            throw new IllegalStateException(
+                    "[BlueGreen] A gate strategy is declared ('bluegreen.gate.strategy'="
+                            + strategy
+                            + ") but the OPERATOR_IMAGE environment variable is not set on the"
+                            + " operator. The Blue/Green gate agent cannot be injected, so the"
+                            + " JobManager would fail to start with a missing -javaagent. This is a"
+                            + " misconfigured operator deployment: the Helm chart must set"
+                            + " OPERATOR_IMAGE on the operator container. Refusing to deploy a job"
+                            + " that would crash-loop.");
+        }
+
+        if (!flinkConfig.has("bluegreen.gate.injection.enabled")) {
+            flinkConfig.put("bluegreen.gate.injection.enabled", "true");
+        }
+
+        final String agentFlag = "-javaagent:/opt/flink/lib/bluegreen-agent.jar";
+        String existingOpts =
+                flinkConfig.has("env.java.opts.jobmanager")
+                        ? flinkConfig.get("env.java.opts.jobmanager").asText()
+                        : "";
+        if (!existingOpts.contains(agentFlag)) {
+            flinkConfig.put(
+                    "env.java.opts.jobmanager",
+                    existingOpts.isEmpty() ? agentFlag : existingOpts + " " + agentFlag);
+        }
+
+        injectAgentInitContainer(flinkDeployment, operatorImage);
+    }
+
     private static void injectAgentInitContainer(
             FlinkDeployment flinkDeployment, String operatorImage) {
         var spec = flinkDeployment.getSpec();
@@ -308,7 +356,16 @@ public class BlueGreenTransitionUtils {
                                 .withCommand(
                                         "sh",
                                         "-c",
-                                        "cp /opt/flink/artifacts/bluegreen-agent.jar"
+                                        // Fail with an actionable message instead of a cryptic
+                                        // `cp: cannot stat` if the operator image was built without
+                                        // the agent jar (see the Dockerfile agent-baking COPY).
+                                        "if [ ! -f /opt/flink/artifacts/bluegreen-agent.jar ]; then"
+                                                + " echo '[BlueGreen] FATAL:"
+                                                + " /opt/flink/artifacts/bluegreen-agent.jar missing"
+                                                + " from operator image — built without the gate"
+                                                + " agent (check Dockerfile agent baking).';"
+                                                + " exit 1; fi;"
+                                                + " cp /opt/flink/artifacts/bluegreen-agent.jar"
                                                 + " /bluegreen-agent/bluegreen-agent.jar")
                                 .withVolumeMounts(
                                         new VolumeMountBuilder()
