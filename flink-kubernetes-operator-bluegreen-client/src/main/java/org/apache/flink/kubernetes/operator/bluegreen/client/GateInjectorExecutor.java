@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Pipeline;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.execution.PipelineExecutor;
@@ -276,7 +277,18 @@ public class GateInjectorExecutor implements PipelineExecutor {
         boolean isSqlJob = upstream.getTypeSerializerOut() instanceof RowDataSerializer;
 
         if (isSqlJob) {
-            int fieldIdx = config.getInteger("bluegreen.gate.watermark.field-index", -1);
+            // Read via the ConfigOption-based getter rather than the string-key
+            // Configuration.getInteger(String, int) overload, which Flink 2.x removed. This is the
+            // only call in the client that is not source-compatible across the Flink 1.x/2.x major
+            // boundary; using get(ConfigOption) (stable in both majors) lets the same source
+            // compile
+            // against either Flink line, so a single codebase can be built into per-major
+            // artifacts.
+            int fieldIdx =
+                    config.get(
+                            ConfigOptions.key("bluegreen.gate.watermark.field-index")
+                                    .intType()
+                                    .defaultValue(-1));
             // fieldIdx is a captured primitive — lambda is serializable via WatermarkExtractor
             return (WatermarkExtractor<Object>)
                     record ->

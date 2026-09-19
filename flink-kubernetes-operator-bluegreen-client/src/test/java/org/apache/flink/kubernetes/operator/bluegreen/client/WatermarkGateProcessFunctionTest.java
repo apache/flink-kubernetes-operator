@@ -366,7 +366,8 @@ public class WatermarkGateProcessFunctionTest {
         }
 
         @Override
-        public void open(org.apache.flink.configuration.Configuration parameters) throws Exception {
+        public void open(org.apache.flink.api.common.functions.OpenContext openContext)
+                throws Exception {
             // Build a mock ConfigMap context representing a non-first deployment in RUNNING state.
             // isFirstDeployment=false ensures watermark values are read from data rather than
             // defaulted to 0.

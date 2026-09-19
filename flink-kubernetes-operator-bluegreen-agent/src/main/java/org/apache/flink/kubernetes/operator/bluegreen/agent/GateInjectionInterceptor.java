@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.bluegreen.agent;
 
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 
 import net.bytebuddy.implementation.bind.annotation.Argument;
@@ -96,7 +97,14 @@ public class GateInjectionInterceptor {
                             + cause);
         }
 
-        if (config != null && config.getBoolean(GATE_INJECTION_ENABLED, false)) {
+        // Read via get(ConfigOption) rather than Configuration.getBoolean(String, boolean), which
+        // Flink 2.x removed (FLINK-29372). The agent is loaded at JVM startup on both Flink 1.x and
+        // 2.x runtimes, so it must only call Configuration methods present in both majors.
+        if (config != null
+                && config.get(
+                        ConfigOptions.key(GATE_INJECTION_ENABLED)
+                                .booleanType()
+                                .defaultValue(false))) {
             // bluegreen.gate.injection.enabled is only set by the operator for BlueGreen
             // deployments. Any failure beyond this point is a real misconfiguration — fail the
             // job with a clear message so the operator can reflect the error in the deployment
