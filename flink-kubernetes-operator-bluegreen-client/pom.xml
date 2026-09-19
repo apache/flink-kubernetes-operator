@@ -83,11 +83,15 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- compile scope: Flink 2.x relocated StreamGraph/StreamNode/StreamEdge/ProcessOperator/
+             SimpleOperatorFactory/ProcessFunction/TimerService from flink-streaming-java into
+             flink-runtime. GateInjectorExecutor + the gate ProcessFunctions need them at compile
+             time. Harmless on Flink 1.x (those classes are also reachable via flink-streaming-java). -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-runtime</artifactId>
             <version>${flink.version}</version>
-            <scope>test</scope>
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
@@ -129,5 +133,36 @@ under the License.
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          Per-Flink-major artifact selection. The default (first-pass) build produces the Flink 1.x
+          jar with no classifier. Invoking with -Dflink.version=<2.x> -Dbluegreen.client.classifier=flink2
+          rebuilds the same source against Flink 2.x and publishes it under the 'flink2' classifier, so
+          one source tree yields both per-major artifacts. The source is cross-major compatible (see the
+          getInteger note in GateInjectorExecutor); the jars are not interchangeable at runtime because
+          they link against version-specific Flink internals, hence separate artifacts. Consumers depend
+          on the classifier matching their job's Flink version (no classifier = 1.x, flink2 = 2.x).
+        -->
+        <profile>
+            <id>bluegreen-client-classifier</id>
+            <activation>
+                <property>
+                    <name>bluegreen.client.classifier</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <configuration>
+                            <classifier>${bluegreen.client.classifier}</classifier>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
