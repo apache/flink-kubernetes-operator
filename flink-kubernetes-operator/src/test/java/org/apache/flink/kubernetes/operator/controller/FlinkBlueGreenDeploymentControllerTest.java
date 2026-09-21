@@ -879,12 +879,6 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 "Green must become the active state after Blue is deleted");
     }
 
-    private static String getFlinkConfigurationValue(
-            FlinkDeploymentSpec flinkDeploymentSpec, String propertyName) {
-        return flinkDeploymentSpec.getFlinkConfiguration().get(propertyName).asText();
-    }
-
-
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifySpecChangeDuringTransition(FlinkVersion flinkVersion) throws Exception {
