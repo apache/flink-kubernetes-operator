@@ -1127,4 +1127,47 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 "s3://bucket/savepoint-explicit",
                 verifyAndReturnTheSubmittedJob(sessionJob, flinkService.listJobs()).f0);
     }
+
+    @Test
+    public void testSavepointRedeployRecoversFromFailedDeployment() throws Exception {
+        var readyCtx = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        reconciler.reconcile(sessionJob, readyCtx);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+
+        sessionJob.getSpec().getJob().setInitialSavepointPath("s3://bucket/savepoint-explicit");
+        sessionJob.getSpec().getJob().setSavepointRedeployNonce(1L);
+
+        // The running job is cancelled but the deployment attempt fails
+        flinkService.setDeployFailure(true);
+        assertThrows(Exception.class, () -> reconciler.reconcile(sessionJob, readyCtx));
+        statusRecorder.updateStatusFromCache(sessionJob);
+
+        // The target spec must be recorded before the deployment attempt, otherwise the next
+        // reconciliation would detect the savepointRedeployNonce change again and repeat the
+        // cancel + redeploy cycle forever
+        var status = sessionJob.getStatus();
+        assertEquals(ReconciliationState.UPGRADING, status.getReconciliationStatus().getState());
+        var lastReconciledJob =
+                status.getReconciliationStatus().deserializeLastReconciledSpec().getJob();
+        assertEquals(1L, lastReconciledJob.getSavepointRedeployNonce());
+        assertEquals(JobState.SUSPENDED, lastReconciledJob.getState());
+        assertEquals(UpgradeMode.SAVEPOINT, lastReconciledJob.getUpgradeMode());
+        assertEquals(
+                "s3://bucket/savepoint-explicit", status.getJobStatus().getUpgradeSavepointPath());
+
+        // The next reconciliation restores from the recorded savepoint
+        flinkService.setDeployFailure(false);
+        reconciler.reconcile(sessionJob, readyCtx);
+        assertEquals(
+                "s3://bucket/savepoint-explicit",
+                verifyAndReturnTheSubmittedJob(sessionJob, flinkService.listJobs()).f0);
+        assertEquals(ReconciliationState.DEPLOYED, status.getReconciliationStatus().getState());
+        lastReconciledJob =
+                status.getReconciliationStatus().deserializeLastReconciledSpec().getJob();
+        assertEquals(1L, lastReconciledJob.getSavepointRedeployNonce());
+        assertEquals(JobState.RUNNING, lastReconciledJob.getState());
+    }
 }
