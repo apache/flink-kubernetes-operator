@@ -37,10 +37,13 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContex
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_ABORT_GRACE_PERIOD;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -223,6 +226,19 @@ public class BlueGreenUtilsTest {
                         bgDeployment.getMetadata());
 
         assertEquals(freshSavepoint, result.getSpec().getJob().getInitialSavepointPath());
+    }
+
+    @Test
+    public void testGateTimeoutFallsBackToAbortGracePeriod() {
+        var bgDeployment = buildBlueGreenDeployment("test-deployment", "default");
+        var configuration = bgDeployment.getSpec().getConfiguration();
+        configuration.put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), "5 min");
+        BlueGreenContext context = createContext(bgDeployment);
+
+        assertEquals(Duration.ofMinutes(5).toMillis(), BlueGreenUtils.getGateTimeout(context));
+
+        configuration.put(BLUEGREEN_GATE_TIMEOUT.key(), "30 s");
+        assertEquals(Duration.ofSeconds(30).toMillis(), BlueGreenUtils.getGateTimeout(context));
     }
 
     private static FlinkBlueGreenDeployment buildBlueGreenDeployment(

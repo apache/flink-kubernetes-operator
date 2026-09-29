@@ -128,9 +128,14 @@ public class BlueGreenTransitionUtils {
         }
     }
 
-    public static void moveToFirstTransitionStage(BlueGreenContext context) {
+    /**
+     * Moves an ADVANCED transition out of INITIALIZING once the new deployment is ready.
+     *
+     * @return {@code true} if the gate phase started, i.e. the stage moved to TRANSITIONING
+     */
+    public static boolean moveToFirstTransitionStage(BlueGreenContext context) {
         if (TransitionMode.ADVANCED != getTransitionMode(context)) {
-            return;
+            return false;
         }
 
         ConfigMap configMap = getConfigMap(context);
@@ -149,7 +154,10 @@ public class BlueGreenTransitionUtils {
             }
 
             updateTransitionStage(context, nextStage);
+            return nextStage == TransitionStage.TRANSITIONING;
         }
+
+        return false;
     }
 
     public static boolean isClearToTeardown(BlueGreenContext context) {
@@ -167,7 +175,17 @@ public class BlueGreenTransitionUtils {
         return true;
     }
 
-    public static void rollbackActiveDeploymentType(
+    /**
+     * Hands the gate back to the deployment that keeps running after an aborted transition. The
+     * ConfigMap is rewritten whole, which drops the strategy entries (e.g. the watermark toggle) of
+     * the aborted hand-over, and it is marked as a first deployment: with no counterpart left to
+     * hand over to, the remaining gate must pass every record, as it does before any transition.
+     *
+     * <p>Call it after the reconciliation's other ConfigMap writes. Those update the informer's
+     * cached copy under optimistic locking, while this write replaces the ConfigMap
+     * unconditionally.
+     */
+    public static void resetGateOnAbort(
             BlueGreenContext context, FlinkBlueGreenDeploymentState previousState) {
 
         if (TransitionMode.ADVANCED != getTransitionMode(context)) {
@@ -179,8 +197,14 @@ public class BlueGreenTransitionUtils {
                         ? BlueGreenDeploymentType.BLUE
                         : BlueGreenDeploymentType.GREEN;
 
-        updateConfigMapEntry(
-                context, ACTIVE_DEPLOYMENT_TYPE.getLabel(), previousDeploymentType.toString());
+        upsertConfigMap(
+                context,
+                Map.of(
+                        IS_FIRST_DEPLOYMENT.getLabel(), "true",
+                        GateContextOptions.DEPLOYMENT_DELETION_DELAY.getLabel(),
+                                String.valueOf(getDeploymentDeletionDelay(context)),
+                        ACTIVE_DEPLOYMENT_TYPE.getLabel(), previousDeploymentType.toString(),
+                        TRANSITION_STAGE.getLabel(), TransitionStage.FAILING.toString()));
     }
 
     public static void updateTransitionStageFromJobStatus(

@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
@@ -51,6 +52,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
@@ -59,6 +61,7 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTran
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.validateAdvancedModeConfig;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getGateTimeout;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
@@ -516,7 +519,12 @@ public class BlueGreenDeploymentService {
         }
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
-            BlueGreenTransitionUtils.moveToFirstTransitionStage(context);
+            if (BlueGreenTransitionUtils.moveToFirstTransitionStage(context)) {
+                // The gate phase starts now and gets its own deadline
+                BlueGreenUtils.setGateAbortTimestamp(context);
+                return patchStatusUpdateControl(context, null, null, null)
+                        .rescheduleAfter(getReconciliationReschedInterval(context));
+            }
             return shouldWeDelete(
                     context,
                     transitionState.currentDeployment,
@@ -616,6 +624,18 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState) {
 
         if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
+            long gateDeadline =
+                    instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
+            if (gateDeadline > 0 && gateDeadline < System.currentTimeMillis()) {
+                var reason =
+                        String.format(
+                                "Aborting deployment '%s': the gate did not reach %s within %d ms (%s)",
+                                nextDeployment.getMetadata().getName(),
+                                TransitionStage.CLEAR_TO_TEARDOWN,
+                                getGateTimeout(context),
+                                BLUEGREEN_GATE_TIMEOUT.key());
+                return abortDeployment(context, nextDeployment, nextState, reason);
+            }
             // Wait until CLEAR_TO_TEARDOWN is set by the client
             return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
                     .rescheduleAfter(getReconciliationReschedInterval(context));
@@ -696,7 +716,11 @@ public class BlueGreenDeploymentService {
         }
 
         if (abortTimestamp < System.currentTimeMillis()) {
-            return abortDeployment(context, nextDeployment, nextState, deploymentName);
+            return abortDeployment(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format("Aborting deployment '%s'", deploymentName));
         } else {
             return retryDeployment(context, deploymentName);
         }
@@ -719,21 +743,20 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context,
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState,
-            String deploymentName) {
+            String reason) {
 
         suspendFlinkDeployment(context, nextDeployment);
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
-        BlueGreenTransitionUtils.rollbackActiveDeploymentType(context, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
         resetTransitionMarkers(context.getDeploymentStatus());
 
-        var error =
-                String.format(
-                        "Aborting deployment '%s', rolling B/G deployment back to %s",
-                        deploymentName, previousState);
-        return markDeploymentFailing(context, error);
+        var error = String.format("%s, rolling B/G deployment back to %s", reason, previousState);
+        var updateControl = markDeploymentFailing(context, error);
+        // Must follow the stage write in markDeploymentFailing, see resetGateOnAbort
+        BlueGreenTransitionUtils.resetGateOnAbort(context, previousState);
+        return updateControl;
     }
 
     @NotNull
