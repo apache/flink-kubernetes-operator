@@ -158,6 +158,14 @@ jobs:
           cd flink-autoscaler-plugin-jdbc
           mvn -B verify -Dit.skip=false
           cd ..
+      - name: Tests in the BlueGreen client and agent against Flink 2.x
+        # Both run inside the user's job, so they are tested against each supported Flink 2.x
+        # version; the build above covers Flink 1.x.
+        run: |
+          for flink_version in 2.0.1 2.1.1 2.2.1; do
+            mvn -B test -Dflink.version=${flink_version} \
+              -pl flink-kubernetes-operator-bluegreen-client,flink-kubernetes-operator-bluegreen-agent
+          done
   e2e_smoke_test:
     name: Smoke test
     strategy:
