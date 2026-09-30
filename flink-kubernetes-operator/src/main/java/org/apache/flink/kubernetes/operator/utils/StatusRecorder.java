@@ -131,7 +131,7 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
     private void replaceStatusWithRetries(CR resource, STATUS prevStatus, KubernetesClient client)
             throws JsonProcessingException, InterruptedException {
         // We retry the status update to avoid some intermittent connectivity errors
-        for (int attempt = 1; true; attempt++) {
+        for (int attempt = 1; ; attempt++) {
             try {
                 replaceStatus(resource, prevStatus, client);
                 return;
