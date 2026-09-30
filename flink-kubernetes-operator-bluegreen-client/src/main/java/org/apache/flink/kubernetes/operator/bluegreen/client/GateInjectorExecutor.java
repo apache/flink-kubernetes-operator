@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Pipeline;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
@@ -27,8 +28,11 @@ import org.apache.flink.core.execution.PipelineExecutor;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
+import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
+import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.ProcessOperator;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
+import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
 import org.apache.flink.util.InstantiationUtil;
@@ -37,6 +41,7 @@ import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -211,36 +216,126 @@ public class GateInjectorExecutor implements PipelineExecutor {
         TypeInformation<Object> typeInfo = new GenericTypeInfo<>(Object.class);
 
         WatermarkGateProcessFunction<Object> gateFunction = buildGateFunction(config, upstream, cl);
-        ProcessOperator<Object, Object> gateOperator = new ProcessOperator<>(gateFunction);
+        SimpleOperatorFactory<Object> gateFactory =
+                SimpleOperatorFactory.of(new ProcessOperator<>(gateFunction));
+        // Set explicitly rather than inherited: Flink 1.x takes it from ProcessOperator, Flink 2.x
+        // from the operator factory's default.
+        gateFactory.setChainingStrategy(ChainingStrategy.ALWAYS);
 
         graph.addOperator(
                 gateId,
                 downstream.getSlotSharingGroup(),
                 null,
-                SimpleOperatorFactory.of(gateOperator),
+                gateFactory,
                 typeInfo,
                 typeInfo,
                 gateName);
+        StreamNode gate = graph.getStreamNode(gateId);
 
         // Override with the correct serializer from upstream
-        graph.getStreamNode(gateId).setSerializersIn(upstream.getTypeSerializerOut());
-        graph.getStreamNode(gateId).setSerializerOut(upstream.getTypeSerializerOut());
+        gate.setSerializersIn(upstream.getTypeSerializerOut());
+        gate.setSerializerOut(upstream.getTypeSerializerOut());
 
-        // Gate always matches the parallelism of the operator immediately downstream of it.
+        // The gate joins the downstream operator's chain, so it copies what Flink compares when
+        // chaining (parallelism, max parallelism, slot sharing group) and the co-location group.
+        // The max parallelism is copied as is, including unset (-1): when the gate heads the
+        // chain it sets the vertex's max parallelism, which must stay what the downstream
+        // operator would have had, e.g. for its key groups.
         graph.setParallelism(gateId, downstream.getParallelism());
-        // StreamGraph.setMaxParallelism(int,int) only applies values > 0.
-        // ExecutionConfig.getMaxParallelism() returns the job-level setting
-        // (set via env.setMaxParallelism()), or -1 when unset. Flink's
-        // scheduler normalises -1 → 128 internally; we do the same here
-        // so the gate node always gets a valid positive value.
-        int configuredMaxPar = graph.getExecutionConfig().getMaxParallelism();
-        graph.setMaxParallelism(gateId, configuredMaxPar > 0 ? configuredMaxPar : 128);
+        graph.setMaxParallelism(gateId, maxParallelismOf(downstream));
+        gate.setCoLocationGroup(downstream.getCoLocationGroup());
 
-        // Rewire: upstream ──✕──> downstream  →  upstream ──> gate ──> downstream
+        // Rewire: upstream ──edge──> downstream  →  upstream ──edge'──> gate ──forward──>
+        // downstream
+        // edge' keeps the original partitioner, side-output tag and exchange mode, so the gate
+        // neither adds nor drops a shuffle (e.g. a keyBy). The forward edge keeps the downstream
+        // input position, and becomes a key partitioner when an unchained gate feeds a keyed
+        // operator.
         downstream.getInEdges().remove(edge);
         upstream.getOutEdges().remove(edge);
-        graph.addEdge(upstream.getId(), gateId, 0);
-        graph.addEdge(gateId, downstream.getId(), 0);
+        StreamEdge gateInput =
+                new StreamEdge(
+                        upstream,
+                        gate,
+                        0,
+                        edge.getBufferTimeout(),
+                        edge.getPartitioner(),
+                        edge.getOutputTag(),
+                        edge.getExchangeMode(),
+                        0,
+                        edge.getIntermediateDatasetIdToProduce());
+        upstream.addOutEdge(gateInput);
+        gate.addInEdge(gateInput);
+        graph.addEdge(gateId, downstream.getId(), edge.getTypeNumber());
+        keepKeyGroupsIfNotChainable(graph, gate, downstream, edge);
+
+        warnIfNotChainable(graph, gate, gateName);
+    }
+
+    /**
+     * Replaces the gate's forward output edge with a copy of the original key partitioner when the
+     * gate cannot chain into a keyed downstream operator. A forward edge only preserves key groups
+     * while both vertices keep the same parallelism; once one is rescaled on its own (e.g. by the
+     * autoscaler) records would reach subtasks that do not own their key groups. At equal
+     * parallelism the key partitioner sends every record to the same subtask index as forward does,
+     * so the cost is unchanged.
+     */
+    private static void keepKeyGroupsIfNotChainable(
+            StreamGraph graph, StreamNode gate, StreamNode downstream, StreamEdge original) {
+        StreamEdge forward = gate.getOutEdges().get(0);
+        if (!(original.getPartitioner() instanceof KeyGroupStreamPartitioner)
+                || StreamingJobGraphGenerator.isChainable(forward, graph)) {
+            return;
+        }
+        gate.getOutEdges().remove(forward);
+        downstream.getInEdges().remove(forward);
+        StreamEdge keyed =
+                new StreamEdge(
+                        gate,
+                        downstream,
+                        forward.getTypeNumber(),
+                        forward.getBufferTimeout(),
+                        original.getPartitioner().copy(),
+                        forward.getOutputTag(),
+                        forward.getExchangeMode(),
+                        0,
+                        forward.getIntermediateDatasetIdToProduce());
+        gate.addOutEdge(keyed);
+        downstream.addInEdge(keyed);
+    }
+
+    /**
+     * Reads a node's max parallelism: the operator's own setting, else the job-wide one, else unset
+     * (-1). {@link StreamNode#getMaxParallelism()} is public in Flink 2.x but package-private in
+     * Flink 1.x, hence the reflective call, which works on both.
+     */
+    @VisibleForTesting
+    static int maxParallelismOf(StreamNode node) {
+        try {
+            Method getter = StreamNode.class.getDeclaredMethod("getMaxParallelism");
+            getter.setAccessible(true);
+            return (int) getter.invoke(node);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Could not read the max parallelism of " + node.getOperatorName(), e);
+        }
+    }
+
+    /**
+     * Warns when the gate can chain with neither neighbor, e.g. because chaining is disabled or the
+     * downstream operator has several inputs. A standalone gate vertex can be rescaled on its own.
+     */
+    private static void warnIfNotChainable(StreamGraph graph, StreamNode gate, String gateName) {
+        if (!StreamingJobGraphGenerator.isChainable(gate.getInEdges().get(0), graph)
+                && !StreamingJobGraphGenerator.isChainable(gate.getOutEdges().get(0), graph)) {
+            System.err.println(
+                    "[BlueGreen] "
+                            + gateName
+                            + " cannot be chained to its upstream or downstream operator and will"
+                            + " run as a separate vertex, which can be rescaled on its own (e.g. by"
+                            + " the autoscaler). Consider excluding it via"
+                            + " job.autoscaler.vertex.exclude.ids.");
+        }
     }
 
     private static WatermarkGateProcessFunction<Object> buildGateFunction(
