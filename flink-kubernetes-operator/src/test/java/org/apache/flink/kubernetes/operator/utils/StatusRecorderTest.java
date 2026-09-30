@@ -45,7 +45,7 @@ public class StatusRecorderTest {
                 new StatusRecorder<FlinkDeployment, FlinkDeploymentStatus>(
                         new MetricManager<>(), (e, s) -> {});
         var deployment = TestUtils.buildApplicationCluster();
-        kubernetesClient.resource(deployment).createOrReplace();
+        kubernetesClient.resource(deployment).create();
         var lastRequest = mockServer.getLastRequest();
 
         helper.patchAndCacheStatus(deployment, kubernetesClient);
@@ -61,6 +61,22 @@ public class StatusRecorderTest {
         // No update
         helper.patchAndCacheStatus(deployment, kubernetesClient);
         assertThat(lastRequest).isSameAs(mockServer.getLastRequest());
+    }
+
+    @Test
+    public void testSuccessfulPatchStopsRetrying() {
+        var statusRecorder =
+                new StatusRecorder<FlinkDeployment, FlinkDeploymentStatus>(
+                        new MetricManager<>(), (e, s) -> {});
+        var deployment = TestUtils.buildApplicationCluster();
+        kubernetesClient.resource(deployment).create();
+        statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
+        deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLING_BACK);
+        var requestCount = mockServer.getRequestCount();
+
+        statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
+
+        assertThat(mockServer.getRequestCount()).isEqualTo(requestCount + 1);
     }
 
     @Test
