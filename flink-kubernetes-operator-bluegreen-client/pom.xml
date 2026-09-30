@@ -44,6 +44,15 @@ under the License.
             <artifactId>flink-kubernetes-operator-api</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
+            <!-- The api is built against the operator's Flink version. Excluding its Flink
+                 dependencies makes every Flink jar follow ${flink.version}, so a build with
+                 -Dflink.version=<2.x> does not mix Flink 1.x and 2.x jars on the classpath. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
