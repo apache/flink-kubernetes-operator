@@ -44,5 +44,11 @@ public enum BlueGreenDiffType {
      * Resume from suspension. Triggered when job.state changes from SUSPENDED to RUNNING. Spins up
      * the child with the current (potentially updated) spec.
      */
-    RESUME
+    RESUME,
+
+    /**
+     * An immutable field was changed. The spec will be reverted to the last reconciled state and
+     * the deployment marked as failing.
+     */
+    IMMUTABLE_FIELD_CHANGED
 }

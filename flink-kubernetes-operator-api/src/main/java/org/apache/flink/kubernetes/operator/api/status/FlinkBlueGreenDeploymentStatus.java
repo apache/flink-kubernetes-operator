@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -34,6 +35,8 @@ import lombok.experimental.SuperBuilder;
 @ToString(callSuper = true)
 @SuperBuilder
 @JsonIgnoreProperties(ignoreUnknown = true)
+// Exclude nulls from SSA status patches — CRD schema fields lack nullable:true
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class FlinkBlueGreenDeploymentStatus {
 
     private JobStatus jobStatus = new JobStatus();

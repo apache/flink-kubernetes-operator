@@ -304,6 +304,20 @@ tests:
       path: spec.template.spec.serviceAccountName
       value: test-service-account
 
+# Regression guard: the BlueGreen controller reads OPERATOR_IMAGE to inject the gate-agent
+# init-container for ADVANCED-mode jobs; assert it is wired to the operator's own image.
+- it: Should set OPERATOR_IMAGE env to the operator image
+  set:
+    image:
+      repository: test-repository/flink-kubernetes-operator
+      tag: test-tag
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: OPERATOR_IMAGE
+        value: test-repository/flink-kubernetes-operator:test-tag
+
 # Logging framework tests
 
 - it: Should use log4j2 logging by default

@@ -43,12 +43,14 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_ABORT_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.getDependentObjectMeta;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.replaceFlinkBlueGreenDeployment;
@@ -95,12 +97,14 @@ public class BlueGreenUtils {
     }
 
     public static void revertToLastSpec(BlueGreenContext context) {
+        String lastReconciledSpec = context.getDeploymentStatus().getLastReconciledSpec();
+        if (lastReconciledSpec == null) {
+            return;
+        }
         context.getBgDeployment()
                 .setSpec(
                         SpecUtils.readSpecFromJSON(
-                                context.getDeploymentStatus().getLastReconciledSpec(),
-                                "spec",
-                                FlinkBlueGreenDeploymentSpec.class));
+                                lastReconciledSpec, "spec", FlinkBlueGreenDeploymentSpec.class));
         replaceFlinkBlueGreenDeployment(context);
     }
 
@@ -197,6 +201,30 @@ public class BlueGreenUtils {
                 .setAbortTimestamp(
                         millisToInstantStr(
                                 System.currentTimeMillis() + getAbortGracePeriod(context)));
+    }
+
+    /**
+     * Gets the gate timeout for an ADVANCED transition, falling back to the abort grace period when
+     * unset.
+     *
+     * @param context the Blue/Green transition context
+     * @return gate timeout in milliseconds
+     */
+    public static long getGateTimeout(BlueGreenContext context) {
+        Duration gateTimeout = getConfigOption(context.getBgDeployment(), BLUEGREEN_GATE_TIMEOUT);
+        return gateTimeout != null ? gateTimeout.toMillis() : getAbortGracePeriod(context);
+    }
+
+    /**
+     * Re-arms the abort timestamp for the gate phase of an ADVANCED transition, which starts once
+     * the new deployment is ready.
+     *
+     * @param context the Blue/Green transition context
+     */
+    public static void setGateAbortTimestamp(BlueGreenContext context) {
+        context.getDeploymentStatus()
+                .setAbortTimestamp(
+                        millisToInstantStr(System.currentTimeMillis() + getGateTimeout(context)));
     }
 
     // ==================== Savepoint/Checkpoint Operations ====================

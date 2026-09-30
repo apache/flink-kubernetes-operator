@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils.bluegreen;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -36,10 +37,13 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContex
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_ABORT_GRACE_PERIOD;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -224,6 +228,19 @@ public class BlueGreenUtilsTest {
         assertEquals(freshSavepoint, result.getSpec().getJob().getInitialSavepointPath());
     }
 
+    @Test
+    public void testGateTimeoutFallsBackToAbortGracePeriod() {
+        var bgDeployment = buildBlueGreenDeployment("test-deployment", "default");
+        var configuration = bgDeployment.getSpec().getConfiguration();
+        configuration.put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), "5 min");
+        BlueGreenContext context = createContext(bgDeployment);
+
+        assertEquals(Duration.ofMinutes(5).toMillis(), BlueGreenUtils.getGateTimeout(context));
+
+        configuration.put(BLUEGREEN_GATE_TIMEOUT.key(), "30 s");
+        assertEquals(Duration.ofSeconds(30).toMillis(), BlueGreenUtils.getGateTimeout(context));
+    }
+
     private static FlinkBlueGreenDeployment buildBlueGreenDeployment(
             String name, String namespace) {
         var deployment = new FlinkBlueGreenDeployment();
@@ -244,6 +261,7 @@ public class BlueGreenUtilsTest {
                 new FlinkBlueGreenDeploymentSpec(
                         new HashMap<>(),
                         null,
+                        TransitionMode.BASIC,
                         FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build());
 
         deployment.setSpec(bgDeploymentSpec);

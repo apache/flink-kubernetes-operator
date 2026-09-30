@@ -826,4 +826,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofMillis(0))
                     .withDescription(
                             "Configurable delay before deleting a deployment after being marked done.");
+
+    @Documentation.Section(SECTION_BLUEGREEN)
+    public static final ConfigOption<Duration> BLUEGREEN_GATE_TIMEOUT =
+            operatorConfig("bluegreen.gate.timeout")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "ADVANCED transition mode only: the max time to wait, once the new deployment is ready, for the gate to report CLEAR_TO_TEARDOWN before aborting the transition. Defaults to the abort grace period. Leave room for the deployment deletion delay, which the gate adds to the watermark it waits for.");
 }
