@@ -239,7 +239,7 @@ public class IngressUtils {
             IngressSpec spec,
             Configuration effectiveConfig,
             String serviceName) {
-        final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
+        final int restPort = effectiveConfig.get(RestOptions.PORT);
 
         URL ingressUrl =
                 getIngressUrl(spec.getTemplate(), objectMeta.getName(), objectMeta.getNamespace());
@@ -281,7 +281,7 @@ public class IngressUtils {
                     IngressSpec spec,
                     Configuration effectiveConfig,
                     String serviceName) {
-        final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
+        final int restPort = effectiveConfig.get(RestOptions.PORT);
 
         URL ingressUrl =
                 getIngressUrl(spec.getTemplate(), objectMeta.getName(), objectMeta.getNamespace());

@@ -57,8 +57,7 @@ public class OperatorHealthService {
 
     public static OperatorHealthService fromConfig(FlinkConfigManager configManager) {
         var defaultConfig = configManager.getDefaultConfig();
-        if (defaultConfig.getBoolean(
-                KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED)) {
+        if (defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED)) {
             return new OperatorHealthService(configManager);
         } else {
             LOG.info("Health probe disabled");

@@ -43,7 +43,7 @@ public class CmdStandaloneTaskManagerDecoratorTest {
     @BeforeEach
     public void setup() {
         configuration = new Configuration();
-        configuration.setString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
+        configuration.set(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
         tmParameters =
                 new StandaloneKubernetesTaskManagerParameters(
                         configuration,
