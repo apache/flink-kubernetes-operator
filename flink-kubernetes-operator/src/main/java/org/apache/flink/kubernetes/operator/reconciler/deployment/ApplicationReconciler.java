@@ -52,7 +52,6 @@ import org.apache.flink.util.Preconditions;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -451,8 +450,8 @@ public class ApplicationReconciler
     }
 
     @Override
-    @SneakyThrows
-    protected DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
+    protected DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx)
+            throws Exception {
         var deployment = ctx.getResource();
         var status = deployment.getStatus();
         var conf = ctx.getDeployConfig(ctx.getResource().getSpec());

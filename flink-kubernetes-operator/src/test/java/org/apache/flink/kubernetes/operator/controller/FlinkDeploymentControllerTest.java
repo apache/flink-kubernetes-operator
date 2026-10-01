@@ -77,6 +77,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -1079,9 +1080,62 @@ public class FlinkDeploymentControllerTest {
                         .getResourceContext(flinkDeployment, context)
                         .getResourceMetricGroup();
         var deleteControl = testController.cleanup(flinkDeployment, context);
-        assertNotNull(deleteControl);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(
+                ResourceLifecycleState.DELETED, flinkDeployment.getStatus().getLifecycleState());
         assertTrue(resourceMetricGroup.isClosed());
         assertTrue(testController.getContextFactory().getMetricGroups().isEmpty());
+        assertTrue(flinkService.listJobs().isEmpty());
+        assertEquals(1, testController.flinkResourceEvents().size());
+        assertEquals("Cleanup", testController.flinkResourceEvents().remove().getReason());
+    }
+
+    @Test
+    public void cleanUpAfterFailedFirstDeployment() {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        flinkService.setDeployFailure(true);
+        assertThrows(Exception.class, () -> testController.reconcile(flinkDeployment, context));
+        testController.flinkResourceEvents().clear();
+
+        // Observing during cleanup clears the spec of the failed first deployment
+        var deleteControl = testController.cleanup(flinkDeployment, context);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(
+                ResourceLifecycleState.DELETED, flinkDeployment.getStatus().getLifecycleState());
+        assertEquals(1, testController.flinkResourceEvents().size());
+        assertEquals("Cleanup", testController.flinkResourceEvents().remove().getReason());
+    }
+
+    @Test
+    public void cleanUpFailureKeepsStatusChanges() throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        for (int i = 0; i < 4; i++) {
+            testController.reconcile(appCluster, context);
+        }
+        flinkService.setDeleteClusterFailure(true);
+
+        // The job is cancelled but the cluster cannot be deleted, JOSDK retries the cleanup
+        assertThrows(RuntimeException.class, () -> testController.cleanup(appCluster, context));
+
+        // The status changes of the failed attempt are not lost
+        var patchedStatus = testController.getStatusUpdateCounter().currentResource.getStatus();
+        assertEquals(ResourceLifecycleState.DELETING, patchedStatus.getLifecycleState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.CANCELLING,
+                patchedStatus.getJobStatus().getState());
+    }
+
+    @Test
+    public void cleanUpDeploymentWithRecordedFirstDeploymentAttempt() throws Exception {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        testController.reconcile(flinkDeployment, context);
+        assertFalse(
+                flinkDeployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
+
+        testController.cleanup(flinkDeployment, context);
+        assertFalse(testController.flinkResourceEvents().isEmpty());
+        assertNotEquals(
+                ResourceLifecycleState.CREATED, flinkDeployment.getStatus().getLifecycleState());
     }
 
     @Test

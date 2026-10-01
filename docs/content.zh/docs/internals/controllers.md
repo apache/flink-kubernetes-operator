@@ -282,6 +282,7 @@ A deletion trigger runs the controller's cleanup path instead of the reconcile p
    ├─ observe            ─► best effort, a failure does not stop the cleanup
    ├─ clean up           ─► the per-resource work in the table below
    ├─ blocked            ─► keep the finalizer, patch the status, retry at the reconcile interval
+   ├─ failed             ─► patch the status, retry with backoff, past resource.cleanup.finalizer.timeout give up and remove the finalizer
    └─ done               ─► mark DELETED, drop the cached status, remove the finalizer
 ```
 

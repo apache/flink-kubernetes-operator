@@ -60,6 +60,12 @@ Kubernetes Operator codebase.
 
 - Regenerate the configuration reference docs: `mvn clean package -pl flink-kubernetes-docs -am -Pgenerate-docs`
   (runs `ConfigOptionsDocGenerator`; output lands under `docs/layouts/shortcodes/generated`). Do not hand-edit generated reference files.
+- **Keep the Chinese docs in sync (strict).** Every page under `docs/content/` has a counterpart at the same
+  path under `docs/content.zh/`. Any change to a page under `docs/content/` (add, edit, move, delete) must be
+  applied to its `docs/content.zh/` counterpart in the same commit. Today the zh pages are verbatim copies of
+  the English ones, so the update is the same text; if a page has been translated, make the equivalent
+  change there instead. Verify before committing that no page differs unintentionally:
+  `cd docs && for f in $(cd content && find . -name '*.md'); do cmp -s content/$f content.zh/$f || echo "$f"; done`
 
 ## Repository Structure
 
@@ -246,6 +252,7 @@ Key separations:
 - Push directly to `apache/flink-kubernetes-operator`; always work from your fork.
 - Mix unrelated changes into one PR.
 - Hand-edit generated CRD YAML or reference docs when a generation workflow exists.
+- Change a page under `docs/content/` without the same change to its `docs/content.zh/` counterpart.
 - Suppress or bypass checkstyle (no `CHECKSTYLE:OFF`/`CHECKSTYLE:ON` comments, no
   `tools/maven/suppressions.xml` additions, no `@SuppressWarnings`); fix the code instead.
 - Add `Co-Authored-By` with an AI agent as co-author; use `Generated-by:` instead.

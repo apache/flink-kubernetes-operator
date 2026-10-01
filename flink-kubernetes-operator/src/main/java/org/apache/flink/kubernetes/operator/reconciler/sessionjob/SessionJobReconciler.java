@@ -128,7 +128,8 @@ public class SessionJobReconciler
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
+    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx)
+            throws Exception {
         var status = ctx.getResource().getStatus();
         var rescheduleDelete =
                 DeleteControl.noFinalizerRemoval()
@@ -192,25 +193,26 @@ public class SessionJobReconciler
         // Only check for pending cancellation once the cluster is ready, so that other deletion
         // paths (cluster missing, deleting, unhealthy without HA) are not blocked.
         if (ReconciliationUtils.isJobCancelling(status)) {
+            if (cancellationTimedOut(ctx)) {
+                LOG.warn(
+                        "Cancellation of job {} did not complete in time, removing finalizer. "
+                                + "The job may still be running in the session cluster and require manual cancellation.",
+                        jobID);
+                return DeleteControl.defaultDelete();
+            }
             LOG.info("Cancellation already in progress, waiting for it to complete");
             return rescheduleDelete;
         }
 
-        try {
-            var suspendMode =
-                    ctx.getObserveConfig()
-                                    .get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
-                            ? SuspendMode.SAVEPOINT
-                            : SuspendMode.STATELESS;
-            if (cancelJob(ctx, suspendMode)) {
-                LOG.info("Cancellation triggered, waiting for it to complete");
-                return rescheduleDelete;
-            }
-            return DeleteControl.defaultDelete();
-        } catch (Exception e) {
-            LOG.error("Failed to cancel job, rescheduling deletion.", e);
+        var suspendMode =
+                ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                        ? SuspendMode.SAVEPOINT
+                        : SuspendMode.STATELESS;
+        if (cancelJob(ctx, suspendMode)) {
+            LOG.info("Cancellation triggered, waiting for it to complete");
             return rescheduleDelete;
         }
+        return DeleteControl.defaultDelete();
     }
 
     public static boolean sessionClusterReady(Optional<FlinkDeployment> flinkDeploymentOpt) {

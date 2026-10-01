@@ -110,7 +110,14 @@ public class FlinkDeploymentController
             LOG.error("Error while observing for cleanup", err);
         }
 
-        var deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        DeleteControl deleteControl;
+        try {
+            deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        } catch (RuntimeException e) {
+            // Keep the status changes of the failed attempt, e.g. a completed savepoint
+            statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
+            throw e;
+        }
         if (deleteControl.isRemoveFinalizer()) {
             flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
             statusRecorder.cleanupForDeletion(flinkApp);
