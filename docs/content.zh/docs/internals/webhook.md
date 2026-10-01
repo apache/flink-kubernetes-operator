@@ -40,7 +40,7 @@ Because admission decisions can depend on other resources, the webhook maintains
 
 The server reads its keystore from `WEBHOOK_KEYSTORE_FILE`, `WEBHOOK_KEYSTORE_TYPE`, and `WEBHOOK_KEYSTORE_PASSWORD`. Without a configured keystore the webhook runs plain HTTP, useful only for local development. The API server requires TLS for admission webhooks.
 
-In the chart, cert-manager issues the certificate: an Issuer and a Certificate produce the `webhook-server-cert` Secret carrying a PKCS12 keystore, mounted into the webhook container, with the keystore password sourced from the generated webhook Secret or a user-provided `passwordSecretRef`. FIPS-compliant environments can force the `Modern2023` encryption profile through `webhook.keystore.pkcs12Profile`. The CA bundle is injected into both admission configurations through the `cert-manager.io/inject-ca-from` annotation.
+In the chart, cert-manager issues the certificate: an Issuer and a Certificate produce the `flink-operator-webhook-server-cert` Secret carrying a PKCS12 keystore, mounted into the webhook container, with the keystore password sourced from the generated webhook Secret or a user-provided `passwordSecretRef`. FIPS-compliant environments can force the `Modern2023` encryption profile through `webhook.keystore.pkcs12Profile`. The CA bundle is injected into both admission configurations through the `cert-manager.io/inject-ca-from` annotation.
 
 Certificate rotation needs no restart: the SSL context is a `ReloadableSslContext`, and a `FileSystemWatchService` watching the keystore directory reloads it whenever cert-manager renews the Secret.
 
