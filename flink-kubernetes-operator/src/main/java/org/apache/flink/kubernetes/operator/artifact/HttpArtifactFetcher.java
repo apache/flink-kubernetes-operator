@@ -64,6 +64,7 @@ public class HttpArtifactFetcher {
 
         var allowedSchemes = operatorConfig.getJarUriAllowedSchemes();
         var disallowRestrictedHosts = operatorConfig.isJarUriDisallowRestrictedHosts();
+        var allowedUriPrefixes = operatorConfig.getJarUriAllowedUriPrefixes();
         var socketTimeoutMillis = (int) operatorConfig.getJarFetchSocketTimeout().toMillis();
         var totalTimeout = operatorConfig.getJarFetchTotalTimeout();
         var maxArtifactSize = operatorConfig.getJarArtifactMaxSize().getBytes();
@@ -95,7 +96,10 @@ public class HttpArtifactFetcher {
             }
             var validationError =
                     JarUriValidationUtils.validateJarURI(
-                            currentUri, allowedSchemes, disallowRestrictedHosts);
+                            currentUri,
+                            allowedSchemes,
+                            disallowRestrictedHosts,
+                            allowedUriPrefixes);
             if (validationError.isPresent()) {
                 throw new IOException(
                         "Refusing to fetch artifact from '"

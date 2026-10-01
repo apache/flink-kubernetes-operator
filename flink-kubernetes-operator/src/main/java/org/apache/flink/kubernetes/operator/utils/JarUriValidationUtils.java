@@ -38,7 +38,10 @@ public final class JarUriValidationUtils {
     private JarUriValidationUtils() {}
 
     public static Optional<String> validateJarURI(
-            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+            String jarURI,
+            Collection<String> allowedSchemes,
+            boolean disallowRestrictedHosts,
+            Collection<String> allowedUriPrefixes) {
         if (jarURI == null) {
             return Optional.empty();
         }
@@ -69,7 +72,8 @@ public final class JarUriValidationUtils {
         }
 
         if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && disallowRestrictedHosts) {
+                && disallowRestrictedHosts
+                && allowedUriPrefixes.stream().noneMatch(jarURI::startsWith)) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");

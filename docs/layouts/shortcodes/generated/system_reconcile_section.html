@@ -81,6 +81,12 @@
             <td>If enabled, FlinkSessionJob jarURI hosts that resolve to loopback, link-local, site-local, wildcard or multicast addresses are rejected during validation. Disable only if the operator legitimately needs to fetch from such addresses.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.user.artifacts.allowed-uri-prefixes</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>List&lt;String&gt;</td>
+            <td>Comma separated list of jarURI prefixes that are exempt from the 'kubernetes.operator.user.artifacts.disallow-restricted-hosts' check, even when it is enabled. Use this to allow a trusted internal artifact store (e.g. an in-cluster Service or an on-prem Artifactory instance) that would otherwise be rejected for resolving to a private address. A jarURI is exempted when it starts with one of the configured prefixes; the scheme allowlist is still enforced.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.socket-timeout</h5></td>
             <td style="word-wrap: break-word;">30 s</td>
             <td>Duration</td>
