@@ -56,6 +56,8 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StatusRecorder.class);
 
+    private static final int MAX_STATUS_UPDATE_ATTEMPTS = 3;
+
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
     protected final ConcurrentHashMap<ResourceID, ObjectNode> statusCache =
@@ -102,23 +104,7 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
         }
 
         var prevStatus = convertPreviousStatus(resource, previousStatusNode);
-
-        Exception err = null;
-        for (int i = 0; i < 3; i++) {
-            // We retry the status update 3 times to avoid some intermittent connectivity errors
-            try {
-                replaceStatus(resource, prevStatus, client);
-                err = null;
-            } catch (KubernetesClientException e) {
-                LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
-                Thread.sleep(1000);
-                err = e;
-            }
-        }
-
-        if (err != null) {
-            throw err;
-        }
+        replaceStatusWithRetries(resource, prevStatus, client);
 
         statusCache.put(resourceId, newStatusNode);
         statusUpdateListener.accept(resource, prevStatus);
@@ -140,6 +126,31 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
                     String.format("Resource is unknown class: %s", resource.getClass()));
         }
         return (STATUS) objectMapper.convertValue(previousStatusNode, statusClass);
+    }
+
+    private void replaceStatusWithRetries(CR resource, STATUS prevStatus, KubernetesClient client)
+            throws JsonProcessingException, InterruptedException {
+        // We retry the status update to avoid some intermittent connectivity errors
+        for (int attempt = 1; ; attempt++) {
+            try {
+                replaceStatus(resource, prevStatus, client);
+                return;
+            } catch (KubernetesClientException e) {
+                if (attempt == MAX_STATUS_UPDATE_ATTEMPTS) {
+                    LOG.error(
+                            "Error while patching status, giving up after {} attempts",
+                            MAX_STATUS_UPDATE_ATTEMPTS,
+                            e);
+                    throw e;
+                }
+                LOG.error(
+                        "Error while patching status, retrying {}/{}...",
+                        attempt,
+                        MAX_STATUS_UPDATE_ATTEMPTS,
+                        e);
+                Thread.sleep(1000);
+            }
+        }
     }
 
     private void replaceStatus(CR resource, STATUS prevStatus, KubernetesClient client)
