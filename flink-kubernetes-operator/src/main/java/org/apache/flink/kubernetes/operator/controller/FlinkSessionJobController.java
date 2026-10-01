@@ -157,7 +157,14 @@ public class FlinkSessionJobController
             LOG.error("Error while observing for cleanup", err);
         }
 
-        var deleteControl = reconciler.cleanup(ctx);
+        DeleteControl deleteControl;
+        try {
+            deleteControl = reconciler.cleanup(ctx);
+        } catch (RuntimeException e) {
+            // Keep the status changes of the failed attempt, e.g. a completed savepoint
+            statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
+            throw e;
+        }
         if (deleteControl.isRemoveFinalizer()) {
             sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
             ctxFactory.cleanup(sessionJob);

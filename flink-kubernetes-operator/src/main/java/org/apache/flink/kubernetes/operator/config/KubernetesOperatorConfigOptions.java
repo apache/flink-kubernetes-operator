@@ -176,7 +176,9 @@ public class KubernetesOperatorConfigOptions {
                     .withDeprecatedKeys(
                             operatorConfigKey("reconciler.flink.cluster.shutdown.timeout"))
                     .withDescription(
-                            "The timeout for the resource clean up to wait for flink to shutdown cluster.");
+                            "The timeout for the resource clean up to wait for flink to shutdown cluster. "
+                                    + "It is also the time after which an in-progress job cancellation is "
+                                    + "considered stuck during upgrades and deletion.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_RESOURCE_CLEANUP_FORCE_DELETE_STUCK_PODS =
@@ -190,6 +192,20 @@ public class KubernetesOperatorConfigOptions {
                                     + "Stuck pods are force deleted once, after half of resource.cleanup.timeout has "
                                     + "elapsed. Pods whose termination grace period is longer than that are left "
                                     + "alone, increase resource.cleanup.timeout for those.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<Duration> OPERATOR_RESOURCE_CLEANUP_FINALIZER_TIMEOUT =
+            operatorConfig("resource.cleanup.finalizer.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(120))
+                    .withDescription(
+                            "Maximum amount of time after the deletion of a resource that a failing cleanup "
+                                    + "is retried. After this the operator gives up and removes the finalizer. "
+                                    + "Without this a resource whose cleanup can never succeed (e.g. a pod stuck "
+                                    + "Terminating) would stay in Terminating state forever, blocking any future "
+                                    + "redeploy under the same name. Resources may be orphaned when this happens and "
+                                    + "require manual cleanup. Set to 0 to never give up, the cleanup is then only "
+                                    + "retried according to the kubernetes.operator.retry.* settings.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_JOB_SUBMISSION_TIMEOUT =

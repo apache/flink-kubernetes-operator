@@ -66,6 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -827,6 +828,50 @@ class FlinkSessionJobControllerTest {
             assertTrue(updateControl.getScheduleDelay().isPresent());
             assertEquals(EventRecorder.Reason.Submit.name(), lastEvent.getReason());
         }
+    }
+
+    @Test
+    public void testCleanupBeforeFirstDeployment() {
+        var deleteControl = testController.cleanup(sessionJob, context);
+
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(ResourceLifecycleState.DELETED, sessionJob.getStatus().getLifecycleState());
+        assertEquals(1, testController.events().size());
+        assertEquals("Cleanup", testController.events().remove().getReason());
+        assertTrue(flinkService.listJobs().isEmpty());
+    }
+
+    @Test
+    public void testCleanupAfterFailedFirstDeployment() {
+        flinkService.setDeployFailure(true);
+        assertThrows(Exception.class, () -> testController.reconcile(sessionJob, context));
+        testController.events().clear();
+
+        // Observing during cleanup clears the spec of the failed first deployment
+        var deleteControl = testController.cleanup(sessionJob, context);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(ResourceLifecycleState.DELETED, sessionJob.getStatus().getLifecycleState());
+        assertEquals(1, testController.events().size());
+        assertEquals("Cleanup", testController.events().remove().getReason());
+    }
+
+    @Test
+    public void testCleanupFailureKeepsStatusChanges() throws Exception {
+        testController.reconcile(sessionJob, context);
+        testController.reconcile(sessionJob, context);
+        flinkService.setPortReady(false);
+
+        // The cancellation fails, JOSDK retries the cleanup
+        assertThrows(RuntimeException.class, () -> testController.cleanup(sessionJob, context));
+
+        // The status changes of the failed attempt are not lost
+        assertEquals(
+                ResourceLifecycleState.DELETING,
+                testController
+                        .getStatusUpdateCounter()
+                        .currentResource
+                        .getStatus()
+                        .getLifecycleState());
     }
 
     @Test

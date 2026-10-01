@@ -88,6 +88,10 @@ To leave a final recovery point behind, `kubernetes.operator.job.savepoint-on-de
 
 Deleting a session cluster is blocked by default while jobs are still running on it. `kubernetes.operator.session.deletion.block-on-session-jobs` (default `true`) blocks the deletion while managed `FlinkSessionJob` resources are running, and `kubernetes.operator.session.deletion.block-on-unmanaged-jobs` (default `true`) blocks it while unmanaged jobs are running, for example jobs submitted through the Flink CLI. The jobs have to be removed first, or the corresponding option disabled.
 
+A failing cleanup, for example cluster resources that cannot be deleted because a pod is stuck `Terminating`, is retried with the regular `kubernetes.operator.retry.*` backoff. Once the resource has been pending deletion for longer than `kubernetes.operator.resource.cleanup.finalizer.timeout` (default `120 min`, measured from the deletion timestamp), the operator gives up: it emits a `CleanupFailed` warning event and removes the finalizer, so that the resource name can be reused. Resources may be orphaned when this happens and require manual cleanup. Setting the timeout to `0` disables giving up.
+
+A `FlinkSessionJob` whose job cancellation does not complete within `kubernetes.operator.resource.cleanup.timeout` (default `5 min`) stops waiting for it, logs a warning and removes the finalizer. The job may still be running in the session cluster and may require manual cancellation.
+
 ## Upgrades
 
 When the spec of a `FlinkDeployment` or `FlinkSessionJob` changes, the running job must be upgraded. To do this the operator stops the job (unless already suspended) and redeploys it using the latest spec, with the state carried over from the previous run for stateful applications.
@@ -110,6 +114,10 @@ How state is carried across the restart is controlled through `spec.job.upgradeM
 
 {{< hint info >}}
 When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behavior in cases where the job is in an unhealthy state, restoring from the checkpoint directory. To prevent this, set `kubernetes.operator.job.upgrade.last-state-fallback.enabled` to `false`. The fallback still happens when `spec.flinkVersion` changes and the job can still be cancelled.
+{{< /hint >}}
+
+{{< hint info >}}
+A job cancellation that does not complete within `kubernetes.operator.resource.cleanup.timeout` (default `5 min`) is considered stuck. In `last-state` mode, or in `savepoint` mode with the last-state fallback enabled, the upgrade then continues from the HA metadata instead of waiting for the cancellation forever. Without HA metadata, or when `spec.flinkVersion` changes, the operator keeps waiting.
 {{< /hint >}}
 
 With `FlinkStateSnapshot` resources enabled, the savepoint taken when suspending in `savepoint` mode is tracked as its own snapshot resource, as described under [Snapshot Management → Upgrade Triggering]({{< ref "docs/managing/snapshot-management#upgrade-triggering" >}}). A `last-state` upgrade creates no snapshot resource, it takes no new snapshot in the first place, reusing the latest checkpoint instead.
@@ -294,6 +302,7 @@ Every operation on this page is accompanied by Kubernetes events on the resource
 ### Deleting
 
 - Deletion is destructive for the operator's tracked state: a deleted resource's status and checkpoint history are gone, and a later redeployment starts from empty state unless a snapshot path is provided explicitly or a savepoint was taken on deletion.
+- When cleanup keeps failing past `kubernetes.operator.resource.cleanup.finalizer.timeout`, the finalizer is removed anyway, and Kubernetes resources or a still running session job may be left behind.
 
 ### Upgrades
 
