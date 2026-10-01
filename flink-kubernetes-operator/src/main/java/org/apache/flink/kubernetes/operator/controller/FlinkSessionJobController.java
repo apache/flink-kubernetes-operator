@@ -134,6 +134,12 @@ public class FlinkSessionJobController
         if (canaryResourceManager.handleCanaryResourceDeletion(sessionJob)) {
             return DeleteControl.defaultDelete();
         }
+        statusRecorder.updateStatusFromCache(sessionJob);
+        if (sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
+            LOG.info("Nothing was deployed yet, nothing to clean up");
+            onCleanupFinished(sessionJob);
+            return DeleteControl.defaultDelete();
+        }
         eventRecorder.triggerEvent(
                 sessionJob,
                 EventRecorder.Type.Normal,
@@ -141,7 +147,6 @@ public class FlinkSessionJobController
                 EventRecorder.Component.Operator,
                 "Cleaning up FlinkSessionJob",
                 josdkContext.getClient());
-        statusRecorder.updateStatusFromCache(sessionJob);
         sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(sessionJob, josdkContext);
         try {
@@ -150,15 +155,26 @@ public class FlinkSessionJobController
             LOG.error("Error while observing for cleanup", err);
         }
 
-        var deleteControl = reconciler.cleanup(ctx);
+        DeleteControl deleteControl;
+        try {
+            deleteControl = reconciler.cleanup(ctx);
+        } catch (RuntimeException e) {
+            // Keep the status changes of the failed attempt, e.g. a completed savepoint
+            statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
+            throw e;
+        }
         if (deleteControl.isRemoveFinalizer()) {
-            sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
-            ctxFactory.cleanup(sessionJob);
-            statusRecorder.cleanupForDeletion(sessionJob);
+            onCleanupFinished(sessionJob);
         } else {
             statusRecorder.patchAndCacheStatus(sessionJob, ctx.getKubernetesClient());
         }
         return deleteControl;
+    }
+
+    private void onCleanupFinished(FlinkSessionJob sessionJob) {
+        sessionJob.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
+        ctxFactory.cleanup(sessionJob);
+        statusRecorder.cleanupForDeletion(sessionJob);
     }
 
     private void triggerErrorEvent(FlinkResourceContext<?> ctx, Exception e, String reason) {

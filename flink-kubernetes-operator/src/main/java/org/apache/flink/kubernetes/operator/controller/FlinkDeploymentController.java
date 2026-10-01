@@ -94,6 +94,12 @@ public class FlinkDeploymentController
         if (canaryResourceManager.handleCanaryResourceDeletion(flinkApp)) {
             return DeleteControl.defaultDelete();
         }
+        statusRecorder.updateStatusFromCache(flinkApp);
+        if (flinkApp.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
+            LOG.info("Nothing was deployed yet, nothing to clean up");
+            onCleanupFinished(flinkApp);
+            return DeleteControl.defaultDelete();
+        }
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Normal,
@@ -101,7 +107,6 @@ public class FlinkDeploymentController
                 EventRecorder.Component.Operator,
                 "Cleaning up FlinkDeployment",
                 josdkContext.getClient());
-        statusRecorder.updateStatusFromCache(flinkApp);
         flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETING);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
@@ -110,15 +115,26 @@ public class FlinkDeploymentController
             LOG.error("Error while observing for cleanup", err);
         }
 
-        var deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        DeleteControl deleteControl;
+        try {
+            deleteControl = reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
+        } catch (RuntimeException e) {
+            // Keep the status changes of the failed attempt, e.g. a completed savepoint
+            statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
+            throw e;
+        }
         if (deleteControl.isRemoveFinalizer()) {
-            flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
-            statusRecorder.cleanupForDeletion(flinkApp);
-            ctxFactory.cleanup(flinkApp);
+            onCleanupFinished(flinkApp);
         } else {
             statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         }
         return deleteControl;
+    }
+
+    private void onCleanupFinished(FlinkDeployment flinkApp) {
+        flinkApp.getStatus().setLifecycleState(ResourceLifecycleState.DELETED);
+        statusRecorder.cleanupForDeletion(flinkApp);
+        ctxFactory.cleanup(flinkApp);
     }
 
     @Override

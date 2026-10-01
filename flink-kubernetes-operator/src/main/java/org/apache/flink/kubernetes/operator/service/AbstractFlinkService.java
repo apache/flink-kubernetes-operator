@@ -460,6 +460,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         status.getJobStatus().setState(JobStatus.CANCELLING);
+        status.getJobStatus().setUpdateTime(String.valueOf(System.currentTimeMillis()));
         return false;
     }
 

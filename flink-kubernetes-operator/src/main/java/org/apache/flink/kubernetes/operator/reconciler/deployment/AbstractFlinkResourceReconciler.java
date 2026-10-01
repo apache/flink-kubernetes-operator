@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
@@ -45,6 +46,7 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -289,7 +291,58 @@ public abstract class AbstractFlinkResourceReconciler<
     @Override
     public DeleteControl cleanup(FlinkResourceContext<CR> ctx) {
         autoscaler.cleanup(ctx.getJobAutoScalerContext());
-        return cleanupInternal(ctx);
+
+        try {
+            return cleanupInternal(ctx);
+        } catch (Exception e) {
+            if (shouldGiveUpCleanup(ctx)) {
+                triggerCleanupFailedEvent(
+                        ctx,
+                        "Cleanup kept failing, removing finalizer. "
+                                + "Resources may be orphaned and require manual cleanup. Last error: "
+                                + e.getMessage());
+                return DeleteControl.defaultDelete();
+            }
+
+            triggerCleanupFailedEvent(ctx, "Cleanup failed, will retry: " + e.getMessage());
+            if (ctx.getJosdkContext().getRetryInfo().map(RetryInfo::isLastAttempt).orElse(false)) {
+                // JOSDK stops retrying after the last attempt, keep polling until we give up
+                // (or forever if giving up is disabled)
+                return DeleteControl.noFinalizerRemoval()
+                        .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
+            }
+            throw new ReconciliationException(e);
+        }
+    }
+
+    // A finalizer timeout of 0 disables giving up
+    private boolean giveUpEnabled(FlinkResourceContext<CR> ctx) {
+        return ctx.getOperatorConfig().getCleanupFinalizerTimeout().compareTo(Duration.ZERO) > 0;
+    }
+
+    private boolean shouldGiveUpCleanup(FlinkResourceContext<CR> ctx) {
+        // Never on the first failed attempt, e.g. when the operator was down for a long time
+        if (!giveUpEnabled(ctx) || ctx.getJosdkContext().getRetryInfo().isEmpty()) {
+            return false;
+        }
+        var deletionTimestamp =
+                Instant.parse(ctx.getResource().getMetadata().getDeletionTimestamp());
+        return clock.instant()
+                .isAfter(
+                        deletionTimestamp.plus(
+                                ctx.getOperatorConfig().getCleanupFinalizerTimeout()));
+    }
+
+    private void triggerCleanupFailedEvent(FlinkResourceContext<CR> ctx, String message) {
+        eventRecorder.triggerEventWithInterval(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.CleanupFailed.name(),
+                message,
+                EventRecorder.Component.Operator,
+                "CleanupFailed",
+                ctx.getKubernetesClient(),
+                null);
     }
 
     /**
@@ -317,7 +370,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param ctx Current context.
      * @return DeleteControl object.
      */
-    protected abstract DeleteControl cleanupInternal(FlinkResourceContext<CR> ctx);
+    protected abstract DeleteControl cleanupInternal(FlinkResourceContext<CR> ctx) throws Exception;
 
     /**
      * Checks whether the desired spec already matches the currently deployed spec. If they match

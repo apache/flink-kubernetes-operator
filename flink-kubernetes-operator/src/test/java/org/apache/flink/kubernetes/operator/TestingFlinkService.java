@@ -141,6 +141,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
     @Setter private Exception makeItFailWith;
+    @Setter private boolean deleteClusterFailure = false;
     @Setter private boolean triggerSavepointFailure = false;
     @Setter private Exception savepointTriggerException = null;
     @Setter private String savepointFetchError = null;
@@ -617,6 +618,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             String clusterId,
             Configuration conf,
             DeletionPropagation deletionPropagation) {
+        if (deleteClusterFailure) {
+            throw new RuntimeException("Simulated cluster resource cleanup failure");
+        }
         jobs.clear();
         sessions.remove(clusterId);
     }

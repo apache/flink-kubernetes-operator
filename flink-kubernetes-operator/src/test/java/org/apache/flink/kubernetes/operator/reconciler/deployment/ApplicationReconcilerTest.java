@@ -81,9 +81,11 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.util.concurrent.Executors;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
@@ -114,6 +116,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
@@ -239,6 +242,99 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                             .getJobStatus()
                                             .getUpgradeSavepointPath());
                         });
+    }
+
+    @Test
+    public void testCleanupGivesUpAfterFinalizerTimeout() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        reconciler.reconcile(deployment, context);
+        flinkService.setDeleteClusterFailure(true);
+
+        // The first failure never gives up, e.g. if the operator was down for a long time
+        setDeletedAgo(deployment, Duration.ofHours(5));
+        assertCleanupFails(deployment);
+
+        // Failures are propagated so JOSDK retries them until the finalizer timeout
+        setDeletedAgo(deployment, Duration.ofMinutes(60));
+        assertCleanupFails(deployment, retryContext(3, false));
+        assertTrue(finalizerRemovedEvents().isEmpty());
+        assertFalse(eventsWithReason(EventRecorder.Reason.CleanupFailed).isEmpty());
+
+        // After that the finalizer is removed even though the cleanup keeps failing
+        setDeletedAgo(deployment, Duration.ofMinutes(121));
+        assertTrue(reconciler.cleanup(deployment, retryContext(4, false)).isRemoveFinalizer());
+        assertEquals(1, finalizerRemovedEvents().size());
+    }
+
+    @Test
+    public void testCleanupKeepsPollingAfterLastRetryAttemptUntilFinalizerTimeout()
+            throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        reconciler.reconcile(deployment, context);
+        flinkService.setDeleteClusterFailure(true);
+        setDeletedAgo(deployment, Duration.ofMinutes(1));
+
+        // JOSDK stops retrying after the last attempt, so we reschedule instead of giving up early
+        var deleteControl = reconciler.cleanup(deployment, retryContext(15, true));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertTrue(deleteControl.getScheduleDelay().isPresent());
+        assertTrue(finalizerRemovedEvents().isEmpty());
+
+        setDeletedAgo(deployment, Duration.ofMinutes(121));
+        assertTrue(reconciler.cleanup(deployment, retryContext(1, false)).isRemoveFinalizer());
+        assertEquals(1, finalizerRemovedEvents().size());
+    }
+
+    @Test
+    public void testCleanupNeverGivesUpWhenFinalizerTimeoutDisabled() throws Exception {
+        var conf = configManager.getDefaultConfig();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_FINALIZER_TIMEOUT,
+                Duration.ZERO);
+        configManager.updateDefaultConfig(conf);
+
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        reconciler.reconcile(deployment, context);
+        flinkService.setDeleteClusterFailure(true);
+        setDeletedAgo(deployment, Duration.ofDays(2));
+
+        // Failures are left to the JOSDK retries, after the last attempt we keep polling forever
+        assertCleanupFails(deployment, retryContext(5, false));
+        var deleteControl = reconciler.cleanup(deployment, retryContext(15, true));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertTrue(deleteControl.getScheduleDelay().isPresent());
+        assertTrue(finalizerRemovedEvents().isEmpty());
+    }
+
+    private Context<FlinkDeployment> retryContext(int attemptCount, boolean lastAttempt) {
+        return TestUtils.withRetryInfo(
+                TestUtils.<FlinkDeployment>createContextWithReadyFlinkDeployment(kubernetesClient),
+                attemptCount,
+                lastAttempt);
+    }
+
+    private static void setDeletedAgo(FlinkDeployment deployment, Duration ago) {
+        deployment.getMetadata().setDeletionTimestamp(Instant.now().minus(ago).toString());
+    }
+
+    private void assertCleanupFails(FlinkDeployment deployment) {
+        assertCleanupFails(deployment, context);
+    }
+
+    private void assertCleanupFails(FlinkDeployment deployment, Context<?> josdkContext) {
+        assertThrows(RuntimeException.class, () -> reconciler.cleanup(deployment, josdkContext));
+    }
+
+    private List<Event> eventsWithReason(EventRecorder.Reason reason) {
+        return flinkResourceEventCollector.events.stream()
+                .filter(e -> reason.name().equals(e.getReason()))
+                .collect(Collectors.toList());
+    }
+
+    private List<Event> finalizerRemovedEvents() {
+        return eventsWithReason(EventRecorder.Reason.CleanupFailed).stream()
+                .filter(e -> e.getMessage().contains("removing finalizer"))
+                .collect(Collectors.toList());
     }
 
     @ParameterizedTest

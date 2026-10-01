@@ -38,11 +38,14 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -54,9 +57,13 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.api.common.JobStatus.CANCELED;
@@ -94,16 +101,17 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     private TestReconcilerAdapter<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus>
             reconciler;
 
+    private SessionJobReconciler sessionJobReconciler;
+    private Clock testClock = Clock.systemDefaultZone();
+
     @Override
     public void setup() {
         var configuration = new Configuration();
         configuration.set(OPERATOR_JOB_RESTART_FAILED, true);
         configManager = new FlinkConfigManager(configuration);
-        reconciler =
-                new TestReconcilerAdapter<>(
-                        this,
-                        new SessionJobReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
+        sessionJobReconciler =
+                new SessionJobReconciler(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
+        reconciler = new TestReconcilerAdapter<>(this, sessionJobReconciler);
     }
 
     @ParameterizedTest
@@ -222,11 +230,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
         // clean up
         flinkService.setPortReady(false);
-        var deleteControl =
-                reconciler.cleanup(
-                        sessionJob,
-                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(10_000, deleteControl.getScheduleDelay().get());
+        assertCleanupFails(sessionJob);
         assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
 
         flinkService.setPortReady(true);
@@ -236,7 +240,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 .getStatus()
                 .getJobStatus()
                 .setState(org.apache.flink.api.common.JobStatus.CANCELED);
-        deleteControl =
+        var deleteControl =
                 reconciler.cleanup(
                         sessionJob,
                         TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
@@ -862,6 +866,138 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob.getStatus().getReconciliationStatus().getState());
         // New jobID recorded despite failure
         Assertions.assertNotEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
+    }
+
+    @Test
+    public void testCleanupGivesUpAfterFailingForFinalizerTimeout() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+        flinkService.setPortReady(false);
+
+        // The first failure never gives up, e.g. if the operator was down for a long time
+        setDeletedAgo(sessionJob, Duration.ofHours(5));
+        assertCleanupFails(sessionJob);
+
+        // Failures are propagated so JOSDK retries them until the finalizer timeout
+        setDeletedAgo(sessionJob, Duration.ofMinutes(60));
+        assertCleanupFails(sessionJob, 3, false);
+        assertTrue(cleanupFailedEvents().stream().noneMatch(e -> isFinalizerRemoval(e)));
+
+        // After that the finalizer is removed even though the cleanup keeps failing
+        setDeletedAgo(sessionJob, Duration.ofMinutes(121));
+        var deleteControl = reconciler.cleanup(sessionJob, retryContext(4, false));
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertEquals(1, cleanupFailedEvents().stream().filter(e -> isFinalizerRemoval(e)).count());
+    }
+
+    @Test
+    public void testCleanupKeepsPollingAfterLastRetryAttempt() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+        flinkService.setPortReady(false);
+        setDeletedAgo(sessionJob, Duration.ofMinutes(1));
+
+        // JOSDK stops retrying after the last attempt, so we reschedule instead of giving up early
+        var deleteControl = reconciler.cleanup(sessionJob, retryContext(15, true));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertTrue(deleteControl.getScheduleDelay().isPresent());
+
+        // Same when giving up is disabled, we never give up
+        var conf = configManager.getDefaultConfig();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_FINALIZER_TIMEOUT,
+                Duration.ZERO);
+        configManager.updateDefaultConfig(conf);
+        setDeletedAgo(sessionJob, Duration.ofDays(2));
+        assertCleanupFails(sessionJob, 5, false);
+        deleteControl = reconciler.cleanup(sessionJob, retryContext(15, true));
+        assertFalse(deleteControl.isRemoveFinalizer());
+        assertTrue(deleteControl.getScheduleDelay().isPresent());
+    }
+
+    @Test
+    public void testCleanupStopsWaitingForCancellationThatNeverCompletes() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING, null, flinkService.listJobs());
+        sessionJob.getStatus().getJobStatus().setState(CANCELLING);
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setUpdateTime(String.valueOf(System.currentTimeMillis()));
+
+        var readyCtx = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        assertFalse(reconciler.cleanup(sessionJob, readyCtx).isRemoveFinalizer());
+
+        // The default cluster shutdown timeout is 5 minutes
+        offsetReconcilerClock(Duration.ofMinutes(6));
+        assertTrue(reconciler.cleanup(sessionJob, readyCtx).isRemoveFinalizer());
+        // The job may still be running, users are told which one to cancel
+        assertTrue(
+                cleanupFailedEvents().stream()
+                        .anyMatch(
+                                e ->
+                                        e.getMessage()
+                                                .contains(
+                                                        sessionJob
+                                                                .getStatus()
+                                                                .getJobStatus()
+                                                                .getJobId())));
+    }
+
+    private void assertCleanupFails(FlinkSessionJob sessionJob) {
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () ->
+                        reconciler.cleanup(
+                                sessionJob,
+                                TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient)));
+    }
+
+    private void assertCleanupFails(FlinkSessionJob sessionJob, int attempt, boolean last) {
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> reconciler.cleanup(sessionJob, retryContext(attempt, last)));
+    }
+
+    private Context<FlinkSessionJob> retryContext(int attemptCount, boolean lastAttempt) {
+        return TestUtils.withRetryInfo(
+                TestUtils.<FlinkSessionJob>createContextWithReadyFlinkDeployment(kubernetesClient),
+                attemptCount,
+                lastAttempt);
+    }
+
+    private static void setDeletedAgo(FlinkSessionJob sessionJob, Duration ago) {
+        sessionJob.getMetadata().setDeletionTimestamp(Instant.now().minus(ago).toString());
+    }
+
+    private void offsetReconcilerClock(Duration offset) {
+        testClock = Clock.offset(testClock, offset);
+        sessionJobReconciler.setClock(testClock);
+    }
+
+    private static boolean isFinalizerRemoval(Event event) {
+        return event.getMessage().contains("removing finalizer");
+    }
+
+    private List<Event> eventsWithReason(EventRecorder.Reason reason) {
+        return flinkResourceEventCollector.events.stream()
+                .filter(e -> reason.name().equals(e.getReason()))
+                .collect(Collectors.toList());
+    }
+
+    private List<Event> cleanupFailedEvents() {
+        return flinkResourceEventCollector.events.stream()
+                .filter(e -> EventRecorder.Reason.CleanupFailed.name().equals(e.getReason()))
+                .collect(Collectors.toList());
     }
 
     @Test
