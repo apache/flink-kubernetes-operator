@@ -38,6 +38,7 @@ import org.apache.flink.util.concurrent.Executors;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.WatchEvent;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
@@ -55,8 +56,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -319,6 +322,105 @@ public class StandaloneFlinkServiceTest {
                                 TestUtils.TEST_DEPLOYMENT_NAME,
                                 new Configuration(),
                                 DeletionPropagation.BACKGROUND));
+    }
+
+    @Test
+    public void testDeleteClusterInternalForceDeletesStuckJmPodAndRetries() throws Exception {
+        var timeout = Duration.ofMillis(200);
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT, timeout);
+        var service =
+                new StandaloneFlinkService(
+                        kubernetesClient,
+                        new ArtifactManager(configManager),
+                        Executors.newDirectExecutorService(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration));
+
+        String jmDeploymentName =
+                StandaloneKubernetesUtils.getJobManagerDeploymentName(
+                        TestUtils.TEST_DEPLOYMENT_NAME);
+
+        var dep =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(jmDeploymentName)
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .endMetadata()
+                        .build();
+        DeploymentList nonEmptyList =
+                new DeploymentListBuilder().withMetadata(new ListMeta()).withItems(dep).build();
+        DeploymentList emptyList =
+                new DeploymentListBuilder()
+                        .withMetadata(new ListMeta())
+                        .withItems(List.of())
+                        .build();
+
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        TestUtils.TEST_NAMESPACE, jmDeploymentName);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        TestUtils.TEST_NAMESPACE, jmDeploymentName);
+
+        // First wait times out, after the force delete the Deployment is reported as gone
+        mockServer
+                .expect()
+                .get()
+                .withPath(
+                        String.format(
+                                "/apis/apps/v1/namespaces/%s/deployments/%s",
+                                TestUtils.TEST_NAMESPACE, jmDeploymentName))
+                .andReturn(200, dep)
+                .always();
+        mockServer.expect().get().withPath(getUrl).andReturn(200, nonEmptyList).once();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(dep, "DELETED"))
+                .done()
+                .once();
+        mockServer.expect().get().withPath(getUrl).andReturn(200, emptyList).always();
+
+        var stuckPod =
+                new PodBuilder()
+                        .withNewMetadata()
+                        .withName("jm-1")
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .withLabels(
+                                StandaloneKubernetesUtils.getJobManagerSelectors(
+                                        TestUtils.TEST_DEPLOYMENT_NAME))
+                        .withFinalizers("test.io/block")
+                        .endMetadata()
+                        .build();
+        kubernetesClient.resource(stuckPod).create();
+        kubernetesClient.resource(stuckPod).delete();
+
+        assertDoesNotThrow(
+                () ->
+                        service.deleteClusterInternal(
+                                TestUtils.TEST_NAMESPACE,
+                                TestUtils.TEST_DEPLOYMENT_NAME,
+                                new Configuration(),
+                                DeletionPropagation.BACKGROUND));
+
+        var events =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(TestUtils.TEST_NAMESPACE)
+                        .list()
+                        .getItems()
+                        .stream()
+                        .filter(event -> "ForceDeleted".equals(event.getReason()))
+                        .collect(Collectors.toList());
+        assertEquals(1, events.size());
+        assertEquals(jmDeploymentName, events.get(0).getInvolvedObject().getName());
     }
 
     class TestingStandaloneFlinkService extends StandaloneFlinkService {
