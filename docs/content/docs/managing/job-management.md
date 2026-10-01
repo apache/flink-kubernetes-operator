@@ -100,16 +100,16 @@ When a referenced Kubernetes resource changes, the running job is not restarted 
 
 How state is carried across the restart is controlled through `spec.job.upgradeMode`, with three supported values: `stateless`, `last-state`, and `savepoint`. The setting controls both the stop and the restore mechanism, as detailed in the following table:
 
-|                        | Stateless        | Last State                             | Savepoint                                 |
-|------------------------|------------------|----------------------------------------|-------------------------------------------|
-| Config Requirement     | None             | Checkpointing Enabled                  | Checkpoint or savepoint directory defined |
-| Job Status Requirement | None             | Job or HA metadata accessible          | Job Running                               |
-| Suspend Mechanism      | Cancel or delete | Cancel or delete (keeping HA metadata) | Cancel with savepoint                     |
-| Restore Mechanism      | Empty state      | Use HA metadata or the latest snapshot | Restore from savepoint                    |
-| Production Use         | Not recommended  | Recommended                            | Recommended                               |
+|                        | Stateless        | Last State                             | Savepoint                                  |
+|------------------------|------------------|----------------------------------------|--------------------------------------------|
+| Config Requirement     | None             | Checkpointing Enabled                  | Checkpoint and savepoint directory defined |
+| Job Status Requirement | None             | Job or HA metadata accessible          | Job Running                                |
+| Suspend Mechanism      | Cancel or delete | Cancel or delete (keeping HA metadata) | Cancel with savepoint                      |
+| Restore Mechanism      | Empty state      | Use HA metadata or the latest snapshot | Restore from savepoint                     |
+| Production Use         | Not recommended  | Recommended                            | Recommended                                |
 
 {{< hint info >}}
-When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behavior in cases where the job is in an unhealthy state.
+When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behavior in cases where the job is in an unhealthy state, restoring from the checkpoint directory. That fallback can be disabled with `kubernetes.operator.job.upgrade.last-state-fallback.enabled`.
 {{< /hint >}}
 
 With `FlinkStateSnapshot` resources enabled, the savepoint taken when suspending in `savepoint` mode is tracked as its own snapshot resource, as described under [Snapshot Management → Upgrade Triggering]({{< ref "docs/managing/snapshot-management#upgrade-triggering" >}}). A `last-state` upgrade creates no snapshot resource, it takes no new snapshot in the first place, reusing the latest checkpoint instead.
