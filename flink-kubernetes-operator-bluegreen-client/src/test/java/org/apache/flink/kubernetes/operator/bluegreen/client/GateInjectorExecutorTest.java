@@ -18,7 +18,10 @@
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SupportsCommitter;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -31,6 +34,7 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
@@ -39,7 +43,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.io.Serializable;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -49,6 +58,7 @@ import java.util.stream.StreamSupport;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests how {@link GateInjectorExecutor} wires the gate into the job graph. */
@@ -110,6 +120,61 @@ public class GateInjectorExecutorTest {
 
         // The gate runs as its own vertex, and the job graph still builds
         assertEquals(vertexCount(original) + 1, vertexCount(graph));
+    }
+
+    @Test
+    public void gateGoesInFrontOfTheWriterOfACommittingSink() {
+        StreamGraph graph = injected(committingSinkPipeline(), GateInjectionPosition.BEFORE_SINK);
+
+        StreamNode gate = gateNode(graph);
+        // The gate has its own output edge (its id is not a virtual node's) into the writer
+        assertEquals(1, gate.getOutEdges().size());
+        StreamNode writer = graph.getStreamNode(gate.getOutEdges().get(0).getTargetId());
+        assertInstanceOf(SinkWriterOperatorFactory.class, writer.getOperatorFactory());
+        assertEquals(List.of(gate.getOutEdges().get(0)), writer.getInEdges());
+        // The committer still receives the writer's committables directly
+        StreamNode committer = terminalNode(graph);
+        assertEquals(writer.getId(), committer.getInEdges().get(0).getSourceId());
+    }
+
+    @Test
+    public void gateGoesInFrontOfTheOperatorWithTheConfiguredUid() {
+        StreamGraph graph = icebergLikePipeline();
+        GateInjectorExecutor.injectGates(
+                graph,
+                gateConfig(
+                        GateInjectionPosition.BEFORE_SINK,
+                        Map.of("bluegreen.gate.injection.before-uid", "table-writer")));
+
+        StreamNode gate = gateNode(graph);
+        StreamNode target = graph.getStreamNode(gate.getOutEdges().get(0).getTargetId());
+        assertEquals("table-writer", target.getTransformationUID());
+    }
+
+    @Test
+    public void failsWhenTheSinkReceivesNoRecords() {
+        IllegalStateException e =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                GateInjectorExecutor.injectGates(
+                                        icebergLikePipeline(),
+                                        gateConfig(GateInjectionPosition.BEFORE_SINK)));
+        assertTrue(e.getMessage().contains("bluegreen.gate.injection.before-uid"));
+    }
+
+    @Test
+    public void failsWhenTheConfiguredUidMatchesNoOperator() {
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        GateInjectorExecutor.injectGates(
+                                icebergLikePipeline(),
+                                gateConfig(
+                                        GateInjectionPosition.BEFORE_SINK,
+                                        Map.of(
+                                                "bluegreen.gate.injection.before-uid",
+                                                "no-such-uid"))));
     }
 
     @Test
@@ -214,6 +279,78 @@ public class GateInjectorExecutorTest {
         return env.getStreamGraph();
     }
 
+    /** source -> map -> a Sink V2 with a committer (Writer -> Committer). */
+    private static StreamGraph committingSinkPipeline() {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.fromSequence(0, 10).map(v -> v).sinkTo(committingSink());
+        return env.getStreamGraph();
+    }
+
+    /**
+     * The shape of Iceberg's FlinkSink: a writer and a committer as regular operators, ending in a
+     * sink that receives no records (Void).
+     */
+    private static StreamGraph icebergLikePipeline() {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.fromSequence(0, 10)
+                .map(v -> v)
+                .uid("table-writer")
+                .map(v -> (Void) null)
+                .returns(Types.VOID)
+                .uid("table-committer")
+                .sinkTo(new DiscardingSink<>());
+        return env.getStreamGraph();
+    }
+
+    /**
+     * A Sink V2 with a committer. Built as a proxy because the abstract createWriter method differs
+     * between Flink 1.x (InitContext) and 2.x (WriterInitContext); only the committable serializer
+     * is needed to build the stream graph.
+     */
+    @SuppressWarnings("unchecked")
+    private static Sink<Long> committingSink() {
+        return (Sink<Long>)
+                Proxy.newProxyInstance(
+                        GateInjectorExecutorTest.class.getClassLoader(),
+                        new Class<?>[] {Sink.class, SupportsCommitter.class},
+                        new CommittingSinkHandler());
+    }
+
+    private static class CommittingSinkHandler implements InvocationHandler, Serializable {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) {
+            switch (method.getName()) {
+                case "getCommittableSerializer":
+                    return new StringSerializer();
+                case "hashCode":
+                    return System.identityHashCode(proxy);
+                case "equals":
+                    return proxy == args[0];
+                case "toString":
+                    return "CommittingSink";
+                default:
+                    throw new UnsupportedOperationException(method.getName());
+            }
+        }
+    }
+
+    private static class StringSerializer implements SimpleVersionedSerializer<String> {
+        @Override
+        public int getVersion() {
+            return 1;
+        }
+
+        @Override
+        public byte[] serialize(String committable) {
+            return committable.getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public String deserialize(int version, byte[] serialized) {
+            return new String(serialized, StandardCharsets.UTF_8);
+        }
+    }
+
     /** One source feeding both inputs of a two-input operator. */
     private static StreamGraph twoInputPipeline() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -239,13 +376,21 @@ public class GateInjectorExecutorTest {
     // ==================== Helpers ====================
 
     private static Configuration gateConfig(GateInjectionPosition position) {
-        return Configuration.fromMap(
-                Map.of(
-                        "bluegreen.active-deployment-type", "BLUE",
-                        "bluegreen.configmap.name", "test-configmap",
-                        "kubernetes.namespace", "default",
-                        "bluegreen.gate.watermark.field-path", "timestamp",
-                        "bluegreen.gate.injection.position", position.name()));
+        return gateConfig(position, Map.of());
+    }
+
+    private static Configuration gateConfig(
+            GateInjectionPosition position, Map<String, String> extra) {
+        Map<String, String> config =
+                new HashMap<>(
+                        Map.of(
+                                "bluegreen.active-deployment-type", "BLUE",
+                                "bluegreen.configmap.name", "test-configmap",
+                                "kubernetes.namespace", "default",
+                                "bluegreen.gate.watermark.field-path", "timestamp",
+                                "bluegreen.gate.injection.position", position.name()));
+        config.putAll(extra);
+        return Configuration.fromMap(config);
     }
 
     private static StreamGraph injected(StreamGraph graph, GateInjectionPosition position) {
@@ -256,6 +401,13 @@ public class GateInjectorExecutorTest {
     private static StreamNode gateNode(StreamGraph graph) {
         return graph.getStreamNodes().stream()
                 .filter(node -> node.getOperatorName().startsWith(GATE_NAME_PREFIX))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static StreamNode terminalNode(StreamGraph graph) {
+        return graph.getStreamNodes().stream()
+                .filter(node -> node.getOutEdges().isEmpty())
                 .findFirst()
                 .orElseThrow();
     }
