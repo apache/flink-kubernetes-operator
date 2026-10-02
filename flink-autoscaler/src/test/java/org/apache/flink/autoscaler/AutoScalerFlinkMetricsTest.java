@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.AVERAGE;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.CURRENT;
@@ -187,6 +188,37 @@ public class AutoScalerFlinkMetricsTest {
         assertNotNull(collectedMetrics.get(getBalancedCounterId(ScaleResult.BLOCKED_BY_COOLDOWN)));
         // A reason that never fired must not create a counter.
         assertNull(collectedMetrics.get(getBalancedCounterId(ScaleResult.BLOCKED_BY_QUOTA)));
+    }
+
+    @Test
+    public void testScalingsCounterIsTaggedWithTheReasons() {
+        metrics.incrementScaling(Set.of(ScaleReason.BACKLOG));
+        metrics.incrementScaling(Set.of(ScaleReason.BACKLOG, ScaleReason.HIGH_LOAD));
+        metrics.incrementScaling(Set.of(ScaleReason.HIGH_LOAD, ScaleReason.BACKLOG));
+
+        // The untagged counter keeps the total.
+        assertEquals(3, metrics.getNumScalingsCount());
+
+        // A combination of reasons is one tag, and the order it arrives in does not matter.
+        assertEquals(1, getScalingsCounterValue("backlog"));
+        assertEquals(2, getScalingsCounterValue("backlog|high_load"));
+    }
+
+    @Test
+    public void testScalingsCounterIsNotRegisteredWithoutAReason() {
+        metrics.incrementScaling(Set.of());
+
+        // The untagged counter still moves, but no tagged counter is created with an empty tag.
+        assertEquals(1, metrics.getNumScalingsCount());
+        assertNull(collectedMetrics.get(getScalingsCounterId("")));
+    }
+
+    private long getScalingsCounterValue(String tag) {
+        return ((Counter) collectedMetrics.get(getScalingsCounterId(tag))).getCount();
+    }
+
+    private String getScalingsCounterId(String tag) {
+        return metricGroup.getMetricIdentifier(String.join(DELIMITER, REASON, tag, "scalings"));
     }
 
     private long getBalancedCounterValue(ScaleResult reason) {

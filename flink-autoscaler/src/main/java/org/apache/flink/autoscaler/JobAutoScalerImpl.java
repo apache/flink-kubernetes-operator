@@ -216,7 +216,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
         var scaleResult = scalingExecutor.execute(ctx);
         if (scaleResult.isScaled()) {
-            autoscalerMetrics.incrementScaling();
+            autoscalerMetrics.incrementScaling(cycleState.getScaleReasons());
         } else {
             autoscalerMetrics.incrementBalanced(scaleResult);
         }

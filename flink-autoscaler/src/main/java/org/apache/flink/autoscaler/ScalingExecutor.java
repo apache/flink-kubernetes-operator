@@ -245,7 +245,19 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Try to clear all delayed scale down requests after scaling.
         delayedScaleDown.clearAll();
 
+        // Publish the reasons of every scaled vertex so that the job level scalings counter can
+        // be tagged. The decision is final at this point, after the custom executors ran.
+        context.getScalingCycleState().setScaleReasons(aggregateScaleReasons(scalingSummaries));
+
         return ScaleResult.SCALED;
+    }
+
+    /** Unions the reasons of every vertex that this cycle scales. */
+    private static Set<ScaleReason> aggregateScaleReasons(
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        var reasons = EnumSet.noneOf(ScaleReason.class);
+        scalingSummaries.values().forEach(summary -> reasons.addAll(summary.getScaleReasons()));
+        return reasons;
     }
 
     private void updateRecommendedParallelism(
@@ -354,7 +366,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         new ScalingSummary(
                                                 currentParallelism,
                                                 parallelismChange.getNewParallelism(),
-                                                metrics));
+                                                metrics,
+                                                parallelismChange.getScaleReasons()));
                             }
                         });
 
