@@ -258,8 +258,8 @@ The Metrics column in the tables below lists only the path suffix that follows t
       <td>Gauge</td>
     </tr>
     <tr>
-      <th rowspan="5"><strong>Resource</strong></th>
-      <td rowspan="5">FlinkDeployment, FlinkSessionJob</td>
+      <th rowspan="6"><strong>Resource</strong></th>
+      <td rowspan="6">FlinkDeployment, FlinkSessionJob</td>
       <td>AutoScaler.scalings</td>
       <td>Number of scaling events triggered by the autoscaler for the resource.</td>
       <td>Counter</td>
@@ -271,7 +271,12 @@ The Metrics column in the tables below lists only the path suffix that follows t
     </tr>
     <tr>
       <td>AutoScaler.balanced</td>
-      <td>Number of autoscaler evaluations for the resource that concluded no scaling was needed.</td>
+      <td>Number of autoscaler evaluations for the resource that applied no parallelism change, for any reason.</td>
+      <td>Counter</td>
+    </tr>
+    <tr>
+      <td>AutoScaler.reason.&lt;reason&gt;.balanced</td>
+      <td>Same count as <code>AutoScaler.balanced</code>, split by the reason why no parallelism change was applied. A counter is created the first time the autoscaler reports that reason, so only the reasons a job really hits are present. The reasons are <code>balanced</code>, <code>config_disabled</code>, <code>excluded_period</code>, <code>memory_pressure</code>, <code>resource_quota</code>, <code>cluster_resources</code>, <code>custom_executor_veto</code>, <code>ineffective_scaling</code>, <code>cooldown</code> and <code>data_unavailable</code>.</td>
       <td>Counter</td>
     </tr>
     <tr>
@@ -354,7 +359,7 @@ The `Checkpoint.State.<SnapshotState>.Count` and `Savepoint.State.<SnapshotState
 
 ### Scaling Metrics
 
-These resource-scoped metrics expose the autoscaler's view of each managed job at job-vertex granularity. Counters (`scalings`, `errors`, `balanced`) track the autoscaler's activity over time, which is useful to alert on scaling storms or persistent evaluation errors, while the per-vertex `Current` / `Average` gauges surface the exact inputs the autoscaler uses to decide whether to scale (processing rate, lag, load, parallelism bounds, thresholds). Together they make it possible to debug scaling decisions, tune autoscaler configuration, and build dashboards that correlate traffic patterns with parallelism changes.
+These resource-scoped metrics expose the autoscaler's view of each managed job at job-vertex granularity. Counters (`scalings`, `errors`, `balanced`) track the autoscaler's activity over time, which is useful to alert on scaling storms or persistent evaluation errors. The `balanced` counter is also reported per reason, so a quiet autoscaler that is genuinely balanced can be told apart from one that is blocked by memory pressure, a resource quota or a cooldown. while the per-vertex `Current` / `Average` gauges surface the exact inputs the autoscaler uses to decide whether to scale (processing rate, lag, load, parallelism bounds, thresholds). Together they make it possible to debug scaling decisions, tune autoscaler configuration, and build dashboards that correlate traffic patterns with parallelism changes.
 
 The `<ScalingMetric>` placeholder in the resource-scoped `AutoScaler.jobVertexID.<jobVertexID>.<ScalingMetric>.{Current,Average}` gauges takes one of the following values (per job vertex). `<jobVertexID>` is the hex id of a Flink job vertex as reported by the JobManager REST API.
 

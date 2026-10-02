@@ -101,17 +101,54 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @Getter
     public static class ParallelismChange {
 
+        /**
+         * Why a vertex kept its parallelism. The reason is propagated to the job level so that the
+         * {@code autoscaler.balanced} counter can be tagged, instead of collapsing every blocking
+         * path into one number.
+         */
+        public enum NoChangeReason {
+            /** The vertex already runs at its target parallelism. */
+            BALANCED(ScaleResult.BALANCED),
+
+            /** The previous scale up did not improve the processing rate enough. */
+            INEFFECTIVE(ScaleResult.BLOCKED_BY_INEFFECTIVE),
+
+            /** The scale down interval has not elapsed yet. */
+            COOLDOWN(ScaleResult.BLOCKED_BY_COOLDOWN),
+
+            /** The true processing rate or the target rate is not available yet. */
+            DATA_UNAVAILABLE(ScaleResult.BLOCKED_BY_DATA_UNAVAILABLE);
+
+            @Getter private final ScaleResult scaleResult;
+
+            NoChangeReason(ScaleResult scaleResult) {
+                this.scaleResult = scaleResult;
+            }
+        }
+
         private final int newParallelism;
 
         private final int currentParallelism;
 
         private final boolean outsideUtilizationBound;
 
+        /**
+         * Set only when {@link #isNoChange()} is true. Deliberately excluded from {@link #equals}
+         * and {@link #hashCode}, in the same way as {@code outsideUtilizationBound}, because it
+         * explains a decision rather than defining it. Two no-change results for the same
+         * parallelism are the same decision whatever drove them.
+         */
+        private final NoChangeReason noChangeReason;
+
         private ParallelismChange(
-                int newParallelism, int currentParallelism, boolean outsideUtilizationBound) {
+                int newParallelism,
+                int currentParallelism,
+                boolean outsideUtilizationBound,
+                NoChangeReason noChangeReason) {
             this.newParallelism = newParallelism;
             this.currentParallelism = currentParallelism;
             this.outsideUtilizationBound = outsideUtilizationBound;
+            this.noChangeReason = noChangeReason;
         }
 
         public boolean isNoChange() {
@@ -148,7 +185,11 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         @Override
         public String toString() {
             return isNoChange()
-                    ? "NoParallelismChange{currentParallelism=" + currentParallelism + "}"
+                    ? "NoParallelismChange{currentParallelism="
+                            + currentParallelism
+                            + ", reason="
+                            + noChangeReason
+                            + "}"
                     : "ParallelismChange{newParallelism="
                             + newParallelism
                             + ", currentParallelism="
@@ -163,12 +204,21 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             checkArgument(newParallelism > 0, "The parallelism should be greater than 0.");
             checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
             return new ParallelismChange(
-                    newParallelism, currentParallelism, outsideUtilizationBound);
+                    newParallelism, currentParallelism, outsideUtilizationBound, null);
         }
 
         public static ParallelismChange noChange(int currentParallelism) {
+            return noChange(currentParallelism, NoChangeReason.BALANCED);
+        }
+
+        public static ParallelismChange noChange(
+                int currentParallelism, NoChangeReason noChangeReason) {
             checkArgument(currentParallelism > 0, "The parallelism should be greater than 0.");
-            return new ParallelismChange(currentParallelism, currentParallelism, false);
+            return new ParallelismChange(
+                    currentParallelism,
+                    currentParallelism,
+                    false,
+                    Preconditions.checkNotNull(noChangeReason));
         }
     }
 
@@ -188,7 +238,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange(currentParallelism);
+            return ParallelismChange.noChange(
+                    currentParallelism, ParallelismChange.NoChangeReason.DATA_UNAVAILABLE);
         }
 
         double targetCapacity =
@@ -198,7 +249,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange(currentParallelism);
+            return ParallelismChange.noChange(
+                    currentParallelism, ParallelismChange.NoChangeReason.DATA_UNAVAILABLE);
         }
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
@@ -381,7 +433,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     && detectIneffectiveScaleUp(
                             context, vertex, conf, evaluatedMetrics, lastSummary)) {
                 // Block scale up when last rescale is ineffective.
-                return ParallelismChange.noChange(currentParallelism);
+                return ParallelismChange.noChange(
+                        currentParallelism, ParallelismChange.NoChangeReason.INEFFECTIVE);
             }
 
             return ParallelismChange.build(
@@ -452,7 +505,15 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         "Try to skip immediate scale down within scale-down interval for {}",
                         vertex);
             }
-            return ParallelismChange.noChange(currentParallelism);
+            // Report the cooldown only when the delayed scale down would really be applied once
+            // the interval elapses. A vertex that is inside the utilization bound is filtered out
+            // later anyway, so tagging it as blocked would wrongly suggest that the parallelism
+            // drops when the interval ends.
+            return ParallelismChange.noChange(
+                    currentParallelism,
+                    outsideUtilizationBound
+                            ? ParallelismChange.NoChangeReason.COOLDOWN
+                            : ParallelismChange.NoChangeReason.BALANCED);
         } else {
             // Using the maximum parallelism within the scale down interval window instead of the
             // latest parallelism when scaling down
