@@ -19,7 +19,9 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.api.dag.Pipeline;
+import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -32,6 +34,7 @@ import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.ProcessOperator;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
+import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
@@ -59,6 +62,8 @@ import java.util.stream.Collectors;
  */
 @AllArgsConstructor
 public class GateInjectorExecutor implements PipelineExecutor {
+
+    private static final String BEFORE_UID = "bluegreen.gate.injection.before-uid";
 
     private final PipelineExecutor delegate;
     private final Configuration config;
@@ -178,8 +183,8 @@ public class GateInjectorExecutor implements PipelineExecutor {
                                         + ". For fan-out DAGs use bluegreen.gate.injection.position=AFTER_SOURCE instead.");
                     }
 
-                    StreamNode sink = sinks.get(0);
-                    List.copyOf(sink.getInEdges())
+                    StreamNode target = beforeSinkTarget(graph, config, sinks.get(0));
+                    List.copyOf(target.getInEdges())
                             .forEach(
                                     edge -> {
                                         StreamNode upstream =
@@ -190,12 +195,68 @@ public class GateInjectorExecutor implements PipelineExecutor {
                                                 cl,
                                                 edge,
                                                 upstream,
-                                                sink,
-                                                "BlueGreen-Gate[" + sink.getOperatorName() + "]");
+                                                target,
+                                                "BlueGreen-Gate[" + target.getOperatorName() + "]");
                                     });
                     break;
                 }
         }
+    }
+
+    /**
+     * The operator the gate is placed in front of for BEFORE_SINK: the operator whose uid is set in
+     * bluegreen.gate.injection.before-uid, else the writer of a Sink V2, else the sink itself. A
+     * Sink V2 with a committer ends in its committer, whose input is committables, not records.
+     */
+    @VisibleForTesting
+    static StreamNode beforeSinkTarget(StreamGraph graph, Configuration config, StreamNode sink) {
+        String uid = config.getString(BEFORE_UID, null);
+        StreamNode target;
+        if (uid != null) {
+            List<StreamNode> matches =
+                    graph.getStreamNodes().stream()
+                            .filter(n -> uid.equals(n.getTransformationUID()))
+                            .collect(Collectors.toList());
+            if (matches.size() != 1) {
+                throw new IllegalStateException(
+                        BEFORE_UID
+                                + "="
+                                + uid
+                                + " matches "
+                                + matches.size()
+                                + " operators, not 1.");
+            }
+            target = matches.get(0);
+        } else {
+            target = sinkWriterOf(graph, sink);
+        }
+
+        for (StreamEdge in : target.getInEdges()) {
+            if (graph.getStreamNode(in.getSourceId()).getTypeSerializerOut()
+                    instanceof VoidSerializer) {
+                throw new IllegalStateException(
+                        "bluegreen.gate.injection.position=BEFORE_SINK would place the gate in front"
+                                + " of "
+                                + target.getOperatorName()
+                                + ", which receives no records. Set "
+                                + BEFORE_UID
+                                + " to the uid of the operator that writes your records, e.g."
+                                + " <uidPrefix>-writer for Iceberg's FlinkSink.");
+            }
+        }
+        return target;
+    }
+
+    /** Walks up from a sink to its Sink V2 writer, or returns the sink if it has none. */
+    private static StreamNode sinkWriterOf(StreamGraph graph, StreamNode sink) {
+        StreamNode node = sink;
+        while (!(node.getOperatorFactory() instanceof SinkWriterOperatorFactory)) {
+            if (node.getInEdges().size() != 1) {
+                return sink;
+            }
+            node = graph.getStreamNode(node.getInEdges().get(0).getSourceId());
+        }
+        return node;
     }
 
     private static void injectGate(
@@ -207,8 +268,10 @@ public class GateInjectorExecutor implements PipelineExecutor {
             StreamNode downstream,
             String gateName) {
 
-        int gateId =
-                graph.getStreamNodes().stream().mapToInt(StreamNode::getId).max().getAsInt() + 1;
+        // Flink's own id allocator. max(node id) + 1 can be the id of a virtual partition or
+        // side-output node, which getStreamNodes() does not list; addEdge would then reroute the
+        // gate's output edge to that virtual node's upstream, leaving the gate without an output.
+        int gateId = Transformation.getNewNodeId();
 
         // TypeInformation recovery is the known friction point (see design notes).
         // Gate is a passthrough: we use GenericTypeInfo as a placeholder for addOperator(),
