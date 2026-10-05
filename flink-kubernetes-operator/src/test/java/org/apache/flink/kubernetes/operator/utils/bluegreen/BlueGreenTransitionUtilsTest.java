@@ -183,6 +183,27 @@ public class BlueGreenTransitionUtilsTest {
     }
 
     @Test
+    public void testValidate_statelessUpgradeMode_returnsError() {
+        BlueGreenContext context =
+                buildContext(
+                        TransitionMode.ADVANCED,
+                        Map.of(
+                                "bluegreen.gate.strategy", "WATERMARK",
+                                "bluegreen.gate.watermark.field-path", "eventTime"));
+        context.getBgDeployment()
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getJob()
+                .setUpgradeMode(UpgradeMode.STATELESS);
+
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertTrue(result.isPresent());
+        assertTrue(result.get().contains("not STATELESS"), result.get());
+        assertTrue(result.get().endsWith("Otherwise data loss may occur."), result.get());
+    }
+
+    @Test
     public void testInjectGateAgent_missingOperatorImage_failsLoud() {
         FlinkDeployment deployment =
                 buildFlinkDeployment(Map.of("bluegreen.gate.strategy", "WATERMARK"));
@@ -264,7 +285,7 @@ public class BlueGreenTransitionUtilsTest {
         var flinkDeploymentSpec =
                 FlinkDeploymentSpec.builder()
                         .flinkConfiguration(new ConfigObjectNode())
-                        .job(JobSpec.builder().upgradeMode(UpgradeMode.STATELESS).build())
+                        .job(JobSpec.builder().upgradeMode(UpgradeMode.LAST_STATE).build())
                         .build();
         flinkDeploymentSpec.setFlinkConfiguration(new HashMap<>(flinkConfig));
 

@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
 
@@ -331,6 +332,8 @@ public class BlueGreenTransitionUtils {
      *       gate is injected. With {@code bluegreen.gate.injection.enabled=false} the extractor
      *       passed to {@code WatermarkGateProcessFunction.create} is the extraction strategy, so
      *       none of them may be set: they would be ignored.
+     *   <li>a gate timeout longer than the deployment deletion delay, and an upgrade mode other
+     *       than STATELESS
      * </ul>
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
@@ -398,6 +401,16 @@ public class BlueGreenTransitionUtils {
                             + deletionDelay
                             + " ms): the cutover point is the watermark plus that delay, so the"
                             + " gate cannot clear sooner.");
+        }
+
+        var job = context.getBgDeployment().getSpec().getTemplate().getSpec().getJob();
+        if (job != null && job.getUpgradeMode() == UpgradeMode.STATELESS) {
+            return Optional.of(
+                    "[BlueGreen] ADVANCED mode needs the SAVEPOINT or LAST_STATE upgrade mode, not"
+                            + " STATELESS: the new deployment must start from the transition"
+                            + " savepoint of the one it replaces, and an abort after the cutover"
+                            + " point redeploys the survivor from it. Otherwise data loss may"
+                            + " occur.");
         }
 
         return Optional.empty();
