@@ -117,11 +117,12 @@ under the License.
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+        <!-- compile scope: the gate reports its hand-over progress as a gauge -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-metrics-core</artifactId>
             <version>${flink.version}</version>
-            <scope>test</scope>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 
