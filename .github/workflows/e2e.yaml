@@ -74,6 +74,25 @@ jobs:
           HTTP_CLIENT=${{ inputs.http-client }}
           docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain --build-arg JAVA_VERSION="${JAVA_VERSION:-11}" --build-arg HTTP_CLIENT="${HTTP_CLIENT:-okhttp}" .
           docker images
+      - name: Build the Blue/Green ADVANCED mode example image
+        if: ${{ inputs.test == 'test_bluegreen_advanced.sh' }}
+        run: |
+          # The job bundles the gate client, built against the Flink version under test as in the
+          # client tests of ci.yml
+          case "${{ inputs.flink-version }}" in
+            v2_2) FLINK_VERSION_ARG="-Dflink.version=2.2.1" ;;
+            v2_1) FLINK_VERSION_ARG="-Dflink.version=2.1.1" ;;
+            v2_0) FLINK_VERSION_ARG="-Dflink.version=2.0.1" ;;
+            *) FLINK_VERSION_ARG="" ;;
+          esac
+          mvn -B -ntp install -DskipTests -pl flink-kubernetes-operator-bluegreen-client -am
+          mvn -B -ntp package -DskipTests ${FLINK_VERSION_ARG} \
+            -pl flink-kubernetes-operator-bluegreen-client,examples/flink-bluegreen-advanced-example
+          FLINK_IMAGE=$(sed --regexp-extended 's/v([0-9]+)_([0-9]+)/flink:\1.\2/g' <<< ${{ inputs.flink-version }})-java${{ inputs.java-version }}
+          export SHELL=/bin/bash
+          eval $(minikube -p minikube docker-env)
+          docker build --progress=plain --build-arg FLINK_IMAGE=${FLINK_IMAGE} \
+            -t flink-bluegreen-advanced-example:ci-latest examples/flink-bluegreen-advanced-example
       - name: Create ${{ inputs.namespace }} == ${{ inputs.create-namespace }}
         id: namespace-creator
         if: ${{ inputs.create-namespace }}
