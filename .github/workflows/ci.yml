@@ -263,6 +263,9 @@ jobs:
           - test_flink_operator_ha.sh
           - test_snapshot.sh
           - test_batch_job.sh
+          - test_bluegreen_stateless.sh
+          - test_bluegreen_laststate.sh
+          - test_bluegreen_ingress_rotation.sh
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
