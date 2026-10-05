@@ -2109,7 +2109,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         var rs = executeAdvancedDeployment(deployment);
         var lastReconciledSpec = rs.reconciledStatus.getLastReconciledSpec();
 
@@ -2141,7 +2141,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         var rs = executeAdvancedDeployment(deployment);
 
         // Verify ConfigMap is created with correct schema
@@ -2174,7 +2174,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         var rs = executeAdvancedDeployment(deployment);
 
         // After executeAdvancedDeployment, should be in RUNNING state
@@ -2194,7 +2194,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
 
         // Complete first deployment
         var rs = executeAdvancedDeployment(deployment);
@@ -2203,6 +2203,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Trigger Blue->Green transition
         simulateChangeInSpec(rs.deployment, "green-config", ALT_DELETION_DELAY_VALUE, null);
+        rs = handleSavepoint(rs);
         rs = reconcile(rs.deployment);
 
         // Initial stage should be INITIALIZING
@@ -2297,7 +2298,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         deployment
                 .getSpec()
                 .getConfiguration()
@@ -2306,6 +2307,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Trigger a Blue->Green transition and let Green become ready
         simulateChangeInSpec(rs.deployment, "green-config", 0, null);
+        rs = handleSavepoint(rs);
         rs = reconcile(rs.deployment);
         simulateSuccessfulJobStart(getFlinkDeployments().get(1));
         var gateStart = System.currentTimeMillis();
@@ -2334,20 +2336,22 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs = reconcile(rs.deployment);
 
         assertTrue(rs.updateControl.isPatchStatus());
-        // STATELESS takes no transition savepoint, so Blue cannot write the skipped records again
+        // The cutover point was set, so Blue is redeployed from the transition savepoint
         assertFailingWithError(
                 rs,
                 "the gate did not reach CLEAR_TO_TEARDOWN",
                 BLUEGREEN_GATE_TIMEOUT.key(),
-                "there is no transition savepoint");
+                "is redeployed from the transition savepoint savepoint_1");
         assertEquals(
                 FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()));
-        var flinkDeployments = getFlinkDeployments();
-        assertEquals(2, flinkDeployments.size());
+        assertEquals(2, getFlinkDeployments().size());
         assertEquals(
-                JobStatus.RUNNING, flinkDeployments.get(0).getStatus().getJobStatus().getState());
-        assertEquals(JobState.SUSPENDED, flinkDeployments.get(1).getSpec().getJob().getState());
+                JobStatus.RUNNING,
+                getFlinkDeploymentByName(BLUE_CLUSTER_ID).getStatus().getJobStatus().getState());
+        assertEquals(
+                JobState.SUSPENDED,
+                getFlinkDeploymentByName(GREEN_CLUSTER_ID).getSpec().getJob().getState());
         assertGateResetOnAbort(BlueGreenDeploymentType.BLUE);
     }
 
@@ -2361,11 +2365,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         deployment.getSpec().getConfiguration().put(BLUEGREEN_GATE_TIMEOUT.key(), "2000");
         var rs = executeAdvancedDeployment(deployment);
 
         simulateChangeInSpec(rs.deployment, "green-config", 0, null);
+        rs = handleSavepoint(rs);
         rs = reconcile(rs.deployment);
         simulateSuccessfulJobStart(getFlinkDeployments().get(1));
         rs = reconcile(rs.deployment);
@@ -2400,11 +2405,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         var rs = executeAdvancedDeployment(deployment);
 
         // Trigger a Blue->Green transition; Green never becomes ready
         simulateChangeInSpec(rs.deployment, "green-config", 0, null);
+        rs = handleSavepoint(rs);
         rs = reconcile(rs.deployment);
         assertEquals(
                 FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN,
@@ -2478,7 +2484,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         TEST_NAMESPACE,
                         flinkVersion,
                         null,
-                        UpgradeMode.STATELESS);
+                        UpgradeMode.SAVEPOINT);
         var rs = executeAdvancedDeployment(deployment);
 
         // Test JobStatus.RUNNING -> TransitionStage.RUNNING
@@ -2497,6 +2503,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // Test JobStatus.RECONCILING -> TransitionStage.INITIALIZING
         simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
         simulateSuccessfulJobStart(getFlinkDeployments().get(0));
+        rs = handleSavepoint(rs);
         rs = reconcile(rs.deployment);
         assertEquals(
                 TransitionStage.INITIALIZING,
