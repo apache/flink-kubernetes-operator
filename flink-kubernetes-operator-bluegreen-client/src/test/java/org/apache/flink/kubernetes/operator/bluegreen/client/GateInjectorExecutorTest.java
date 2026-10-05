@@ -17,13 +17,17 @@
 
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SupportsCommitter;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.streaming.api.connector.sink2.SupportsPreCommitTopology;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -38,6 +42,16 @@ import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFacto
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.TimestampData;
+import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
+import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
+import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.LocalZonedTimestampType;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.TimestampType;
 
 import org.junit.jupiter.api.Test;
 
@@ -64,6 +78,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Tests how {@link GateInjectorExecutor} wires the gate into the job graph. */
 public class GateInjectorExecutorTest {
 
+    private static final String EXTRACTOR_CLASS = "bluegreen.gate.watermark.extractor-class";
+    private static final String FIELD_INDEX = "bluegreen.gate.watermark.field-index";
+    private static final String FIELD_PATH = "bluegreen.gate.watermark.field-path";
     private static final String GATE_NAME_PREFIX = "BlueGreen-Gate[";
 
     @Test
@@ -138,6 +155,21 @@ public class GateInjectorExecutorTest {
     }
 
     @Test
+    public void gateGoesInFrontOfTheWriterOfASinkWithAPreCommitStep() {
+        // The shape of Iceberg 1.9's IcebergSink, which SQL INSERT INTO uses by default
+        StreamGraph graph = injected(aggregatingSinkPipeline(), GateInjectionPosition.BEFORE_SINK);
+
+        StreamNode gate = gateNode(graph);
+        StreamNode writer = graph.getStreamNode(gate.getOutEdges().get(0).getTargetId());
+        assertInstanceOf(SinkWriterOperatorFactory.class, writer.getOperatorFactory());
+        // writer -> pre-commit aggregator -> committer, so the gate was found two steps up
+        StreamNode committer = terminalNode(graph);
+        StreamNode aggregator = graph.getStreamNode(committer.getInEdges().get(0).getSourceId());
+        assertTrue(aggregator.getOperatorName().endsWith("pre-commit aggregator"));
+        assertEquals(writer.getId(), aggregator.getInEdges().get(0).getSourceId());
+    }
+
+    @Test
     public void gateGoesInFrontOfTheOperatorWithTheConfiguredUid() {
         StreamGraph graph = icebergLikePipeline();
         GateInjectorExecutor.injectGates(
@@ -175,6 +207,120 @@ public class GateInjectorExecutorTest {
                                         Map.of(
                                                 "bluegreen.gate.injection.before-uid",
                                                 "no-such-uid"))));
+    }
+
+    @Test
+    public void failsUnlessExactlyOneExtractorIsConfigured() {
+        IllegalStateException none =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                GateInjectorExecutor.injectGates(
+                                        forwardPipeline(),
+                                        extractedBy(GateInjectionPosition.BEFORE_SINK, Map.of())));
+        assertTrue(none.getMessage().contains("found: none"), none.getMessage());
+
+        IllegalStateException two =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                GateInjectorExecutor.injectGates(
+                                        forwardPipeline(),
+                                        gateConfig(
+                                                GateInjectionPosition.BEFORE_SINK,
+                                                Map.of(EXTRACTOR_CLASS, "com.example.Extractor"))));
+        assertTrue(
+                two.getMessage().contains("found: " + EXTRACTOR_CLASS + ", " + FIELD_PATH),
+                two.getMessage());
+    }
+
+    @Test
+    public void fieldIndexReadsRowData() {
+        StreamGraph graph = rowDataPipeline(InternalTypeInfo.ofFields(new BigIntType()));
+
+        GateInjectorExecutor.injectGates(
+                graph, extractedBy(GateInjectionPosition.BEFORE_SINK, Map.of(FIELD_INDEX, "0")));
+
+        assertTrue(gateNode(graph).getOperatorName().startsWith(GATE_NAME_PREFIX));
+    }
+
+    @Test
+    public void fieldIndexReadsEachTimestampColumnType() {
+        LogicalType[] columns = {
+            new BigIntType(), new TimestampType(3), new LocalZonedTimestampType(6)
+        };
+        StreamGraph graph = rowDataPipeline(InternalTypeInfo.ofFields(columns));
+        GenericRowData row =
+                GenericRowData.of(
+                        1_000L,
+                        TimestampData.fromEpochMillis(2_000L),
+                        TimestampData.fromEpochMillis(3_000L, 456_000));
+        // The same row as SQL operators pass it on, with TIMESTAMP(6) outside the fixed-size part
+        RowData binary = new RowDataSerializer(columns).toBinaryRow(row).copy();
+
+        for (int column = 0; column < columns.length; column++) {
+            WatermarkExtractor<Object> extractor = fieldIndexExtractor(graph, column);
+            long expected = (column + 1) * 1_000L;
+            assertEquals(expected, extractor.apply(row), columns[column].asSummaryString());
+            assertEquals(expected, extractor.apply(binary), columns[column].asSummaryString());
+        }
+        assertEquals(
+                Long.MIN_VALUE,
+                fieldIndexExtractor(graph, 1).apply(GenericRowData.of(1_000L, null, null)));
+    }
+
+    @Test
+    public void failsWhenFieldIndexCannotReadTheColumn() {
+        StreamGraph graph =
+                rowDataPipeline(InternalTypeInfo.ofFields(new BigIntType(), new IntType()));
+        IllegalArgumentException notATime =
+                assertThrows(IllegalArgumentException.class, () -> fieldIndexExtractor(graph, 1));
+        assertTrue(notATime.getMessage().contains("column type INT"), notATime.getMessage());
+
+        IllegalArgumentException outside =
+                assertThrows(IllegalArgumentException.class, () -> fieldIndexExtractor(graph, 2));
+        assertTrue(outside.getMessage().contains("outside the 2 columns"), outside.getMessage());
+
+        // RowData a DataStream job left to Kryo carries no column types
+        IllegalStateException untyped =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                fieldIndexExtractor(
+                                        rowDataPipeline(TypeInformation.of(RowData.class)), 0));
+        assertTrue(untyped.getMessage().contains("needs the column types"), untyped.getMessage());
+    }
+
+    @Test
+    public void failsWhenFieldIndexMeetsRecordsThatAreNotRowData() {
+        IllegalStateException e =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                GateInjectorExecutor.injectGates(
+                                        forwardPipeline(),
+                                        extractedBy(
+                                                GateInjectionPosition.BEFORE_SINK,
+                                                Map.of(FIELD_INDEX, "0"))));
+        assertTrue(e.getMessage().startsWith(FIELD_INDEX), e.getMessage());
+    }
+
+    @Test
+    public void failsWhenFieldPathMeetsRowData() {
+        // SQL / Table API RowData, and RowData a DataStream job left to Kryo
+        for (TypeInformation<RowData> rowType :
+                List.of(
+                        InternalTypeInfo.ofFields(new BigIntType()),
+                        TypeInformation.of(RowData.class))) {
+            IllegalStateException e =
+                    assertThrows(
+                            IllegalStateException.class,
+                            () ->
+                                    GateInjectorExecutor.injectGates(
+                                            rowDataPipeline(rowType),
+                                            gateConfig(GateInjectionPosition.BEFORE_SINK)));
+            assertTrue(e.getMessage().startsWith(FIELD_PATH), e.getMessage());
+        }
     }
 
     @Test
@@ -251,6 +397,15 @@ public class GateInjectorExecutorTest {
         return env.getStreamGraph();
     }
 
+    private static StreamGraph rowDataPipeline(TypeInformation<RowData> rowType) {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.fromSequence(0, 10)
+                .map(v -> (RowData) GenericRowData.of(v))
+                .returns(rowType)
+                .sinkTo(new DiscardingSink<>());
+        return env.getStreamGraph();
+    }
+
     /** source (2) -keyBy-> keyed filter (4, max parallelism 64) -> sink (4). */
     private static StreamGraph keyedPipeline() {
         return keyedPipeline(keyedOperator -> {});
@@ -283,6 +438,12 @@ public class GateInjectorExecutorTest {
     private static StreamGraph committingSinkPipeline() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.fromSequence(0, 10).map(v -> v).sinkTo(committingSink());
+        return env.getStreamGraph();
+    }
+
+    private static StreamGraph aggregatingSinkPipeline() {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.fromSequence(0, 10).map(v -> v).sinkTo(aggregatingSink());
         return env.getStreamGraph();
     }
 
@@ -330,6 +491,41 @@ public class GateInjectorExecutorTest {
                     return "CommittingSink";
                 default:
                     throw new UnsupportedOperationException(method.getName());
+            }
+        }
+    }
+
+    /** A committing sink that, like Iceberg's IcebergSink, aggregates in one task before commit. */
+    @SuppressWarnings("unchecked")
+    private static Sink<Long> aggregatingSink() {
+        return (Sink<Long>)
+                Proxy.newProxyInstance(
+                        GateInjectorExecutorTest.class.getClassLoader(),
+                        new Class<?>[] {
+                            Sink.class, SupportsCommitter.class, SupportsPreCommitTopology.class
+                        },
+                        new AggregatingSinkHandler());
+    }
+
+    private static class AggregatingSinkHandler extends CommittingSinkHandler {
+        @Override
+        @SuppressWarnings("unchecked")
+        public Object invoke(Object proxy, Method method, Object[] args) {
+            switch (method.getName()) {
+                case "getWriteResultSerializer":
+                    return new StringSerializer();
+                case "addPreCommitTopology":
+                    DataStream<Object> writeResults = (DataStream<Object>) args[0];
+                    return writeResults
+                            .global()
+                            .map(
+                                    (MapFunction<Object, Object>) result -> result,
+                                    writeResults.getType())
+                            .name("pre-commit aggregator")
+                            .setParallelism(1)
+                            .global();
+                default:
+                    return super.invoke(proxy, method, args);
             }
         }
     }
@@ -384,13 +580,46 @@ public class GateInjectorExecutorTest {
         Map<String, String> config =
                 new HashMap<>(
                         Map.of(
-                                "bluegreen.active-deployment-type", "BLUE",
-                                "bluegreen.configmap.name", "test-configmap",
-                                "kubernetes.namespace", "default",
-                                "bluegreen.gate.watermark.field-path", "timestamp",
-                                "bluegreen.gate.injection.position", position.name()));
+                                "bluegreen.active-deployment-type",
+                                "BLUE",
+                                "bluegreen.configmap.name",
+                                "test-configmap",
+                                "kubernetes.namespace",
+                                "default",
+                                "bluegreen.gate.strategy",
+                                "WATERMARK",
+                                FIELD_PATH,
+                                "timestamp",
+                                "bluegreen.gate.injection.position",
+                                position.name()));
         config.putAll(extra);
         return Configuration.fromMap(config);
+    }
+
+    /** The extractor the gate builds for field-index, for the records leaving the Map. */
+    private static WatermarkExtractor<Object> fieldIndexExtractor(StreamGraph graph, int column) {
+        StreamNode map =
+                graph.getStreamNodes().stream()
+                        .filter(node -> node.getOperatorName().equals("Map"))
+                        .findFirst()
+                        .orElseThrow();
+        return GateInjectorExecutor.buildWatermarkExtractor(
+                extractedBy(
+                        GateInjectionPosition.BEFORE_SINK,
+                        Map.of(FIELD_INDEX, String.valueOf(column))),
+                map,
+                GateInjectorExecutorTest.class.getClassLoader());
+    }
+
+    /** A gate config with the given extraction keys in place of the default field-path. */
+    private static Configuration extractedBy(
+            GateInjectionPosition position, Map<String, String> extractors) {
+        Configuration config = gateConfig(position);
+        config.removeConfig(ConfigOptions.key(FIELD_PATH).stringType().noDefaultValue());
+        extractors.forEach(
+                (key, value) ->
+                        config.set(ConfigOptions.key(key).stringType().noDefaultValue(), value));
+        return config;
     }
 
     private static StreamGraph injected(StreamGraph graph, GateInjectionPosition position) {

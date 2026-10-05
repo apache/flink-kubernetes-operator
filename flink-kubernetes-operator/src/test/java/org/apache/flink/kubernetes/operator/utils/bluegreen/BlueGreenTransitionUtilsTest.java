@@ -99,6 +99,68 @@ public class BlueGreenTransitionUtilsTest {
     }
 
     @Test
+    public void testValidate_watermarkStrategy_eachExtractorAlone_returnsEmpty() {
+        for (String extractor : BlueGreenTransitionUtils.WATERMARK_EXTRACTOR_KEYS) {
+            BlueGreenContext context =
+                    buildContext(
+                            TransitionMode.ADVANCED,
+                            Map.of("bluegreen.gate.strategy", "WATERMARK", extractor, "2"));
+            Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+            assertFalse(result.isPresent(), extractor + ": " + result.orElse(""));
+        }
+    }
+
+    @Test
+    public void testValidate_watermarkStrategy_twoExtractors_returnsError() {
+        BlueGreenContext context =
+                buildContext(
+                        TransitionMode.ADVANCED,
+                        Map.of(
+                                "bluegreen.gate.strategy", "WATERMARK",
+                                "bluegreen.gate.watermark.field-path", "eventTime",
+                                "bluegreen.gate.watermark.extractor-class",
+                                        "com.example.MyExtractor"));
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertTrue(result.isPresent());
+        assertTrue(
+                result.get().contains("exactly one of 'bluegreen.gate.watermark.extractor-class'"),
+                result.get());
+        assertTrue(
+                result.get()
+                        .contains(
+                                "found: bluegreen.gate.watermark.extractor-class, "
+                                        + "bluegreen.gate.watermark.field-path."),
+                result.get());
+    }
+
+    @Test
+    public void testValidate_programmaticGate_withoutExtractor_returnsEmpty() {
+        BlueGreenContext context =
+                buildContext(
+                        TransitionMode.ADVANCED,
+                        Map.of(
+                                "bluegreen.gate.strategy", "WATERMARK",
+                                "bluegreen.gate.injection.enabled", "false"));
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertFalse(result.isPresent());
+    }
+
+    @Test
+    public void testValidate_programmaticGate_withExtractor_returnsError() {
+        BlueGreenContext context =
+                buildContext(
+                        TransitionMode.ADVANCED,
+                        Map.of(
+                                "bluegreen.gate.strategy", "WATERMARK",
+                                "bluegreen.gate.injection.enabled", "false",
+                                "bluegreen.gate.watermark.field-path", "eventTime"));
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertTrue(result.isPresent());
+        assertTrue(
+                result.get().contains("Remove bluegreen.gate.watermark.field-path"), result.get());
+    }
+
+    @Test
     public void testInjectGateAgent_missingOperatorImage_failsLoud() {
         FlinkDeployment deployment =
                 buildFlinkDeployment(Map.of("bluegreen.gate.strategy", "WATERMARK"));

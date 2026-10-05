@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
@@ -93,7 +94,11 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             throws IllegalAccessException {
         Long wmToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
         if (wmToggleValue != null) {
-            Long extractedWatermark = watermarkExtractor.apply(value);
+            if (isFullyOpen(ctx.timerService(), wmToggleValue)) {
+                out.collect(value);
+                return;
+            }
+            long extractedWatermark = timestampOf(value);
             if (wmToggleValue <= extractedWatermark) {
                 // Normal
                 out.collect(value);
@@ -123,8 +128,8 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         if (currentWatermarkGateContext.getWatermarkToggleValue() != null) {
             var watermarkToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
 
-            if (getWatermarkBoundary(ctx.timerService()) <= watermarkToggleValue) {
-                if (watermarkToggleValue > watermarkExtractor.apply(value)) {
+            if (ctx.timerService().currentWatermark() <= watermarkToggleValue) {
+                if (watermarkToggleValue > timestampOf(value)) {
                     // Should still output the element
                     out.collect(value);
                 } else {
@@ -144,10 +149,36 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         }
     }
 
-    private long getWatermarkBoundary(TimerService timerService) {
-        return timerService.currentWatermark() > 0
-                ? timerService.currentWatermark()
-                : timerService.currentProcessingTime();
+    /**
+     * The active gate passes every record when there is no standby deployment to share the stream
+     * with (a first deployment, or the deployment kept after an abort), or once this subtask's own
+     * watermark has passed the toggle. The standby's gate stops at that same point, so it never
+     * emits the records that arrive after it, including late ones older than the toggle. Only the
+     * record-time watermark counts: until the first one arrives, currentWatermark() is
+     * Long.MIN_VALUE and records are compared with the toggle one by one.
+     */
+    private boolean isFullyOpen(TimerService timerService, long wmToggleValue) {
+        return currentWatermarkGateContext.getBaseContext().isFirstDeployment()
+                || timerService.currentWatermark() > wmToggleValue;
+    }
+
+    /**
+     * The record's timestamp from the job's extractor. A record without one (null) counts as older
+     * than any toggle, like a null field-path field or field-index column: the standby emits it
+     * until it stops, the active once it is fully open.
+     */
+    private long timestampOf(I value) {
+        Long timestamp = watermarkExtractor.apply(value);
+        return timestamp == null ? Long.MIN_VALUE : timestamp;
+    }
+
+    /**
+     * The toggle the standby proposes: its own record-time watermark plus the deletion delay, or
+     * null while no watermark has reached this subtask. It is never taken from the wall clock.
+     */
+    @VisibleForTesting
+    static Long nextWatermarkToggleValue(long currentWatermark, long deploymentTeardownDelayMs) {
+        return currentWatermark > 0 ? currentWatermark + deploymentTeardownDelayMs : null;
     }
 
     protected void updateWatermarkInConfigMap(Context ctx) {
@@ -165,9 +196,17 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         // Standby job: Active job has signalled it's waiting — compute and write the WM toggle.
         if (wmCtx.getWatermarkGateStage() == WatermarkGateStage.WAITING_FOR_WATERMARK
                 && wmCtx.getWatermarkToggleValue() == null) {
-            var nextWatermarkToggleValue =
-                    getWatermarkBoundary(ctx.timerService())
-                            + wmCtx.getBaseContext().getDeploymentTeardownDelayMs();
+            Long nextWatermarkToggleValue =
+                    nextWatermarkToggleValue(
+                            ctx.timerService().currentWatermark(),
+                            wmCtx.getBaseContext().getDeploymentTeardownDelayMs());
+            if (nextWatermarkToggleValue == null) {
+                // Retried on the next record, which reschedules this write. A job that never
+                // produces watermarks never gets a toggle, and the transition hits the gate
+                // timeout.
+                logInfo("No watermark has reached this subtask yet, the toggle waits for one");
+                return false;
+            }
             // Set optimistically so subsequent elements on this subtask don't reschedule
             // before the ConfigMap informer propagates.
             currentWatermarkGateContext.setWatermarkToggleValue(nextWatermarkToggleValue);
