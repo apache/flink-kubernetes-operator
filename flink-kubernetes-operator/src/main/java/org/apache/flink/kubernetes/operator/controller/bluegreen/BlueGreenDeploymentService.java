@@ -819,14 +819,60 @@ public class BlueGreenDeploymentService {
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
+        // Before resetGateOnAbort below drops the cutover point from the ConfigMap
+        var redeployed = redeployIfCutoverWasSet(context, nextDeployment, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
         resetTransitionMarkers(context.getDeploymentStatus());
 
-        var error = String.format("%s, rolling B/G deployment back to %s", reason, previousState);
+        var error =
+                String.format(
+                        "%s, rolling B/G deployment back to %s%s",
+                        reason, previousState, redeployed);
         var updateControl = markDeploymentFailing(context, error);
         // Must follow the stage write in markDeploymentFailing, see resetGateOnAbort
         BlueGreenTransitionUtils.resetGateOnAbort(context, previousState);
         return updateControl;
+    }
+
+    /**
+     * Once the cutover point is set, the surviving deployment's gate skips the records from it on
+     * and leaves them to the aborted one, which may not have written or committed them yet. The
+     * survivor is then redeployed from the savepoint the aborted deployment started from, so those
+     * records are written again (along with duplicates of what was written since) instead of lost.
+     * Returns what was done, for the abort message.
+     */
+    private static String redeployIfCutoverWasSet(
+            BlueGreenContext context,
+            FlinkDeployment aborted,
+            FlinkBlueGreenDeploymentState previousState) {
+        if (TransitionMode.ADVANCED != BlueGreenTransitionUtils.getTransitionMode(context)
+                || previousState == FlinkBlueGreenDeploymentState.INITIALIZING_BLUE
+                || !BlueGreenTransitionUtils.isCutoverSet(context)) {
+            return "";
+        }
+        var survivor =
+                context.getDeploymentByType(
+                        previousState.name().contains("BLUE")
+                                ? BlueGreenDeploymentType.BLUE
+                                : BlueGreenDeploymentType.GREEN);
+        var savepoint = aborted.getSpec().getJob().getInitialSavepointPath();
+        if (survivor == null || StringUtils.isNullOrWhitespaceOnly(savepoint)) {
+            LOG.error(
+                    "The cutover point was set, but there is no savepoint to redeploy from: the"
+                            + " records from it on that '{}' did not write are lost",
+                    aborted.getMetadata().getName());
+            return ". The cutover point was set and there is no transition savepoint, so the"
+                    + " records from it on that the aborted deployment did not write are lost";
+        }
+        var job = survivor.getSpec().getJob();
+        job.setInitialSavepointPath(savepoint);
+        job.setSavepointRedeployNonce(
+                job.getSavepointRedeployNonce() == null ? 1L : job.getSavepointRedeployNonce() + 1);
+        updateFlinkDeployment(survivor, context);
+        return String.format(
+                ". The cutover point was set, so '%s' is redeployed from the transition savepoint"
+                        + " %s, and records written since may be written twice",
+                survivor.getMetadata().getName(), savepoint);
     }
 
     @NotNull

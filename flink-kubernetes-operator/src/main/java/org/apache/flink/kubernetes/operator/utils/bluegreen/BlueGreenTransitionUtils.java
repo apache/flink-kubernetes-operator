@@ -67,6 +67,9 @@ public class BlueGreenTransitionUtils {
 
     private static final String GATE_INJECTION_ENABLED = "bluegreen.gate.injection.enabled";
 
+    // The WATERMARK gate's cutover point (WatermarkGateContext.WATERMARK_TOGGLE_VALUE)
+    private static final String WATERMARK_TOGGLE_VALUE = "watermark-toggle-value";
+
     /** The WATERMARK gate's extraction strategies. A job sets exactly one. */
     @VisibleForTesting
     static final List<String> WATERMARK_EXTRACTOR_KEYS =
@@ -263,6 +266,15 @@ public class BlueGreenTransitionUtils {
     public static void updateTransitionStage(
             BlueGreenContext context, TransitionStage transitionStage) {
         updateConfigMapEntry(context, TRANSITION_STAGE.getLabel(), transitionStage.toString());
+    }
+
+    /**
+     * Whether the gates agreed on a cutover point in the current transition: from then on, the
+     * standby skips the records at or after it. Written by the WATERMARK gate, see
+     * WatermarkGateContext in the bluegreen client.
+     */
+    public static boolean isCutoverSet(BlueGreenContext context) {
+        return getConfigMap(context).getData().containsKey(WATERMARK_TOGGLE_VALUE);
     }
 
     /**

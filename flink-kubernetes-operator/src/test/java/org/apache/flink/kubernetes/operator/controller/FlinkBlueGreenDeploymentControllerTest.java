@@ -2334,8 +2334,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
         rs = reconcile(rs.deployment);
 
         assertTrue(rs.updateControl.isPatchStatus());
+        // STATELESS takes no transition savepoint, so Blue cannot write the skipped records again
         assertFailingWithError(
-                rs, "the gate did not reach CLEAR_TO_TEARDOWN", BLUEGREEN_GATE_TIMEOUT.key());
+                rs,
+                "the gate did not reach CLEAR_TO_TEARDOWN",
+                BLUEGREEN_GATE_TIMEOUT.key(),
+                "there is no transition savepoint");
         assertEquals(
                 FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getAbortTimestamp()));
@@ -2416,6 +2420,52 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertEquals(
                 JobState.SUSPENDED, getFlinkDeployments().get(1).getSpec().getJob().getState());
+        // No cutover point was set, so Blue passed every record and is not redeployed
+        assertNull(
+                getFlinkDeploymentByName(BLUE_CLUSTER_ID)
+                        .getSpec()
+                        .getJob()
+                        .getSavepointRedeployNonce());
+        assertGateResetOnAbort(BlueGreenDeploymentType.BLUE);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeAbortAfterTheCutoverRedeploysBlue(FlinkVersion flinkVersion)
+            throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.SAVEPOINT);
+        deployment.getSpec().getConfiguration().put(BLUEGREEN_GATE_TIMEOUT.key(), "2000");
+        var rs = executeAdvancedDeployment(deployment);
+
+        // Blue is savepointed and Green starts from that savepoint
+        simulateChangeInSpec(rs.deployment, "green-config", 0, null);
+        rs = handleSavepoint(rs);
+        rs = reconcile(rs.deployment);
+        var green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        assertEquals("savepoint_1", green.getSpec().getJob().getInitialSavepointPath());
+        simulateSuccessfulJobStart(green);
+        rs = reconcile(rs.deployment);
+        var gateDeadline = instantStrToMillis(rs.reconciledStatus.getAbortTimestamp());
+
+        // The gates agree on a cutover point, from which Blue skips the records it leaves to
+        // Green, and then the gate times out
+        simulateExternalConfigMapUpdate(TEST_DEPLOYMENT_NAME, "watermark-toggle-value", "1000");
+        Thread.sleep(Math.max(0, gateDeadline - System.currentTimeMillis()) + 1);
+        rs = reconcile(rs.deployment);
+
+        // Blue goes back to the savepoint Green started from, so the skipped records come again
+        assertFailingWithError(rs, "is redeployed from the transition savepoint savepoint_1");
+        var blueJob = getFlinkDeploymentByName(BLUE_CLUSTER_ID).getSpec().getJob();
+        assertEquals("savepoint_1", blueJob.getInitialSavepointPath());
+        assertEquals(1L, blueJob.getSavepointRedeployNonce());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertGateResetOnAbort(BlueGreenDeploymentType.BLUE);
     }
 
