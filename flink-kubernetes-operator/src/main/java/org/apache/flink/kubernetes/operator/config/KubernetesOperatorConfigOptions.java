@@ -833,5 +833,5 @@ public class KubernetesOperatorConfigOptions {
                     .durationType()
                     .noDefaultValue()
                     .withDescription(
-                            "ADVANCED transition mode only: the max time to wait, once the new deployment is ready, for the gate to report CLEAR_TO_TEARDOWN before aborting the transition. Defaults to the abort grace period. Leave room for the deployment deletion delay, which the gate adds to the watermark it waits for.");
+                            "ADVANCED transition mode only: the max time to wait, once the new deployment is ready, for the gate to hand over before aborting the transition: CLEAR_TO_TEARDOWN, and every gate subtask of the old deployment done. Defaults to the abort grace period. Must be longer than the deployment deletion delay, which the gate adds to the watermark it waits for.");
 }

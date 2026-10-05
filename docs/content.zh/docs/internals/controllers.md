@@ -323,7 +323,7 @@ org.apache.flink.kubernetes.operator.api.spec
 
 This static structure is what every section above observes, diffs, and acts on. The exhaustive field list lives in the [Reference]({{< ref "docs/custom-resource/reference" >}}).
 
-## Blue/Green Controller
+## Blue/Green Controller {#blue-green-controller}
 
 The blue/green controller is the one that manages other custom resources rather than a Flink cluster directly: it drives the blue/green state machine, orchestrating the savepoint-driven transitions between the two child deployments, with `deploymentReadyTimestamp` and `abortTimestamp` gating the state changes. The user-facing behavior is documented under [Blue/Green Deployments]({{< ref "docs/managing/bluegreen-deployments" >}}).
 
@@ -353,6 +353,25 @@ Four details refine the cycle:
 - An abort of the very first deployment falls back to `INITIALIZING_BLUE`, there is no previous active environment yet.
 - Finalization reschedules immediately, so a spec change that arrived mid-transition is picked up on the very next pass.
 
+The `ADVANCED` transition mode adds a gate phase to the transitioning state, coordinated with the gates in the two jobs through the resource's ConfigMap. Its user-visible behavior is documented under [Blue/Green Deployments → Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}):
+
+```
+ TRANSITIONING_TO_GREEN, ADVANCED
+   ├─ Green ready ─────────────► the ConfigMap stage moves to TRANSITIONING, abortTimestamp
+   │                             re-armed from the gate timeout
+   ├─ CLEAR_TO_TEARDOWN ───────► written by the first Blue gate subtask past the cutover
+   │                             point, then the controller waits until the minimum of the
+   │                             gates' bluegreenGateHandOverDone gauge, read over REST, is 1
+   ├─ hand-over done ──────────► the deletion delay waited out, Blue suspended with
+   │                             upgradeMode savepoint and deleted once stopped, then
+   │                             ACTIVE_GREEN
+   └─ gate deadline passed ────► Green suspended, the ConfigMap rewritten as a first
+                                 deployment, and Blue redeployed from Green's
+                                 initialSavepointPath if the cutover point was set
+```
+
+The ConfigMap is rewritten whole at the start of every transition and on every abort. The controller patches single entries of it, and the gates write theirs as a compare-and-set on its resourceVersion, refused when the ConfigMap belongs to another transition.
+
 ### State Handlers
 
 The controller delegates every state to a dedicated handler:
@@ -372,4 +391,4 @@ Blue/green spec changes are classified into a diff type of their own, evaluated 
 
 ### Secondary Resources
 
-The controller watches what it owns: the Blue and Green child `FlinkDeployment` resources through an informer with owner-reference mapping, so any status change on a child triggers a reconciliation, and, when operator ingress management is enabled, the single active Ingress it maintains. Completing a transition repoints that Ingress from the old environment's REST service to the new one. With ingress management disabled, traffic switching is left to external tooling.
+The controller watches what it owns: the Blue and Green child `FlinkDeployment` resources through an informer with owner-reference mapping, so any status change on a child triggers a reconciliation, the gate ConfigMap in the `ADVANCED` transition mode, and, when operator ingress management is enabled, the single active Ingress it maintains. Completing a transition repoints that Ingress from the old environment's REST service to the new one. With ingress management disabled, traffic switching is left to external tooling.
