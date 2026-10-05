@@ -193,9 +193,8 @@ public class BlueGreenTransitionUtils {
      * the aborted hand-over, and it is marked as a first deployment: with no counterpart left to
      * hand over to, the remaining gate must pass every record, as it does before any transition.
      *
-     * <p>Call it after the reconciliation's other ConfigMap writes. Those update the informer's
-     * cached copy under optimistic locking, while this write replaces the ConfigMap
-     * unconditionally.
+     * <p>Call it after the reconciliation's other ConfigMap writes: those patch single entries,
+     * while this write replaces the whole ConfigMap.
      */
     public static void resetGateOnAbort(
             BlueGreenContext context, FlinkBlueGreenDeploymentState previousState) {

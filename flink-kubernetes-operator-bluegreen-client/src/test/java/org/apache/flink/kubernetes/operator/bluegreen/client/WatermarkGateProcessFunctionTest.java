@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
+import org.apache.flink.kubernetes.operator.api.bluegreen.GateKubernetesService;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.ProcessFunctionTestHarnesses;
@@ -28,11 +29,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
+import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.TRANSITION_STAGE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -266,6 +270,57 @@ public class WatermarkGateProcessFunctionTest {
                 TEST_WATERMARK_VALUE + TEST_TEARDOWN_DELAY,
                 WatermarkGateProcessFunction.nextWatermarkToggleValue(
                         TEST_WATERMARK_VALUE, TEST_TEARDOWN_DELAY));
+    }
+
+    @Test
+    void testStandbyUsesTheStoredToggleNotItsOwnProposal() throws Exception {
+        setupStandbyContext(null, WatermarkGateStage.WAITING_FOR_WATERMARK);
+        // Another standby subtask already stored its toggle
+        var configMap = new RecordingGateKubernetesService("1500");
+        watermarkGateFunction.writeTo(configMap);
+
+        testHarness.processWatermark(900L);
+        testHarness.processElement(new TestMessage("a", 800L), 800L); // schedules the write
+        testHarness.setProcessingTime(1_000L); // past the write delay
+        testHarness.processElement(new TestMessage("b", 850L), 850L); // performs it
+
+        // It proposed its own watermark plus the delay, only if no toggle was stored yet
+        assertEquals(
+                List.of(
+                        Arrays.asList(
+                                BlueGreenDeploymentType.BLUE,
+                                WatermarkGateContext.WATERMARK_TOGGLE_VALUE,
+                                null,
+                                Map.of(
+                                        WatermarkGateContext.WATERMARK_TOGGLE_VALUE,
+                                        Long.toString(900L + TEST_TEARDOWN_DELAY),
+                                        WatermarkGateContext.WATERMARK_STAGE,
+                                        WatermarkGateStage.WATERMARK_SET.toString()))),
+                configMap.calls);
+        assertEquals(1500L, getWatermarkContext().getWatermarkToggleValue());
+    }
+
+    @Test
+    void testStandbySignalsTeardownOnlyFromTransitioning() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        var configMap = new RecordingGateKubernetesService(null);
+        watermarkGateFunction.writeTo(configMap);
+
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        testHarness.processElement(new TestMessage("a", 0L), 0L); // past the toggle: schedules
+        testHarness.setProcessingTime(1_000L);
+        testHarness.processElement(new TestMessage("b", 0L), 0L); // performs the write
+
+        assertEquals(
+                List.of(
+                        Arrays.asList(
+                                BlueGreenDeploymentType.BLUE,
+                                TRANSITION_STAGE.getLabel(),
+                                TransitionStage.TRANSITIONING.toString(),
+                                Map.of(
+                                        TRANSITION_STAGE.getLabel(),
+                                        TransitionStage.CLEAR_TO_TEARDOWN.toString()))),
+                configMap.calls);
     }
 
     // ==================== Watermark Control Tests ====================
@@ -514,6 +569,27 @@ public class WatermarkGateProcessFunctionTest {
         }
     }
 
+    /** Records each compare-and-set and answers with the value already stored, if any. */
+    private static class RecordingGateKubernetesService extends GateKubernetesService {
+        private final List<List<Object>> calls = new ArrayList<>();
+        private final String stored;
+
+        RecordingGateKubernetesService(String stored) {
+            super(null, TEST_NAMESPACE, TEST_CONFIGMAP_NAME);
+            this.stored = stored;
+        }
+
+        @Override
+        public Optional<String> compareAndSet(
+                BlueGreenDeploymentType activeDeploymentType,
+                String key,
+                String expected,
+                Map<String, String> entries) {
+            calls.add(Arrays.asList(activeDeploymentType, key, expected, entries));
+            return Optional.of(stored != null ? stored : entries.get(key));
+        }
+    }
+
     /** Test implementation of WatermarkGateProcessFunction that captures method calls and state. */
     private static class TestWatermarkGateProcessFunction
             extends WatermarkGateProcessFunction<TestMessage> {
@@ -570,12 +646,29 @@ public class WatermarkGateProcessFunctionTest {
         @Override
         protected void notifyWaitingForWatermark(Context ctx) {
             notifyWaitingForWatermarkCalled = true;
+            if (writesTo != null) {
+                super.notifyWaitingForWatermark(ctx);
+            }
         }
 
         /** Override to capture the call without invoking Kubernetes. */
         @Override
         protected void updateWatermarkInConfigMap(Context ctx) {
             updateWatermarkInConfigMapCalled = true;
+            if (writesTo != null) {
+                super.updateWatermarkInConfigMap(ctx);
+            }
+        }
+
+        private RecordingGateKubernetesService writesTo;
+
+        /** Performs the scheduled ConfigMap writes, against a recording service. */
+        void writeTo(RecordingGateKubernetesService service) throws Exception {
+            writesTo = service;
+            java.lang.reflect.Field field =
+                    GateProcessFunction.class.getDeclaredField("gateKubernetesService");
+            field.setAccessible(true);
+            field.set(this, service);
         }
 
         // Helper to access the private currentWatermarkGateContext field for assertions

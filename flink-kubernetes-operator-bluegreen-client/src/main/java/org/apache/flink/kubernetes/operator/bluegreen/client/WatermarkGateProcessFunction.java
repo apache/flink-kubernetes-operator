@@ -207,17 +207,22 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
                 logInfo("No watermark has reached this subtask yet, the toggle waits for one");
                 return false;
             }
-            // Set optimistically so subsequent elements on this subtask don't reschedule
-            // before the ConfigMap informer propagates.
-            currentWatermarkGateContext.setWatermarkToggleValue(nextWatermarkToggleValue);
-            logInfo("Updating the ConfigMap Watermark value to: " + nextWatermarkToggleValue);
-            updateConfigMapCustomEntries(
-                    Map.of(
+            // Every standby subtask may propose a toggle; the first one written wins and all of
+            // them use the stored value, never their own proposal.
+            var toggle =
+                    compareAndSetCustomEntries(
                             WatermarkGateContext.WATERMARK_TOGGLE_VALUE,
-                                    Long.toString(nextWatermarkToggleValue),
-                            WatermarkGateContext.WATERMARK_STAGE,
-                                    WatermarkGateStage.WATERMARK_SET.toString()));
-            logInfo("Watermark updated!");
+                            null,
+                            Map.of(
+                                    WatermarkGateContext.WATERMARK_TOGGLE_VALUE,
+                                            Long.toString(nextWatermarkToggleValue),
+                                    WatermarkGateContext.WATERMARK_STAGE,
+                                            WatermarkGateStage.WATERMARK_SET.toString()));
+            toggle.ifPresent(
+                    value ->
+                            currentWatermarkGateContext.setWatermarkToggleValue(
+                                    Long.parseLong(value)));
+            logInfo("Watermark toggle value: " + toggle.orElse("none, another transition"));
             return true;
         }
 
@@ -225,12 +230,15 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         if (wmCtx.getBaseContext().getGateStage() == TransitionStage.TRANSITIONING
                 && wmCtx.getWatermarkToggleValue() == null
                 && wmCtx.getWatermarkGateStage() != WatermarkGateStage.WAITING_FOR_WATERMARK) {
-            logInfo("Setting " + WatermarkGateStage.WAITING_FOR_WATERMARK);
-            updateConfigMapCustomEntries(
-                    Map.of(
+            // Only while no stage is set: a late subtask must not undo WATERMARK_SET
+            var stage =
+                    compareAndSetCustomEntries(
                             WatermarkGateContext.WATERMARK_STAGE,
-                            WatermarkGateStage.WAITING_FOR_WATERMARK.toString()));
-            logInfo(WatermarkGateStage.WAITING_FOR_WATERMARK + " set!");
+                            null,
+                            Map.of(
+                                    WatermarkGateContext.WATERMARK_STAGE,
+                                    WatermarkGateStage.WAITING_FOR_WATERMARK.toString()));
+            logInfo("Watermark stage is " + stage.orElse("unset"));
             return true;
         }
 
