@@ -19,10 +19,12 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.api.dag.Pipeline;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
+import org.apache.flink.api.java.typeutils.runtime.kryo.KryoSerializer;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.execution.JobClient;
@@ -37,19 +39,26 @@ import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.typeutils.AbstractRowDataSerializer;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeChecks;
 import org.apache.flink.util.InstantiationUtil;
 
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * {@link PipelineExecutor} decorator that transparently injects a BlueGreen gate operator into the
@@ -64,6 +73,9 @@ import java.util.stream.Collectors;
 public class GateInjectorExecutor implements PipelineExecutor {
 
     private static final String BEFORE_UID = "bluegreen.gate.injection.before-uid";
+    private static final String EXTRACTOR_CLASS = "bluegreen.gate.watermark.extractor-class";
+    private static final String FIELD_INDEX = "bluegreen.gate.watermark.field-index";
+    private static final String FIELD_PATH = "bluegreen.gate.watermark.field-path";
 
     private final PipelineExecutor delegate;
     private final Configuration config;
@@ -404,9 +416,13 @@ public class GateInjectorExecutor implements PipelineExecutor {
     private static WatermarkGateProcessFunction<Object> buildGateFunction(
             Configuration config, StreamNode upstream, ClassLoader cl) {
 
-        GateStrategy strategy =
-                GateStrategy.valueOf(
-                        config.getString("bluegreen.gate.strategy", GateStrategy.WATERMARK.name()));
+        String strategyName = config.getString("bluegreen.gate.strategy", null);
+        if (strategyName == null) {
+            throw new IllegalStateException(
+                    "bluegreen.gate.strategy is not set. The operator sets it for ADVANCED"
+                            + " Blue/Green deployments; supported values: WATERMARK.");
+        }
+        GateStrategy strategy = GateStrategy.valueOf(strategyName);
 
         switch (strategy) {
             case WATERMARK:
@@ -429,58 +445,182 @@ public class GateInjectorExecutor implements PipelineExecutor {
         }
     }
 
-    private static WatermarkExtractor<Object> buildWatermarkExtractor(
+    /**
+     * Builds the one extraction strategy the job configured. The record type at the gate is only
+     * used to check that this strategy can read it: nothing is chosen, defaulted or replaced.
+     */
+    @VisibleForTesting
+    static WatermarkExtractor<Object> buildWatermarkExtractor(
             Configuration config, StreamNode upstream, ClassLoader cl) {
 
-        boolean isSqlJob = upstream.getTypeSerializerOut() instanceof RowDataSerializer;
-
-        if (isSqlJob) {
-            // Read via the ConfigOption-based getter rather than the string-key
-            // Configuration.getInteger(String, int) overload, which Flink 2.x removed. This is the
-            // only call in the client that is not source-compatible across the Flink 1.x/2.x major
-            // boundary; using get(ConfigOption) (stable in both majors) lets the same source
-            // compile
-            // against either Flink line, so a single codebase can be built into per-major
-            // artifacts.
-            int fieldIdx =
-                    config.get(
-                            ConfigOptions.key("bluegreen.gate.watermark.field-index")
-                                    .intType()
-                                    .defaultValue(-1));
-            // fieldIdx is a captured primitive — lambda is serializable via WatermarkExtractor
-            return (WatermarkExtractor<Object>)
-                    record ->
-                            (fieldIdx < 0 || ((RowData) record).isNullAt(fieldIdx))
-                                    ? Long.MIN_VALUE
-                                    : ((RowData) record).getLong(fieldIdx);
+        List<String> configured =
+                Stream.of(EXTRACTOR_CLASS, FIELD_INDEX, FIELD_PATH)
+                        .filter(config::containsKey)
+                        .collect(Collectors.toList());
+        if (configured.size() != 1) {
+            throw new IllegalStateException(
+                    "The WATERMARK gate needs exactly one of "
+                            + EXTRACTOR_CLASS
+                            + ", "
+                            + FIELD_INDEX
+                            + " or "
+                            + FIELD_PATH
+                            + ", found: "
+                            + (configured.isEmpty() ? "none" : String.join(", ", configured))
+                            + ".");
         }
 
-        String fieldPath = config.getString("bluegreen.gate.watermark.field-path", null);
-        if (fieldPath != null) {
-            return new FieldPathWatermarkExtractor(fieldPath);
+        Optional<Boolean> rowData = isRowData(upstream.getTypeSerializerOut());
+        switch (configured.get(0)) {
+            case FIELD_INDEX:
+                return fieldIndexExtractor(config, upstream.getTypeSerializerOut(), rowData);
+            case FIELD_PATH:
+                if (rowData.orElse(false)) {
+                    throw new IllegalStateException(
+                            FIELD_PATH
+                                    + " resolves fields by name, but the records at the gate are"
+                                    + " Flink RowData, which carries values by position only. Use "
+                                    + FIELD_INDEX
+                                    + " or "
+                                    + EXTRACTOR_CLASS
+                                    + ".");
+                }
+                return new FieldPathWatermarkExtractor(config.getString(FIELD_PATH, null));
+            default:
+                return instantiateExtractor(config.getString(EXTRACTOR_CLASS, null), cl);
         }
+    }
 
-        String extractorClass = config.getString("bluegreen.gate.watermark.extractor-class", null);
-        if (extractorClass != null) {
+    /**
+     * Reads the column at field-index with the accessor its type needs. The column types come from
+     * the records' RowDataSerializer, so the index and the type are checked here, before the job
+     * runs, rather than on the first record.
+     */
+    private static WatermarkExtractor<Object> fieldIndexExtractor(
+            Configuration config, TypeSerializer<?> serializer, Optional<Boolean> rowData) {
+        if (!rowData.orElse(true)) {
+            throw new IllegalStateException(
+                    FIELD_INDEX
+                            + " reads a column of Flink's RowData, the record type of SQL / Table"
+                            + " API jobs, but the records at the gate are "
+                            + serializer.getClass().getSimpleName()
+                            + "-serialized objects. Use "
+                            + FIELD_PATH
+                            + " or "
+                            + EXTRACTOR_CLASS
+                            + ".");
+        }
+        // ConfigOption-based read: the string-key Configuration.getInteger(String, int) is gone in
+        // Flink 2.x, get(ConfigOption) works in both majors.
+        int fieldIdx = config.get(ConfigOptions.key(FIELD_INDEX).intType().noDefaultValue());
+        LogicalType[] columns = columnTypesOf(serializer);
+        if (fieldIdx < 0 || fieldIdx >= columns.length) {
+            throw new IllegalArgumentException(
+                    FIELD_INDEX
+                            + "="
+                            + fieldIdx
+                            + " is outside the "
+                            + columns.length
+                            + " columns of the records at the gate: "
+                            + Arrays.toString(columns)
+                            + ".");
+        }
+        LogicalType column = columns[fieldIdx];
+        // fieldIdx and precision are captured primitives — lambdas are serializable via
+        // WatermarkExtractor. A null column reads as Long.MIN_VALUE, like a null field-path.
+        switch (column.getTypeRoot()) {
+            case BIGINT:
+                return record ->
+                        ((RowData) record).isNullAt(fieldIdx)
+                                ? Long.MIN_VALUE
+                                : ((RowData) record).getLong(fieldIdx);
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+                // getMillisecond() is what Flink SQL derives a rowtime watermark from, for both
+                // types, so the column and the watermark share one time domain.
+                int precision = LogicalTypeChecks.getPrecision(column);
+                return record ->
+                        ((RowData) record).isNullAt(fieldIdx)
+                                ? Long.MIN_VALUE
+                                : ((RowData) record)
+                                        .getTimestamp(fieldIdx, precision)
+                                        .getMillisecond();
+            default:
+                throw new IllegalArgumentException(
+                        FIELD_INDEX
+                                + "="
+                                + fieldIdx
+                                + " points at column type "
+                                + column.asSummaryString()
+                                + ". It must be BIGINT (epoch milliseconds), TIMESTAMP(p) or"
+                                + " TIMESTAMP_LTZ(p).");
+        }
+    }
+
+    /** The column types of SQL / Table API RowData, kept privately by RowDataSerializer. */
+    private static LogicalType[] columnTypesOf(TypeSerializer<?> serializer) {
+        if (!(serializer instanceof RowDataSerializer)) {
+            throw new IllegalStateException(
+                    FIELD_INDEX
+                            + " needs the column types of the records at the gate, but they are "
+                            + serializer.getClass().getSimpleName()
+                            + "-serialized, which carries none. Give the stream a RowData type"
+                            + " with its columns (InternalTypeInfo), or use "
+                            + EXTRACTOR_CLASS
+                            + ".");
+        }
+        // No getter in 1.20 (2.x has one on the serializer snapshot); the field is in both.
+        try {
+            Field types = RowDataSerializer.class.getDeclaredField("types");
+            types.setAccessible(true);
+            return (LogicalType[]) types.get(serializer);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            throw new IllegalStateException(
+                    "Could not read the column types of the records at the gate from"
+                            + " RowDataSerializer. Use "
+                            + EXTRACTOR_CLASS
+                            + ".",
+                    e);
+        }
+    }
+
+    /**
+     * Whether the records at the gate are RowData: from a SQL / Table API job, or RowData a
+     * DataStream job left to Kryo. Empty when the serializer does not tell.
+     */
+    private static Optional<Boolean> isRowData(TypeSerializer<?> serializer) {
+        if (serializer instanceof AbstractRowDataSerializer) {
+            return Optional.of(true);
+        }
+        if (serializer instanceof KryoSerializer) {
+            // KryoSerializer has no getter for the class it serializes, in 1.20 or 2.x.
             try {
-                Object instance =
-                        Class.forName(extractorClass, true, cl)
-                                .getDeclaredConstructor()
-                                .newInstance();
-                // Full serialization dry-run — surfaces non-serializable fields anywhere
-                // in the object graph before JobGraph submission, not at TaskManager distribution
-                InstantiationUtil.serializeObject(instance);
-                return (WatermarkExtractor<Object>) instance;
-            } catch (IOException e) {
-                throw new IllegalArgumentException(
-                        extractorClass + " is not fully serializable: " + e.getMessage(), e);
-            } catch (ReflectiveOperationException e) {
-                throw new IllegalArgumentException(
-                        "Could not instantiate extractor class: " + extractorClass, e);
+                Field type = KryoSerializer.class.getDeclaredField("type");
+                type.setAccessible(true);
+                return Optional.of(RowData.class.isAssignableFrom((Class<?>) type.get(serializer)));
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return Optional.empty();
             }
         }
+        return Optional.of(false);
+    }
 
-        // No extractor configured — fall back to processing-time gating
-        return (WatermarkExtractor<Object>) record -> Long.MIN_VALUE;
+    @SuppressWarnings("unchecked")
+    private static WatermarkExtractor<Object> instantiateExtractor(
+            String extractorClass, ClassLoader cl) {
+        try {
+            Object instance =
+                    Class.forName(extractorClass, true, cl).getDeclaredConstructor().newInstance();
+            // Full serialization dry-run — surfaces non-serializable fields anywhere
+            // in the object graph before JobGraph submission, not at TaskManager distribution
+            InstantiationUtil.serializeObject(instance);
+            return (WatermarkExtractor<Object>) instance;
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    extractorClass + " is not fully serializable: " + e.getMessage(), e);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalArgumentException(
+                    "Could not instantiate extractor class: " + extractorClass, e);
+        }
     }
 }

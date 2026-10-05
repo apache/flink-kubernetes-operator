@@ -43,8 +43,10 @@ import org.slf4j.LoggerFactory;
 
 import javax.naming.OperationNotSupportedException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.ACTIVE_DEPLOYMENT_TYPE;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.IS_FIRST_DEPLOYMENT;
@@ -58,6 +60,16 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 public class BlueGreenTransitionUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(BlueGreenTransitionUtils.class);
+
+    private static final String GATE_INJECTION_ENABLED = "bluegreen.gate.injection.enabled";
+
+    /** The WATERMARK gate's extraction strategies. A job sets exactly one. */
+    @VisibleForTesting
+    static final List<String> WATERMARK_EXTRACTOR_KEYS =
+            List.of(
+                    "bluegreen.gate.watermark.extractor-class",
+                    "bluegreen.gate.watermark.field-index",
+                    "bluegreen.gate.watermark.field-path");
 
     /**
      * Test override for the {@code OPERATOR_IMAGE} env lookup used by {@link
@@ -259,8 +271,10 @@ public class BlueGreenTransitionUtils {
      *
      * <ul>
      *   <li>{@code bluegreen.gate.strategy} — must be set to a supported value (e.g. WATERMARK)
-     *   <li>{@code bluegreen.gate.watermark.field-path} or {@code
-     *       bluegreen.gate.watermark.extractor-class} — required when strategy is WATERMARK
+     *   <li>exactly one of {@link #WATERMARK_EXTRACTOR_KEYS} when strategy is WATERMARK and the
+     *       gate is injected. With {@code bluegreen.gate.injection.enabled=false} the extractor
+     *       passed to {@code WatermarkGateProcessFunction.create} is the extraction strategy, so
+     *       none of them may be set: they would be ignored.
      * </ul>
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
@@ -278,20 +292,40 @@ public class BlueGreenTransitionUtils {
         }
 
         String strategy = flinkConfig.get("bluegreen.gate.strategy").asText();
-        if ("WATERMARK".equals(strategy)) {
-            if (!flinkConfig.has("bluegreen.gate.watermark.field-path")
-                    && !flinkConfig.has("bluegreen.gate.watermark.extractor-class")) {
-                return Optional.of(
-                        "[BlueGreen] Gate strategy WATERMARK requires either "
-                                + "'bluegreen.gate.watermark.field-path' (dot-notation POJO field, no app code needed) "
-                                + "or 'bluegreen.gate.watermark.extractor-class' (custom class) "
-                                + "to be set in flinkConfiguration.");
-            }
-        } else {
+        if (!"WATERMARK".equals(strategy)) {
             return Optional.of(
                     "[BlueGreen] Unknown gate strategy: '"
                             + strategy
                             + "'. Supported values: WATERMARK");
+        }
+
+        List<String> extractors =
+                WATERMARK_EXTRACTOR_KEYS.stream()
+                        .filter(flinkConfig::has)
+                        .collect(Collectors.toList());
+        boolean injected =
+                !flinkConfig.has(GATE_INJECTION_ENABLED)
+                        || Boolean.parseBoolean(flinkConfig.get(GATE_INJECTION_ENABLED).asText());
+        if (injected && extractors.size() != 1) {
+            return Optional.of(
+                    "[BlueGreen] Gate strategy WATERMARK requires exactly one of "
+                            + "'bluegreen.gate.watermark.extractor-class' (custom class), "
+                            + "'bluegreen.gate.watermark.field-index' (column position, for SQL / "
+                            + "Table API jobs) or 'bluegreen.gate.watermark.field-path' "
+                            + "(dot-notation field, no app code needed) in flinkConfiguration, "
+                            + "found: "
+                            + (extractors.isEmpty() ? "none" : String.join(", ", extractors))
+                            + ".");
+        }
+        if (!injected && !extractors.isEmpty()) {
+            return Optional.of(
+                    "[BlueGreen] With '"
+                            + GATE_INJECTION_ENABLED
+                            + "' set to false, the extractor passed to "
+                            + "WatermarkGateProcessFunction.create(...) is the gate's extraction "
+                            + "strategy. Remove "
+                            + String.join(", ", extractors)
+                            + " from flinkConfiguration: it would be ignored.");
         }
 
         return Optional.empty();
@@ -328,8 +362,8 @@ public class BlueGreenTransitionUtils {
                             + " that would crash-loop.");
         }
 
-        if (!flinkConfig.has("bluegreen.gate.injection.enabled")) {
-            flinkConfig.put("bluegreen.gate.injection.enabled", "true");
+        if (!flinkConfig.has(GATE_INJECTION_ENABLED)) {
+            flinkConfig.put(GATE_INJECTION_ENABLED, "true");
         }
 
         final String agentFlag = "-javaagent:/opt/flink/lib/bluegreen-agent.jar";

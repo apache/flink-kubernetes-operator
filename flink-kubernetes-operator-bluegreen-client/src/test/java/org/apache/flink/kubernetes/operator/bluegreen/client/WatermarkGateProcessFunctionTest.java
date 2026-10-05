@@ -35,6 +35,7 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Unit tests for {@link WatermarkGateProcessFunction}. */
@@ -111,8 +112,7 @@ public class WatermarkGateProcessFunctionTest {
         assertEquals(
                 WatermarkGateStage.WATERMARK_SET, getWatermarkContext().getWatermarkGateStage());
 
-        // Processing time=0, watermark boundary=0 <= toggle=500; message ts=600 > 500
-        // → message passes the gate
+        // Message ts=600 >= toggle=500 → passes the gate
         TestMessage message = new TestMessage("test", 600L);
         testHarness.processElement(message, 550L);
 
@@ -162,11 +162,51 @@ public class WatermarkGateProcessFunctionTest {
         assertTrue(watermarkGateFunction.notifyWaitingForWatermarkCalled);
     }
 
+    @Test
+    void testProcessElementActiveOpensOnceItsWatermarkPassesToggle() throws Exception {
+        setupActiveContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        TestMessage late = new TestMessage("late", TEST_WATERMARK_VALUE - 500);
+
+        // A watermark at the toggle is not past it: the standby may still emit this record
+        testHarness.processWatermark(TEST_WATERMARK_VALUE);
+        testHarness.processElement(late, late.getTimestamp());
+        assertEquals(0, testHarness.extractOutputValues().size());
+
+        // Past the toggle the standby has stopped, so every record is the active's to emit
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        testHarness.processElement(late, late.getTimestamp());
+        assertEquals(List.of(late), testHarness.extractOutputValues());
+    }
+
+    @Test
+    void testProcessElementActiveIsNotOpenedByProcessingTime() throws Exception {
+        setupActiveContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        // No watermark yet and the wall clock is far past the toggle: only record time counts
+        testHarness.setProcessingTime(TEST_WATERMARK_VALUE * 10);
+        TestMessage late = new TestMessage("late", TEST_WATERMARK_VALUE - 500);
+
+        testHarness.processElement(late, late.getTimestamp());
+
+        assertEquals(0, testHarness.extractOutputValues().size());
+    }
+
+    @Test
+    void testProcessElementActivePassesEveryRecordWithoutStandby() throws Exception {
+        // First deployment, or the deployment kept after an abort: nothing to share the stream with
+        watermarkGateFunction.onContextUpdate(
+                createBaseContext(TransitionStage.RUNNING, true), new HashMap<>());
+        TestMessage noTimestamp = new TestMessage("no-timestamp", Long.MIN_VALUE);
+
+        testHarness.processElement(noTimestamp, 0L);
+
+        assertEquals(List.of(noTimestamp), testHarness.extractOutputValues());
+    }
+
     // ==================== Standby Processing Tests ====================
 
     @Test
     void testProcessElementStandbyWithinWatermarkBoundary() throws Exception {
-        // Standby deployment: message ts < toggle value and processing time <= toggle value
+        // Standby deployment: message ts < toggle value and no watermark past the toggle yet
         // → still within valid range, element passes through
         setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
         TestMessage message = new TestMessage("test", TEST_WATERMARK_VALUE - 100);
@@ -205,6 +245,29 @@ public class WatermarkGateProcessFunctionTest {
         assertTrue(watermarkGateFunction.updateWatermarkInConfigMapCalled);
     }
 
+    @Test
+    void testProcessElementStandbyIsNotStoppedByProcessingTime() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        // No watermark yet and the wall clock is far past the toggle: only record time stops it
+        testHarness.setProcessingTime(TEST_WATERMARK_VALUE * 10);
+        TestMessage old = new TestMessage("old", TEST_WATERMARK_VALUE - 100);
+
+        testHarness.processElement(old, old.getTimestamp());
+
+        assertEquals(List.of(old), testHarness.extractOutputValues());
+    }
+
+    @Test
+    void testStandbyProposesToggleOnlyFromAWatermark() {
+        assertNull(
+                WatermarkGateProcessFunction.nextWatermarkToggleValue(
+                        Long.MIN_VALUE, TEST_TEARDOWN_DELAY));
+        assertEquals(
+                TEST_WATERMARK_VALUE + TEST_TEARDOWN_DELAY,
+                WatermarkGateProcessFunction.nextWatermarkToggleValue(
+                        TEST_WATERMARK_VALUE, TEST_TEARDOWN_DELAY));
+    }
+
     // ==================== Watermark Control Tests ====================
 
     @Test
@@ -217,14 +280,83 @@ public class WatermarkGateProcessFunctionTest {
         testHarness.processElement(earlyMessage, TEST_WATERMARK_VALUE - 300);
         assertEquals(0, testHarness.extractOutputValues().size());
 
-        // Advance watermark; does not affect the toggle-value gate directly, but verifies
-        // the harness progresses without errors
+        // Advance the watermark to just below the toggle value: the gate stays closed
         testHarness.processWatermark(TEST_WATERMARK_VALUE - 50);
 
         // Late message ts > toggle value → passes
         testHarness.processElement(lateMessage, TEST_WATERMARK_VALUE + 50);
         assertEquals(1, testHarness.extractOutputValues().size());
         assertEquals(lateMessage, testHarness.extractOutputValues().get(0));
+    }
+
+    // ==================== Hand-over Tests ====================
+
+    @Test
+    void testHandOverEmitsEveryRecordExactlyOnce() throws Exception {
+        // Both deployments read the same records, so each record reaches both gates. In this
+        // test's ConfigMap BLUE is the active (incoming) deployment and GREEN the standby.
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> outgoing =
+                handOverGate(BlueGreenDeploymentType.GREEN);
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> incoming =
+                handOverGate(BlueGreenDeploymentType.BLUE);
+        TestMessage old = new TestMessage("old", TEST_WATERMARK_VALUE - 50);
+        TestMessage fresh = new TestMessage("new", TEST_WATERMARK_VALUE + 50);
+        TestMessage late = new TestMessage("late", TEST_WATERMARK_VALUE - 500);
+        TestMessage newer = new TestMessage("newer", TEST_WATERMARK_VALUE + 100);
+
+        // Before the watermarks pass the toggle, the record timestamp decides
+        feed(TEST_WATERMARK_VALUE - 100, List.of(old, fresh), outgoing, incoming);
+        // After they pass it, the standby stops and the active emits everything, late or not
+        feed(TEST_WATERMARK_VALUE + 1, List.of(late, newer), outgoing, incoming);
+
+        assertEquals(List.of(old), outgoing.extractOutputValues());
+        assertEquals(List.of(fresh, late, newer), incoming.extractOutputValues());
+        outgoing.close();
+        incoming.close();
+    }
+
+    @Test
+    void testHandOverJudgesRecordsByTheExtractorOnly() throws Exception {
+        // Each record's Flink timestamp falls on the other side of the toggle than the timestamp
+        // the extractor returns. The extractor is the record's time, so both gates follow it.
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> outgoing =
+                handOverGate(BlueGreenDeploymentType.GREEN);
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> incoming =
+                handOverGate(BlueGreenDeploymentType.BLUE);
+        TestMessage old = new TestMessage("old", TEST_WATERMARK_VALUE - 50);
+        TestMessage fresh = new TestMessage("new", TEST_WATERMARK_VALUE + 50);
+
+        for (OneInputStreamOperatorTestHarness<TestMessage, TestMessage> gate :
+                List.of(outgoing, incoming)) {
+            gate.processWatermark(TEST_WATERMARK_VALUE - 100);
+            gate.processElement(old, TEST_WATERMARK_VALUE + 50);
+            gate.processElement(fresh, TEST_WATERMARK_VALUE - 50);
+        }
+
+        assertEquals(List.of(old), outgoing.extractOutputValues());
+        assertEquals(List.of(fresh), incoming.extractOutputValues());
+        outgoing.close();
+        incoming.close();
+    }
+
+    @Test
+    void testHandOverEmitsRecordsWithoutTimestampOnce() throws Exception {
+        // The extractor finds no timestamp on these records: they count as older than the toggle
+        Function<TestMessage, Long> noTimestamp = message -> null;
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> outgoing =
+                handOverGate(BlueGreenDeploymentType.GREEN, noTimestamp);
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> incoming =
+                handOverGate(BlueGreenDeploymentType.BLUE, noTimestamp);
+        TestMessage before = new TestMessage("before", 0L);
+        TestMessage after = new TestMessage("after", 0L);
+
+        feed(TEST_WATERMARK_VALUE - 100, List.of(before), outgoing, incoming);
+        feed(TEST_WATERMARK_VALUE + 1, List.of(after), outgoing, incoming);
+
+        assertEquals(List.of(before), outgoing.extractOutputValues());
+        assertEquals(List.of(after), incoming.extractOutputValues());
+        outgoing.close();
+        incoming.close();
     }
 
     // ==================== Factory Method Tests ====================
@@ -274,6 +406,40 @@ public class WatermarkGateProcessFunctionTest {
         GateContext baseContext = createBaseContext(TransitionStage.RUNNING, false);
         Map<String, String> data = createWatermarkData(watermarkToggleValue, stage);
         watermarkGateFunction.onContextUpdate(baseContext, data);
+    }
+
+    private OneInputStreamOperatorTestHarness<TestMessage, TestMessage> handOverGate(
+            BlueGreenDeploymentType deploymentType) throws Exception {
+        return handOverGate(deploymentType, watermarkExtractor);
+    }
+
+    private OneInputStreamOperatorTestHarness<TestMessage, TestMessage> handOverGate(
+            BlueGreenDeploymentType deploymentType, Function<TestMessage, Long> extractor)
+            throws Exception {
+        TestWatermarkGateProcessFunction function =
+                new TestWatermarkGateProcessFunction(
+                        deploymentType, TEST_NAMESPACE, TEST_CONFIGMAP_NAME, extractor);
+        OneInputStreamOperatorTestHarness<TestMessage, TestMessage> harness =
+                ProcessFunctionTestHarnesses.forProcessFunction(function);
+        harness.open();
+        function.onContextUpdate(
+                createBaseContext(TransitionStage.TRANSITIONING, false),
+                createWatermarkData(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET));
+        return harness;
+    }
+
+    @SafeVarargs
+    private static void feed(
+            long watermark,
+            List<TestMessage> records,
+            OneInputStreamOperatorTestHarness<TestMessage, TestMessage>... gates)
+            throws Exception {
+        for (OneInputStreamOperatorTestHarness<TestMessage, TestMessage> gate : gates) {
+            gate.processWatermark(watermark);
+            for (TestMessage record : records) {
+                gate.processElement(record, record.getTimestamp());
+            }
+        }
     }
 
     private GateContext createBaseContext(TransitionStage gateStage, boolean isFirstDeployment) {
