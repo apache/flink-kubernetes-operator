@@ -17,23 +17,33 @@
 
 package org.apache.flink.kubernetes.operator.api.bluegreen;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
+import java.net.HttpURLConnection;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
+import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.ACTIVE_DEPLOYMENT_TYPE;
 
 /** Simple Kubernetes service proxy for Gate operations. */
 public class GateKubernetesService implements Serializable {
 
     private static final Logger logger = LoggerFactory.getLogger(GateKubernetesService.class);
+
+    // A round of concurrent writers ends with one success; the others find it on their next read.
+    private static final int COMPARE_AND_SET_ATTEMPTS = 10;
 
     @Getter private final KubernetesClient kubernetesClient;
 
@@ -41,18 +51,27 @@ public class GateKubernetesService implements Serializable {
     private final String configMapName;
 
     public GateKubernetesService(String namespace, String configMapName) {
+        this(buildClient(), namespace, configMapName);
+    }
+
+    @VisibleForTesting
+    public GateKubernetesService(
+            KubernetesClient kubernetesClient, String namespace, String configMapName) {
         Preconditions.checkNotNull(namespace);
         Preconditions.checkNotNull(configMapName);
 
+        this.kubernetesClient = kubernetesClient;
+        this.namespace = namespace;
+        this.configMapName = configMapName;
+    }
+
+    private static KubernetesClient buildClient() {
         try {
-            kubernetesClient = new KubernetesClientBuilder().build();
+            return new KubernetesClientBuilder().build();
         } catch (Exception e) {
             logger.error("Error instantiating Kubernetes Client", e);
             throw e;
         }
-
-        this.namespace = namespace;
-        this.configMapName = configMapName;
     }
 
     public void setInformers(ResourceEventHandler<ConfigMap> resourceEventHandler) {
@@ -63,17 +82,53 @@ public class GateKubernetesService implements Serializable {
                 .inform(resourceEventHandler, 0);
     }
 
-    public void updateConfigMapEntries(Map<String, String> kvps) {
-        var configMap = parseConfigMap();
-
-        kvps.forEach((key, value) -> configMap.getData().put(key, value));
-
-        try {
-            kubernetesClient.configMaps().inNamespace(namespace).resource(configMap).update();
-        } catch (Exception e) {
-            logger.error("Failed to UPDATE the ConfigMap", e);
-            throw e;
+    /**
+     * Writes the entries only while the ConfigMap still belongs to the caller's transition (its
+     * active deployment type is {@code activeDeploymentType}) and {@code key} still holds {@code
+     * expected} ({@code null}: absent). Returns the value {@code key} holds afterwards, or empty if
+     * the ConfigMap belongs to another transition or {@code key} is absent.
+     *
+     * <p>Each attempt updates with the resourceVersion it read, so Kubernetes rejects it (409) if
+     * anyone wrote in between, and the next attempt reads again. Concurrent callers therefore agree
+     * on the first value written: the others find it on their next read and leave it in place.
+     */
+    public Optional<String> compareAndSet(
+            BlueGreenDeploymentType activeDeploymentType,
+            String key,
+            String expected,
+            Map<String, String> entries) {
+        for (int attempt = 1; attempt <= COMPARE_AND_SET_ATTEMPTS; attempt++) {
+            var configMap = parseConfigMap();
+            if (configMap == null
+                    || !activeDeploymentType
+                            .toString()
+                            .equals(configMap.getData().get(ACTIVE_DEPLOYMENT_TYPE.getLabel()))) {
+                return Optional.empty();
+            }
+            var current = configMap.getData().get(key);
+            if (!Objects.equals(current, expected)) {
+                return Optional.ofNullable(current);
+            }
+            configMap.getData().putAll(entries);
+            try {
+                kubernetesClient.configMaps().inNamespace(namespace).resource(configMap).update();
+                return Optional.ofNullable(entries.get(key));
+            } catch (KubernetesClientException e) {
+                if (e.getCode() != HttpURLConnection.HTTP_CONFLICT) {
+                    logger.error("Failed to UPDATE the ConfigMap", e);
+                    throw e;
+                }
+                logger.info("ConfigMap changed while writing {}, reading it again", key);
+            }
         }
+        throw new IllegalStateException(
+                "ConfigMap "
+                        + configMapName
+                        + " kept changing while writing "
+                        + key
+                        + " ("
+                        + COMPARE_AND_SET_ATTEMPTS
+                        + " attempts)");
     }
 
     public ConfigMap parseConfigMap() {

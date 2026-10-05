@@ -130,10 +130,20 @@ public class BlueGreenKubernetesService {
     public static void updateConfigMapEntry(BlueGreenContext context, String key, String value) {
         FlinkBlueGreenDeployment bgDeployment = context.getBgDeployment();
         var josdkContext = context.getJosdkContext();
-        ConfigMap configMap = getConfigMap(context);
-        String namespace = bgDeployment.getMetadata().getNamespace();
-        configMap.getData().put(key, value);
-        josdkContext.getClient().configMaps().inNamespace(namespace).resource(configMap).update();
+        // Keeps this reconciliation's view current; the write itself goes to the live ConfigMap
+        getConfigMap(context).getData().put(key, value);
+        // A patch, not an update of the cached copy: the gates write to the ConfigMap too, and an
+        // update with the cached resourceVersion would fail with 409 whenever one of them had.
+        josdkContext
+                .getClient()
+                .configMaps()
+                .inNamespace(bgDeployment.getMetadata().getNamespace())
+                .withName(context.getConfigMapName())
+                .edit(
+                        configMap -> {
+                            configMap.getData().put(key, value);
+                            return configMap;
+                        });
     }
 
     public static ConfigMap getConfigMap(BlueGreenContext context) {

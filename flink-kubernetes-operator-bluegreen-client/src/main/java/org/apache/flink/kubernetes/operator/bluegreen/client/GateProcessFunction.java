@@ -27,7 +27,6 @@ import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,10 +35,13 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.TRANSITION_STAGE;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage.CLEAR_TO_TEARDOWN;
+import static org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage.TRANSITIONING;
 
 /** Base class for ProcessFunction (streaming) based Gate implementations. */
 abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements Serializable {
@@ -51,6 +53,13 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
     // ConfigMap. This window gives other subtasks a chance to observe the write via the informer,
     // reducing duplicate K8s API calls.
     private static final long WRITE_DEDUP_DELAY_MS = 500L;
+    // Each subtask adds a random share of this to its wait, so that the subtasks noticing a write
+    // condition together do not all read the ConfigMap at once: the first write usually reaches
+    // the others through the informer before they look.
+    private static final long WRITE_JITTER_MS = 2000L;
+
+    // Chosen per subtask in open(); the function object itself is shared by all subtasks.
+    private long writeDelayMs = WRITE_DEDUP_DELAY_MS;
 
     // Processing time (ms) when a pending write was first requested; -1 means no write pending.
     private long pendingWriteSince = -1L;
@@ -88,6 +97,7 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
     public void open(OpenContext openContext) throws Exception {
         super.open(openContext);
 
+        writeDelayMs = WRITE_DEDUP_DELAY_MS + ThreadLocalRandom.current().nextLong(WRITE_JITTER_MS);
         setKubernetesEnvironment();
         processConfigMap(gateKubernetesService.parseConfigMap());
     }
@@ -142,7 +152,7 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
             return;
         }
         long now = ctx.timerService().currentProcessingTime();
-        if (now - pendingWriteSince < WRITE_DEDUP_DELAY_MS) {
+        if (now - pendingWriteSince < writeDelayMs) {
             return;
         }
         pendingWriteSince = -1L;
@@ -150,10 +160,14 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         if (!handled && pendingClearToTeardown) {
             pendingClearToTeardown = false;
             if (baseContext.getGateStage() != CLEAR_TO_TEARDOWN) {
-                logInfo("Writing " + CLEAR_TO_TEARDOWN + " to ConfigMap");
-                gateKubernetesService.updateConfigMapEntries(
-                        Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
-                logInfo(CLEAR_TO_TEARDOWN + " set!");
+                // Only from TRANSITIONING: a late write must not undo an abort or a new transition
+                var stage =
+                        gateKubernetesService.compareAndSet(
+                                baseContext.getActiveBlueGreenDeploymentType(),
+                                TRANSITION_STAGE.getLabel(),
+                                TRANSITIONING.toString(),
+                                Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
+                logInfo("Transition stage is " + stage.orElse("unset"));
             } else {
                 logInfo(CLEAR_TO_TEARDOWN + " already set, skipping");
             }
@@ -231,8 +245,14 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
         return false;
     }
 
-    protected final void updateConfigMapCustomEntries(Map<String, String> customEntries)
-            throws Exception {
+    /**
+     * Writes custom (strategy) entries only while {@code key} still holds {@code expected} ({@code
+     * null}: absent) in this transition's ConfigMap, and returns the value {@code key} holds
+     * afterwards. See {@link GateKubernetesService#compareAndSet}.
+     */
+    protected final Optional<String> compareAndSetCustomEntries(
+            String key, String expected, Map<String, String> customEntries)
+            throws IllegalAccessException {
         // Validating only "custom" entries/keys can be updated
         var keysToUpdate = customEntries.keySet();
         var baseContextKeys =
@@ -247,23 +267,9 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
             logger.error(error);
             throw new IllegalAccessException(error);
         }
-        logInfo("Updating custom entries: " + customEntries);
-        int maxRetries = 3;
-        for (int attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                gateKubernetesService.updateConfigMapEntries(customEntries);
-                return;
-            } catch (KubernetesClientException e) {
-                if (e.getCode() == 409 && attempt < maxRetries) {
-                    logInfo(
-                            "ConfigMap update conflict on attempt "
-                                    + (attempt + 1)
-                                    + ", retrying...");
-                } else {
-                    throw e;
-                }
-            }
-        }
+        logInfo("Writing custom entries " + customEntries + " if " + key + " is " + expected);
+        return gateKubernetesService.compareAndSet(
+                baseContext.getActiveBlueGreenDeploymentType(), key, expected, customEntries);
     }
 
     // Temporary "utility" function for development
