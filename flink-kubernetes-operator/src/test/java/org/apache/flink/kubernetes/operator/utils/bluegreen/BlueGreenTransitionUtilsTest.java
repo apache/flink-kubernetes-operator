@@ -40,6 +40,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -158,6 +160,26 @@ public class BlueGreenTransitionUtilsTest {
         assertTrue(result.isPresent());
         assertTrue(
                 result.get().contains("Remove bluegreen.gate.watermark.field-path"), result.get());
+    }
+
+    @Test
+    public void testValidate_gateTimeoutNotLongerThanDeletionDelay_returnsError() {
+        BlueGreenContext context =
+                buildContext(
+                        TransitionMode.ADVANCED,
+                        Map.of(
+                                "bluegreen.gate.strategy", "WATERMARK",
+                                "bluegreen.gate.watermark.field-path", "eventTime"));
+        var configuration = context.getBgDeployment().getSpec().getConfiguration();
+        configuration.put(BLUEGREEN_GATE_TIMEOUT.key(), "60000");
+        configuration.put(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(), "60000");
+
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertTrue(result.isPresent());
+        assertTrue(result.get().contains("must be longer than"), result.get());
+
+        configuration.put(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(), "59999");
+        assertFalse(BlueGreenTransitionUtils.validateAdvancedModeConfig(context).isPresent());
     }
 
     @Test

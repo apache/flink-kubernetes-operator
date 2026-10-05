@@ -58,6 +58,7 @@ import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
@@ -69,6 +70,8 @@ import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobExceptionsHeaders;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
+import org.apache.flink.runtime.rest.messages.JobIDPathParameter;
+import org.apache.flink.runtime.rest.messages.JobVertexIdPathParameter;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
@@ -81,8 +84,14 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeade
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.MetricsAggregationParameter;
+import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
@@ -141,6 +150,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1136,6 +1146,84 @@ public abstract class AbstractFlinkService implements FlinkService {
                     .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
                     .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
         }
+    }
+
+    @Override
+    public Map<String, Double> getMinSubtaskMetrics(
+            Configuration conf, String jobId, String metricName) throws Exception {
+        var jobID = JobID.fromHexString(jobId);
+        long timeout = operatorConfig.getFlinkClientTimeout().toSeconds();
+        try (var clusterClient = getClusterClient(conf)) {
+            var jobParameters = JobDetailsHeaders.getInstance().getUnresolvedMessageParameters();
+            jobParameters.jobPathParameter.resolve(jobID);
+            var vertices =
+                    clusterClient
+                            .sendRequest(
+                                    JobDetailsHeaders.getInstance(),
+                                    jobParameters,
+                                    EmptyRequestBody.getInstance())
+                            .get(timeout, TimeUnit.SECONDS)
+                            .getJobVertexInfos();
+
+            var minimums = new HashMap<String, Double>();
+            for (var vertex : vertices) {
+                // Operator metric ids are "<operator name>.<metric name>"
+                var metricIds =
+                        querySubtaskMetrics(
+                                        clusterClient,
+                                        jobID,
+                                        vertex.getJobVertexID(),
+                                        null,
+                                        timeout)
+                                .stream()
+                                .map(AggregatedMetric::getId)
+                                .filter(id -> id.endsWith("." + metricName))
+                                .collect(Collectors.toList());
+                if (metricIds.isEmpty()) {
+                    continue;
+                }
+                for (var metric :
+                        querySubtaskMetrics(
+                                clusterClient,
+                                jobID,
+                                vertex.getJobVertexID(),
+                                metricIds,
+                                timeout)) {
+                    if (metric.getMin() != null) {
+                        minimums.put(
+                                vertex.getJobVertexID() + "." + metric.getId(), metric.getMin());
+                    }
+                }
+            }
+            return minimums;
+        }
+    }
+
+    /** Lists the vertex's subtask metrics, or their minimums when {@code metricIds} is given. */
+    private static Collection<AggregatedMetric> querySubtaskMetrics(
+            RestClusterClient<String> clusterClient,
+            JobID jobId,
+            JobVertexID vertexId,
+            @Nullable List<String> metricIds,
+            long timeoutSeconds)
+            throws Exception {
+        var parameters = new AggregatedSubtaskMetricsParameters();
+        var pathParameters = parameters.getPathParameters().iterator();
+        ((JobIDPathParameter) pathParameters.next()).resolve(jobId);
+        ((JobVertexIdPathParameter) pathParameters.next()).resolve(vertexId);
+        if (metricIds != null) {
+            var queryParameters = parameters.getQueryParameters().iterator();
+            ((MetricsFilterParameter) queryParameters.next()).resolve(metricIds);
+            ((MetricsAggregationParameter) queryParameters.next())
+                    .resolve(List.of(MetricsAggregationParameter.AggregationMode.MIN));
+        }
+        return clusterClient
+                .sendRequest(
+                        AggregatedSubtaskMetricsHeaders.getInstance(),
+                        parameters,
+                        EmptyRequestBody.getInstance())
+                .get(timeoutSeconds, TimeUnit.SECONDS)
+                .getMetrics();
     }
 
     private TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {

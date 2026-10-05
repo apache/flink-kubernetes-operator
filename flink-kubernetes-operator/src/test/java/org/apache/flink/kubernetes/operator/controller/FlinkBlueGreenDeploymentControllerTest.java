@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -117,6 +118,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private static final String GREEN_CLUSTER_ID = TEST_DEPLOYMENT_NAME + "-green";
     private static final String REST_SVC_NAME_SUFFIX = "-rest";
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private static final String GATE_DONE_METRIC_ID =
+            "vertex.BlueGreen-Gate[Sink].bluegreenGateHandOverDone";
+
     private TestingFlinkService flinkService;
     private Context<FlinkBlueGreenDeployment> context;
     private TestingFlinkBlueGreenDeploymentController testController;
@@ -1779,6 +1783,12 @@ public class FlinkBlueGreenDeploymentControllerTest {
         kubernetesClient.resource(deployment).update();
     }
 
+    /** The session clusters these tests deploy have no job; the gate metrics are read per job. */
+    private void simulateJobId(FlinkDeployment deployment) {
+        deployment.getStatus().getJobStatus().setJobId(new JobID().toHexString());
+        kubernetesClient.resource(deployment).update();
+    }
+
     private void simulateSuccessfulSuspend(FlinkDeployment deployment) {
         deployment.getStatus().getJobStatus().setState(JobStatus.FINISHED);
         deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
@@ -2237,19 +2247,33 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 TRANSITION_STAGE.getLabel(),
                 TransitionStage.CLEAR_TO_TEARDOWN.toString());
 
-        // Now reconciliation should proceed with the transition
+        // The first subtask past the toggle set CLEAR_TO_TEARDOWN, another one has not finished
+        simulateJobId(getFlinkDeploymentByName(BLUE_CLUSTER_ID));
+        flinkService.setMinSubtaskMetrics(Map.of(GATE_DONE_METRIC_ID, 0.0));
         rs = reconcile(rs.deployment);
         assertEquals(
                 TransitionStage.CLEAR_TO_TEARDOWN,
                 BlueGreenTestUtils.getCurrentConfigMapStage(context, TEST_DEPLOYMENT_NAME));
+        assertTrue(rs.updateControl.isNoUpdate());
+        assertEquals(2, getFlinkDeployments().size());
 
-        // Verify transition can continue - should schedule for deletion delay
+        // Once every gate subtask is done the transition continues with the deletion delay
+        flinkService.setMinSubtaskMetrics(Map.of(GATE_DONE_METRIC_ID, 1.0));
+        rs = reconcile(rs.deployment);
         assertTrue(rs.updateControl.isPatchStatus());
         assertTrue(rs.updateControl.getScheduleDelay().isPresent());
         assertEquals(ALT_DELETION_DELAY_VALUE, rs.updateControl.getScheduleDelay().get());
 
-        // Complete the transition after deletion delay
+        // After the deletion delay Blue is first stopped with a savepoint, so its sinks commit
         Thread.sleep(ALT_DELETION_DELAY_VALUE);
+        rs = reconcile(rs.deployment);
+        var blue = getFlinkDeploymentByName(BLUE_CLUSTER_ID);
+        assertEquals(JobState.SUSPENDED, blue.getSpec().getJob().getState());
+        assertEquals(UpgradeMode.SAVEPOINT, blue.getSpec().getJob().getUpgradeMode());
+        assertEquals(2, getFlinkDeployments().size());
+
+        // and deleted once stopped
+        simulateSuccessfulSuspend(blue);
         rs = reconcile(rs.deployment);
 
         // Verify successful transition completion
@@ -2320,6 +2344,46 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(
                 JobStatus.RUNNING, flinkDeployments.get(0).getStatus().getJobStatus().getState());
         assertEquals(JobState.SUSPENDED, flinkDeployments.get(1).getSpec().getJob().getState());
+        assertGateResetOnAbort(BlueGreenDeploymentType.BLUE);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeAbortsWhenAGateSubtaskNeverFinishes(FlinkVersion flinkVersion)
+            throws Exception {
+        var deployment =
+                buildAdvancedSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        deployment.getSpec().getConfiguration().put(BLUEGREEN_GATE_TIMEOUT.key(), "2000");
+        var rs = executeAdvancedDeployment(deployment);
+
+        simulateChangeInSpec(rs.deployment, "green-config", 0, null);
+        rs = reconcile(rs.deployment);
+        simulateSuccessfulJobStart(getFlinkDeployments().get(1));
+        rs = reconcile(rs.deployment);
+        var gateDeadline = instantStrToMillis(rs.reconciledStatus.getAbortTimestamp());
+
+        // CLEAR_TO_TEARDOWN is set, but one gate subtask never reports that it is done
+        simulateJobId(getFlinkDeploymentByName(BLUE_CLUSTER_ID));
+        simulateExternalConfigMapUpdate(
+                TEST_DEPLOYMENT_NAME,
+                TRANSITION_STAGE.getLabel(),
+                TransitionStage.CLEAR_TO_TEARDOWN.toString());
+        flinkService.setMinSubtaskMetrics(Map.of(GATE_DONE_METRIC_ID, 0.0));
+        rs = reconcile(rs.deployment);
+        assertTrue(rs.updateControl.isNoUpdate());
+
+        Thread.sleep(Math.max(0, gateDeadline - System.currentTimeMillis()) + 1);
+        rs = reconcile(rs.deployment);
+
+        assertFailingWithError(
+                rs, "not every gate subtask of '" + BLUE_CLUSTER_ID + "' finished the hand-over");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
         assertGateResetOnAbort(BlueGreenDeploymentType.BLUE);
     }
 

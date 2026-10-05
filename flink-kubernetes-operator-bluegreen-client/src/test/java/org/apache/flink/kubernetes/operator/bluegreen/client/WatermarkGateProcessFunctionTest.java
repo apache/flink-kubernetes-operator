@@ -38,6 +38,7 @@ import java.util.function.Function;
 
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.TRANSITION_STAGE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -321,6 +322,45 @@ public class WatermarkGateProcessFunctionTest {
                                         TRANSITION_STAGE.getLabel(),
                                         TransitionStage.CLEAR_TO_TEARDOWN.toString()))),
                 configMap.calls);
+    }
+
+    @Test
+    void testStandbyIsDoneOnceItsWatermarkPassesTheToggle() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        long now = System.currentTimeMillis();
+        testHarness.processElement(new TestMessage("old", TEST_WATERMARK_VALUE - 100), 0L);
+        assertFalse(watermarkGateFunction.isHandOverDone(now));
+
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        testHarness.processElement(new TestMessage("new", TEST_WATERMARK_VALUE + 100), 0L);
+        assertTrue(watermarkGateFunction.isHandOverDone(now));
+    }
+
+    @Test
+    void testStandbyWithoutRecordsIsDoneAfterTheIdleTime() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        long now = System.currentTimeMillis();
+
+        // It never sees its watermark pass the toggle, but it has nothing left to emit either
+        assertFalse(watermarkGateFunction.isHandOverDone(now));
+        assertTrue(
+                watermarkGateFunction.isHandOverDone(
+                        now + WatermarkGateProcessFunction.IDLE_DONE_MS + 1_000));
+    }
+
+    @Test
+    void testANewTransitionResetsTheHandOverProgress() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        testHarness.processElement(new TestMessage("new", TEST_WATERMARK_VALUE + 100), 0L);
+        assertTrue(watermarkGateFunction.isHandOverDone(System.currentTimeMillis()));
+
+        // The operator rewrites the ConfigMap without a toggle when the next transition starts
+        watermarkGateFunction.onContextUpdate(
+                createBaseContext(TransitionStage.INITIALIZING, false), new HashMap<>());
+        assertFalse(
+                watermarkGateFunction.isHandOverDone(
+                        System.currentTimeMillis() + WatermarkGateProcessFunction.IDLE_DONE_MS));
     }
 
     // ==================== Watermark Control Tests ====================

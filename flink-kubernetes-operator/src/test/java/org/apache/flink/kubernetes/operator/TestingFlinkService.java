@@ -131,6 +131,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     private final List<Tuple3<String, JobStatusMessage, Configuration>> jobs = new ArrayList<>();
     private final Map<JobID, String> jobErrors = new HashMap<>();
     @Getter private final Set<String> sessions = new HashSet<>();
+
+    /** What {@link #getMinSubtaskMetrics} reports, for every job and metric. */
+    @Setter private Map<String, Double> minSubtaskMetrics = Map.of();
+
     @Setter private boolean isFlinkJobNotFound = false;
     @Setter private boolean isFlinkJobTerminatedWithoutCancellation = false;
     @Setter private boolean isPortReady = true;
@@ -747,6 +751,12 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public void setMetricValue(String name, String value) {
         metricsValues.put(name, value);
+    }
+
+    @Override
+    public Map<String, Double> getMinSubtaskMetrics(
+            Configuration conf, String jobId, String metricName) {
+        return minSubtaskMetrics;
     }
 
     @Override

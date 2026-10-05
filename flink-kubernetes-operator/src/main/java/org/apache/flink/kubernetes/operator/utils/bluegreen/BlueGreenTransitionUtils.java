@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
+import org.apache.flink.kubernetes.operator.api.bluegreen.GateMetrics;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
@@ -51,10 +52,13 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.ACTIVE_DEPLOYMENT_TYPE;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.IS_FIRST_DEPLOYMENT;
 import static org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions.TRANSITION_STAGE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.getConfigMap;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateConfigMapEntry;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.upsertConfigMap;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getGateTimeout;
 
 /** Utility class for Blue/Green transition stage operations. */
 public class BlueGreenTransitionUtils {
@@ -262,6 +266,47 @@ public class BlueGreenTransitionUtils {
     }
 
     /**
+     * Whether every gate subtask of the standby reports that it has nothing left to emit ({@link
+     * GateMetrics#HAND_OVER_DONE}). The first standby subtask past the toggle sets
+     * CLEAR_TO_TEARDOWN, but the others may still owe records. Always true outside ADVANCED mode.
+     */
+    public static boolean isHandOverDone(BlueGreenContext context, FlinkDeployment standby) {
+        if (TransitionMode.ADVANCED != getTransitionMode(context)) {
+            return true;
+        }
+        var name = standby.getMetadata().getName();
+        var jobId = standby.getStatus().getJobStatus().getJobId();
+        if (jobId == null) {
+            LOG.info("Waiting for the job of '{}' to report its gates", name);
+            return false;
+        }
+        try {
+            var ctx =
+                    context.getCtxFactory().getResourceContext(standby, context.getJosdkContext());
+            var done =
+                    ctx.getFlinkService()
+                            .getMinSubtaskMetrics(
+                                    ctx.getObserveConfig(), jobId, GateMetrics.HAND_OVER_DONE);
+            var pending =
+                    done.entrySet().stream()
+                            .filter(gate -> gate.getValue() < 1)
+                            .map(Map.Entry::getKey)
+                            .collect(Collectors.toList());
+            if (done.isEmpty() || !pending.isEmpty()) {
+                LOG.info(
+                        "Waiting for the gates of '{}' to finish the hand-over: {}",
+                        name,
+                        done.isEmpty() ? "none reported yet" : "pending " + pending);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Could not read the gate metrics of '{}', retrying", name, e);
+            return false;
+        }
+    }
+
+    /**
      * Validates that all required gate configuration properties are present when using ADVANCED
      * mode. Returns an error message if any required property is missing, or {@link
      * Optional#empty()} if the configuration is valid.
@@ -325,6 +370,22 @@ public class BlueGreenTransitionUtils {
                             + "strategy. Remove "
                             + String.join(", ", extractors)
                             + " from flinkConfiguration: it would be ignored.");
+        }
+
+        long gateTimeout = getGateTimeout(context);
+        long deletionDelay = getDeploymentDeletionDelay(context);
+        if (gateTimeout <= deletionDelay) {
+            return Optional.of(
+                    "[BlueGreen] "
+                            + BLUEGREEN_GATE_TIMEOUT.key()
+                            + " ("
+                            + gateTimeout
+                            + " ms) must be longer than "
+                            + BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key()
+                            + " ("
+                            + deletionDelay
+                            + " ms): the cutover point is the watermark plus that delay, so the"
+                            + " gate cannot clear sooner.");
         }
 
         return Optional.empty();

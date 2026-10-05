@@ -18,9 +18,12 @@
 package org.apache.flink.kubernetes.operator.bluegreen.client;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
+import org.apache.flink.kubernetes.operator.api.bluegreen.GateMetrics;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
+import org.apache.flink.metrics.Gauge;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
@@ -34,9 +37,18 @@ import java.util.function.Function;
 public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         implements Serializable {
 
+    // A standby subtask without a record for this long since it learned the toggle owes nothing to
+    // the hand-over: there is nothing it could still emit before its watermark passes the toggle.
+    @VisibleForTesting static final long IDLE_DONE_MS = 30_000L;
+
     private final Function<I, Long> watermarkExtractor;
 
     private WatermarkGateContext currentWatermarkGateContext;
+
+    // Hand-over progress, read by the HAND_OVER_DONE gauge from the metric reporter's thread
+    private transient volatile boolean pastToggle;
+    private transient volatile long toggleKnownSince = -1L;
+    private transient volatile long lastRecordAt = -1L;
 
     WatermarkGateProcessFunction(
             BlueGreenDeploymentType blueGreenDeploymentType,
@@ -75,6 +87,36 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     }
 
     @Override
+    public void open(OpenContext openContext) throws Exception {
+        // Deserialization does not run field initializers: set the progress before super.open()
+        // reads the ConfigMap for the first time
+        pastToggle = false;
+        toggleKnownSince = -1L;
+        lastRecordAt = -1L;
+        super.open(openContext);
+        getRuntimeContext()
+                .getMetricGroup()
+                .gauge(
+                        GateMetrics.HAND_OVER_DONE,
+                        (Gauge<Integer>) () -> isHandOverDone(System.currentTimeMillis()) ? 1 : 0);
+    }
+
+    /**
+     * Whether this subtask, as the standby, has nothing left to emit for the hand-over: its
+     * watermark has passed the toggle, or it has had no record for {@link #IDLE_DONE_MS} since it
+     * learned the toggle. A subtask that receives no records never sees its watermark pass the
+     * toggle, but it owes nothing either.
+     */
+    @VisibleForTesting
+    boolean isHandOverDone(long now) {
+        if (pastToggle) {
+            return true;
+        }
+        long since = toggleKnownSince;
+        return since >= 0 && now - Math.max(since, lastRecordAt) >= IDLE_DONE_MS;
+    }
+
+    @Override
     protected void onContextUpdate(GateContext baseContext, Map<String, String> data) {
         var fetchedWatermarkContext = WatermarkGateContext.create(baseContext, data);
         logInfo("Refreshing WatermarkGateContext with data: " + data);
@@ -85,6 +127,17 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         } else if (!currentWatermarkGateContext.equals(fetchedWatermarkContext)) {
             logInfo("currentWatermarkGateContext UPDATED: " + fetchedWatermarkContext);
             currentWatermarkGateContext = fetchedWatermarkContext;
+        }
+        trackToggle(currentWatermarkGateContext.getWatermarkToggleValue());
+    }
+
+    /** A new transition starts without a toggle, which resets the hand-over progress. */
+    private void trackToggle(Long toggle) {
+        if (toggle == null) {
+            pastToggle = false;
+            toggleKnownSince = -1L;
+        } else if (toggleKnownSince < 0) {
+            toggleKnownSince = System.currentTimeMillis();
         }
     }
 
@@ -125,6 +178,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     protected void processElementStandby(
             I value, ProcessFunction<I, I>.Context ctx, Collector<I> out)
             throws IllegalAccessException {
+        lastRecordAt = System.currentTimeMillis();
         if (currentWatermarkGateContext.getWatermarkToggleValue() != null) {
             var watermarkToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
 
@@ -139,6 +193,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             } else {
                 // Went past the Watermark Boundary: BLOCK ELEMENT
                 logInfo(" -- Past WM Boundary -- ");
+                pastToggle = true;
                 notifyClearToTeardown(ctx);
             }
         } else {
@@ -222,6 +277,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
                     value ->
                             currentWatermarkGateContext.setWatermarkToggleValue(
                                     Long.parseLong(value)));
+            trackToggle(currentWatermarkGateContext.getWatermarkToggleValue());
             logInfo("Watermark toggle value: " + toggle.orElse("none, another transition"));
             return true;
         }

@@ -18,12 +18,16 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
@@ -32,12 +36,14 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -57,6 +63,7 @@ import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGree
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.updateTransitionStageFromJobStatus;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.validateAdvancedModeConfig;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
@@ -624,21 +631,26 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState) {
 
         if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
-            long gateDeadline =
-                    instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
-            if (gateDeadline > 0 && gateDeadline < System.currentTimeMillis()) {
-                var reason =
-                        String.format(
-                                "Aborting deployment '%s': the gate did not reach %s within %d ms (%s)",
-                                nextDeployment.getMetadata().getName(),
-                                TransitionStage.CLEAR_TO_TEARDOWN,
-                                getGateTimeout(context),
-                                BLUEGREEN_GATE_TIMEOUT.key());
-                return abortDeployment(context, nextDeployment, nextState, reason);
-            }
             // Wait until CLEAR_TO_TEARDOWN is set by the client
-            return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
-                    .rescheduleAfter(getReconciliationReschedInterval(context));
+            return waitForGate(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format("the gate did not reach %s", TransitionStage.CLEAR_TO_TEARDOWN));
+        }
+
+        // The first standby subtask past the toggle sets CLEAR_TO_TEARDOWN, the others may still
+        // owe records: their watermarks pass the toggle separately unless the gate is behind a
+        // shuffle
+        if (currentDeployment != null
+                && !BlueGreenTransitionUtils.isHandOverDone(context, currentDeployment)) {
+            return waitForGate(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format(
+                            "not every gate subtask of '%s' finished the hand-over",
+                            currentDeployment.getMetadata().getName()));
         }
 
         var deploymentStatus = context.getDeploymentStatus();
@@ -666,10 +678,33 @@ public class BlueGreenDeploymentService {
         long deletionTimestamp = deploymentReadyTimestamp + deploymentDeletionDelayMs;
 
         if (deletionTimestamp < System.currentTimeMillis()) {
-            return deleteDeployment(currentDeployment, context, nextState);
+            return TransitionMode.ADVANCED == BlueGreenTransitionUtils.getTransitionMode(context)
+                    ? stopWithSavepointAndDelete(currentDeployment, context, nextState)
+                    : deleteDeployment(currentDeployment, context, nextState);
         } else {
             return waitBeforeDeleting(currentDeployment, deletionTimestamp);
         }
+    }
+
+    /** Waits for the gate until its deadline, then aborts the transition. */
+    private UpdateControl<FlinkBlueGreenDeployment> waitForGate(
+            BlueGreenContext context,
+            FlinkDeployment nextDeployment,
+            FlinkBlueGreenDeploymentState nextState,
+            String pending) {
+        long gateDeadline = instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
+        if (gateDeadline > 0 && gateDeadline < System.currentTimeMillis()) {
+            var reason =
+                    String.format(
+                            "Aborting deployment '%s': %s within %d ms (%s)",
+                            nextDeployment.getMetadata().getName(),
+                            pending,
+                            getGateTimeout(context),
+                            BLUEGREEN_GATE_TIMEOUT.key());
+            return abortDeployment(context, nextDeployment, nextState, reason);
+        }
+        return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                .rescheduleAfter(getReconciliationReschedInterval(context));
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> waitBeforeDeleting(
@@ -682,6 +717,41 @@ public class BlueGreenDeploymentService {
                 delay / 1000);
 
         return UpdateControl.<FlinkBlueGreenDeployment>noUpdate().rescheduleAfter(delay);
+    }
+
+    /**
+     * Stops the standby with a savepoint, then deletes it. Its gate no longer emits, and the
+     * savepoint makes sinks that commit on checkpoints (Iceberg, Kafka exactly-once, files) commit
+     * what it wrote since its last checkpoint. Deleting a running job cancels it and discards that
+     * output, and the new deployment does not write those records again.
+     */
+    private UpdateControl<FlinkBlueGreenDeployment> stopWithSavepointAndDelete(
+            FlinkDeployment standby,
+            BlueGreenContext context,
+            FlinkBlueGreenDeploymentState nextState) {
+        var name = standby.getMetadata().getName();
+        if (standby.getStatus().getLifecycleState() == ResourceLifecycleState.SUSPENDED
+                || ReconciliationUtils.isJobInTerminalState(standby.getStatus())) {
+            return deleteDeployment(standby, context, nextState);
+        }
+        if (standby.getSpec().getJob().getState() != JobState.SUSPENDED) {
+            var ctx =
+                    context.getCtxFactory().getResourceContext(standby, context.getJosdkContext());
+            if (StringUtils.isNullOrWhitespaceOnly(
+                    ctx.getObserveConfig().get(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
+                LOG.warn(
+                        "No savepoint directory for '{}', deleting it without a savepoint: sinks"
+                                + " that commit on checkpoints lose what it wrote since its last one",
+                        name);
+                return deleteDeployment(standby, context, nextState);
+            }
+            LOG.info("Stopping '{}' with a savepoint before deleting it", name);
+            standby.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+            standby.getSpec().getJob().setState(JobState.SUSPENDED);
+            updateFlinkDeployment(standby, context);
+        }
+        return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                .rescheduleAfter(getReconciliationReschedInterval(context));
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> deleteDeployment(
