@@ -630,6 +630,13 @@ public class BlueGreenDeploymentService {
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState) {
 
+        // The standby is only stopped once the gate has handed over, and its gate metrics go with
+        // it: checking them again would wait until the gate timeout aborts the transition
+        if (currentDeployment != null
+                && currentDeployment.getSpec().getJob().getState() == JobState.SUSPENDED) {
+            return stopWithSavepointAndDelete(currentDeployment, context, nextState);
+        }
+
         if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
             // Wait until CLEAR_TO_TEARDOWN is set by the client
             return waitForGate(
