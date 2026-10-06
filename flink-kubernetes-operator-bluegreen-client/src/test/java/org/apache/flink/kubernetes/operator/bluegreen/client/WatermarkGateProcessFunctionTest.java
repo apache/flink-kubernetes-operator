@@ -308,6 +308,42 @@ public class WatermarkGateProcessFunctionTest {
     }
 
     @Test
+    void testActiveNeverProposesTheToggle() throws Exception {
+        // The active job has signalled it is waiting, and keeps scheduling writes until the
+        // standby sets the toggle: it must leave that to the standby, which is ahead of it
+        setupActiveContext(
+                null, WatermarkGateStage.WAITING_FOR_WATERMARK, TransitionStage.TRANSITIONING);
+        var configMap = new RecordingGateKubernetesService(null);
+        watermarkGateFunction.writeTo(configMap);
+
+        testHarness.processWatermark(900L);
+        testHarness.processElement(new TestMessage("a", 800L), 800L); // schedules a write
+        testHarness.setProcessingTime(1_000L); // past the write delay
+        testHarness.processElement(new TestMessage("b", 850L), 850L);
+
+        assertEquals(List.of(), configMap.calls);
+        assertNull(getWatermarkContext().getWatermarkToggleValue());
+    }
+
+    @Test
+    void testStandbyNeverSignalsWaitingForTheToggle() throws Exception {
+        setupStandbyContext(null, WatermarkGateStage.WATERMARK_NOT_SET);
+        watermarkGateFunction.onContextUpdate(
+                createBaseContext(TransitionStage.TRANSITIONING, false),
+                createWatermarkData(null, WatermarkGateStage.WATERMARK_NOT_SET));
+        var configMap = new RecordingGateKubernetesService(null);
+        watermarkGateFunction.writeTo(configMap);
+
+        testHarness.processWatermark(900L);
+        testHarness.processElement(new TestMessage("a", 800L), 800L); // schedules a write
+        testHarness.setProcessingTime(1_000L);
+        testHarness.processElement(new TestMessage("b", 850L), 850L);
+
+        // Only the active job signals that it is waiting, once it runs
+        assertEquals(List.of(), configMap.calls);
+    }
+
+    @Test
     void testStandbySignalsTeardownOnlyFromTransitioning() throws Exception {
         setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
         var configMap = new RecordingGateKubernetesService(null);
