@@ -47,6 +47,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 
 /**
@@ -220,5 +221,12 @@ public class JobAutoScalerContext<KEY> {
 
         /** The metrics evaluated from {@link #collectedMetrics}. */
         @Nullable private EvaluatedMetrics evaluatedMetrics;
+
+        /**
+         * Why the current cycle changed the parallelism, unioned over every scaled vertex. Set by
+         * {@link ScalingExecutor} once the decision is final, and read by {@link JobAutoScalerImpl}
+         * to tag the {@code autoscaler.scalings} counter. Empty when the cycle scales nothing.
+         */
+        private Set<ScaleReason> scaleReasons = Set.of();
     }
 }

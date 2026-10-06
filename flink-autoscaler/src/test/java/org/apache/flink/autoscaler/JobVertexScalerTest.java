@@ -45,10 +45,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.JobVertexScaler.INEFFECTIVE_SCALING;
+import static org.apache.flink.autoscaler.JobVertexScaler.INPUT_SPIKE_FACTOR;
 import static org.apache.flink.autoscaler.alignment.ParallelismAligner.SCALE_LIMITED_MESSAGE_FORMAT;
 import static org.apache.flink.autoscaler.alignment.ParallelismAligner.SCALING_LIMITED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.OBSERVED_SCALABILITY_ENABLED;
@@ -57,6 +59,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.UTILIZATION_T
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for vertex parallelism scaler logic. */
@@ -1309,6 +1312,187 @@ public class JobVertexScalerTest {
         assertThat(smallChangesForScaleFactorLimitedEvent).isNotNull();
         assertThat(partitionLimitedEvent.getMessageKey())
                 .isEqualTo(smallChangesForScaleFactorLimitedEvent.getMessageKey());
+    }
+
+    /**
+     * The no-change reason must stay out of {@code equals} and {@code hashCode}. The rest of this
+     * class compares against {@code ParallelismChange.noChange(n)} in more than 60 places, and
+     * those comparisons must keep working whatever reason the scaler attaches. This is the guard
+     * for that contract: if somebody adds the reason to {@code equals}, this test fails first and
+     * says why.
+     */
+    @Test
+    public void testNoChangeReasonIsExcludedFromEquality() {
+        var balanced = ParallelismChange.noChange(10);
+        var cooldown = ParallelismChange.noChange(10, ParallelismChange.NoChangeReason.COOLDOWN);
+        var ineffective =
+                ParallelismChange.noChange(10, ParallelismChange.NoChangeReason.INEFFECTIVE);
+
+        assertEquals(balanced, cooldown);
+        assertEquals(cooldown, ineffective);
+        assertEquals(balanced.hashCode(), cooldown.hashCode());
+
+        // A different parallelism is still a different decision.
+        assertNotEquals(balanced, ParallelismChange.noChange(11));
+
+        // The default factory reports a balanced vertex.
+        assertEquals(
+                ParallelismChange.NoChangeReason.BALANCED,
+                ParallelismChange.noChange(10).getNoChangeReason());
+    }
+
+    @Test
+    public void testNoChangeReasonIsDataUnavailableWhenProcessingRateIsNaN() {
+        var change =
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        evaluated(10, 100, Double.NaN),
+                        new TreeMap<>(),
+                        restartTime,
+                        new DelayedScaleDown());
+
+        assertTrue(change.isNoChange());
+        assertEquals(ParallelismChange.NoChangeReason.DATA_UNAVAILABLE, change.getNoChangeReason());
+    }
+
+    /**
+     * A delayed scale down reports the cooldown only when it would really be applied once the
+     * interval elapses. A vertex that is inside the utilization bound is dropped later anyway, so
+     * reporting a cooldown for it would wrongly suggest that the parallelism drops when the
+     * interval ends.
+     */
+    @Test
+    public void testNoChangeReasonIsCooldownOnlyForAnOutOfBoundScaleDown() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(1));
+        vertexScaler.setClock(Clock.fixed(Instant.now(), ZoneId.systemDefault()));
+
+        // A target rate of 600 against a processing rate of 1000 is below the utilization bound,
+        // so this scale down is real and the interval is what holds it back.
+        var outOfBound =
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        evaluated(100, 600, 1000),
+                        new TreeMap<>(),
+                        restartTime,
+                        new DelayedScaleDown());
+
+        assertTrue(outOfBound.isNoChange());
+        assertEquals(ParallelismChange.NoChangeReason.COOLDOWN, outOfBound.getNoChangeReason());
+
+        // A target rate of 800 is inside the bound, so the vertex is balanced, not blocked.
+        var inBound =
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        vertex,
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        evaluated(100, 800, 1000),
+                        new TreeMap<>(),
+                        restartTime,
+                        new DelayedScaleDown());
+
+        assertTrue(inBound.isNoChange());
+        assertEquals(ParallelismChange.NoChangeReason.BALANCED, inBound.getNoChangeReason());
+    }
+
+    @Test
+    public void testScaleReasonIsLowUtilOnScaleDown() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
+
+        var change = computeChange(evaluated(10, 50, 100));
+
+        assertEquals(5, change.getNewParallelism());
+        assertEquals(Set.of(ScaleReason.LOW_UTIL), change.getScaleReasons());
+    }
+
+    @Test
+    public void testScaleReasonIsHighLoadOnScaleUpWithoutBacklog() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
+
+        // No lag, so the catch up rate is zero and only the sustained load drives the change.
+        var change = computeChange(evaluated(10, 200, 100));
+
+        assertTrue(change.getNewParallelism() > 10);
+        assertEquals(Set.of(ScaleReason.HIGH_LOAD), change.getScaleReasons());
+    }
+
+    @Test
+    public void testScaleReasonReportsBacklogAndHighLoadTogether() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
+
+        // A lag catch up rate on top of a load that already needs more capacity. The target
+        // capacity formula adds the two, so both reasons apply to the same decision.
+        var metrics = evaluated(10, 200, 100);
+        metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(500.));
+
+        var change = computeChange(metrics);
+
+        assertEquals(Set.of(ScaleReason.BACKLOG, ScaleReason.HIGH_LOAD), change.getScaleReasons());
+        assertEquals("backlog|high_load", ScaleReason.toTag(change.getScaleReasons()));
+    }
+
+    @Test
+    public void testScaleReasonReportsAnInputSpike() {
+        conf.set(UTILIZATION_TARGET, 1.);
+        conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ZERO);
+
+        // The current rate sits well above its own average, so the load is a spike.
+        var metrics = evaluated(10, 200, 100);
+        metrics.put(
+                ScalingMetric.TARGET_DATA_RATE,
+                new EvaluatedScalingMetric(200 * INPUT_SPIKE_FACTOR + 1, 200));
+
+        var change = computeChange(metrics);
+
+        assertTrue(change.getScaleReasons().contains(ScaleReason.INPUT_SPIKE));
+    }
+
+    @Test
+    public void testScaleReasonTagIsSortedAndStable() {
+        // The tag is part of the metric surface, so the order must not depend on the set order.
+        assertEquals(
+                "backlog|high_load|input_spike|low_util",
+                ScaleReason.toTag(
+                        List.of(
+                                ScaleReason.LOW_UTIL,
+                                ScaleReason.INPUT_SPIKE,
+                                ScaleReason.HIGH_LOAD,
+                                ScaleReason.BACKLOG)));
+        assertEquals("backlog", ScaleReason.toTag(Set.of(ScaleReason.BACKLOG)));
+    }
+
+    @Test
+    public void testScaleReasonIsExcludedFromEquality() {
+        // Same guard as the no-change reason: the reason explains a decision, it does not define
+        // one, so it must not change how two changes compare.
+        assertEquals(
+                ParallelismChange.build(5, 10, true, Set.of(ScaleReason.BACKLOG)),
+                ParallelismChange.build(5, 10, true, Set.of(ScaleReason.LOW_UTIL)));
+        assertEquals(
+                ParallelismChange.build(5, 10, true).hashCode(),
+                ParallelismChange.build(5, 10, true, Set.of(ScaleReason.BACKLOG)).hashCode());
+    }
+
+    private ParallelismChange computeChange(Map<ScalingMetric, EvaluatedScalingMetric> metrics) {
+        return vertexScaler.computeScaleTargetParallelism(
+                context,
+                vertex,
+                NOT_ADJUST_INPUTS,
+                null,
+                metrics,
+                new TreeMap<>(),
+                restartTime,
+                new DelayedScaleDown());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

@@ -26,6 +26,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
+import java.util.Set;
 
 /** Scaling summary returned by the {@link ScalingMetricEvaluator}. */
 @Data
@@ -38,10 +39,28 @@ public class ScalingSummary {
 
     private Map<ScalingMetric, EvaluatedScalingMetric> metrics;
 
+    /**
+     * Why the autoscaler changed the parallelism of this vertex, used to tag the {@code
+     * autoscaler.scalings} counter.
+     *
+     * <p>Not serialized. The scaling history in the state store keeps the shape it had before this
+     * field existed, so an operator can roll back without a state migration. The reason is only
+     * needed inside the cycle that produces it.
+     */
+    @JsonIgnore private Set<ScaleReason> scaleReasons = Set.of();
+
     public ScalingSummary(
             int currentParallelism,
             int newParallelism,
             Map<ScalingMetric, EvaluatedScalingMetric> metrics) {
+        this(currentParallelism, newParallelism, metrics, Set.of());
+    }
+
+    public ScalingSummary(
+            int currentParallelism,
+            int newParallelism,
+            Map<ScalingMetric, EvaluatedScalingMetric> metrics,
+            Set<ScaleReason> scaleReasons) {
         if (currentParallelism == newParallelism) {
             throw new IllegalArgumentException(
                     "Current parallelism should not be equal to newParallelism during scaling.");
@@ -49,6 +68,7 @@ public class ScalingSummary {
         this.currentParallelism = currentParallelism;
         this.newParallelism = newParallelism;
         this.metrics = metrics;
+        this.scaleReasons = scaleReasons;
     }
 
     @JsonIgnore
