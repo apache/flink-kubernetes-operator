@@ -123,10 +123,10 @@ Job status changed to <state>
 
 ```
 <root exception class>: <message>
-<first N lines of the stack trace>
-... (<N> more lines)
+<first N characters of the stack trace>
+... (<N> more characters)
 ```
-The number of stack-trace lines included is controlled by the operator configuration; the trailing `... (<N> more lines)` suffix is only present when the trace was truncated.
+The number of stack-trace characters included is controlled by the `kubernetes.operator.events.exceptions.stacktrace.max.length` operator configuration option; the trailing `... (<N> more characters)` suffix is only present when the trace was truncated.
 
 #### SavepointError
 

@@ -780,12 +780,12 @@ public class KubernetesOperatorConfigOptions {
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
-    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
-            operatorConfig("events.exceptions.stacktrace-lines")
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH =
+            operatorConfig("events.exceptions.stacktrace.max.length")
                     .intType()
-                    .defaultValue(5)
+                    .defaultValue(2048)
                     .withDescription(
-                            "Maximum number of stack trace lines to include in exception-related Kubernetes event messages.");
+                            "Maximum number of characters of stack trace text to include in exception-related Kubernetes event messages. The stack trace is truncated once it reaches this size, regardless of how many lines it spans, so a single pathological line with no line breaks cannot bypass the cap.");
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
