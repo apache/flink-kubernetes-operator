@@ -681,22 +681,26 @@ public abstract class AbstractFlinkService implements FlinkService {
                             savepointStatusMessageParameters,
                             EmptyRequestBody.getInstance());
 
-            if (response.get() == null || response.get().resource() == null) {
+            AsynchronousOperationResult<SavepointInfo> result =
+                    response.get(
+                            operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+
+            if (result == null || result.resource() == null) {
                 return SavepointFetchResult.pending();
             }
 
-            if (response.get().resource().getLocation() == null) {
-                if (response.get().resource().getFailureCause() != null) {
+            if (result.resource().getLocation() == null) {
+                if (result.resource().getFailureCause() != null) {
                     LOG.error(
                             "Failure occurred while fetching the savepoint result",
-                            response.get().resource().getFailureCause());
+                            result.resource().getFailureCause());
                     return SavepointFetchResult.error(
-                            response.get().resource().getFailureCause().toString());
+                            result.resource().getFailureCause().toString());
                 } else {
                     return SavepointFetchResult.pending();
                 }
             }
-            String location = response.get().resource().getLocation();
+            String location = result.resource().getLocation();
             LOG.info("Savepoint result: {}", location);
             return SavepointFetchResult.completed(location);
         } catch (Exception e) {
@@ -723,19 +727,22 @@ public abstract class AbstractFlinkService implements FlinkService {
                             checkpointStatusMessageParameters,
                             EmptyRequestBody.getInstance());
 
-            if (response.get() == null || response.get().resource() == null) {
+            AsynchronousOperationResult<CheckpointInfo> result =
+                    response.get(
+                            operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
+
+            if (result == null || result.resource() == null) {
                 return CheckpointFetchResult.pending();
             }
 
-            if (response.get().resource().getFailureCause() != null) {
+            if (result.resource().getFailureCause() != null) {
                 LOG.error(
                         "Failure occurred while fetching the checkpoint result",
-                        response.get().resource().getFailureCause());
-                return CheckpointFetchResult.error(
-                        response.get().resource().getFailureCause().toString());
+                        result.resource().getFailureCause());
+                return CheckpointFetchResult.error(result.resource().getFailureCause().toString());
             }
 
-            QueueStatus.Id operationStatus = response.get().queueStatus().getId();
+            QueueStatus.Id operationStatus = result.queueStatus().getId();
             switch (operationStatus) {
                 case IN_PROGRESS:
                     return CheckpointFetchResult.pending();
@@ -744,8 +751,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             "Checkpoint {} triggered by the operator for job {} completed:",
                             triggerId,
                             jobId);
-                    return CheckpointFetchResult.completed(
-                            response.get().resource().getCheckpointId());
+                    return CheckpointFetchResult.completed(result.resource().getCheckpointId());
                 default:
                     throw new IllegalStateException(
                             String.format(
@@ -775,7 +781,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                     clusterClient.sendRequest(
                             checkpointStatusHeaders, parameters, EmptyRequestBody.getInstance());
 
-            var stats = response.get();
+            var stats =
+                    response.get(
+                            operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
             if (stats == null) {
                 throw new IllegalStateException(
                         String.format(
@@ -860,7 +868,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         checkpointingStatisticsHeaders,
                                         parameters,
                                         EmptyRequestBody.getInstance())
-                                .get();
+                                .get(
+                                        operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                        TimeUnit.SECONDS);
                 CheckpointStatistics.CompletedCheckpointStatistics completedCheckpointStatistics =
                         checkpointingStatistics
                                 .getLatestCheckpoints()
