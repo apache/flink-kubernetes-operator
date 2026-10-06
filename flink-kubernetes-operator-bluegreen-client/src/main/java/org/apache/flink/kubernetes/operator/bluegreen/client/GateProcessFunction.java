@@ -169,7 +169,7 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
                                 Map.of(TRANSITION_STAGE.getLabel(), CLEAR_TO_TEARDOWN.toString()));
                 logInfo("Transition stage is " + stage.orElse("unset"));
             } else {
-                logInfo(CLEAR_TO_TEARDOWN + " already set, skipping");
+                logDebug(CLEAR_TO_TEARDOWN + " already set, skipping");
             }
         }
     }
@@ -177,12 +177,12 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
     private void setKubernetesEnvironment() {
         this.gateKubernetesService = new GateKubernetesService(namespace, configMapName);
 
-        logInfo("Preparing Informers...");
         var resourceEventHandler =
                 new ResourceEventHandler<ConfigMap>() {
                     @Override
                     public void onAdd(ConfigMap obj) {
-                        logger.warn("Unexpected ConfigMap added: " + obj);
+                        // The informer's first listing, of the ConfigMap open() has already read
+                        logDebug("ConfigMap listed: " + obj.getData());
                     }
 
                     @Override
@@ -191,7 +191,11 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
                             var oldState = oldObj.getData().get(TRANSITION_STAGE.getLabel());
                             var newState = newObj.getData().get(TRANSITION_STAGE.getLabel());
 
-                            logInfo("Update notification 1: " + oldState + " to " + newState);
+                            logDebug(
+                                    "ConfigMap updated, transition stage "
+                                            + oldState
+                                            + " to "
+                                            + newState);
 
                             processConfigMap(newObj);
                         }
@@ -199,7 +203,7 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
 
                     @Override
                     public void onDelete(ConfigMap obj, boolean deletedFinalStateUnknown) {
-                        logger.error(
+                        logger.warn(
                                 "ConfigMap deleted: "
                                         + obj
                                         + ", final state unknown: "
@@ -208,7 +212,7 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
                 };
 
         gateKubernetesService.setInformers(resourceEventHandler);
-        logInfo("Informers set!");
+        logInfo("Watching the ConfigMap " + configMapName);
     }
 
     private void processConfigMap(ConfigMap configMap) {
@@ -267,16 +271,27 @@ abstract class GateProcessFunction<I> extends ProcessFunction<I, I> implements S
             logger.error(error);
             throw new IllegalAccessException(error);
         }
-        logInfo("Writing custom entries " + customEntries + " if " + key + " is " + expected);
+        logDebug("Writing custom entries " + customEntries + " if " + key + " is " + expected);
         return gateKubernetesService.compareAndSet(
                 baseContext.getActiveBlueGreenDeploymentType(), key, expected, customEntries);
     }
 
-    // Temporary "utility" function for development
+    /** Logs a change in this subtask's state. Never called for every record. */
     protected void logInfo(String message) {
+        logger.info(subtaskPrefix() + message);
+    }
+
+    protected void logDebug(String message) {
+        if (logger.isDebugEnabled()) {
+            logger.debug(subtaskPrefix() + message);
+        }
+    }
+
+    private String subtaskPrefix() {
         // Via getTaskInfo() rather than RuntimeContext.getIndexOfThisSubtask() directly, which
         // Flink 2.x removed from RuntimeContext (present on TaskInfo in both 1.x and 2.x).
-        int subtaskIdx = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask();
-        logger.error("[BlueGreen Gate-" + subtaskIdx + "]:" + message);
+        return "[BlueGreen Gate-"
+                + getRuntimeContext().getTaskInfo().getIndexOfThisSubtask()
+                + "]:";
     }
 }
