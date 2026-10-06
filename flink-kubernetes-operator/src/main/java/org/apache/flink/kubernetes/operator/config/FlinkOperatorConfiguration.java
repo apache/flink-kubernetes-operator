@@ -85,6 +85,7 @@ public class FlinkOperatorConfiguration {
     Duration jobSubmissionTimeout;
     List<String> jarUriAllowedSchemes;
     boolean jarUriDisallowRestrictedHosts;
+    List<String> jarUriAllowedUriPrefixes;
     Duration jarFetchSocketTimeout;
     Duration jarFetchTotalTimeout;
     MemorySize jarArtifactMaxSize;
@@ -225,6 +226,9 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS);
 
+        List<String> jarUriAllowedUriPrefixes =
+                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_URI_PREFIXES);
+
         Duration jarFetchSocketTimeout =
                 operatorConfig.get(KubernetesOperatorConfigOptions.JAR_FETCH_SOCKET_TIMEOUT);
 
@@ -270,6 +274,7 @@ public class FlinkOperatorConfiguration {
                 jobSubmissionTimeout,
                 jarUriAllowedSchemes,
                 jarUriDisallowRestrictedHosts,
+                jarUriAllowedUriPrefixes,
                 jarFetchSocketTimeout,
                 jarFetchTotalTimeout,
                 jarArtifactMaxSize);

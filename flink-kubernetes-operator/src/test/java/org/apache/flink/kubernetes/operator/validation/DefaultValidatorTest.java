@@ -729,10 +729,11 @@ public class DefaultValidatorTest {
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "https://example.com/path/to/job.jar", defaultAllowed, true));
+                        "https://example.com/path/to/job.jar", defaultAllowed, true, List.of()));
         // Null jarURI is allowed (e.g. for entryClass-only jobs).
         Assertions.assertEquals(
-                Optional.empty(), DefaultValidator.validateJarURI(null, defaultAllowed, true));
+                Optional.empty(),
+                DefaultValidator.validateJarURI(null, defaultAllowed, true, List.of()));
 
         // Disallowed schemes are rejected.
         for (String disallowed :
@@ -741,7 +742,8 @@ public class DefaultValidatorTest {
                         "file:///var/run/secrets/kubernetes.io/serviceaccount/token",
                         "s3://my-bucket/job.jar",
                         "local:///tmp/sample.jar")) {
-            var error = DefaultValidator.validateJarURI(disallowed, defaultAllowed, true);
+            var error =
+                    DefaultValidator.validateJarURI(disallowed, defaultAllowed, true, List.of());
             assertTrue(error.isPresent(), "expected error for " + disallowed);
             assertTrue(
                     error.get().startsWith("jarURI scheme '"),
@@ -749,12 +751,15 @@ public class DefaultValidatorTest {
         }
 
         // Missing scheme is rejected.
-        var noScheme = DefaultValidator.validateJarURI("/no/scheme/job.jar", defaultAllowed, true);
+        var noScheme =
+                DefaultValidator.validateJarURI(
+                        "/no/scheme/job.jar", defaultAllowed, true, List.of());
         assertTrue(noScheme.isPresent());
         assertTrue(noScheme.get().startsWith("jarURI must include a scheme"));
 
         // Malformed URI is rejected.
-        var malformed = DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true);
+        var malformed =
+                DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true, List.of());
         assertTrue(malformed.isPresent());
         assertTrue(malformed.get().startsWith("jarURI is not a valid URI"));
 
@@ -762,7 +767,7 @@ public class DefaultValidatorTest {
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "S3://my-bucket/job.jar", List.of("https", "s3"), true));
+                        "S3://my-bucket/job.jar", List.of("https", "s3"), true, List.of()));
     }
 
     @Test
@@ -777,7 +782,8 @@ public class DefaultValidatorTest {
                         "https://localhost/job.jar",
                         "https://10.0.0.1/job.jar",
                         "https://192.168.1.1/job.jar")) {
-            var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
+            var error =
+                    DefaultValidator.validateJarURI(restricted, defaultAllowed, true, List.of());
             assertTrue(error.isPresent(), "expected error for " + restricted);
             assertTrue(
                     error.get().contains("resolves to a restricted address"),
@@ -788,7 +794,27 @@ public class DefaultValidatorTest {
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "https://127.0.0.1/job.jar", defaultAllowed, false));
+                        "https://127.0.0.1/job.jar", defaultAllowed, false, List.of()));
+
+        // A jarURI matching a configured allowed-uri-prefix is exempt from the restricted-host
+        // check, even with the check enabled.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://10.0.0.1/repo/job.jar",
+                        defaultAllowed,
+                        true,
+                        List.of("https://10.0.0.1/repo/")));
+
+        // A jarURI that doesn't match any configured prefix is still rejected.
+        var notExempted =
+                DefaultValidator.validateJarURI(
+                        "https://10.0.0.2/job.jar",
+                        defaultAllowed,
+                        true,
+                        List.of("https://10.0.0.1/repo/"));
+        assertTrue(notExempted.isPresent());
+        assertTrue(notExempted.get().contains("resolves to a restricted address"));
     }
 
     @Test
