@@ -83,7 +83,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
         this.standaloneKubeClient = checkNotNull(client);
         this.clusterId =
                 checkNotNull(
-                        flinkConfig.getString(KubernetesConfigOptions.CLUSTER_ID),
+                        flinkConfig.get(KubernetesConfigOptions.CLUSTER_ID),
                         "ClusterId must be specified!");
     }
 
@@ -142,7 +142,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
                 flinkConfig, RestOptions.BIND_PORT, Constants.REST_PORT);
 
         if (HighAvailabilityMode.isHighAvailabilityModeActivated(flinkConfig)) {
-            flinkConfig.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
+            flinkConfig.set(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
             KubernetesUtils.checkAndUpdatePortConfigOption(
                     flinkConfig,
                     HighAvailabilityOptions.HA_JOB_MANAGER_PORT_RANGE,
@@ -221,8 +221,8 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
             final Optional<Endpoint> restEndpoint = standaloneKubeClient.getRestEndpoint(clusterId);
 
             if (restEndpoint.isPresent()) {
-                configuration.setString(RestOptions.ADDRESS, restEndpoint.get().getAddress());
-                configuration.setInteger(RestOptions.PORT, restEndpoint.get().getPort());
+                configuration.set(RestOptions.ADDRESS, restEndpoint.get().getAddress());
+                configuration.set(RestOptions.PORT, restEndpoint.get().getPort());
             } else {
                 throw new RuntimeException(
                         new ClusterRetrieveException(

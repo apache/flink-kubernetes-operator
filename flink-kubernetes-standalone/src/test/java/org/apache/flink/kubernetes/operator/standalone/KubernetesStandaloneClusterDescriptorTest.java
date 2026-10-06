@@ -78,9 +78,9 @@ public class KubernetesStandaloneClusterDescriptorTest {
     public void testDeploySessionCluster() throws Exception {
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
 
-        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(0));
-        flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
-        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
+        flinkConfig.set(BlobServerOptions.PORT, String.valueOf(0));
+        flinkConfig.set(TaskManagerOptions.RPC_PORT, String.valueOf(0));
+        flinkConfig.set(RestOptions.BIND_PORT, String.valueOf(0));
         flinkConfig.setString(
                 ResourceManagerOptions.CONTAINERIZED_MASTER_ENV_PREFIX + USER_ENV_VAR,
                 JM_ENV_VALUE);
@@ -149,9 +149,9 @@ public class KubernetesStandaloneClusterDescriptorTest {
     public void testDeployApplicationCluster() throws Exception {
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
 
-        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(0));
-        flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
-        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
+        flinkConfig.set(BlobServerOptions.PORT, String.valueOf(0));
+        flinkConfig.set(TaskManagerOptions.RPC_PORT, String.valueOf(0));
+        flinkConfig.set(RestOptions.BIND_PORT, String.valueOf(0));
 
         var clusterClientProvider =
                 clusterDescriptor.deployApplicationCluster(

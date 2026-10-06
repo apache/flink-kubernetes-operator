@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -43,6 +42,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.Optional;
 
 import static org.apache.flink.api.common.JobStatus.RUNNING;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -131,7 +131,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
-        assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
+        assertNull(flinkService.getSubmittedConf().get(SAVEPOINT_PATH));
 
         // trigger checkpoint
         long now = System.currentTimeMillis();
@@ -162,11 +162,9 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
 
         // check savepoint_path
         if (upgradeMode != UpgradeMode.STATELESS) {
-            assertEquals(
-                    flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH),
-                    savepointPath);
+            assertEquals(flinkService.getSubmittedConf().get(SAVEPOINT_PATH), savepointPath);
         } else {
-            assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
+            assertNull(flinkService.getSubmittedConf().get(SAVEPOINT_PATH));
         }
     }
 }

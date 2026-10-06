@@ -105,10 +105,9 @@ public class TestUtils {
         flinkConf.set(KubernetesConfigOptions.JOB_MANAGER_CPU, JOB_MANAGER_CPU);
         flinkConf.set(KubernetesConfigOptions.TASK_MANAGER_CPU, TASK_MANAGER_CPU);
 
-        flinkConf.setString(
-                TaskManagerOptions.RPC_PORT, String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
-        flinkConf.setString(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
-        flinkConf.setString(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
+        flinkConf.set(TaskManagerOptions.RPC_PORT, String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
+        flinkConf.set(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
+        flinkConf.set(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
         return flinkConf;
     }
 }
