@@ -28,22 +28,30 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpecBuilder;
+import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -214,7 +222,7 @@ public class BlueGreenTransitionUtilsTest {
                         IllegalStateException.class,
                         () ->
                                 BlueGreenTransitionUtils.injectGateAgent(
-                                        deployment, flinkConfig, null));
+                                        deployment, flinkConfig, null, false));
         assertTrue(ex.getMessage().contains("OPERATOR_IMAGE"));
 
         // Must not wire a doomed deployment: no -javaagent flag, no injected init-container.
@@ -229,7 +237,7 @@ public class BlueGreenTransitionUtilsTest {
         ConfigObjectNode flinkConfig = deployment.getSpec().getFlinkConfiguration();
 
         BlueGreenTransitionUtils.injectGateAgent(
-                deployment, flinkConfig, "test-operator-image:1.15");
+                deployment, flinkConfig, "test-operator-image:1.15", false);
 
         // -javaagent flag is added for the JobManager.
         assertTrue(
@@ -268,6 +276,78 @@ public class BlueGreenTransitionUtilsTest {
                         .orElseThrow();
         assertEquals("/opt/flink/lib/bluegreen-agent.jar", mount.getMountPath());
         assertEquals("bluegreen-agent.jar", mount.getSubPath());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testInjectGateAgent_commonPodTemplate_keepsAgentEntriesApart(
+            boolean mergeArraysByName) {
+        FlinkDeployment deployment =
+                buildFlinkDeployment(Map.of("bluegreen.gate.strategy", "WATERMARK"));
+        // A volume, an init container and a main container mount in the common template, at the
+        // positions the agent's would take in the JobManager one
+        deployment
+                .getSpec()
+                .setPodTemplate(
+                        new PodTemplateSpecBuilder()
+                                .withNewSpec()
+                                .addNewInitContainer()
+                                .withName("artifacts-fetcher")
+                                .withImage("busybox:1.35.0")
+                                .endInitContainer()
+                                .addNewContainer()
+                                .withName("flink-main-container")
+                                .addNewVolumeMount()
+                                .withName("flink-volume")
+                                .withMountPath("/opt/flink/volume")
+                                .endVolumeMount()
+                                .endContainer()
+                                .addNewVolume()
+                                .withName("flink-volume")
+                                .withNewPersistentVolumeClaim()
+                                .withClaimName("flink-pvc")
+                                .endPersistentVolumeClaim()
+                                .endVolume()
+                                .endSpec()
+                                .build());
+
+        BlueGreenTransitionUtils.injectGateAgent(
+                deployment,
+                deployment.getSpec().getFlinkConfiguration(),
+                "test-operator-image:1.17",
+                mergeArraysByName);
+
+        // The JobManager pod, merged as at deployment
+        PodSpec podSpec =
+                FlinkUtils.mergePodTemplates(
+                                deployment.getSpec().getPodTemplate(),
+                                deployment.getSpec().getJobManager().getPodTemplate(),
+                                mergeArraysByName)
+                        .getSpec();
+
+        assertEquals(
+                List.of("flink-volume", "bluegreen-agent"),
+                podSpec.getVolumes().stream().map(Volume::getName).collect(Collectors.toList()));
+        assertEquals(
+                "flink-pvc", podSpec.getVolumes().get(0).getPersistentVolumeClaim().getClaimName());
+        assertNull(podSpec.getVolumes().get(0).getEmptyDir());
+        assertNotNull(podSpec.getVolumes().get(1).getEmptyDir());
+        assertNull(podSpec.getVolumes().get(1).getPersistentVolumeClaim());
+
+        assertEquals(
+                List.of("artifacts-fetcher", "bluegreen-agent-init"),
+                podSpec.getInitContainers().stream()
+                        .map(Container::getName)
+                        .collect(Collectors.toList()));
+        assertEquals("busybox:1.35.0", podSpec.getInitContainers().get(0).getImage());
+        assertEquals("test-operator-image:1.17", podSpec.getInitContainers().get(1).getImage());
+
+        assertEquals(1, podSpec.getContainers().size());
+        assertEquals(
+                List.of("/opt/flink/volume", "/opt/flink/lib/bluegreen-agent.jar"),
+                podSpec.getContainers().get(0).getVolumeMounts().stream()
+                        .map(VolumeMount::getMountPath)
+                        .collect(Collectors.toList()));
     }
 
     // ==================== Helpers ====================

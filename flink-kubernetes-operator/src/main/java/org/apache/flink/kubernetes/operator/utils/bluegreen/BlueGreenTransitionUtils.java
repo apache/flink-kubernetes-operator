@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
@@ -29,7 +30,9 @@ import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Container;
@@ -144,8 +147,29 @@ public class BlueGreenTransitionUtils {
                     operatorImageOverride != null
                             ? operatorImageOverride
                             : System.getenv("OPERATOR_IMAGE");
-            injectGateAgent(flinkDeployment, flinkConfig, operatorImage);
+            injectGateAgent(
+                    flinkDeployment,
+                    flinkConfig,
+                    operatorImage,
+                    mergesPodTemplateArraysByName(context, flinkDeployment));
         }
+    }
+
+    /**
+     * The {@code kubernetes.operator.pod-template.merge-arrays-by-name} the deployment is deployed
+     * with: its own flinkConfiguration over the operator's defaults.
+     */
+    private static boolean mergesPodTemplateArraysByName(
+            BlueGreenContext context, FlinkDeployment flinkDeployment) {
+        var spec = flinkDeployment.getSpec();
+        Configuration conf =
+                context.getCtxFactory()
+                        .getConfigManager()
+                        .getDefaultConfig(
+                                flinkDeployment.getMetadata().getNamespace(),
+                                spec.getFlinkVersion());
+        conf.addAll(spec.getFlinkConfiguration().asConfiguration());
+        return conf.get(KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME);
     }
 
     /**
@@ -430,7 +454,10 @@ public class BlueGreenTransitionUtils {
      */
     @VisibleForTesting
     static void injectGateAgent(
-            FlinkDeployment flinkDeployment, ConfigObjectNode flinkConfig, String operatorImage) {
+            FlinkDeployment flinkDeployment,
+            ConfigObjectNode flinkConfig,
+            String operatorImage,
+            boolean mergeArraysByName) {
         if (operatorImage == null || operatorImage.isEmpty()) {
             String strategy =
                     flinkConfig.has("bluegreen.gate.strategy")
@@ -462,11 +489,11 @@ public class BlueGreenTransitionUtils {
                     existingOpts.isEmpty() ? agentFlag : existingOpts + " " + agentFlag);
         }
 
-        injectAgentInitContainer(flinkDeployment, operatorImage);
+        injectAgentInitContainer(flinkDeployment, operatorImage, mergeArraysByName);
     }
 
     private static void injectAgentInitContainer(
-            FlinkDeployment flinkDeployment, String operatorImage) {
+            FlinkDeployment flinkDeployment, String operatorImage, boolean mergeArraysByName) {
         var spec = flinkDeployment.getSpec();
 
         if (spec.getJobManager() == null) {
@@ -474,10 +501,19 @@ public class BlueGreenTransitionUtils {
         }
         JobManagerSpec jmSpec = spec.getJobManager();
 
-        if (jmSpec.getPodTemplate() == null) {
-            jmSpec.setPodTemplate(new PodTemplateSpec());
+        // The JobManager pod template is merged into the common one at deployment, by array
+        // position unless kubernetes.operator.pod-template.merge-arrays-by-name is set, so entries
+        // appended to it could be merged into the common template's entries at the same positions.
+        // Merging the common template in first, the same way, makes the JobManager template begin
+        // with the common template's entries, which that merge leaves as they are, and puts the
+        // agent's after them.
+        PodTemplateSpec podTemplate =
+                FlinkUtils.mergePodTemplates(
+                        spec.getPodTemplate(), jmSpec.getPodTemplate(), mergeArraysByName);
+        if (podTemplate == null) {
+            podTemplate = new PodTemplateSpec();
         }
-        PodTemplateSpec podTemplate = jmSpec.getPodTemplate();
+        jmSpec.setPodTemplate(podTemplate);
         if (podTemplate.getSpec() == null) {
             podTemplate.setSpec(new PodSpec());
         }
