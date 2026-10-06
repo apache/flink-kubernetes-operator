@@ -2273,7 +2273,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(UpgradeMode.SAVEPOINT, blue.getSpec().getJob().getUpgradeMode());
         assertEquals(2, getFlinkDeployments().size());
 
-        // and deleted once stopped
+        // and deleted once stopped, when it no longer reports any gate metrics
+        flinkService.setMinSubtaskMetrics(Map.of());
         simulateSuccessfulSuspend(blue);
         rs = reconcile(rs.deployment);
 
