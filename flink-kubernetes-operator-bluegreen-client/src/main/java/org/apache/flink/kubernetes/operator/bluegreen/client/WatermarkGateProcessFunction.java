@@ -31,6 +31,7 @@ import org.apache.flink.util.Preconditions;
 
 import java.io.Serializable;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /** Watermark based GateProcessFunction (streaming). */
@@ -49,6 +50,11 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     private transient volatile boolean pastToggle;
     private transient volatile long toggleKnownSince = -1L;
     private transient volatile long lastRecordAt = -1L;
+
+    // What this subtask does with its records, and for which toggle, as last logged
+    private transient Decision decision;
+    private transient Long decisionToggle;
+    private transient boolean noWatermarkLogged;
 
     WatermarkGateProcessFunction(
             BlueGreenDeploymentType blueGreenDeploymentType,
@@ -93,6 +99,9 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         pastToggle = false;
         toggleKnownSince = -1L;
         lastRecordAt = -1L;
+        decision = null;
+        decisionToggle = null;
+        noWatermarkLogged = false;
         super.open(openContext);
         getRuntimeContext()
                 .getMetricGroup()
@@ -119,7 +128,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     @Override
     protected void onContextUpdate(GateContext baseContext, Map<String, String> data) {
         var fetchedWatermarkContext = WatermarkGateContext.create(baseContext, data);
-        logInfo("Refreshing WatermarkGateContext with data: " + data);
+        logDebug("Refreshing WatermarkGateContext with data: " + data);
 
         if (currentWatermarkGateContext == null) {
             logInfo("currentWatermarkGateContext INITIALIZED: " + fetchedWatermarkContext);
@@ -136,8 +145,11 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         if (toggle == null) {
             pastToggle = false;
             toggleKnownSince = -1L;
-        } else if (toggleKnownSince < 0) {
-            toggleKnownSince = System.currentTimeMillis();
+        } else {
+            noWatermarkLogged = false;
+            if (toggleKnownSince < 0) {
+                toggleKnownSince = System.currentTimeMillis();
+            }
         }
     }
 
@@ -148,28 +160,26 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         Long wmToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
         if (wmToggleValue != null) {
             if (isFullyOpen(ctx.timerService(), wmToggleValue)) {
+                decide(
+                        currentWatermarkGateContext.getBaseContext().isFirstDeployment()
+                                ? Decision.PASS_ALL
+                                : Decision.PASS_ALL_PAST_TOGGLE,
+                        wmToggleValue);
                 out.collect(value);
                 return;
             }
-            long extractedWatermark = timestampOf(value);
-            if (wmToggleValue <= extractedWatermark) {
-                // Normal
+            decide(Decision.PASS_FROM_TOGGLE, wmToggleValue);
+            if (wmToggleValue <= timestampOf(value)) {
                 out.collect(value);
-            } else {
-                // Waiting for WM
-                logInfo(
-                        " -- Waiting to Reach WM: "
-                                + (wmToggleValue - extractedWatermark)
-                                + " ms - ");
             }
         } else {
             // Transitioning to Active
             var currentGateStage = currentWatermarkGateContext.getBaseContext().getGateStage();
             if (currentGateStage == TransitionStage.TRANSITIONING) {
-                logInfo(" -- Waiting for WM to be set - ");
+                decide(Decision.HOLD_UNTIL_TOGGLE, null);
                 notifyWaitingForWatermark(ctx);
             } else {
-                logInfo("Waiting for the TRANSITIONING state, current: " + currentGateStage);
+                decide(Decision.HOLD_UNTIL_TRANSITION, null);
             }
         }
     }
@@ -183,21 +193,18 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             var watermarkToggleValue = currentWatermarkGateContext.getWatermarkToggleValue();
 
             if (ctx.timerService().currentWatermark() <= watermarkToggleValue) {
+                decide(Decision.PASS_BEFORE_TOGGLE, watermarkToggleValue);
                 if (watermarkToggleValue > timestampOf(value)) {
-                    // Should still output the element
                     out.collect(value);
-                } else {
-                    // Went past the Watermark toggle value: BLOCK ELEMENT
-                    logInfo(" -- Past WM -- ");
                 }
             } else {
-                // Went past the Watermark Boundary: BLOCK ELEMENT
-                logInfo(" -- Past WM Boundary -- ");
+                decide(Decision.HOLD_ALL_PAST_TOGGLE, watermarkToggleValue);
                 pastToggle = true;
                 notifyClearToTeardown(ctx);
             }
         } else {
             // This ACTIVE job is transitioning to STANDBY, output elements
+            decide(Decision.PASS_ALL_UNTIL_TOGGLE, null);
             out.collect(value);
             // Set the watermark when the other new job is ready
             updateWatermarkInConfigMap(ctx);
@@ -236,6 +243,43 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         return currentWatermark > 0 ? currentWatermark + deploymentTeardownDelayMs : null;
     }
 
+    /**
+     * Logs what this subtask does with its records when that changes. Called for every record, it
+     * only compares in between.
+     */
+    private void decide(Decision next, Long toggle) {
+        if (next != decision || !Objects.equals(toggle, decisionToggle)) {
+            decision = next;
+            decisionToggle = toggle;
+            logInfo(String.format(next.message, toggle));
+        }
+    }
+
+    /** What a subtask does with its records, for a given toggle. */
+    private enum Decision {
+        PASS_ALL("Passing every record, no other deployment shares the stream"),
+        HOLD_UNTIL_TRANSITION("Holding back every record until the transition starts"),
+        HOLD_UNTIL_TOGGLE("Holding back every record until the watermark toggle is set"),
+        PASS_FROM_TOGGLE(
+                "Passing the records from the watermark toggle %d on, until this subtask's"
+                        + " watermark passes it"),
+        PASS_ALL_PAST_TOGGLE(
+                "Passing every record, this subtask's watermark passed the watermark toggle %d"),
+        PASS_ALL_UNTIL_TOGGLE("Passing every record until the watermark toggle is set"),
+        PASS_BEFORE_TOGGLE(
+                "Passing the records older than the watermark toggle %d, until this subtask's"
+                        + " watermark passes it"),
+        HOLD_ALL_PAST_TOGGLE(
+                "Holding back every record, this subtask's watermark passed the watermark toggle"
+                        + " %d");
+
+        private final String message;
+
+        Decision(String message) {
+            this.message = message;
+        }
+    }
+
     protected void updateWatermarkInConfigMap(Context ctx) {
         scheduleWriteTimer(ctx);
     }
@@ -259,7 +303,10 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
                 // Retried on the next record, which reschedules this write. A job that never
                 // produces watermarks never gets a toggle, and the transition hits the gate
                 // timeout.
-                logInfo("No watermark has reached this subtask yet, the toggle waits for one");
+                if (!noWatermarkLogged) {
+                    noWatermarkLogged = true;
+                    logInfo("No watermark has reached this subtask yet, the toggle waits for one");
+                }
                 return false;
             }
             // Every standby subtask may propose a toggle; the first one written wins and all of

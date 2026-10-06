@@ -150,7 +150,10 @@ public class WatermarkGateProcessFunctionTest {
         assertEquals(0, testHarness.extractOutputValues().size());
         assertTrue(
                 watermarkGateFunction.getLogMessages().stream()
-                        .anyMatch(msg -> msg.contains("Waiting to Reach WM")));
+                        .anyMatch(
+                                msg ->
+                                        msg.startsWith(
+                                                "Passing the records from the watermark toggle 1000 on")));
     }
 
     @Test
@@ -233,7 +236,10 @@ public class WatermarkGateProcessFunctionTest {
         assertEquals(0, testHarness.extractOutputValues().size());
         assertTrue(
                 watermarkGateFunction.getLogMessages().stream()
-                        .anyMatch(msg -> msg.contains("Past WM")));
+                        .anyMatch(
+                                msg ->
+                                        msg.startsWith(
+                                                "Passing the records older than the watermark toggle 1000")));
     }
 
     @Test
@@ -467,6 +473,57 @@ public class WatermarkGateProcessFunctionTest {
                 WatermarkGateProcessFunction.create(flinkConfig, s -> (long) s.length());
 
         assertNotNull(function);
+    }
+
+    @Test
+    void testActiveLogsWhatItDoesOncePerChange() throws Exception {
+        setupActiveContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        watermarkGateFunction.getLogMessages().clear();
+
+        // Records on both sides of the toggle, which this subtask passes or holds back
+        testHarness.processWatermark(TEST_WATERMARK_VALUE - 500);
+        for (int i = 0; i < 100; i++) {
+            long timestamp = TEST_WATERMARK_VALUE + (i % 2 == 0 ? -50 : 50);
+            testHarness.processElement(new TestMessage("record", timestamp), timestamp);
+        }
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        for (int i = 0; i < 100; i++) {
+            testHarness.processElement(new TestMessage("record", TEST_WATERMARK_VALUE - 50), 0);
+        }
+
+        assertEquals(150, testHarness.extractOutputValues().size());
+        assertEquals(
+                List.of(
+                        "Passing the records from the watermark toggle 1000 on, until this"
+                                + " subtask's watermark passes it",
+                        "Passing every record, this subtask's watermark passed the watermark"
+                                + " toggle 1000"),
+                watermarkGateFunction.getLogMessages());
+    }
+
+    @Test
+    void testStandbyLogsWhatItDoesOncePerChange() throws Exception {
+        setupStandbyContext(TEST_WATERMARK_VALUE, WatermarkGateStage.WATERMARK_SET);
+        watermarkGateFunction.getLogMessages().clear();
+
+        testHarness.processWatermark(TEST_WATERMARK_VALUE - 500);
+        for (int i = 0; i < 100; i++) {
+            long timestamp = TEST_WATERMARK_VALUE + (i % 2 == 0 ? -50 : 50);
+            testHarness.processElement(new TestMessage("record", timestamp), timestamp);
+        }
+        testHarness.processWatermark(TEST_WATERMARK_VALUE + 1);
+        for (int i = 0; i < 100; i++) {
+            testHarness.processElement(new TestMessage("record", TEST_WATERMARK_VALUE - 50), 0);
+        }
+
+        assertEquals(50, testHarness.extractOutputValues().size());
+        assertEquals(
+                List.of(
+                        "Passing the records older than the watermark toggle 1000, until this"
+                                + " subtask's watermark passes it",
+                        "Holding back every record, this subtask's watermark passed the"
+                                + " watermark toggle 1000"),
+                watermarkGateFunction.getLogMessages());
     }
 
     // ==================== Helper Methods ====================
