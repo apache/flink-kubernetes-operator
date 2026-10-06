@@ -34,6 +34,18 @@ tests:
       name: flink-kubernetes-operator
       namespace: flink-operator
 
+- it: Should mount the static webhook certificate secret
+  asserts:
+  - contains:
+      path: spec.template.spec.volumes
+      content:
+        name: keystore
+        secret:
+          items:
+          - key: keystore.p12
+            path: keystore.p12
+          secretName: flink-operator-webhook-server-cert
+
 - it: Should use the specified image if `image.repository` and `image.tag` are set
   set:
     image: 
