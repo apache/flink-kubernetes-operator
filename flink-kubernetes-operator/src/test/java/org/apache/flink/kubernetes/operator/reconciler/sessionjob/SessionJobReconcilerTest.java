@@ -1169,5 +1169,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 status.getReconciliationStatus().deserializeLastReconciledSpec().getJob();
         assertEquals(1L, lastReconciledJob.getSavepointRedeployNonce());
         assertEquals(JobState.RUNNING, lastReconciledJob.getState());
+        // Like a redeploy that succeeds on the first attempt, a retried one cannot be rolled back
+        assertTrue(status.getReconciliationStatus().isLastReconciledSpecStable());
     }
 }

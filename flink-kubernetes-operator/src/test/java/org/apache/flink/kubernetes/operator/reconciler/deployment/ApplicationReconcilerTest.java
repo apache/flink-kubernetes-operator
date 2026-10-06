@@ -1678,6 +1678,96 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 status.getReconciliationStatus().deserializeLastReconciledSpec().getJob();
         assertEquals(1L, lastReconciledJob.getSavepointRedeployNonce());
         assertEquals(JobState.RUNNING, lastReconciledJob.getState());
+        // Like a redeploy that succeeds on the first attempt, a retried one cannot be rolled back
+        assertTrue(status.getReconciliationStatus().isLastReconciledSpecStable());
+    }
+
+    @Test
+    public void testSavepointRedeployRetryIsNotRolledBack() throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        offsetReconcilerClock(deployment, Duration.ZERO);
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(),
+                                "true",
+                                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(),
+                                "10s",
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                        .key(),
+                                "false"));
+
+        // Initial deployment, mark as stable
+        reconciler.reconcile(deployment, context);
+        var runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+        deployment.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+
+        // Savepoint redeploy whose first deployment attempt fails
+        var job = deployment.getSpec().getJob();
+        job.setInitialSavepointPath("sp-t1");
+        job.setSavepointRedeployNonce(1L);
+        flinkService.setDeployFailure(true);
+        assertThrows(Exception.class, () -> reconciler.reconcile(deployment, context));
+        statusRecorder.updateStatusFromCache(deployment);
+        assertTrue(runningJobs.isEmpty());
+
+        // The retry restores from the requested savepoint
+        flinkService.setDeployFailure(false);
+        reconciler.reconcile(deployment, context);
+        assertEquals(1, runningJobs.size());
+        assertEquals("sp-t1", runningJobs.get(0).f0);
+
+        // Even if the JobManager is not ready within the readiness timeout, the redeploy must not
+        // be rolled back to the previously stable spec
+        offsetReconcilerClock(deployment, Duration.ofSeconds(15));
+        flinkService.setHaDataAvailable(false);
+        flinkService.setJobManagerReady(false);
+        reconciler.reconcile(deployment, context);
+
+        var status = deployment.getStatus();
+        assertEquals(ReconciliationState.DEPLOYED, status.getReconciliationStatus().getState());
+        assertEquals(1, runningJobs.size());
+        assertEquals("sp-t1", runningJobs.get(0).f0);
+        assertEquals(
+                1L,
+                status.getReconciliationStatus()
+                        .deserializeLastStableSpec()
+                        .getJob()
+                        .getSavepointRedeployNonce());
+    }
+
+    @Test
+    public void testResumeIgnoresInitialSavepointPathEditAfterRedeployWhileSuspended()
+            throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+
+        reconciler.reconcile(deployment, context);
+        var runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // Suspend, then request a savepoint redeploy
+        var job = deployment.getSpec().getJob();
+        job.setState(JobState.SUSPENDED);
+        reconciler.reconcile(deployment, context);
+        job.setInitialSavepointPath("sp-t1");
+        job.setSavepointRedeployNonce(1L);
+        reconciler.reconcile(deployment, context);
+        assertEquals(0, flinkService.getRunningCount());
+        assertEquals("sp-t1", deployment.getStatus().getJobStatus().getUpgradeSavepointPath());
+
+        // initialSavepointPath is ignored by the spec diff: clearing it without a new nonce is not
+        // a new operation, so the job still resumes from the recorded redeploy's savepoint
+        job.setInitialSavepointPath(null);
+        job.setState(JobState.RUNNING);
+        reconciler.reconcile(deployment, context);
+        assertEquals(1, runningJobs.size());
+        assertEquals("sp-t1", runningJobs.get(0).f0);
     }
 
     private void verifySavepointRedeploy(

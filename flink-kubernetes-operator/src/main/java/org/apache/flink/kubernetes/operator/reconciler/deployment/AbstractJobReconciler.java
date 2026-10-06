@@ -192,8 +192,10 @@ public abstract class AbstractJobReconciler<
             // We inherit the upgrade mode unless stateless upgrade requested. A savepoint the user
             // explicitly requested through initialSavepointPath is always restored, regardless of
             // the upgrade mode of the spec.
+            boolean restoreFromInitialSavepoint =
+                    restoringFromInitialSavepoint(resource, lastReconciledSpec);
             if (currentDeploySpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS
-                    || restoringFromInitialSavepoint(resource, lastReconciledSpec)) {
+                    || restoreFromInitialSavepoint) {
                 currentDeploySpec
                         .getJob()
                         .setUpgradeMode(lastReconciledSpec.getJob().getUpgradeMode());
@@ -210,6 +212,12 @@ public abstract class AbstractJobReconciler<
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
 
             ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
+            if (restoreFromInitialSavepoint) {
+                // Savepoint redeploys cannot be rolled back (see redeployWithSavepoint). That also
+                // applies to a redeploy completed here rather than in redeployWithSavepoint, i.e.
+                // one requested while suspended, or one whose first deployment attempt failed.
+                resource.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+            }
         }
         return true;
     }
@@ -220,9 +228,14 @@ public abstract class AbstractJobReconciler<
      * redeploy or the first deployment. Such a savepoint is honoured even for stateless specs,
      * otherwise a savepoint redeploy requested while suspended, or one whose deployment attempt
      * failed, would be replaced by an empty state restore.
+     *
+     * <p>The check reads initialSavepointPath from the last reconciled spec, not the current one.
+     * initialSavepointPath is ignored by the spec diff, so editing or clearing it without a new
+     * savepointRedeployNonce is not a new operation and must not change which savepoint the
+     * recorded redeploy restores from.
      */
     private boolean restoringFromInitialSavepoint(CR resource, SPEC lastReconciledSpec) {
-        var initialSavepointPath = resource.getSpec().getJob().getInitialSavepointPath();
+        var initialSavepointPath = lastReconciledSpec.getJob().getInitialSavepointPath();
         return initialSavepointPath != null
                 && lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT
                 && initialSavepointPath.equals(

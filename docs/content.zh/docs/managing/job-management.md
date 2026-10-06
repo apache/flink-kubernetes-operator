@@ -68,7 +68,7 @@ job:
   state: suspended
 ```
 
-Setting the value to `suspended` stops the job while keeping its state information, and setting it back to `running` resumes the job from where it stopped. Any other spec change while the job is running triggers an [upgrade](#upgrades), and changes made while suspended are recorded and take effect once the job is resumed. In every case, how state survives the stop and restore is decided by the upgrade mode. A [savepoint redeploy](#redeploying-from-a-savepoint) requested while suspended is the exception: resuming starts from its `initialSavepointPath` regardless of the upgrade mode.
+Setting the value to `suspended` stops the job while keeping its state information, and setting it back to `running` resumes the job from where it stopped. Any other spec change while the job is running triggers an [upgrade](#upgrades), and changes made while suspended are recorded and take effect once the job is resumed. In every case, how state survives the stop and restore is decided by the upgrade mode.
 
 These are the desired states: what the resource actually reports back, the observed lifecycle states and the transitions between them, is documented under [Status and Lifecycle]({{< ref "docs/custom-resource/status-and-lifecycle" >}}).
 
@@ -258,6 +258,8 @@ job:
 ```
 
 When the `savepointRedeployNonce` changes, the operator redeploys the job to the savepoint defined in `initialSavepointPath`. The savepoint path must not be empty.
+
+A savepoint redeploy requested while the job is [suspended](#suspending-and-resuming) is applied when the job is resumed. The job then starts from `initialSavepointPath` regardless of the upgrade mode.
 
 {{< hint warning >}}
 Rollbacks are not supported after redeployments.
