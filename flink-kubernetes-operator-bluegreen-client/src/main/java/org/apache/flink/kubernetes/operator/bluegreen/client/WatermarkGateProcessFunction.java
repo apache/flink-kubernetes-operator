@@ -22,6 +22,7 @@ import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContext;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateMetrics;
+import org.apache.flink.kubernetes.operator.api.bluegreen.GateOutputMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.streaming.api.TimerService;
@@ -291,9 +292,14 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
     @Override
     protected boolean handleScheduledWrite(Context ctx) throws Exception {
         var wmCtx = currentWatermarkGateContext;
+        // Each write belongs to one side. The active job started from a savepoint of the standby
+        // and is behind it: a toggle from its watermark would stop the standby at once and leave
+        // the records in between to both jobs.
+        boolean standby = baseContext.getOutputMode() == GateOutputMode.STANDBY;
 
-        // Standby job: Active job has signalled it's waiting — compute and write the WM toggle.
-        if (wmCtx.getWatermarkGateStage() == WatermarkGateStage.WAITING_FOR_WATERMARK
+        // Standby job: the active job has signalled it's waiting, compute and write the toggle.
+        if (standby
+                && wmCtx.getWatermarkGateStage() == WatermarkGateStage.WAITING_FOR_WATERMARK
                 && wmCtx.getWatermarkToggleValue() == null) {
             Long nextWatermarkToggleValue =
                     nextWatermarkToggleValue(
@@ -329,8 +335,9 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             return true;
         }
 
-        // Active job: signal that it is waiting for the Standby job to provide the WM toggle.
-        if (wmCtx.getBaseContext().getGateStage() == TransitionStage.TRANSITIONING
+        // Active job: signal that it is waiting for the standby job to provide the toggle.
+        if (!standby
+                && wmCtx.getBaseContext().getGateStage() == TransitionStage.TRANSITIONING
                 && wmCtx.getWatermarkToggleValue() == null
                 && wmCtx.getWatermarkGateStage() != WatermarkGateStage.WAITING_FOR_WATERMARK) {
             // Only while no stage is set: a late subtask must not undo WATERMARK_SET
