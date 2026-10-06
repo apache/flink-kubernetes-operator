@@ -259,6 +259,8 @@ job:
 
 When the `savepointRedeployNonce` changes, the operator redeploys the job to the savepoint defined in `initialSavepointPath`. The savepoint path must not be empty.
 
+A savepoint redeploy requested while the job is [suspended](#suspending-and-resuming) is applied when the job is resumed. The job then starts from `initialSavepointPath` regardless of the upgrade mode.
+
 {{< hint warning >}}
 Rollbacks are not supported after redeployments.
 {{< /hint >}}

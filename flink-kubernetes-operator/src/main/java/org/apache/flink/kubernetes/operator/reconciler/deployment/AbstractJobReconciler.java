@@ -189,8 +189,13 @@ public abstract class AbstractJobReconciler<
         }
 
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
-            // We inherit the upgrade mode unless stateless upgrade requested
-            if (currentDeploySpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+            // We inherit the upgrade mode unless stateless upgrade requested. A savepoint the user
+            // explicitly requested through initialSavepointPath is always restored, regardless of
+            // the upgrade mode of the spec.
+            boolean restoreFromInitialSavepoint =
+                    restoringFromInitialSavepoint(resource, lastReconciledSpec);
+            if (currentDeploySpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS
+                    || restoreFromInitialSavepoint) {
                 currentDeploySpec
                         .getJob()
                         .setUpgradeMode(lastReconciledSpec.getJob().getUpgradeMode());
@@ -207,8 +212,34 @@ public abstract class AbstractJobReconciler<
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
 
             ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
+            if (restoreFromInitialSavepoint) {
+                // Savepoint redeploys cannot be rolled back (see redeployWithSavepoint). That also
+                // applies to a redeploy completed here rather than in redeployWithSavepoint, i.e.
+                // one requested while suspended, or one whose first deployment attempt failed.
+                resource.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+            }
         }
         return true;
+    }
+
+    /**
+     * Checks whether the suspended job is to be restored from the savepoint the user explicitly
+     * requested through initialSavepointPath, recorded as the upgrade savepoint by a savepoint
+     * redeploy or the first deployment. Such a savepoint is honoured even for stateless specs,
+     * otherwise a savepoint redeploy requested while suspended, or one whose deployment attempt
+     * failed, would be replaced by an empty state restore.
+     *
+     * <p>The check reads initialSavepointPath from the last reconciled spec, not the current one.
+     * initialSavepointPath is ignored by the spec diff, so editing or clearing it without a new
+     * savepointRedeployNonce is not a new operation and must not change which savepoint the
+     * recorded redeploy restores from.
+     */
+    private boolean restoringFromInitialSavepoint(CR resource, SPEC lastReconciledSpec) {
+        var initialSavepointPath = lastReconciledSpec.getJob().getInitialSavepointPath();
+        return initialSavepointPath != null
+                && lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT
+                && initialSavepointPath.equals(
+                        resource.getStatus().getJobStatus().getUpgradeSavepointPath());
     }
 
     protected JobUpgrade getJobUpgrade(FlinkResourceContext<CR> ctx, Configuration deployConfig)
@@ -633,6 +664,13 @@ public abstract class AbstractJobReconciler<
         status.getJobStatus().setUpgradeSavepointPath(savepointPath.orElse(null));
 
         if (desiredJobState == JobState.RUNNING) {
+            // We record the target spec into an upgrading state before deploying, like every
+            // other deployment path. Otherwise a failed deploy attempt leaves the new
+            // savepointRedeployNonce unrecorded and every subsequent reconciliation repeats the
+            // cancel + redeploy cycle instead of restoring from the recorded savepoint.
+            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig, clock);
+            statusRecorder.patchAndCacheStatus(resource, ctx.getKubernetesClient());
+
             deploy(
                     ctx,
                     currentDeploySpec,
