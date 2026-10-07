@@ -43,6 +43,7 @@ How the two deployments hand over is set by `spec.transitionMode`. The default, 
 
 - **Application Mode**: blue/green deployments manage application clusters, so the template must define a `spec.job`, as described under [Application Mode]({{< ref "docs/deployment/overview#application-mode" >}}).
 - **State handoff**: for every upgrade mode except `stateless` the transition hands the state over through a savepoint, so checkpointing and a savepoint directory (`state.savepoints.dir`) must be configured just like for regular [stateful upgrades]({{< ref "docs/managing/job-management#upgrades" >}}). This currently applies to `last-state` as well.
+- **Savepoint format**: the transition savepoint is taken in the format set by `kubernetes.operator.savepoint.format.type`, `CANONICAL` by default. On Flink 2.x, operators using the async state API cannot take a canonical savepoint: the attempt fails the job over, the transition fails with an error that names the setting, and such a job needs `NATIVE`. A native savepoint can only be restored with the state backend that took it, so a transition that changes `state.backend.type` is rejected while the format is `NATIVE`. Changing the format itself is patched onto the running deployment, without a transition.
 - **ADVANCED transition mode**: further requirements, among them a Java 17 JobManager and event-time watermarks, are listed under [ADVANCED Requirements](#advanced-requirements).
 
 ## Creating a Blue/Green Deployment
@@ -210,7 +211,7 @@ The gate phase, from the moment the new deployment is ready until every subtask 
 
 - **A Java 17 JobManager**: the gate is injected by a Java agent compiled to Java 17 bytecode and loaded at JobManager startup, so a Java 11 JobManager fails to start with `UnsupportedClassVersionError`. `BASIC` deployments are not affected.
 - **Event-time watermarks**: the cutover point and both crossings come from the job's watermark.
-- **The `savepoint` or `last-state` upgrade mode**: the new deployment must start from the transition savepoint of the old one, and an abort after the cutover point redeploys the old deployment from it. `stateless` is rejected.
+- **The `savepoint` or `last-state` upgrade mode**: the new deployment must start from the transition savepoint of the old one, and an abort after the cutover point redeploys the old deployment from it. `stateless` is rejected. On Flink 2.x, a job using the async state API needs that savepoint in the native format, see [Requirements](#requirements).
 - **The gate client in the job JAR**: the agent provides only the injection hook, the gate classes are loaded from the job. Add `org.apache.flink:flink-kubernetes-operator-bluegreen-client` at the operator's version, bundled into the job JAR rather than `provided`, so that the TaskManagers can load it. The client links against Flink internals and is built per Flink major version: the default artifact targets Flink 1.x, and the `flink2` classifier targets Flink 2.x. The `examples/flink-bluegreen-advanced-example` job bundles it.
 - **`OPERATOR_IMAGE` on the operator**: the agent is copied out of the operator image by an init container, so the operator must know its own image. The Helm chart sets it, and the operator rejects `ADVANCED` deployments without it.
 
@@ -343,3 +344,4 @@ The blue/green resource itself does not emit Kubernetes events, failures surface
 - In the `ADVANCED` mode, late records arriving right around the crossing of the cutover point can be written twice or dropped, and an abort after the cutover point may write records twice.
 - The state handoff is currently always savepoint-based: `last-state` transitions also take a savepoint instead of reusing the latest checkpoint information.
 - Suspend requests are deferred while a transition is in progress.
+- A Flink 2.x job using the async state API takes only native savepoints, so a transition cannot change its state backend.
