@@ -296,7 +296,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 ReconciliationUtils.rescheduleAfter(
                                 JobManagerDeploymentStatus.ERROR,
-                                appCluster,
+                                appCluster.getStatus().getJobStatus(),
                                 configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
@@ -496,7 +496,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 ReconciliationUtils.rescheduleAfter(
                                 JobManagerDeploymentStatus.DEPLOYING,
-                                appCluster,
+                                appCluster.getStatus().getJobStatus(),
                                 configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
