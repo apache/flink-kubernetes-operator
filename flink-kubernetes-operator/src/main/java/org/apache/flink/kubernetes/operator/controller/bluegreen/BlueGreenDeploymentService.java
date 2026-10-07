@@ -180,6 +180,16 @@ public class BlueGreenDeploymentService {
             if (currentFlinkDeployment != null && isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
                     Optional<String> configError = validateAdvancedModeConfig(context);
+                    if (configError.isEmpty() && isSavepointRequired(context)) {
+                        configError =
+                                BlueGreenUtils.validateTransitionStateBackend(
+                                        context.getCtxFactory()
+                                                .getResourceContext(
+                                                        currentFlinkDeployment,
+                                                        context.getJosdkContext())
+                                                .getObserveConfig(),
+                                        BlueGreenUtils.templateConfig(context));
+                    }
                     if (configError.isPresent()) {
                         return rejectWithValidationError(context, configError.get());
                     }
@@ -430,8 +440,15 @@ public class BlueGreenDeploymentService {
                     && !savepointFetchResult.getError().isEmpty()) {
                 throw new RuntimeException(
                         String.format(
-                                "Could not fetch savepoint with triggerId: %s. Error: %s",
-                                triggerId, savepointFetchResult.getError()));
+                                "Could not fetch savepoint with triggerId: %s. Error: %s%s",
+                                triggerId,
+                                savepointFetchResult.getError(),
+                                BlueGreenUtils.savepointFailureHint(
+                                        ctx.getFlinkVersion(),
+                                        ctx.getObserveConfig()
+                                                .get(
+                                                        KubernetesOperatorConfigOptions
+                                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE))));
             }
 
             return getSavepointObject(ctx, savepointFetchResult.getLocation());

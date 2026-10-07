@@ -21,11 +21,14 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.StateBackendOptions;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -45,6 +48,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -248,6 +252,97 @@ public class BlueGreenUtils {
         // Currently taking savepoints for all modes except STATELESS
         // (previously only SAVEPOINT mode required savepoints)
         return UpgradeMode.STATELESS != upgradeMode;
+    }
+
+    /**
+     * Explains a transition savepoint that failed on Flink 2.x in the canonical format: Flink takes
+     * no canonical savepoint of operators using the async state API, and fails them instead.
+     */
+    public static String savepointFailureHint(
+            FlinkVersion flinkVersion, SavepointFormatType formatType) {
+        if (flinkVersion == null
+                || !flinkVersion.isEqualOrNewer(FlinkVersion.v2_0)
+                || formatType != SavepointFormatType.CANONICAL) {
+            return "";
+        }
+        return String.format(
+                " On Flink 2.x, operators using the async state API cannot take a savepoint in the"
+                        + " canonical format, so a job using them needs %s: NATIVE.",
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE.key());
+    }
+
+    /**
+     * A savepoint in the native format can only be restored with the state backend that took it.
+     * Refuses a transition that changes the state backend while the current deployment, which takes
+     * the transition savepoint, takes it in the native format.
+     *
+     * @param currentConf the configuration of the current deployment
+     * @param nextConf the configuration the next deployment gets
+     * @return the error, or empty if the transition savepoint can be restored
+     */
+    public static Optional<String> validateTransitionStateBackend(
+            Configuration currentConf, Configuration nextConf) {
+        var formatKey = KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE.key();
+        if (currentConf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                != SavepointFormatType.NATIVE) {
+            return Optional.empty();
+        }
+        String current = stateBackendName(currentConf);
+        String next = stateBackendName(nextConf);
+        if (current.equals(next)) {
+            return Optional.empty();
+        }
+        return Optional.of(
+                String.format(
+                        "[BlueGreen] The transition savepoint is taken in the native format (%s:"
+                                + " NATIVE), which can only be restored with the state backend that"
+                                + " took it, but the new template changes %s from %s to %s. Set %s:"
+                                + " CANONICAL first, which is patched onto the running deployment"
+                                + " without a transition, then change the state backend. On Flink"
+                                + " 2.x a job using the async state API takes no canonical"
+                                + " savepoint, and cannot change its state backend through one.",
+                        formatKey,
+                        StateBackendOptions.STATE_BACKEND.key(),
+                        current,
+                        next,
+                        formatKey));
+    }
+
+    /** The state backend a configuration selects, by its short name. */
+    private static String stateBackendName(Configuration conf) {
+        String name =
+                conf.getOptional(StateBackendOptions.STATE_BACKEND)
+                        .orElse("hashmap")
+                        .toLowerCase(Locale.ROOT);
+        // Factory class names and the legacy aliases select the same backends as the short names
+        if (name.contains("rocksdb")) {
+            return "rocksdb";
+        }
+        if (name.contains("forst")) {
+            return "forst";
+        }
+        if (name.contains("hashmap") || name.equals("filesystem") || name.equals("jobmanager")) {
+            return "hashmap";
+        }
+        return name;
+    }
+
+    /**
+     * The configuration a deployment of the template gets: its flinkConfiguration over the
+     * operator's defaults.
+     */
+    public static Configuration templateConfig(BlueGreenContext context) {
+        var spec = context.getBgDeployment().getSpec().getTemplate().getSpec();
+        Configuration conf =
+                context.getCtxFactory()
+                        .getConfigManager()
+                        .getDefaultConfig(
+                                context.getBgDeployment().getMetadata().getNamespace(),
+                                spec.getFlinkVersion());
+        if (spec.getFlinkConfiguration() != null) {
+            conf.addAll(spec.getFlinkConfiguration().asConfiguration());
+        }
+        return conf;
     }
 
     public static boolean lookForCheckpoint(BlueGreenContext context) {

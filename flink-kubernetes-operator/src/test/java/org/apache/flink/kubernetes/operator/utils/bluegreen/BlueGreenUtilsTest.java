@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
@@ -25,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
@@ -51,6 +53,76 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link BlueGreenUtils}. */
 public class BlueGreenUtilsTest {
+
+    @Test
+    public void testSavepointFailureHintOnlyForCanonicalSavepointsOnFlink2() {
+        var canonical = org.apache.flink.core.execution.SavepointFormatType.CANONICAL;
+        var nativeFormat = org.apache.flink.core.execution.SavepointFormatType.NATIVE;
+
+        String hint = BlueGreenUtils.savepointFailureHint(FlinkVersion.v2_0, canonical);
+        assertTrue(hint.contains("async state API"), hint);
+        assertTrue(hint.contains("kubernetes.operator.savepoint.format.type: NATIVE"), hint);
+        assertEquals(hint, BlueGreenUtils.savepointFailureHint(FlinkVersion.v2_2, canonical));
+
+        assertEquals("", BlueGreenUtils.savepointFailureHint(FlinkVersion.v1_20, canonical));
+        assertEquals("", BlueGreenUtils.savepointFailureHint(FlinkVersion.v2_2, nativeFormat));
+        assertEquals("", BlueGreenUtils.savepointFailureHint(null, canonical));
+    }
+
+    @Test
+    public void testNativeTransitionSavepointRefusesAnotherStateBackend() {
+        var error =
+                BlueGreenUtils.validateTransitionStateBackend(
+                        stateConf("NATIVE", "hashmap"), stateConf(null, "rocksdb"));
+        assertTrue(error.isPresent());
+        assertTrue(error.get().contains("from hashmap to rocksdb"), error.get());
+        assertTrue(
+                error.get().contains("kubernetes.operator.savepoint.format.type: CANONICAL"),
+                error.get());
+
+        // No state backend set is the default hash map one
+        assertTrue(
+                BlueGreenUtils.validateTransitionStateBackend(
+                                stateConf("NATIVE", null), stateConf(null, "forst"))
+                        .isPresent());
+    }
+
+    @Test
+    public void testTransitionSavepointAcceptsTheSameStateBackend() {
+        // A canonical savepoint can be restored with any state backend
+        assertFalse(
+                BlueGreenUtils.validateTransitionStateBackend(
+                                stateConf(null, "hashmap"), stateConf(null, "rocksdb"))
+                        .isPresent());
+        assertFalse(
+                BlueGreenUtils.validateTransitionStateBackend(
+                                stateConf("NATIVE", "rocksdb"), stateConf(null, "rocksdb"))
+                        .isPresent());
+        // A factory class name or a legacy alias selects the same backend as its short name
+        assertFalse(
+                BlueGreenUtils.validateTransitionStateBackend(
+                                stateConf("NATIVE", "rocksdb"),
+                                stateConf(
+                                        null,
+                                        "org.apache.flink.contrib.streaming.state"
+                                                + ".EmbeddedRocksDBStateBackendFactory"))
+                        .isPresent());
+        assertFalse(
+                BlueGreenUtils.validateTransitionStateBackend(
+                                stateConf("NATIVE", null), stateConf(null, "filesystem"))
+                        .isPresent());
+    }
+
+    private static Configuration stateConf(String savepointFormat, String stateBackend) {
+        Map<String, String> conf = new HashMap<>();
+        if (savepointFormat != null) {
+            conf.put("kubernetes.operator.savepoint.format.type", savepointFormat);
+        }
+        if (stateBackend != null) {
+            conf.put("state.backend.type", stateBackend);
+        }
+        return Configuration.fromMap(conf);
+    }
 
     private static final String TEST_NAMESPACE = "test-namespace";
 

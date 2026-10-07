@@ -62,6 +62,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -1095,6 +1096,8 @@ public class FlinkBlueGreenDeploymentControllerTest {
         // The next reconciliation will fail in configureInitialSavepoint due to fetch error
         rs = reconcile(rs.deployment);
         assertFailingWithError(rs, "Could not start Transition", error);
+        // Flink 1.x has no async state to explain the failure with
+        assertFalse(rs.reconciledStatus.getError().contains("async state API"));
 
         // Recovery: Clear the fetch error and try again with new spec change
         flinkService.clearSavepointFetchError();
@@ -1106,6 +1109,72 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
         // Continue with successful transition - second savepoint will be "savepoint_2"
         testTransitionToGreen(rs, customValue, "savepoint_2");
+    }
+
+    @Test
+    public void verifySavepointFetchFailureOnFlink2NamesTheNativeFormat() throws Exception {
+        var flinkVersion = FlinkVersion.v2_0;
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.SAVEPOINT);
+        var rs = executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        simulateSpecChange(rs.deployment, UUID.randomUUID().toString());
+        rs = handleSavepoint(rs);
+
+        // What Flink 2.x reports when an async state operator declines a canonical savepoint
+        flinkService.setSavepointFetchError(
+                "CheckpointException: Checkpoint Coordinator is suspending.");
+        rs = reconcile(rs.deployment);
+
+        assertFailingWithError(
+                rs,
+                "Could not start Transition",
+                "Checkpoint Coordinator is suspending.",
+                "async state API",
+                "kubernetes.operator.savepoint.format.type: NATIVE");
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyNativeTransitionSavepointRefusesAnotherStateBackend(FlinkVersion flinkVersion)
+            throws Exception {
+        var deployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.SAVEPOINT);
+        var conf = deployment.getSpec().getTemplate().getSpec().getFlinkConfiguration();
+        conf.put("kubernetes.operator.savepoint.format.type", "NATIVE");
+        conf.put("state.backend.type", "hashmap");
+        var rs = executeBasicDeployment(flinkVersion, deployment, false, null);
+        var lastReconciledSpec = rs.reconciledStatus.getLastReconciledSpec();
+
+        // A native savepoint taken by the hash map backend cannot be restored by RocksDB
+        rs.deployment
+                .getSpec()
+                .getTemplate()
+                .getSpec()
+                .getFlinkConfiguration()
+                .put("state.backend.type", "rocksdb");
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+        rs = reconcile(rs.deployment);
+
+        assertValidationError(rs, "from hashmap to rocksdb", "CANONICAL");
+        assertEquals(
+                lastReconciledSpec,
+                rs.reconciledStatus.getLastReconciledSpec(),
+                "Spec should be reverted on validation error");
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+        assertEquals(1, getFlinkDeployments().size());
+        assertNull(rs.reconciledStatus.getSavepointTriggerId());
     }
 
     @ParameterizedTest
