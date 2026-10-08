@@ -94,6 +94,10 @@ public class FlinkResourceContextFactory {
                         : Executors.newFixedThreadPool(parallelism, threadFactory);
     }
 
+    public FlinkConfigManager getConfigManager() {
+        return configManager;
+    }
+
     public FlinkStateSnapshotContext getFlinkStateSnapshotContext(
             FlinkStateSnapshot savepoint, Context<FlinkStateSnapshot> josdkContext) {
         return new FlinkStateSnapshotContext(

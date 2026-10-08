@@ -45,10 +45,12 @@ The pattern name comes from the two deployment slots, blue and green, between wh
 Continuity has a price, paid twice:
 
 - Capacity: during the transition two complete Flink clusters run side by side, and the environment needs room for both.
-- Delivery: while both jobs run they process the same records, so the output is duplicated with at-least-once semantics. This holds even for otherwise exactly-once jobs, the two deployments process and commit independently, with no coordination that would preserve exactly-once delivery across the transition.
+- Delivery: in the default `BASIC` transition mode both jobs process the same records while they run, so the output is duplicated with at-least-once semantics. This holds even for otherwise exactly-once jobs, the two deployments process and commit independently, with no coordination that would preserve exactly-once delivery across the transition.
 
-Downstream consumers must tolerate the duplicates, through idempotent writes or by deduplicating on read.
+Downstream consumers must tolerate the duplicates, through idempotent writes or by deduplicating on read, unless the transition coordinates the two jobs as described below.
 {{< /hint >}}
+
+The `ADVANCED` transition mode adds that coordination, record by record: a gate injected into both jobs decides which of them writes each record, by the record's event time and the watermarks of the two jobs, so the records that arrive within the watermark are written exactly once across the transition. It needs event-time watermarks and a Java 17 JobManager, and is described under [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
 
 The transition is guarded in the other direction as well: if the new deployment does not become stable within a configurable grace period, the transition is aborted and the previous deployment keeps serving, with the failure reported on the resource.
 
