@@ -297,3 +297,16 @@ Job-specific Java options can therefore keep going into the `FlinkDeployment`, a
 The exception to the above is Flink 1.18, as the `env.java.default-opts.all` option is not available in that version.
 For 1.18 the Helm chart's default configuration sets the `env.java.opts.all` directly, which allows Java 17 based images to work correctly.
 However, a `FlinkDeployment` that sets its own `env.java.opts.all` needs to copy the upstream Java options into its list.
+
+## CPU Limit Factor and the JVM Active Processor Count
+
+When a CPU limit factor is configured (`spec.jobManager/taskManager.resources` with both a CPU request and limit, or `kubernetes.jobmanager/taskmanager.cpu.limit-factor`), the container's CPU limit is higher than its request.
+The container-aware JVM derives `Runtime.availableProcessors()` from the cgroup CPU quota, which reflects the inflated limit, while the memory model (including `MaxDirectMemorySize`) is sized from the request.
+Thread pools and direct buffer allocators scaled from the processor count (e.g. the Netty pooled allocator arenas) can then exceed the direct memory budget and fail with `OutOfMemoryError: Direct buffer memory`.
+
+To prevent this, whenever the effective CPU limit factor is greater than 1 the operator appends `-XX:ActiveProcessorCount=N` to `env.java.opts.jobmanager`/`env.java.opts.taskmanager` in the effective configuration, where `N` is the CPU request rounded up (minimum 1).
+The TaskManager CPU request is resolved the same way Flink resolves the container CPU: `taskmanager.cpu-cores` if set, otherwise `kubernetes.taskmanager.cpu`, falling back to `taskmanager.numberOfTaskSlots` when unset.
+This is a no-op when the limit equals the request.
+
+An explicitly user-set `-XX:ActiveProcessorCount` always wins and disables the injection for the affected component.
+It is detected in `env.java.opts`, `env.java.opts.all` (Flink 1.16+), `env.java.opts.jobmanager`/`env.java.opts.taskmanager`, `env.java.default-opts.*` (Flink 1.18+) and in the `FLINK_ENV_JAVA_OPTS`, `FLINK_ENV_JAVA_OPTS_JM`/`FLINK_ENV_JAVA_OPTS_TM` and `JVM_ARGS` pod template environment variables.
