@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.admission.mutator;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
@@ -64,6 +65,9 @@ public class FlinkMutator implements Mutator<HasMetadata> {
                 if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
                     return mutateStateSnapshot(resource);
                 }
+                if (CrdConstants.KIND_FLINK_MINI_CLUSTER.equals(resource.getKind())) {
+                    return mutateMiniCluster(resource);
+                }
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -86,6 +90,11 @@ public class FlinkMutator implements Mutator<HasMetadata> {
     private HasMetadata mutateDeployment(HasMetadata resource) {
         var flinkDeployment = mapper.convertValue(resource, FlinkDeployment.class);
         return applyMutators(resource, flinkDeployment, FlinkResourceMutator::mutateDeployment);
+    }
+
+    private HasMetadata mutateMiniCluster(HasMetadata resource) {
+        var miniCluster = mapper.convertValue(resource, FlinkMiniCluster.class);
+        return applyMutators(resource, miniCluster, FlinkResourceMutator::mutateMiniCluster);
     }
 
     private HasMetadata mutateStateSnapshot(HasMetadata resource) {
