@@ -40,7 +40,10 @@ import java.util.Map;
 @SuperBuilder
 public abstract class AbstractFlinkSpec {
 
-    /** Job specification for application deployments/session job. Null for session clusters. */
+    /**
+     * Job specification for application deployments, session jobs and MiniClusters. Null for
+     * session clusters.
+     */
     private JobSpec job;
 
     /**

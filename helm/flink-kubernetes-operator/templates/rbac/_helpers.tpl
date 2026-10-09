@@ -132,6 +132,8 @@ rules:
       - flinkbluegreendeployments/finalizers
       - flinkdeployments
       - flinkdeployments/finalizers
+      - flinkminiclusters
+      - flinkminiclusters/finalizers
       - flinksessionjobs
       - flinksessionjobs/finalizers
       - flinkstatesnapshots
@@ -149,6 +151,7 @@ rules:
     resources:
       - flinkbluegreendeployments/status
       - flinkdeployments/status
+      - flinkminiclusters/status
       - flinksessionjobs/status
       - flinkstatesnapshots/status
     verbs:

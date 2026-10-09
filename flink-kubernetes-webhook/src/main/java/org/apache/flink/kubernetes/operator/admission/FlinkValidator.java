@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -70,6 +71,8 @@ public class FlinkValidator implements Validator<HasMetadata> {
             validateSessionJob(resource);
         } else if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
             validateStateSnapshot(resource);
+        } else if (CrdConstants.KIND_FLINK_MINI_CLUSTER.equals(resource.getKind())) {
+            validateMiniCluster(resource);
         } else {
             throw new NotAllowedException("Unexpected resource: " + resource.getKind());
         }
@@ -79,6 +82,11 @@ public class FlinkValidator implements Validator<HasMetadata> {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
         runValidators(validator -> validator.validateDeployment(flinkDeployment));
+    }
+
+    private void validateMiniCluster(KubernetesResource resource) {
+        FlinkMiniCluster miniCluster = objectMapper.convertValue(resource, FlinkMiniCluster.class);
+        runValidators(validator -> validator.validateMiniCluster(miniCluster));
     }
 
     private void validateSessionJob(KubernetesResource resource) {

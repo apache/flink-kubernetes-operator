@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.api.mutator;
 
 import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
@@ -51,4 +52,17 @@ public interface FlinkResourceMutator extends Plugin {
      * @return the mutated snapshot.
      */
     FlinkStateSnapshot mutateStateSnapshot(FlinkStateSnapshot stateSnapshot);
+
+    /**
+     * Mutate MiniCluster and return the mutated Object.
+     *
+     * <p>By default, returns the resource unchanged, so mutators written before {@link
+     * FlinkMiniCluster} existed can work unchanged.
+     *
+     * @param miniCluster the MiniCluster to be mutated.
+     * @return the mutated MiniCluster.
+     */
+    default FlinkMiniCluster mutateMiniCluster(FlinkMiniCluster miniCluster) {
+        return miniCluster;
+    }
 }

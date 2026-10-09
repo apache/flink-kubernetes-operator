@@ -46,13 +46,13 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
     public static final String MSG_MANUAL_RESTORE_REQUIRED = "Manual restore required.";
 
-    /** Last observed status of the Flink job on Application/Session cluster. */
+    /** Last observed status of the Flink job. */
     private JobStatus jobStatus = new JobStatus();
 
-    /** Error information about the FlinkDeployment/FlinkSessionJob. */
+    /** Error information about the resource. */
     private String error;
 
-    /** Last observed generation of the FlinkDeployment/FlinkSessionJob. */
+    /** Last observed generation of the resource. */
     private Long observedGeneration;
 
     /** Lifecycle state of the Flink resource (including being rolled back, failed etc.). */
