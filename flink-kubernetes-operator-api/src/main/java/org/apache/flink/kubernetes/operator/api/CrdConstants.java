@@ -24,6 +24,7 @@ public class CrdConstants {
     public static final String KIND_SESSION_JOB = "FlinkSessionJob";
     public static final String KIND_FLINK_DEPLOYMENT = "FlinkDeployment";
     public static final String KIND_FLINK_STATE_SNAPSHOT = "FlinkStateSnapshot";
+    public static final String KIND_FLINK_MINI_CLUSTER = "FlinkMiniCluster";
 
     public static final String LABEL_TARGET_SESSION = "target.session";
 

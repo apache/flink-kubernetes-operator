@@ -42,6 +42,7 @@ webhooks:
     - UPDATE
     resources:
     - flinkdeployments
+    - flinkminiclusters
     - flinksessionjobs
     - flinkstatesnapshots
   sideEffects: None

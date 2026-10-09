@@ -52,6 +52,7 @@ helm install -f custom-values.yaml  flink-kubernetes-operator  helm/flink-kubern
    ║   crds/*.yml ─► CRDs registered with API server:                                     ║
    ║          │        flinkdeployments,                                                  ║
    ║          │        flinksessionjobs,                                                  ║
+   ║          │        flinkminiclusters,                                                 ║
    ║          │        flinkstatesnapshots,                                               ║
    ║          │        flinkbluegreendeployments                                          ║
    ╚══════════════════════════════════════════════════════════════════════════════════════╝
