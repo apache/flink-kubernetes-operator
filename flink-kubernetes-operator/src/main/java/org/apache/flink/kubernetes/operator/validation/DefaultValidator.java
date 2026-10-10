@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
@@ -101,13 +102,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         Map<String, String> effectiveConfig =
-                configManager
-                        .getDefaultConfig(
-                                deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
-                        .toMap();
-        if (spec.getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(spec.getFlinkConfiguration().asFlatMap());
-        }
+                getEffectiveConfig(
+                        deployment.getMetadata().getNamespace(),
+                        spec.getFlinkVersion(),
+                        spec.getFlinkConfiguration());
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
                 validateFlinkVersion(deployment),
@@ -123,6 +121,18 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateSpecChange(deployment),
                 validateServiceAccount(spec.getServiceAccount()),
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
+    }
+
+    private Map<String, String> getEffectiveConfig(
+            String namespace,
+            FlinkVersion flinkVersion,
+            @Nullable ConfigObjectNode flinkConfiguration) {
+        Map<String, String> effectiveConfig =
+                configManager.getDefaultConfig(namespace, flinkVersion).toMap();
+        if (flinkConfiguration != null) {
+            effectiveConfig.putAll(flinkConfiguration.asFlatMap());
+        }
+        return effectiveConfig;
     }
 
     @SafeVarargs
@@ -675,15 +685,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateSessionJobWithCluster(
             FlinkSessionJob sessionJob, FlinkDeployment sessionCluster) {
         Map<String, String> effectiveConfig =
-                configManager
-                        .getDefaultConfig(
-                                sessionJob.getMetadata().getNamespace(),
-                                sessionCluster.getSpec().getFlinkVersion())
-                        .toMap();
-        if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration().asFlatMap());
-        }
-
+                getEffectiveConfig(
+                        sessionJob.getMetadata().getNamespace(),
+                        sessionCluster.getSpec().getFlinkVersion(),
+                        sessionCluster.getSpec().getFlinkConfiguration());
         if (sessionJob.getSpec().getFlinkConfiguration() != null) {
             effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration().asFlatMap());
         }
