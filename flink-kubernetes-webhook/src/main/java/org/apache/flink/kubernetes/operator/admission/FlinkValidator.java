@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /** Validator for FlinkDeployment creation and updates. */
 public class FlinkValidator implements Validator<HasMetadata> {
@@ -77,12 +78,7 @@ public class FlinkValidator implements Validator<HasMetadata> {
     private void validateDeployment(KubernetesResource resource) {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
-        for (FlinkResourceValidator validator : validators) {
-            Optional<String> validationError = validator.validateDeployment(flinkDeployment);
-            if (validationError.isPresent()) {
-                throw new NotAllowedException(validationError.get());
-            }
-        }
+        runValidators(validator -> validator.validateDeployment(flinkDeployment));
     }
 
     private void validateSessionJob(KubernetesResource resource) {
@@ -93,13 +89,9 @@ public class FlinkValidator implements Validator<HasMetadata> {
         var key = Cache.namespaceKeyFunc(namespace, deploymentName);
         var deployment = informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
 
-        for (FlinkResourceValidator validator : validators) {
-            Optional<String> validationError =
-                    validator.validateSessionJob(sessionJob, Optional.ofNullable(deployment));
-            if (validationError.isPresent()) {
-                throw new NotAllowedException(validationError.get());
-            }
-        }
+        runValidators(
+                validator ->
+                        validator.validateSessionJob(sessionJob, Optional.ofNullable(deployment)));
     }
 
     private void validateStateSnapshot(KubernetesResource resource) {
@@ -130,9 +122,13 @@ public class FlinkValidator implements Validator<HasMetadata> {
             }
         }
 
+        Optional<AbstractFlinkResource<?, ?>> target = Optional.ofNullable(targetResource);
+        runValidators(validator -> validator.validateStateSnapshot(snapshot, target));
+    }
+
+    private void runValidators(Function<FlinkResourceValidator, Optional<String>> validation) {
         for (FlinkResourceValidator validator : validators) {
-            Optional<String> validationError =
-                    validator.validateStateSnapshot(snapshot, Optional.ofNullable(targetResource));
+            Optional<String> validationError = validation.apply(validator);
             if (validationError.isPresent()) {
                 throw new NotAllowedException(validationError.get());
             }
