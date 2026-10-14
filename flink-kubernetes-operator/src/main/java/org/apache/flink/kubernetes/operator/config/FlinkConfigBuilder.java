@@ -546,7 +546,15 @@ public class FlinkConfigBuilder {
     private int getParallelism() {
         if (spec.getTaskManager() != null && spec.getTaskManager().getReplicas() != null) {
             if (spec.getJob().getParallelism() > 0) {
-                LOG.warn("Job parallelism setting is ignored as TaskManager replicas are set");
+                if (KubernetesDeploymentMode.STANDALONE.equals(spec.getMode())
+                        && !effectiveConfig.get(
+                                KubernetesOperatorConfigOptions
+                                        .JOB_PARALLELISM_DERIVE_FROM_REPLICAS)) {
+                    return spec.getJob().getParallelism();
+                }
+                LOG.warn(
+                        "Job parallelism setting is ignored as TaskManager replicas are set, in standalone mode set {} to false to use it",
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS.key());
             }
             return spec.getTaskManager().getReplicas()
                     * effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS);

@@ -25,6 +25,8 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
@@ -120,6 +122,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager(), effectiveConfig),
+                validateStandaloneParallelism(spec, effectiveConfig),
                 validateSpecChange(deployment),
                 validateServiceAccount(spec.getServiceAccount()),
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
@@ -408,6 +411,46 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateTmReplicas(TaskManagerSpec tmSpec) {
         if (tmSpec.getReplicas() != null && tmSpec.getReplicas() < 1) {
             return Optional.of("TaskManager replicas should not be configured less than one.");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateStandaloneParallelism(
+            FlinkDeploymentSpec spec, Map<String, String> confMap) {
+        final var job = spec.getJob();
+        final var tm = spec.getTaskManager();
+        if (job == null
+                || tm == null
+                || tm.getReplicas() == null
+                || KubernetesDeploymentMode.getDeploymentMode(spec)
+                        != KubernetesDeploymentMode.STANDALONE) {
+            return Optional.empty();
+        }
+
+        final Configuration conf = Configuration.fromMap(confMap);
+        if (conf.get(KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS)) {
+            return Optional.empty();
+        }
+
+        final int slots = tm.getReplicas() * conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
+        final int parallelism =
+                Math.max(
+                        job.getParallelism(),
+                        conf.getOptional(PipelineOptions.PARALLELISM_OVERRIDES)
+                                .flatMap(
+                                        overrides ->
+                                                overrides.values().stream()
+                                                        .map(Integer::valueOf)
+                                                        .max(Integer::compareTo))
+                                .orElse(0));
+        if (parallelism > slots) {
+            return Optional.of(
+                    String.format(
+                            "Job parallelism %d is larger than the %d task slots of the TaskManager replicas, which a standalone cluster cannot exceed when %s is false",
+                            parallelism,
+                            slots,
+                            KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS
+                                    .key()));
         }
         return Optional.empty();
     }

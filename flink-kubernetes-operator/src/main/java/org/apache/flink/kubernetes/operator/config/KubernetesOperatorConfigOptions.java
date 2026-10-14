@@ -223,6 +223,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable inplace scaling for Flink 1.18+ using the resource requirements API. On failure or earlier Flink versions it falls back to regular full redeployment.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> JOB_PARALLELISM_DERIVE_FROM_REPLICAS =
+            operatorConfig("job.parallelism.derive-from-replicas")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether, in standalone mode, the job parallelism is derived from the TaskManager replicas times the number of task slots when the TaskManager replicas are set, ignoring the job parallelism. If false, a job parallelism larger than 0 is used as is and the remaining slots stay free, for example as standby capacity. Has no effect in native mode, where slotmanager.redundant-taskmanager-num can be used instead.");
+
     @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
             operatorConfig("dynamic.config.enabled")

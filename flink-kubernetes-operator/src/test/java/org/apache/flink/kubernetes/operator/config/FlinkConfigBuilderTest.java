@@ -1280,6 +1280,68 @@ public class FlinkConfigBuilderTest {
     }
 
     @Test
+    public void testJobParallelismNotDerivedFromReplicasOnlyAppliedForStandaloneMode()
+            throws URISyntaxException, IOException {
+        final FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getJob().setParallelism(4);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS.key(),
+                        "false");
+
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(4);
+        assertThat(
+                        configuration.get(
+                                StandaloneKubernetesConfigOptionsInternal
+                                        .KUBERNETES_TASKMANAGER_REPLICAS))
+                .isEqualTo(3);
+
+        dep.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(6);
+    }
+
+    @Test
+    public void testUnsetJobParallelismFallsBackToTaskManagerReplicas()
+            throws URISyntaxException, IOException {
+        final FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getJob().setParallelism(0);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS.key(),
+                        "false");
+
+        final Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(6);
+    }
+
+    @Test
     public void testParallelismOverridesOnlyAppliedForStandaloneMode()
             throws URISyntaxException, IOException {
         FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
