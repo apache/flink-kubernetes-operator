@@ -25,6 +25,8 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
@@ -117,7 +119,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
+                validateJobSpec(
+                        spec.getJob(),
+                        spec.getTaskManager(),
+                        KubernetesDeploymentMode.getDeploymentMode(spec),
+                        effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager(), effectiveConfig),
                 validateSpecChange(deployment),
@@ -242,7 +248,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJobSpec(
-            JobSpec job, @Nullable TaskManagerSpec tm, Map<String, String> confMap) {
+            JobSpec job,
+            @Nullable TaskManagerSpec tm,
+            @Nullable KubernetesDeploymentMode mode,
+            Map<String, String> confMap) {
         if (job == null) {
             return Optional.empty();
         }
@@ -294,6 +303,41 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("TaskManager replicas must be larger than 0");
         } else if (!tmReplicasDefined && job.getParallelism() < 1) {
             return Optional.of("Job parallelism must be larger than 0");
+        }
+
+        if (tmReplicasDefined
+                && mode == KubernetesDeploymentMode.STANDALONE
+                && !configuration.get(
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS)) {
+            final int slots =
+                    tm.getReplicas() * configuration.get(TaskManagerOptions.NUM_TASK_SLOTS);
+            final int maxParallelismOverride;
+            try {
+                maxParallelismOverride =
+                        configuration
+                                .getOptional(PipelineOptions.PARALLELISM_OVERRIDES)
+                                .flatMap(
+                                        overrides ->
+                                                overrides.values().stream()
+                                                        .map(Integer::valueOf)
+                                                        .max(Integer::compareTo))
+                                .orElse(0);
+            } catch (IllegalArgumentException e) {
+                return Optional.of(
+                        String.format(
+                                "%s parse error: %s",
+                                PipelineOptions.PARALLELISM_OVERRIDES.key(), e.getMessage()));
+            }
+            final int parallelism = Math.max(job.getParallelism(), maxParallelismOverride);
+            if (parallelism > slots) {
+                return Optional.of(
+                        String.format(
+                                "Job parallelism %d is larger than the %d task slots of the TaskManager replicas, which a standalone cluster cannot exceed when %s is false",
+                                parallelism,
+                                slots,
+                                KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS
+                                        .key()));
+            }
         }
 
         return Optional.empty();
@@ -691,7 +735,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig),
+                validateJobSpec(sessionJob.getSpec().getJob(), null, null, effectiveConfig),
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
 
