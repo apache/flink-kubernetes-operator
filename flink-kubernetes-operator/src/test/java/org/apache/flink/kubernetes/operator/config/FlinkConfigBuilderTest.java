@@ -79,8 +79,6 @@ import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEF
 import static org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -1227,7 +1225,7 @@ public class FlinkConfigBuilderTest {
         List<String> classpaths =
                 ConfigUtils.decodeListFromConfig(
                         configuration, PipelineOptions.CLASSPATHS, String::toString);
-        assertThat(classpaths, containsInAnyOrder(correctedJarUri));
+        assertThat(classpaths).containsExactlyInAnyOrder(correctedJarUri);
 
         dep.getSpec().getTaskManager().setReplicas(null);
         dep.getSpec().getJob().setParallelism(10);
