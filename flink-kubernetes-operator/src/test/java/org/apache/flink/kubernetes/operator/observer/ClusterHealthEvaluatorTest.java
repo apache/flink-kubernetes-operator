@@ -263,6 +263,35 @@ class ClusterHealthEvaluatorTest {
         assertClusterHealthIs(false);
     }
 
+    @ParameterizedTest
+    @MethodSource("provideParametersEvaluateLegacyClusterHealthInfo")
+    public void evaluateShouldReevaluateLegacyClusterHealthInfo(
+            boolean legacyHealthy, int observedNumRestarts, boolean expectedHealthy) {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(5));
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD, 100);
+        final var timeStamp = validInstant1.toEpochMilli();
+        clusterInfo.put(
+                ClusterHealthInfo.class.getSimpleName(),
+                String.format(
+                        "{\"timeStamp\":%d,\"numRestarts\":0,\"numRestartsEvaluationTimeStamp\":%d,"
+                                + "\"numCompletedCheckpoints\":1,"
+                                + "\"numCompletedCheckpointsIncreasedTimeStamp\":%d,"
+                                + "\"healthy\":%b}",
+                        timeStamp, timeStamp, timeStamp, legacyHealthy));
+        final var observedClusterHealthInfo =
+                createClusterHealthInfo(validInstant2, observedNumRestarts, 1);
+
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo);
+        assertClusterHealthIs(expectedHealthy);
+    }
+
+    private static Stream<Arguments> provideParametersEvaluateLegacyClusterHealthInfo() {
+        return Stream.of(
+                Arguments.of(false, 0, true),
+                Arguments.of(true, 101, false),
+                Arguments.of(false, 101, false));
+    }
+
     @Test
     public void evaluateShouldMarkClusterHealthyWhenNoCompletedCheckpointsInsideWindow() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);

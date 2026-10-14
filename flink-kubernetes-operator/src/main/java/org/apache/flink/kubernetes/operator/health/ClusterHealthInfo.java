@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.health;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
@@ -31,6 +32,7 @@ import java.time.Clock;
 @Experimental
 @Data
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ClusterHealthInfo {
     /** Millisecond timestamp of the last observed health information. */
     private long timeStamp;
