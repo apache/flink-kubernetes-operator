@@ -104,6 +104,9 @@ class ConfigMapView {
                 refreshConfigMap(resourceRetriever.apply(configMap).update());
                 return;
             } catch (KubernetesClientException e) {
+                if (e.getCode() == HttpURLConnection.HTTP_CONFLICT && adoptIfAlreadyStored()) {
+                    return;
+                }
                 if (e.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
                     throw e;
                 }
@@ -120,7 +123,37 @@ class ConfigMapView {
             }
         }
         LOG.info("Creating ConfigMap {}", configMap.getMetadata().getName());
-        refreshConfigMap(resourceRetriever.apply(configMap).create());
+        try {
+            refreshConfigMap(resourceRetriever.apply(configMap).create());
+        } catch (KubernetesClientException e) {
+            if (e.getCode() != HttpURLConnection.HTTP_CONFLICT || !adoptIfAlreadyStored()) {
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * The Kubernetes client retries a write whose response did not arrive in time. If the first
+     * attempt was applied, the retry conflicts: an update on its stale resourceVersion, a create on
+     * the existing ConfigMap. When the stored ConfigMap holds the local state, it is adopted. Only
+     * what this view writes is compared: the data and the owner references.
+     */
+    private boolean adoptIfAlreadyStored() {
+        var stored = resourceRetriever.apply(configMap).get();
+        if (stored == null
+                || !configMap.getData().equals(stored.getData())
+                || !configMap
+                        .getMetadata()
+                        .getOwnerReferences()
+                        .equals(stored.getMetadata().getOwnerReferences())) {
+            return false;
+        }
+        LOG.info(
+                "ConfigMap {} already holds the local state, adopting resourceVersion {}",
+                configMap.getMetadata().getName(),
+                stored.getMetadata().getResourceVersion());
+        refreshConfigMap(stored);
+        return true;
     }
 
     /**
