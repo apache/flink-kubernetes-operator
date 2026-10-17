@@ -146,19 +146,36 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateDeploymentName(String name) {
+        return validateResourceName(CrdConstants.KIND_FLINK_DEPLOYMENT, name);
+    }
+
+    private Optional<String> validateResourceName(String kind, String name) {
         Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
         if (!matcher.matches()) {
             return Optional.of(
                     String.format(
-                            "The FlinkDeployment name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
-                            name));
+                            "The %s name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
+                            kind, name));
         }
         return Optional.empty();
     }
 
     private Optional<String> validateFlinkVersion(FlinkDeployment deployment) {
         var spec = deployment.getSpec();
-        var version = spec.getFlinkVersion();
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        return validateFlinkVersion(
+                spec.getFlinkVersion(),
+                spec.getJob(),
+                lastReconciledSpec == null ? null : lastReconciledSpec.getFlinkVersion(),
+                lastReconciledSpec == null ? null : lastReconciledSpec.getJob());
+    }
+
+    private Optional<String> validateFlinkVersion(
+            @Nullable FlinkVersion version,
+            @Nullable JobSpec job,
+            @Nullable FlinkVersion lastReconciledVersion,
+            @Nullable JobSpec lastReconciledJob) {
         if (version == null) {
             return Optional.of("Flink Version must be defined.");
         }
@@ -168,17 +185,12 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "Flink version " + version + " is not supported by this operator version");
         }
 
-        var lastReconciledSpec =
-                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
-
-        if (lastReconciledSpec != null
-                && lastReconciledSpec.getJob() != null
-                && spec.getJob() != null
-                && spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
-            var lastJob = lastReconciledSpec.getJob();
-            if (lastJob.getState() == JobState.SUSPENDED
-                    && lastJob.getUpgradeMode() == UpgradeMode.LAST_STATE
-                    && lastReconciledSpec.getFlinkVersion() != spec.getFlinkVersion()) {
+        if (lastReconciledJob != null
+                && job != null
+                && job.getUpgradeMode() != UpgradeMode.STATELESS) {
+            if (lastReconciledJob.getState() == JobState.SUSPENDED
+                    && lastReconciledJob.getUpgradeMode() == UpgradeMode.LAST_STATE
+                    && lastReconciledVersion != version) {
                 return Optional.of(
                         "Changing flinkVersion after last-state suspend is not allowed. Restore your cluster with the current flinkVersion and perform the version upgrade afterwards.");
             }
@@ -607,8 +619,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "Cannot switch from standalone kubernetes to native kubernetes cluster");
         }
 
-        JobSpec oldJob = oldSpec.getJob();
-        JobSpec newJob = newSpec.getJob();
+        return validateSavepointRedeployNonce(oldSpec.getJob(), newSpec.getJob());
+    }
+
+    private static Optional<String> validateSavepointRedeployNonce(
+            @Nullable JobSpec oldJob, @Nullable JobSpec newJob) {
         if (oldJob != null && newJob != null) {
             if (newJob.getSavepointRedeployNonce() != null
                     && !newJob.getSavepointRedeployNonce()
