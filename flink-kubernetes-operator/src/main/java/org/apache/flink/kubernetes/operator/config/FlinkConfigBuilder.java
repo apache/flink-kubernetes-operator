@@ -33,8 +33,10 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
@@ -86,7 +88,9 @@ import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemp
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NAME;
 
-/** Builder to get effective flink config from {@link FlinkDeployment}. */
+/**
+ * Builder to get effective flink config from {@link FlinkDeployment} or {@link FlinkMiniCluster}.
+ */
 public class FlinkConfigBuilder {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigBuilder.class);
@@ -658,6 +662,37 @@ public class FlinkConfigBuilder {
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
                 .build();
+    }
+
+    /**
+     * Builds the effective config for a {@link FlinkMiniCluster}. The pod template and resources
+     * aren't included, as the MiniCluster pod is built from the spec directly.
+     */
+    public static Configuration buildFrom(
+            String namespace,
+            String clusterId,
+            FlinkMiniClusterSpec spec,
+            Configuration flinkConfig)
+            throws IOException {
+        applyFlinkConfiguration(flinkConfig, spec.getFlinkConfiguration(), spec.getFlinkVersion());
+        applyLogConfiguration(flinkConfig, spec.getLogConfiguration());
+        applyImage(flinkConfig, spec.getImage(), spec.getFlinkVersion());
+        applyImagePullPolicy(flinkConfig, spec.getImagePullPolicy());
+        applyServiceAccount(flinkConfig, spec.getServiceAccount());
+
+        var job = spec.getJob();
+        flinkConfig.set(CoreOptions.DEFAULT_PARALLELISM, job.getParallelism());
+        // MiniClusters can't add TaskManagers after startup, so default task slots if not
+        // specified. As for a standalone FlinkDeployment, this covers parallelism overrides.
+        var slots =
+                Math.max(
+                        job.getParallelism(),
+                        getMaxParallelismFromOverrideConfig(flinkConfig).orElse(0));
+        setDefaultConf(flinkConfig, TaskManagerOptions.NUM_TASK_SLOTS, slots);
+        applyApplicationJobConfig(clusterId, flinkConfig, job);
+
+        applyClusterConfig(flinkConfig, namespace, clusterId);
+        return flinkConfig;
     }
 
     private static <T> void setDefaultConf(Configuration conf, ConfigOption<T> option, T value) {
