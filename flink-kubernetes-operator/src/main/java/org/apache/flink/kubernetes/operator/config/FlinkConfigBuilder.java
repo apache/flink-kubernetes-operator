@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -120,40 +121,56 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyImage() {
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImage())) {
+        applyImage(effectiveConfig, spec.getImage(), spec.getFlinkVersion());
+        return this;
+    }
+
+    private static void applyImage(Configuration conf, String image, FlinkVersion flinkVersion) {
+        if (!StringUtils.isNullOrWhitespaceOnly(image)) {
             String configKey;
-            if (spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_17)) {
+            if (flinkVersion.isEqualOrNewer(FlinkVersion.v1_17)) {
                 configKey = KubernetesConfigOptions.CONTAINER_IMAGE.key();
             } else {
                 configKey = "kubernetes.container.image";
             }
-            effectiveConfig.setString(configKey, spec.getImage());
+            conf.setString(configKey, image);
         }
-        return this;
     }
 
     protected FlinkConfigBuilder applyImagePullPolicy() {
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImagePullPolicy())) {
-            effectiveConfig.set(
-                    KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
-                    KubernetesConfigOptions.ImagePullPolicy.valueOf(spec.getImagePullPolicy()));
-        }
+        applyImagePullPolicy(effectiveConfig, spec.getImagePullPolicy());
         return this;
     }
 
+    private static void applyImagePullPolicy(Configuration conf, String imagePullPolicy) {
+        if (!StringUtils.isNullOrWhitespaceOnly(imagePullPolicy)) {
+            conf.set(
+                    KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
+                    KubernetesConfigOptions.ImagePullPolicy.valueOf(imagePullPolicy));
+        }
+    }
+
     protected FlinkConfigBuilder applyFlinkConfiguration() {
+        applyFlinkConfiguration(
+                effectiveConfig, spec.getFlinkConfiguration(), spec.getFlinkVersion());
+        return this;
+    }
+
+    private static void applyFlinkConfiguration(
+            Configuration conf, ConfigObjectNode flinkConfiguration, FlinkVersion flinkVersion) {
         // Parse config from spec's flinkConfiguration
-        if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
-            spec.getFlinkConfiguration().asFlatMap().forEach(effectiveConfig::setString);
+        if (flinkConfiguration != null && !flinkConfiguration.isEmpty()) {
+            flinkConfiguration.asFlatMap().forEach(conf::setString);
         }
 
         // Adapt default rest service type from 1.15+
         setDefaultConf(
-                REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
+                conf,
+                REST_SERVICE_EXPOSED_TYPE,
+                KubernetesConfigOptions.ServiceExposedType.ClusterIP);
         // Set 'web.cancel.enable' to false to avoid users accidentally cancelling jobs.
-        setDefaultConf(CANCEL_ENABLE, false);
-        effectiveConfig.set(FLINK_VERSION, spec.getFlinkVersion());
-        return this;
+        setDefaultConf(conf, CANCEL_ENABLE, false);
+        conf.set(FLINK_VERSION, flinkVersion);
     }
 
     protected static void applyJobConfig(String name, Configuration conf, JobSpec jobSpec) {
@@ -190,14 +207,19 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyLogConfiguration() throws IOException {
-        if (spec.getLogConfiguration() != null) {
+        applyLogConfiguration(effectiveConfig, spec.getLogConfiguration());
+        return this;
+    }
+
+    private static void applyLogConfiguration(
+            Configuration conf, Map<String, String> logConfiguration) throws IOException {
+        if (logConfiguration != null) {
             String confDir =
                     createLogConfigFiles(
-                            spec.getLogConfiguration().get(CONFIG_FILE_LOG4J_NAME),
-                            spec.getLogConfiguration().get(CONFIG_FILE_LOGBACK_NAME));
-            effectiveConfig.setString(CONF_DIR, confDir);
+                            logConfiguration.get(CONFIG_FILE_LOG4J_NAME),
+                            logConfiguration.get(CONFIG_FILE_LOGBACK_NAME));
+            conf.setString(CONF_DIR, confDir);
         }
-        return this;
     }
 
     @VisibleForTesting
@@ -342,11 +364,14 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyServiceAccount() {
-        if (spec.getServiceAccount() != null) {
-            effectiveConfig.set(
-                    KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, spec.getServiceAccount());
-        }
+        applyServiceAccount(effectiveConfig, spec.getServiceAccount());
         return this;
+    }
+
+    private static void applyServiceAccount(Configuration conf, String serviceAccount) {
+        if (serviceAccount != null) {
+            conf.set(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, serviceAccount);
+        }
     }
 
     protected FlinkConfigBuilder applyJobManagerSpec() {
@@ -499,12 +524,7 @@ public class FlinkConfigBuilder {
             }
             effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
 
-            // We need to keep the application clusters around for proper operator behaviour
-            effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
-            setDefaultConf(SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
-
-            // Generic shared job config logic
-            applyJobConfig(clusterId, effectiveConfig, jobSpec);
+            applyApplicationJobConfig(clusterId, effectiveConfig, jobSpec);
         } else {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
@@ -552,6 +572,17 @@ public class FlinkConfigBuilder {
         }
     }
 
+    /** Job config for application clusters, which run a single job. */
+    private static void applyApplicationJobConfig(
+            String clusterId, Configuration conf, JobSpec jobSpec) {
+        // We need to keep the application clusters around for proper operator behaviour
+        conf.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
+        setDefaultConf(conf, SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
+
+        // Generic shared job config logic
+        applyJobConfig(clusterId, conf, jobSpec);
+    }
+
     private String getStandaloneJarURI(JobSpec jobSpec) throws URISyntaxException {
         URI uri = new URI(jobSpec.getJarURI());
 
@@ -580,7 +611,8 @@ public class FlinkConfigBuilder {
         }
 
         if (KubernetesDeploymentMode.STANDALONE.equals(spec.getMode())) {
-            Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
+            Optional<Integer> maxOverrideParallelism =
+                    getMaxParallelismFromOverrideConfig(effectiveConfig);
             if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
                 return maxOverrideParallelism.get();
             }
@@ -589,9 +621,8 @@ public class FlinkConfigBuilder {
         return spec.getJob().getParallelism();
     }
 
-    private Optional<Integer> getMaxParallelismFromOverrideConfig() {
-        return effectiveConfig
-                .getOptional(PipelineOptions.PARALLELISM_OVERRIDES)
+    private static Optional<Integer> getMaxParallelismFromOverrideConfig(Configuration conf) {
+        return conf.getOptional(PipelineOptions.PARALLELISM_OVERRIDES)
                 .flatMap(
                         overrides ->
                                 overrides.values().stream()
@@ -600,14 +631,17 @@ public class FlinkConfigBuilder {
     }
 
     protected Configuration build() {
-
-        // Set cluster config
-        effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
-        effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
-        if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
-            effectiveConfig.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
-        }
+        applyClusterConfig(effectiveConfig, namespace, clusterId);
         return effectiveConfig;
+    }
+
+    private static void applyClusterConfig(Configuration conf, String namespace, String clusterId) {
+        // Set cluster config
+        conf.setString(KubernetesConfigOptions.NAMESPACE, namespace);
+        conf.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
+        if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+            conf.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
+        }
     }
 
     public static Configuration buildFrom(
@@ -624,10 +658,6 @@ public class FlinkConfigBuilder {
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
                 .build();
-    }
-
-    private <T> void setDefaultConf(ConfigOption<T> option, T value) {
-        setDefaultConf(effectiveConfig, option, value);
     }
 
     private static <T> void setDefaultConf(Configuration conf, ConfigOption<T> option, T value) {
