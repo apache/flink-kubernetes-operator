@@ -279,6 +279,13 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                 Collectors.toMap(
                                         JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
                                         JobDetailsInfo.JobVertexDetailsInfo::getMaxParallelism));
+        var vertexNames =
+                jobDetailsInfo.getJobVertexInfos().stream()
+                        .filter(e -> e.getName() != null)
+                        .collect(
+                                Collectors.toMap(
+                                        JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
+                                        JobDetailsInfo.JobVertexDetailsInfo::getName));
 
         // Flink 1.17 introduced a strange behaviour where the JobDetailsInfo#getJsonPlan()
         // doesn't return the jsonPlan correctly but it wraps with RawJson{json='plan'}
@@ -299,7 +306,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                         });
 
         return JobTopology.fromJsonPlan(
-                json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
+                json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished, vertexNames);
     }
 
     private void updateKafkaPulsarSourceNumPartitions(

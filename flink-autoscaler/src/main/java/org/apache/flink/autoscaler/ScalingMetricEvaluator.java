@@ -118,7 +118,7 @@ public class ScalingMetricEvaluator<KEY, Context extends JobAutoScalerContext<KE
         cycleState
                 .getAutoscalerMetrics()
                 .registerScalingMetrics(
-                        collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                        collectedMetrics.getJobTopology(),
                         () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
 
         if (!collectedMetrics.isFullyCollected()) {

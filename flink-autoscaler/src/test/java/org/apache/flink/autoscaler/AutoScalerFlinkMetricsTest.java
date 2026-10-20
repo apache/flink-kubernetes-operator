@@ -22,6 +22,8 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -32,25 +34,27 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.AVERAGE;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.CURRENT;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.JOB_VERTEX_ID;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.JOB_VERTEX_NAME;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link AutoscalerFlinkMetrics} tests. */
 public class AutoScalerFlinkMetricsTest {
 
     public static final String DELIMITER = ".";
     private final JobVertexID jobVertexID = new JobVertexID();
+    private JobTopology jobTopology;
     private JobID jobID;
 
     private GenericMetricGroup metricGroup;
@@ -73,6 +77,7 @@ public class AutoScalerFlinkMetricsTest {
 
         metrics = new AutoscalerFlinkMetrics(metricGroup);
         jobID = new JobID();
+        jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 1, null));
     }
 
     @Test
@@ -82,8 +87,8 @@ public class AutoScalerFlinkMetricsTest {
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> lastEvaluatedMetrics.get(jobID));
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> lastEvaluatedMetrics.get(jobID));
+        metrics.registerScalingMetrics(jobTopology, () -> lastEvaluatedMetrics.get(jobID));
+        metrics.registerScalingMetrics(jobTopology, () -> lastEvaluatedMetrics.get(jobID));
 
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
@@ -94,7 +99,7 @@ public class AutoScalerFlinkMetricsTest {
     @Test
     public void testAllVertexScalingMetricsAreRegistered() {
         int numMetricsAlreadyRegistered = collectedMetrics.size();
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> null);
+        metrics.registerScalingMetrics(jobTopology, () -> null);
         int numScalingMetrics = 0;
         for (ScalingMetric scalingMetric : ScalingMetric.REPORTED_VERTEX_METRICS) {
             if (scalingMetric.isCalculateAverage()) {
@@ -112,7 +117,7 @@ public class AutoScalerFlinkMetricsTest {
         var lastEvaluatedMetrics = new HashMap<JobID, EvaluatedMetrics>();
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> lastEvaluatedMetrics.get(jobID));
+        metrics.registerScalingMetrics(jobTopology, () -> lastEvaluatedMetrics.get(jobID));
 
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
@@ -134,7 +139,7 @@ public class AutoScalerFlinkMetricsTest {
         resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> lastEvaluatedMetrics.get(jobID));
+        metrics.registerScalingMetrics(jobTopology, () -> lastEvaluatedMetrics.get(jobID));
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(Double.NaN, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));
@@ -148,11 +153,24 @@ public class AutoScalerFlinkMetricsTest {
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(List.of(jobVertexID), () -> lastEvaluatedMetrics.get(jobID));
+        metrics.registerScalingMetrics(jobTopology, () -> lastEvaluatedMetrics.get(jobID));
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));
         assertEquals(2000., getAverageMetricValue(TRUE_PROCESSING_RATE));
+    }
+
+    @Test
+    public void testVertexNameAddedToMetricScope() {
+        var vertex = new VertexInfo(jobVertexID, Map.of(), 1, 1, null);
+        vertex.setName("my-vertex");
+
+        metrics.registerScalingMetrics(new JobTopology(vertex), () -> null);
+
+        assertTrue(
+                collectedMetrics.keySet().stream()
+                        .anyMatch(id -> id.contains(JOB_VERTEX_NAME + DELIMITER + "my-vertex")),
+                "Vertex name is missing from the metric identifiers: " + collectedMetrics.keySet());
     }
 
     private static Map<ScalingMetric, EvaluatedScalingMetric> testMetrics() {

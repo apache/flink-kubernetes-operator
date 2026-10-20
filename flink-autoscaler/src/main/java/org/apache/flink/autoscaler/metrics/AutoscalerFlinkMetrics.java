@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -25,7 +26,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -40,6 +40,7 @@ public class AutoscalerFlinkMetrics {
     @VisibleForTesting public static final String CURRENT = "Current";
     @VisibleForTesting public static final String AVERAGE = "Average";
     @VisibleForTesting public static final String JOB_VERTEX_ID = "jobVertexID";
+    @VisibleForTesting public static final String JOB_VERTEX_NAME = "jobVertexName";
 
     private final Counter numScalings;
 
@@ -71,7 +72,7 @@ public class AutoscalerFlinkMetrics {
     }
 
     public void registerScalingMetrics(
-            List<JobVertexID> jobVertices, Supplier<EvaluatedMetrics> metricsSupplier) {
+            JobTopology jobTopology, Supplier<EvaluatedMetrics> metricsSupplier) {
         if (scalingMetricsInitialized) {
             // It is important that we only initialize these metrics once because the Flink API does
             // not support registering counters / gauges multiple times.
@@ -81,10 +82,17 @@ public class AutoscalerFlinkMetrics {
         scalingMetricsInitialized = true;
 
         LOG.info("Registering scaling metrics");
-        for (JobVertexID jobVertexID : jobVertices) {
+        for (JobVertexID jobVertexID : jobTopology.getVerticesInTopologicalOrder()) {
 
             MetricGroup jobVertexGroup =
                     metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());
+
+            var vertexName = jobTopology.get(jobVertexID).getName();
+            if (vertexName != null) {
+                // The vertex id is not interpretable on its own and is dropped by metric backends
+                // that refuse high cardinality ids, the name makes the metrics usable.
+                jobVertexGroup = jobVertexGroup.addGroup(JOB_VERTEX_NAME, vertexName);
+            }
 
             for (ScalingMetric scalingMetric : ScalingMetric.REPORTED_VERTEX_METRICS) {
                 MetricGroup scalingMetricGroup = jobVertexGroup.addGroup(scalingMetric.name());

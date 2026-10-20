@@ -25,6 +25,8 @@ import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
 
+import javax.annotation.Nullable;
+
 import java.util.Map;
 
 /** Job vertex information. */
@@ -32,6 +34,12 @@ import java.util.Map;
 public class VertexInfo {
 
     private final JobVertexID id;
+
+    /**
+     * Human readable name of the vertex as reported by the JobManager. It makes the autoscaler
+     * metrics interpretable, the id alone is not. May be {@code null} when the name is unknown.
+     */
+    @Nullable private String name;
 
     // All input vertices and the ship_strategy
     private final Map<JobVertexID, ShipStrategy> inputs;

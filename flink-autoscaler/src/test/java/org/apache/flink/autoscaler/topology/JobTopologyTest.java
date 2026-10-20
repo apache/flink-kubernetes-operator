@@ -68,6 +68,7 @@ public class JobTopologyTest {
 
         var vertices = new HashMap<String, JobVertexID>();
         var maxParallelism = new HashMap<JobVertexID, Integer>();
+        var vertexNames = new HashMap<JobVertexID, String>();
         for (JobVertex vertex : jobGraph.getVertices()) {
             vertices.put(vertex.getName(), vertex.getID());
             maxParallelism.put(
@@ -75,11 +76,17 @@ public class JobTopologyTest {
                     vertex.getMaxParallelism() != -1
                             ? vertex.getMaxParallelism()
                             : SchedulerBase.getDefaultMaxParallelism(vertex));
+            vertexNames.put(vertex.getID(), vertex.getName());
         }
 
         JobTopology jobTopology =
                 JobTopology.fromJsonPlan(
-                        jsonPlan, Map.of(), maxParallelism, Map.of(), Collections.emptySet());
+                        jsonPlan,
+                        Map.of(),
+                        maxParallelism,
+                        Map.of(),
+                        Collections.emptySet(),
+                        vertexNames);
 
         assertTrue(jobTopology.get(vertices.get("Sink: sink1")).getOutputs().isEmpty());
         assertTrue(jobTopology.get(vertices.get("Sink: sink2")).getOutputs().isEmpty());
@@ -110,5 +117,7 @@ public class JobTopologyTest {
         assertEquals(2, jobTopology.get(vertices.get("map1")).getParallelism());
         assertEquals(4, jobTopology.get(vertices.get("map2")).getParallelism());
         jobTopology.getVertexInfos().forEach((v, p) -> assertEquals(128, p.getMaxParallelism()));
+        assertEquals("map1", jobTopology.get(vertices.get("map1")).getName());
+        assertEquals("Sink: sink2", jobTopology.get(vertices.get("Sink: sink2")).getName());
     }
 }

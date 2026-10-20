@@ -358,6 +358,14 @@ These resource-scoped metrics expose the autoscaler's view of each managed job a
 
 The `<ScalingMetric>` placeholder in the resource-scoped `AutoScaler.jobVertexID.<jobVertexID>.<ScalingMetric>.{Current,Average}` gauges takes one of the following values (per job vertex). `<jobVertexID>` is the hex id of a Flink job vertex as reported by the JobManager REST API.
 
+When the JobManager reports the name of the job vertex, the name is added to the metric scope, which makes the metrics readable and filterable without resolving the id first:
+
+```
+AutoScaler.jobVertexID.<jobVertexID>.jobVertexName.<vertexName>.<ScalingMetric>.Current
+```
+
+Vertices whose name is not available are reported with the id only.
+
 | Name                        | Description                                                                                              | `.Average` emitted? |
 |-----------------------------|----------------------------------------------------------------------------------------------------------|---------------------|
 | `CATCH_UP_DATA_RATE`        | Additional processing rate needed to catch up with the backlog within the catch-up window (records/sec). | No                  |

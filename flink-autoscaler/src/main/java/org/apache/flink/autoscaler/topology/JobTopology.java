@@ -146,7 +146,8 @@ public class JobTopology {
             Map<JobVertexID, SlotSharingGroupId> slotSharingGroupIdMap,
             Map<JobVertexID, Integer> maxParallelismMap,
             Map<JobVertexID, IOMetrics> metrics,
-            Set<JobVertexID> finishedVertices)
+            Set<JobVertexID> finishedVertices,
+            Map<JobVertexID, String> vertexNames)
             throws JsonProcessingException {
         ObjectNode plan = objectMapper.readValue(jsonPlan, ObjectNode.class);
         ArrayNode nodes = (ArrayNode) plan.get("nodes");
@@ -162,7 +163,7 @@ public class JobTopology {
             var inputs = new HashMap<JobVertexID, ShipStrategy>();
             var ioMetrics = metrics.get(vertexId);
             var finished = finishedVertices.contains(vertexId);
-            vertexInfo.add(
+            var vertex =
                     new VertexInfo(
                             vertexId,
                             slotSharingGroupIdMap.get(vertexId),
@@ -170,7 +171,9 @@ public class JobTopology {
                             node.get("parallelism").asInt(),
                             maxParallelismMap.get(vertexId),
                             finished,
-                            finished ? IOMetrics.FINISHED_METRICS : ioMetrics));
+                            finished ? IOMetrics.FINISHED_METRICS : ioMetrics);
+            vertex.setName(vertexNames.get(vertexId));
+            vertexInfo.add(vertex);
             if (node.has("inputs")) {
                 for (JsonNode input : node.get("inputs")) {
                     inputs.put(

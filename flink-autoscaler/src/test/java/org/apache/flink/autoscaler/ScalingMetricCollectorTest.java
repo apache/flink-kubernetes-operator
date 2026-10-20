@@ -224,9 +224,11 @@ public class ScalingMetricCollectorTest {
         var sinkId = JobVertexID.fromHexString("20ba6b65f97481d5570070de90e4e791");
 
         var source = new VertexInfo(sourceId, Map.of(), 2, 128, true, IOMetrics.FINISHED_METRICS);
+        source.setName("Source: Custom Source");
         var sink =
                 new VertexInfo(
                         sinkId, Map.of(sourceId, HASH), 2, 128, false, new IOMetrics(291532, 1, 2));
+        sink.setName("Flat Map -> Sink: Print to Std. Out");
 
         assertEquals(
                 new JobTopology(source, sink), metricsCollector.getJobTopology(jobDetailsInfo));
