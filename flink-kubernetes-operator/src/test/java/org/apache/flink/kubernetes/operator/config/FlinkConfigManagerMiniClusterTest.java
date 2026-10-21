@@ -23,6 +23,7 @@ import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -211,6 +212,54 @@ class FlinkConfigManagerMiniClusterTest {
                 .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "vertex-a:1");
 
         assertThat(deployConfig(miniCluster).get(TaskManagerOptions.NUM_TASK_SLOTS)).isEqualTo(3);
+    }
+
+    @Test
+    void testResourceConfigDerivedFromResources() {
+        // 1 CPU and 2Gi: 1632Mi is left after 128Mi of managed memory, 64Mi of network memory, the
+        // 160Mi native memory reserve and 64Mi of headroom, more than the 75% of the memory the
+        // heap is capped at
+        var conf = deployConfig(TestUtils.buildMiniCluster());
+
+        assertThat(conf.get(TaskManagerOptions.MANAGED_MEMORY_SIZE))
+                .isEqualTo(MemorySize.parse("128m"));
+        assertThat(conf.get(TaskManagerOptions.NETWORK_MEMORY_MIN))
+                .isEqualTo(MemorySize.parse("64m"));
+        assertThat(conf.get(TaskManagerOptions.NETWORK_MEMORY_MAX))
+                .isEqualTo(MemorySize.parse("64m"));
+        assertThat(conf.get(CoreOptions.FLINK_JVM_OPTIONS))
+                // 128Mi of framework off-heap memory and 64Mi of network memory
+                .isEqualTo(
+                        "-XX:ActiveProcessorCount=1 -Xmx1536m -XX:MaxDirectMemorySize=201326592");
+        assertThat(conf.getString(MiniClusterResourceConfigUtils.MALLOC_CONF_KEY, null))
+                .isEqualTo("narenas:1,tcache:false");
+    }
+
+    @Test
+    void testUserMemoryConfigOverridesDerived() {
+        var miniCluster = TestUtils.buildMiniCluster();
+        miniCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(TaskManagerOptions.MANAGED_MEMORY_SIZE.key(), "1g");
+
+        assertThat(deployConfig(miniCluster).get(TaskManagerOptions.MANAGED_MEMORY_SIZE))
+                .isEqualTo(MemorySize.parse("1g"));
+    }
+
+    @Test
+    void testUnparseableUserMemoryConfigIsPassedToFlink() {
+        // Flink rejects it when the MiniCluster starts, as it does for a FlinkDeployment
+        var miniCluster = TestUtils.buildMiniCluster();
+        miniCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(TaskManagerOptions.MANAGED_MEMORY_SIZE.key(), "lots");
+
+        assertThat(
+                        deployConfig(miniCluster)
+                                .getString(TaskManagerOptions.MANAGED_MEMORY_SIZE.key(), null))
+                .isEqualTo("lots");
     }
 
     @Test

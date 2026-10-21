@@ -34,10 +34,12 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 
 import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Map;
 import java.util.Optional;
@@ -247,6 +249,54 @@ class DefaultValidatorMiniClusterTest {
                 "MiniCluster resource requirements memory request (2Gi) must not exceed its limit (1Gi)");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"512m", "512M", "1G", "1g", "512Mi", "536870912", "64Mi", "5e8"})
+    void testMemoryFormats(String memory) {
+        // Read as for a FlinkDeployment, so e.g. 512m is 512 mebibytes rather than millibytes
+        testSuccess(mc -> mc.getSpec().setResources(memory(memory, memory)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"63Mi", "512k", "512Ki", "512"})
+    void testMemoryBelowMinimum(String memory) {
+        testError(
+                mc -> mc.getSpec().setResources(memory(memory, memory)),
+                "MiniCluster memory must be at least 64Mi, as less leaves no room for the JVM: "
+                        + memory);
+    }
+
+    @Test
+    void testMemoryMinimumUsesRequest() {
+        testError(
+                mc -> mc.getSpec().setResources(memory("32Mi", "1Gi")),
+                "MiniCluster memory must be at least 64Mi");
+    }
+
+    @Test
+    void testMemoryRequestAndLimitInDifferentFormats() {
+        // 512m and 1G are 512 mebibytes and a gibibyte, so the request is below the limit
+        testSuccess(mc -> mc.getSpec().setResources(memory("512m", "1G")));
+        testError(
+                mc -> mc.getSpec().setResources(memory("1G", "1000Mi")),
+                "MiniCluster resource requirements memory request (1G) must not exceed its limit"
+                        + " (1000Mi)");
+    }
+
+    @Test
+    void testFractionalMemoryIsRejected() {
+        // As for a FlinkDeployment, which can't parse the fraction either
+        testError(
+                mc -> mc.getSpec().setResources(memory("0.5Gi", "0.5Gi")),
+                "MiniCluster resource requirements requests memory parse error");
+    }
+
+    private static ResourceRequirements memory(String request, String limit) {
+        return new ResourceRequirementsBuilder()
+                .addToRequests("memory", new Quantity(request))
+                .addToLimits("memory", new Quantity(limit))
+                .build();
+    }
+
     @Test
     void testForbiddenConfig() {
         testError(
@@ -325,6 +375,24 @@ class DefaultValidatorMiniClusterTest {
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
         reconciliationStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecWithMeta(miniCluster.getSpec(), miniCluster));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "taskmanager.memory.managed.size",
+                "taskmanager.memory.network.min",
+                "taskmanager.memory.network.max"
+            })
+    void testUnparseableMemoryOptionIsAcceptedAsForFlinkDeployment(String key) {
+        // Pins the behaviour to that of a FlinkDeployment, so that a spec moved between the two
+        // kinds is accepted by both or by neither. A FlinkDeployment with its memory in the spec
+        // doesn't validate these options either: a value that can't be parsed fails when used.
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getFlinkConfiguration().put(key, "abc");
+        assertThat(validator.validateDeployment(deployment)).isEmpty();
+
+        testSuccess(mc -> mc.getSpec().getFlinkConfiguration().put(key, "abc"));
     }
 
     private void testSuccess(Consumer<FlinkMiniCluster> modifier) {

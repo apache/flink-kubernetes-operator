@@ -666,7 +666,8 @@ public class FlinkConfigBuilder {
 
     /**
      * Builds the effective config for a {@link FlinkMiniCluster}. The pod template and resources
-     * aren't included, as the MiniCluster pod is built from the spec directly.
+     * aren't included, as the MiniCluster pod is built from the spec directly, but the CPU and
+     * memory configuration is derived from the resources.
      */
     public static Configuration buildFrom(
             String namespace,
@@ -675,6 +676,10 @@ public class FlinkConfigBuilder {
             Configuration flinkConfig)
             throws IOException {
         applyFlinkConfiguration(flinkConfig, spec.getFlinkConfiguration(), spec.getFlinkVersion());
+        // After the flinkConfiguration, so that the CPU and memory options set there take
+        // precedence
+        MiniClusterResourceConfigUtils.applyResourceConfig(
+                flinkConfig, spec.getResources(), spec.getPodTemplate());
         applyLogConfiguration(flinkConfig, spec.getLogConfiguration());
         applyImage(flinkConfig, spec.getImage(), spec.getFlinkVersion());
         applyImagePullPolicy(flinkConfig, spec.getImagePullPolicy());

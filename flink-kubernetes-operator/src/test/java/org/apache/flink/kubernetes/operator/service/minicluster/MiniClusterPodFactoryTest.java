@@ -53,12 +53,17 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.PodTemplateSpecBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -339,6 +344,64 @@ class MiniClusterPodFactoryTest {
                         tuple(
                                 Constants.USER_ARTIFACTS_VOLUME,
                                 ArtifactFetchOptions.BASE_DIR.defaultValue()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // Read as for a FlinkDeployment, so e.g. 512m is 512 mebibytes rather than millibytes
+        "512m, 512Mi",
+        "512M, 512Mi",
+        "1G, 1024Mi",
+        "1g, 1024Mi",
+        "500000k, 512000000",
+        // Kept as they are when Kubernetes reads them as the same size
+        "512Mi, 512Mi",
+        "1Gi, 1Gi",
+        "5e8, 5e8",
+        "536870912, 536870912"
+    })
+    void testMemoryFormats(String memory, String podMemory) throws IOException {
+        miniCluster.getSpec().setResources(memory(memory, memory));
+        var resources = mainContainer(podSpec(build())).getResources();
+
+        assertThat(resources.getRequests().get("memory")).hasToString(podMemory);
+        assertThat(resources.getLimits().get("memory")).hasToString(podMemory);
+    }
+
+    @Test
+    void testMemoryRequestAndLimitInDifferentFormats() throws IOException {
+        miniCluster.getSpec().setResources(memory("512m", "1G"));
+        var resources = mainContainer(podSpec(build())).getResources();
+
+        assertThat(resources.getRequests().get("memory")).hasToString("512Mi");
+        assertThat(resources.getLimits().get("memory")).hasToString("1024Mi");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"512m", "512M", "1G", "500000k", "5e8", "512Mi", "1Gi", "536870912"})
+    void testMemoryMatchesFlinkDeployment(String memory) throws IOException {
+        // A FlinkDeployment's JobManager is sized from the same memory
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJobManager().setResources(memory(memory, memory));
+        var deploymentMemory =
+                configManager
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec())
+                        .get(JobManagerOptions.TOTAL_PROCESS_MEMORY);
+
+        miniCluster.getSpec().setResources(memory(memory, memory));
+        var podMemory = mainContainer(podSpec(build())).getResources().getLimits().get("memory");
+
+        assertThat(
+                        org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.Quantity
+                                .getAmountInBytes(podMemory))
+                .isEqualByComparingTo(BigDecimal.valueOf(deploymentMemory.getBytes()));
+    }
+
+    private static ResourceRequirements memory(String request, String limit) {
+        return new ResourceRequirementsBuilder()
+                .addToRequests("memory", new Quantity(request))
+                .addToLimits("memory", new Quantity(limit))
+                .build();
     }
 
     @Test
@@ -902,6 +965,38 @@ class MiniClusterPodFactoryTest {
     }
 
     @Test
+    void testMallocConfFromCpu() throws IOException {
+        // The image's entrypoint would otherwise use the node's CPUs, as there is no CPU limit
+        assertThat(mainContainer(podSpec(build())).getEnv())
+                .filteredOn(env -> env.getName().equals("MALLOC_CONF"))
+                .extracting(EnvVar::getValue)
+                .containsExactly("narenas:1,tcache:false");
+    }
+
+    @Test
+    void testMallocConfFromPodTemplateIsKept() throws IOException {
+        miniCluster
+                .getSpec()
+                .setPodTemplate(
+                        new PodTemplateSpecBuilder()
+                                .withNewSpec()
+                                .addNewContainer()
+                                .withName(Constants.MAIN_CONTAINER_NAME)
+                                .addNewEnv()
+                                .withName("MALLOC_CONF")
+                                .withValue("narenas:2")
+                                .endEnv()
+                                .endContainer()
+                                .endSpec()
+                                .build());
+
+        assertThat(mainContainer(podSpec(build())).getEnv())
+                .filteredOn(env -> env.getName().equals("MALLOC_CONF"))
+                .extracting(EnvVar::getValue)
+                .containsExactly("narenas:2");
+    }
+
+    @Test
     void testConfigFileIsReadableByFlink() throws IOException {
         miniCluster
                 .getSpec()
@@ -911,13 +1006,36 @@ class MiniClusterPodFactoryTest {
 
         var conf = loadConfigFile(build());
 
+        // Followed by the JVM options derived from spec.resources
         assertThat(conf.get(CoreOptions.FLINK_JVM_OPTIONS))
-                .isEqualTo("-Dname=\"quoted value\" -Dother='single quoted'");
+                .startsWith("-Dname=\"quoted value\" -Dother='single quoted' ");
         assertThat(conf.get(ApplicationConfiguration.APPLICATION_ARGS))
                 .containsExactly("--input", "/data/in");
         assertThat(conf.get(DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH)).isFalse();
         assertThat(conf.get(KubernetesConfigOptions.CLUSTER_ID)).isEqualTo(NAME);
         assertThat(conf.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(1);
+    }
+
+    @Test
+    void testDeprecatedJvmOptionsKeyIsWrittenToConfigFile() throws IOException {
+        // As for a FlinkDeployment, the deprecated key on its own is accepted
+        miniCluster.getSpec().getFlinkConfiguration().put("env.java.opts", "-Dlegacy=true");
+
+        var conf = loadConfigFile(build());
+
+        // Followed by the JVM options derived from spec.resources
+        assertThat(conf.get(CoreOptions.FLINK_JVM_OPTIONS)).startsWith("-Dlegacy=true ");
+    }
+
+    @Test
+    void testDeprecatedAndCurrentJvmOptionsKeysAreRejected() {
+        // As for a FlinkDeployment, a config file with both keys is rejected
+        miniCluster.getSpec().getFlinkConfiguration().put("env.java.opts", "-Dlegacy=true");
+        miniCluster.getSpec().getFlinkConfiguration().put("env.java.opts.all", "-Dcurrent=true");
+
+        assertThatThrownBy(this::build)
+                .hasMessageContaining(
+                        "Overlapping key prefixes detected (env.java.opts -> env.java.opts.all)");
     }
 
     @Test

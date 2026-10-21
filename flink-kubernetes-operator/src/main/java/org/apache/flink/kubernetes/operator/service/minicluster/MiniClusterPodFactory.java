@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.service.minicluster;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
@@ -29,11 +30,13 @@ import org.apache.flink.kubernetes.kubeclient.decorators.KerberosMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.KubernetesStepDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.MountSecretsDecorator;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.Container;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.HasMetadata;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.PodBuilder;
@@ -50,6 +53,7 @@ import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.client.utils.Serialization;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -247,8 +251,46 @@ public final class MiniClusterPodFactory {
         }
         if (specValues != null) {
             merged.putAll(specValues);
+            final var memory = specValues.get(CrdConstants.MEMORY);
+            if (memory != null) {
+                merged.put(CrdConstants.MEMORY, parseMemory(memory));
+            }
         }
         return merged;
+    }
+
+    /**
+     * Reads memory as it is read for a {@code FlinkDeployment}, and as the MiniCluster's memory
+     * configuration is derived from it, e.g. {@code 512m} as 512 mebibytes rather than Kubernetes'
+     * 512 millibytes. Like Flink does for a {@code FlinkDeployment}, the container gets the parsed
+     * size, in mebibytes when it is a whole number of them. A quantity that Kubernetes reads as the
+     * same size, e.g. {@code 1Gi}, is kept as it is.
+     */
+    private static Quantity parseMemory(Quantity memory) {
+        final MemorySize size;
+        try {
+            size = ResourceConfigUtils.parseMemoryQuantity(memory);
+        } catch (IllegalArgumentException e) {
+            // Validation rejects the resource before it is deployed
+            return memory;
+        }
+        if (isKubernetesSize(memory, size)) {
+            return memory;
+        }
+        final long mebiByte = MemorySize.ofMebiBytes(1).getBytes();
+        return size.getBytes() % mebiByte == 0
+                ? new Quantity(size.getBytes() / mebiByte + "Mi")
+                : new Quantity(String.valueOf(size.getBytes()));
+    }
+
+    private static boolean isKubernetesSize(Quantity memory, MemorySize size) {
+        try {
+            return Quantity.getAmountInBytes(memory).compareTo(new BigDecimal(size.getBytes()))
+                    == 0;
+        } catch (IllegalArgumentException e) {
+            // Flink syntax that isn't a Kubernetes quantity, e.g. 1g
+            return false;
+        }
     }
 
     private static Deployment createDeployment(

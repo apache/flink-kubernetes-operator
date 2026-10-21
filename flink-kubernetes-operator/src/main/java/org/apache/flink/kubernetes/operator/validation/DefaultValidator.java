@@ -48,6 +48,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.config.MiniClusterResourceConfigUtils;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -756,7 +757,21 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of(
                     "MiniCluster memory must be defined using spec.resources.requests.memory or spec.resources.limits.memory");
         }
-        return validateResourceRequirements("MiniCluster", resources);
+        final var error = validateResourceRequirements("MiniCluster", resources);
+        if (error.isPresent()) {
+            return error;
+        }
+        // The request, or the limit without one, is what the memory configuration is derived from
+        final var memory = ResourceConfigUtils.getRequestOrLimit(resources, CrdConstants.MEMORY);
+        if (ResourceConfigUtils.parseMemoryQuantity(memory)
+                        .compareTo(MiniClusterResourceConfigUtils.MIN_MEMORY)
+                < 0) {
+            return Optional.of(
+                    String.format(
+                            "MiniCluster memory must be at least %dMi, as less leaves no room for the JVM: %s",
+                            MiniClusterResourceConfigUtils.MIN_MEMORY.getMebiBytes(), memory));
+        }
+        return Optional.empty();
     }
 
     private Optional<String> validateSpecChange(FlinkMiniCluster miniCluster) {
