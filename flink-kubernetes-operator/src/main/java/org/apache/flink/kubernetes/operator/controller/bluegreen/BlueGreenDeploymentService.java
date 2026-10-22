@@ -49,6 +49,7 @@ import java.util.Objects;
 
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isCandidateReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
@@ -487,13 +488,17 @@ public class BlueGreenDeploymentService {
             }
         }
 
-        if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
+        if (isCandidateReady(transitionState.nextDeployment)) {
             return shouldWeDelete(
                     context,
                     transitionState.currentDeployment,
                     transitionState.nextDeployment,
                     transitionState.nextState);
         } else {
+            // Any readiness evidence recorded so far no longer describes a ready candidate
+            // (e.g. its spec changed or its job stopped running). A fresh deletion delay must
+            // start once the current revision is observed ready.
+            resetReadiness(context.getDeploymentStatus());
             return shouldWeAbort(
                     context, transitionState.nextDeployment, transitionState.nextState);
         }
@@ -528,6 +533,9 @@ public class BlueGreenDeploymentService {
             }
 
             if (diffType != BlueGreenDiffType.IGNORE) {
+                // The candidate is about to be patched to a new revision. Readiness recorded for
+                // the previous revision must not shorten the deletion delay of the new one.
+                resetReadiness(context.getDeploymentStatus());
                 setLastReconciledSpec(context);
                 var oppositeDeploymentType =
                         context.getOppositeDeploymentType(currentBlueGreenDeploymentType);
@@ -815,8 +823,12 @@ public class BlueGreenDeploymentService {
 
     // ==================== Common Utility Methods ====================
 
-    private static void resetTransitionMarkers(FlinkBlueGreenDeploymentStatus status) {
+    private static void resetReadiness(FlinkBlueGreenDeploymentStatus status) {
         status.setDeploymentReadyTimestamp(millisToInstantStr(0));
+    }
+
+    private static void resetTransitionMarkers(FlinkBlueGreenDeploymentStatus status) {
+        resetReadiness(status);
         status.setAbortTimestamp(millisToInstantStr(0));
         status.setSavepointTriggerId(null);
     }
