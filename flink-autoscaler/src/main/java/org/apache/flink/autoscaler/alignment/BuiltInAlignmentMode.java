@@ -24,7 +24,7 @@ import static org.apache.flink.configuration.description.TextElement.text;
 
 /**
  * The built-in {@link ParallelismAlignmentMode}s selectable through the {@code
- * scaling.parallelism-alignment.mode} option. They align a computed target parallelism to the
+ * scaling.parallelism-alignment.modes} option. They align a computed target parallelism to the
  * number of key groups (keyBy) or source partitions to reduce data skew, searching one of the
  * regions illustrated on {@link ParallelismAlignmentMode}.
  *

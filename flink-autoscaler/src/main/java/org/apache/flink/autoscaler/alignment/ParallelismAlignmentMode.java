@@ -47,7 +47,7 @@ import java.util.Map;
  * <p>This is the extension seam for tuning how the computed parallelism is adjusted. The built-in
  * behaviors are provided by {@link BuiltInAlignmentMode}. Custom implementations are discovered as
  * plugins (via {@code ServiceLoader} in the standalone autoscaler, or Flink's {@code PluginManager}
- * in the operator) and selected by name through {@code scaling.parallelism-alignment.mode} plus
+ * in the operator) and selected by name through {@code scaling.parallelism-alignment.modes} plus
  * {@code scaling.parallelism-alignment.mode.<name>.class}.
  *
  * <p>An implementation may keep the computed target unchanged or adjust it, and decides for itself

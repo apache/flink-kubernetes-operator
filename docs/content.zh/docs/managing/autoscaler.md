@@ -265,7 +265,7 @@ The autoscaler bounds are the safe way to play with the ceiling: `job.autoscaler
 
 #### Parallelism Alignment
 
-A computed parallelism can distribute data unevenly: the key groups of a keyBy (hash) vertex, or the partitions of a source, are shared across subtasks, and some parallelisms split them badly. Alignment adjusts the computed target to a nearby value that distributes better, controlled by `job.autoscaler.scaling.parallelism-alignment.mode`:
+A computed parallelism can distribute data unevenly: the key groups of a keyBy (hash) vertex, or the partitions of a source, are shared across subtasks, and some parallelisms split them badly. Alignment adjusts the computed target to a nearby value that distributes better, controlled by `job.autoscaler.scaling.parallelism-alignment.modes`:
 
 - `BALANCED` (default): aligns to the first parallelism in the scaling direction that reduces the per-subtask load, snapping to an exact divisor of the key groups or partitions when one is within reach. It balances even distribution against resource usage, tolerating mild skew to avoid over-provisioning.
 - `EVENLY_SPREAD`: aligns strictly to a divisor of the key groups or source partitions, spreading the data evenly across subtasks.
@@ -293,7 +293,7 @@ Because both searches move upward, the built-in modes carry a structural bias to
 
 Custom alignment modes are the answer whenever this does not fit: they can implement a different trade-off, treat the parallelism ranges in any other way, or extend the alignment to vertices the built-ins do not recognize. Between vertices, only keyBy (hash) partitioning is handled by default, so a pipeline that partitions data with a custom scheme can bring its own mode.
 
-To plug one in, list the mode name in `job.autoscaler.scaling.parallelism-alignment.mode`, point `job.autoscaler.scaling.parallelism-alignment.mode.<name>.class` at the implementation, discovered as a plugin, and pass instance parameters under `job.autoscaler.scaling.parallelism-alignment.mode.<name>.<parameter>`. Writing and packaging a mode is covered under [Custom Parallelism Alignment Modes]({{< ref "docs/deployment/plugins#custom-parallelism-alignment-modes" >}}).
+To plug one in, list the mode name in `job.autoscaler.scaling.parallelism-alignment.modes`, point `job.autoscaler.scaling.parallelism-alignment.mode.<name>.class` at the implementation, discovered as a plugin, and pass instance parameters under `job.autoscaler.scaling.parallelism-alignment.mode.<name>.<parameter>`. Writing and packaging a mode is covered under [Custom Parallelism Alignment Modes]({{< ref "docs/deployment/plugins#custom-parallelism-alignment-modes" >}}).
 
 #### Scaling Effectiveness
 

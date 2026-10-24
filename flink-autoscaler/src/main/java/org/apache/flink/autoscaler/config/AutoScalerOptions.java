@@ -388,14 +388,17 @@ public class AutoScalerOptions {
                                     oldOperatorConfigKey(
                                             "scaling.key-group.partitions.adjust.mode"))
                             .withDescription(
-                                    "Deprecated, use scaling.parallelism-alignment.mode instead. How to adjust "
+                                    "Deprecated, use scaling.parallelism-alignment.modes instead. How to adjust "
                                             + "the parallelism of Source vertex or upstream partitioning is keyBy");
 
     public static final ConfigOption<String> ALIGNMENT_MODE =
-            autoScalerConfig("scaling.parallelism-alignment.mode")
+            autoScalerConfig("scaling.parallelism-alignment.modes")
                     .stringType()
                     .defaultValue(BuiltInAlignmentMode.BALANCED.name())
-                    .withFallbackKeys(oldOperatorConfigKey("scaling.parallelism-alignment.mode"))
+                    .withDeprecatedKeys(
+                            AUTOSCALER_CONF_PREFIX + "scaling.parallelism-alignment.mode",
+                            oldOperatorConfigKey("scaling.parallelism-alignment.mode"))
+                    .withFallbackKeys(oldOperatorConfigKey("scaling.parallelism-alignment.modes"))
                     .withDescription(
                             "How the autoscaler aligns the parallelism of source vertices and keyBy "
                                     + "(hash) vertices to the number of key groups or source "
@@ -421,7 +424,7 @@ public class AutoScalerOptions {
                     .withDescription(
                             "The fully-qualified class name of the custom alignment mode named "
                                     + "<name>, discovered as a plugin and selectable via "
-                                    + "scaling.parallelism-alignment.mode=<name>.");
+                                    + "scaling.parallelism-alignment.modes=<name>.");
 
     /** Documentation-only template for the custom alignment mode parameters. */
     @SuppressWarnings("unused")

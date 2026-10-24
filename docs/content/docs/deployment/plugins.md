@@ -377,9 +377,9 @@ The following steps demonstrate how to develop and use a custom metric evaluator
 
 ### Custom Parallelism Alignment Modes
 
-The autoscaler aligns a vertex's computed target parallelism to the number of key groups (keyBy) or source partitions to reduce data skew. The built-in modes (`BALANCED`, `EVENLY_SPREAD`, `OFF`) are selected by name through `job.autoscaler.scaling.parallelism-alignment.mode`. A custom alignment mode can also be provided as a plugin by implementing the `ParallelismAlignmentMode` SPI. Custom modes are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
+The autoscaler aligns a vertex's computed target parallelism to the number of key groups (keyBy) or source partitions to reduce data skew. The built-in modes (`BALANCED`, `EVENLY_SPREAD`, `OFF`) are selected by name through `job.autoscaler.scaling.parallelism-alignment.modes`. A custom alignment mode can also be provided as a plugin by implementing the `ParallelismAlignmentMode` SPI. Custom modes are discovered through the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism when running inside the Kubernetes operator, and through the standard Java `ServiceLoader` mechanism when running with `flink-autoscaler-standalone`. In both cases the implementation class must be registered in `META-INF/services`.
 
-All `job.autoscaler.*` keys related to custom alignment modes also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.parallelism-alignment.mode`). The canonical key takes precedence on overlap.
+All `job.autoscaler.*` keys related to custom alignment modes also support the legacy `kubernetes.operator.`-prefixed form as a fallback (for example, `kubernetes.operator.job.autoscaler.scaling.parallelism-alignment.modes`). The canonical key takes precedence on overlap.
 
 The following steps demonstrate how to develop and use a custom alignment mode.
 
@@ -427,12 +427,12 @@ The following steps demonstrate how to develop and use a custom alignment mode.
 
 4. Select the custom mode by name and point it at the implementation class. Any other `job.autoscaler.scaling.parallelism-alignment.mode.<name>.*` entries are merged (prefix-stripped) on top of the job configuration and exposed to the mode through `Context#getConfiguration()`:
     ```yaml
-    job.autoscaler.scaling.parallelism-alignment.mode: custom-mode
+    job.autoscaler.scaling.parallelism-alignment.modes: custom-mode
     job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.class: org.apache.flink.autoscaler.custom.CustomAlignmentMode
     job.autoscaler.scaling.parallelism-alignment.mode.custom-mode.min-parallelism: 4
     ```
    {{< hint info >}}
-   The `<name>` is a free-form identifier. `custom-mode` is used here, but `CUSTOM_MODE` or any other style works just as well. It is matched exactly, including case, so the value of `scaling.parallelism-alignment.mode` and the `<name>` in `scaling.parallelism-alignment.mode.<name>.class` must be identical. As a result, `CUSTOM_MODE` and `custom-mode` are two different modes, not aliases. The only reserved names are the built-ins (`BALANCED`, `EVENLY_SPREAD`, `OFF`), which always resolve to the built-in modes regardless of any configured class.
+   The `<name>` is a free-form identifier. `custom-mode` is used here, but `CUSTOM_MODE` or any other style works just as well. It is matched exactly, including case, so the value of `scaling.parallelism-alignment.modes` and the `<name>` in `scaling.parallelism-alignment.mode.<name>.class` must be identical. As a result, `CUSTOM_MODE` and `custom-mode` are two different modes, not aliases. The only reserved names are the built-ins (`BALANCED`, `EVENLY_SPREAD`, `OFF`), which always resolve to the built-in modes regardless of any configured class.
    {{< /hint >}}
 
 5. Deploy the mode.

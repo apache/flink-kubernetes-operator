@@ -382,7 +382,7 @@ The clamp always includes the current parallelism, so tightening the configured 
 
 ### Parallelism Alignment
 
-For sources and HASH-partitioned vertices, the clamped parallelism is aligned to the number of key groups or source partitions, `N`, by the mode selected through `job.autoscaler.scaling.parallelism-alignment.mode`. The aligner scans the region of the scaling direction, upward from the target:
+For sources and HASH-partitioned vertices, the clamped parallelism is aligned to the number of key groups or source partitions, `N`, by the mode selected through `job.autoscaler.scaling.parallelism-alignment.modes`. The aligner scans the region of the scaling direction, upward from the target:
 
 | Direction  | Search Region                                        |
 |------------|------------------------------------------------------|

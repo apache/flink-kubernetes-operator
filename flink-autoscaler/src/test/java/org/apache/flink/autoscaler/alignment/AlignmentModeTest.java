@@ -282,6 +282,19 @@ class AlignmentModeTest {
     }
 
     @Test
+    void resolveHonoursTheDeprecatedAlignmentModeKey() {
+        Configuration conf = new Configuration();
+        // The property was renamed from ...alignment.mode to ...alignment.modes by FLINK-40873.
+        conf.setString("job.autoscaler.scaling.parallelism-alignment.mode", "custom");
+        conf.setString(
+                "job.autoscaler.scaling.parallelism-alignment.mode.custom.class",
+                TestAlignmentMode.class.getName());
+
+        ParallelismAlignmentMode custom = new TestAlignmentMode();
+        assertThat(new ParallelismAligner(List.of(custom)).resolve(conf)).isSameAs(custom);
+    }
+
+    @Test
     void resolveFallsBackWhenCustomModeMissing() {
         Configuration conf = new Configuration();
         conf.set(AutoScalerOptions.ALIGNMENT_MODE, "custom");

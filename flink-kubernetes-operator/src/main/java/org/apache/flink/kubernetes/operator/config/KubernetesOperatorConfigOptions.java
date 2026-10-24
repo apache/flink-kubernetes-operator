@@ -305,9 +305,13 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD =
-            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
+            // FLINK-40873: 'savepoint.history.max.count.threshold' would make the
+            // 'savepoint.history.max.count' key its strict prefix, which breaks converting a flat
+            // config map to yaml.
+            operatorConfig("savepoint.history.threshold.max.count")
                     .intType()
                     .noDefaultValue()
+                    .withDeprecatedKeys(operatorConfigKey("savepoint.history.max.count.threshold"))
                     .withDescription(
                             "Maximum number threshold of savepoint FlinkStateSnapshot resources to retain.");
 
@@ -321,9 +325,13 @@ public class KubernetesOperatorConfigOptions {
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
-            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
+            // FLINK-40873: 'savepoint.history.max.age.threshold' would make the
+            // 'savepoint.history.max.age' key its strict prefix, which breaks converting a flat
+            // config map to yaml.
+            operatorConfig("savepoint.history.threshold.max.age")
                     .durationType()
                     .noDefaultValue()
+                    .withDeprecatedKeys(operatorConfigKey("savepoint.history.max.age.threshold"))
                     .withDescription(
                             "Maximum age threshold for FlinkStateSnapshot resources to retain.");
 

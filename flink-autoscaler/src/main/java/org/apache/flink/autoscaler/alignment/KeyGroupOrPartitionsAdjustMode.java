@@ -28,10 +28,10 @@ import static org.apache.flink.configuration.description.TextElement.text;
  * <p>Unlike {@link BuiltInAlignmentMode}, these preserve the original <b>blocking</b> behavior:
  * when no aligned value can preserve the scaling direction they return the current parallelism and
  * emit a {@code SCALING_LIMITED} event, and they also emit when the aligned value deviates from the
- * computed target. New configurations should use {@code scaling.parallelism-alignment.mode}.
+ * computed target. New configurations should use {@code scaling.parallelism-alignment.modes}.
  *
  * @deprecated Superseded by {@link BuiltInAlignmentMode} (config key {@code
- *     scaling.parallelism-alignment.mode}). Retained only so the deprecated {@code
+ *     scaling.parallelism-alignment.modes}). Retained only so the deprecated {@code
  *     scaling.key-group.partitions.adjust.mode} key still parses and behaves exactly as before.
  */
 @Deprecated

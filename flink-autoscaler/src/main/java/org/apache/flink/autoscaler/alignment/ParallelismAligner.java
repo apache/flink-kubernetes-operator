@@ -132,7 +132,7 @@ public final class ParallelismAligner {
 
     /**
      * Resolves the effective alignment mode from configuration. The {@code
-     * scaling.parallelism-alignment.mode} key is read first: a value matching a {@link
+     * scaling.parallelism-alignment.modes} key is read first: a value matching a {@link
      * BuiltInAlignmentMode} name selects that built-in, otherwise it is treated as a custom mode
      * {@code <name>} whose class ({@code scaling.parallelism-alignment.mode.<name>.class}) is
      * matched against the discovered plugins. If that key is unset, the deprecated {@code
