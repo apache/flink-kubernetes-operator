@@ -53,22 +53,11 @@ under the License.
         </dependency>
 
         <!-- The gate classes and the HTTP client they reach the ConfigMap with, bundled into the
-             job JAR. Built with -Dflink.version=<2.x>, the reactor builds them against Flink 2.x,
-             which the flink2 classifier publishes. -->
+             job JAR. The same client serves Flink 1.x and 2.x jobs. -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-kubernetes-operator-bluegreen-client</artifactId>
             <version>${project.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-streaming-java</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-runtime</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- Added to every module by the parent's depend-on-okhttp4 profile, unused here -->

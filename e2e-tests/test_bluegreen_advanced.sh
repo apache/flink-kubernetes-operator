@@ -30,8 +30,7 @@
 # flink-bluegreen-advanced-example:ci-latest. To build it for a local run, against minikube's
 # docker and the Flink version under test:
 #   mvn install -DskipTests -pl flink-kubernetes-operator-bluegreen-client -am
-#   mvn package -DskipTests -Dflink.version=2.2.1 \
-#     -pl flink-kubernetes-operator-bluegreen-client,examples/flink-bluegreen-advanced-example
+#   mvn package -DskipTests -Dflink.version=2.2.1 -pl examples/flink-bluegreen-advanced-example
 #   eval $(minikube docker-env)
 #   docker build --build-arg FLINK_IMAGE=flink:2.2-java17 -t flink-bluegreen-advanced-example:ci-latest \
 #     examples/flink-bluegreen-advanced-example
