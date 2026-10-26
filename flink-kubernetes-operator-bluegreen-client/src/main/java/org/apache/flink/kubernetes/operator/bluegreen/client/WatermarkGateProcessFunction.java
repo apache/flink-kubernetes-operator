@@ -69,8 +69,18 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
         this.watermarkExtractor = watermarkExtractor;
     }
 
+    /**
+     * Creates the gate of a job deployed by a FlinkBlueGreenDeployment in the ADVANCED transition
+     * mode, to be placed in front of the operator that writes the job's output.
+     *
+     * @param flinkConfig the job's configuration, e.g. {@code env.getConfiguration().toMap()}, in
+     *     which the operator sets the keys the gate needs
+     * @param watermarkExtractor the epoch milliseconds of a record's event time, the time the job's
+     *     watermark is built from, or {@code null} for a record without one. It is shipped with the
+     *     gate, so a lambda or method reference passed here is made serializable.
+     */
     public static <I> WatermarkGateProcessFunction<I> create(
-            Map<String, String> flinkConfig, Function<I, Long> watermarkExtractor) {
+            Map<String, String> flinkConfig, WatermarkExtractor<I> watermarkExtractor) {
         requireConfigKey(flinkConfig, "bluegreen.active-deployment-type");
         requireConfigKey(flinkConfig, "kubernetes.namespace");
         requireConfigKey(flinkConfig, "bluegreen.configmap.name");
@@ -87,9 +97,9 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
             throw new IllegalArgumentException(
                     "WatermarkGateProcessFunction requires config key '"
                             + key
-                            + "' to be set. If using automatic injection this is set by the"
-                            + " operator; if instantiating directly, provide it in the"
-                            + " flinkConfig map.");
+                            + "' to be set. The operator sets it on the deployments of a"
+                            + " FlinkBlueGreenDeployment in the ADVANCED transition mode: pass the"
+                            + " job's configuration, e.g. env.getConfiguration().toMap().");
         }
     }
 
@@ -227,8 +237,7 @@ public class WatermarkGateProcessFunction<I> extends GateProcessFunction<I>
 
     /**
      * The record's timestamp from the job's extractor. A record without one (null) counts as older
-     * than any toggle, like a null field-path field or field-index column: the standby emits it
-     * until it stops, the active once it is fully open.
+     * than any toggle: the standby emits it until it stops, the active once it is fully open.
      */
     private long timestampOf(I value) {
         Long timestamp = watermarkExtractor.apply(value);

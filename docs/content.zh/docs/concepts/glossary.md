@@ -52,7 +52,7 @@ The effective Flink configuration the operator builds from the desired spec and 
 
 #### Gate
 
-The operator injected into both jobs of an `ADVANCED` blue/green transition, which decides record by record which of the two jobs writes each record, coordinating with the other job through the blue/green resource's ConfigMap. See [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
+The operator both jobs of an `ADVANCED` blue/green transition place in front of their output, which decides record by record which of the two jobs writes each record, coordinating with the other job through the blue/green resource's ConfigMap. See [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
 
 #### JobManager Deployment Status
 

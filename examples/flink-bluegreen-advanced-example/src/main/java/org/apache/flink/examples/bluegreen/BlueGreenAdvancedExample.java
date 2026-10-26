@@ -27,6 +27,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.connector.datagen.source.DataGeneratorSource;
 import org.apache.flink.connector.file.sink.FileSink;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.kubernetes.operator.bluegreen.client.WatermarkGateProcessFunction;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.filesystem.bucketassigners.BasePathBucketAssigner;
 import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.OnCheckpointRollingPolicy;
@@ -43,9 +44,8 @@ import java.time.Duration;
  * <p>The records carry a sequence id, and their event time follows the id: most are in order, every
  * 10th is out of order within the watermark bound, and every 100th is late, older than the
  * watermark by far. The file sink writes one line per record, {@code <color>,<id>,<eventTime>},
- * where the color is the deployment that wrote it, and commits on checkpoints. The gate is injected
- * in front of the sink by the operator, reading the event time through {@code
- * bluegreen.gate.watermark.field-path: eventTime}.
+ * where the color is the deployment that wrote it, and commits on checkpoints. The gate sits in
+ * front of the sink and reads each record's event time from its {@code eventTime} field.
  */
 public class BlueGreenAdvancedExample {
 
@@ -98,6 +98,11 @@ public class BlueGreenAdvancedExample {
                 .setParallelism(1)
                 .uid("events")
                 .rebalance()
+                .process(
+                        WatermarkGateProcessFunction.create(
+                                env.getConfiguration().toMap(), (Event event) -> event.eventTime))
+                .name("BlueGreen-Gate")
+                .uid("bluegreen-gate")
                 .sinkTo(sink)
                 .uid("output");
 

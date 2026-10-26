@@ -37,14 +37,14 @@ A `FlinkBlueGreenDeployment` runs a Flink application as two alternating deploym
 - **Safe rollback capability**: the previous version keeps running until the new one proves itself, and a failed upgrade is aborted without touching the serving deployment.
 - **Validation before the switch**: a new deployment becomes active only after it has been observed running and stable.
 
-How the two deployments hand over is set by `spec.transitionMode`. The default, `BASIC`, switches at the deployment level: once the new deployment is stable the old one is retired, and while both run they write the same records. `ADVANCED` switches at the record level: a gate injected into both jobs decides which of them writes each record, so the hand-over neither duplicates nor drops the records that arrive within the job's watermark. It is described under [Advanced Transition Mode](#advanced-transition-mode). The mode is fixed at the first deployment: changing it later is rejected.
+How the two deployments hand over is set by `spec.transitionMode`. The default, `BASIC`, switches at the deployment level: once the new deployment is stable the old one is retired, and while both run they write the same records. `ADVANCED` switches at the record level: a gate in both jobs decides which of them writes each record, so the hand-over neither duplicates nor drops the records that arrive within the job's watermark. It is described under [Advanced Transition Mode](#advanced-transition-mode). The mode is fixed at the first deployment: changing it later is rejected.
 
 ## Requirements
 
 - **Application Mode**: blue/green deployments manage application clusters, so the template must define a `spec.job`, as described under [Application Mode]({{< ref "docs/deployment/overview#application-mode" >}}).
 - **State handoff**: for every upgrade mode except `stateless` the transition hands the state over through a savepoint, so checkpointing and a savepoint directory (`state.savepoints.dir`) must be configured just like for regular [stateful upgrades]({{< ref "docs/managing/job-management#upgrades" >}}). This currently applies to `last-state` as well.
 - **Savepoint format**: the transition savepoint is taken in the format set by `kubernetes.operator.savepoint.format.type`, `CANONICAL` by default. On Flink 2.x, operators using the async state API cannot take a canonical savepoint: the attempt fails the job over, the transition fails with an error that names the setting, and such a job needs `NATIVE`. A native savepoint can only be restored with the state backend that took it, so a transition that changes `state.backend.type` is rejected while the format is `NATIVE`. Changing the format itself is patched onto the running deployment, without a transition.
-- **ADVANCED transition mode**: further requirements, among them a Java 17 JobManager and event-time watermarks, are listed under [ADVANCED Requirements](#advanced-requirements).
+- **ADVANCED transition mode**: further requirements, among them a gate in the job's code and event-time watermarks, are listed under [ADVANCED Requirements](#advanced-requirements).
 
 ## Creating a Blue/Green Deployment
 
@@ -177,20 +177,20 @@ Recovery is then an ordinary next upgrade: inspect the suspended child for the r
 Like blue/green deployments as a whole, the `ADVANCED` transition mode is experimental.
 {{< /hint >}}
 
-In the `ADVANCED` transition mode the operator injects a gate operator into the jobs of both deployments. Both jobs read the same input, so every record reaches both gates, and the gates decide which of the two jobs writes it. The jobs coordinate through the resource's ConfigMap, and the controller retires the old deployment only once its gate has handed everything over.
+In the `ADVANCED` transition mode the jobs of both deployments run a gate, an operator the job places in front of the operator that writes its output. Both jobs read the same input, so every record reaches both gates, and the gates decide which of the two jobs writes it. The jobs coordinate through the resource's ConfigMap, and the controller retires the old deployment only once its gate has handed everything over.
 
 ### How the Hand-Over Works
 
 The gates use two kinds of time:
 
 - **The job's watermark**, produced by its `WatermarkStrategy` (or the `WATERMARK FOR` clause in SQL), drives the gates. When the new deployment is ready, the old deployment's gate proposes its own watermark plus the deployment deletion delay as the cutover point. Every subtask of that gate may propose one, the first written to the ConfigMap wins and all of them use it. The old deployment stops writing once its watermark passes the cutover point, and the new deployment writes every record once its own watermark passes it.
-- **Each record's timestamp**, read by the extraction strategy the job configures, decides who writes the record until then: the old deployment writes records older than the cutover point, the new deployment the rest.
+- **Each record's timestamp**, read by the extractor the job passes to the gate, decides who writes the record until then: the old deployment writes records older than the cutover point, the new deployment the rest.
 
 What this gives you:
 
 - Every record that arrives within the job's watermark is written exactly once.
 - Late records are written by the old deployment before the crossing and by the new deployment after it. Only late records arriving right around the crossing can be written twice or dropped, because the watermarks of the two jobs do not advance in lockstep.
-- A record without a timestamp (a null field or column, or an extractor returning `null`) counts as older than the cutover point: the old deployment writes it before the crossing, the new deployment after.
+- A record without a timestamp, for which the extractor returns `null`, counts as older than the cutover point: the old deployment writes it before the crossing, the new deployment after.
 
 Both kinds of time must be the same event time: the extracted timestamp must be the epoch milliseconds of the time the watermark is built from. The gates never use the wall clock. A job without event-time watermarks never gets a cutover point, and the transition is aborted once the gate timeout expires.
 
@@ -209,15 +209,15 @@ The gate phase, from the moment the new deployment is ready until every subtask 
 
 ### ADVANCED Requirements
 
-- **A Java 17 JobManager**: the gate is injected by a Java agent compiled to Java 17 bytecode and loaded at JobManager startup, so a Java 11 JobManager fails to start with `UnsupportedClassVersionError`. `BASIC` deployments are not affected.
+- **Java 17**: the gate client is compiled to Java 17 bytecode, so the job must run on Java 17: on Java 11 it fails with `UnsupportedClassVersionError` as soon as it loads the gate. `BASIC` deployments are not affected.
 - **Event-time watermarks**: the cutover point and both crossings come from the job's watermark.
 - **The `savepoint` or `last-state` upgrade mode**: the new deployment must start from the transition savepoint of the old one, and an abort after the cutover point redeploys the old deployment from it. `stateless` is rejected. On Flink 2.x, a job using the async state API needs that savepoint in the native format, see [Requirements](#requirements).
-- **The gate client in the job JAR**: the agent provides only the injection hook, the gate classes are loaded from the job. Add `org.apache.flink:flink-kubernetes-operator-bluegreen-client` at the operator's version, bundled into the job JAR rather than `provided`, so that the TaskManagers can load it. The same artifact serves Flink 1.x and 2.x jobs. The `examples/flink-bluegreen-advanced-example` job bundles it.
-- **`OPERATOR_IMAGE` on the operator**: the agent is copied out of the operator image by an init container, so the operator must know its own image. The Helm chart sets it, and the operator rejects `ADVANCED` deployments without it.
+- **A gate in the job**: placed on the `DataStream` the job writes, see [Enabling It](#enabling-it). SQL jobs that write through `INSERT INTO` have no such stream.
+- **The gate client in the job JAR**: add `org.apache.flink:flink-kubernetes-operator-bluegreen-client` at the operator's version, bundled into the job JAR rather than `provided`, so that the TaskManagers can load it. The same artifact serves Flink 1.x and 2.x jobs. The `examples/flink-bluegreen-advanced-example` job bundles it.
 
 ### Enabling It
 
-Set the transition mode, a gate strategy, and exactly one way to read each record's timestamp:
+Set the transition mode:
 
 ```yaml
 apiVersion: flink.apache.org/v1beta1
@@ -230,83 +230,37 @@ spec:
     kubernetes.operator.bluegreen.gate.timeout: "10 min"
   template:
     spec:
-      flinkConfiguration:
-        bluegreen.gate.strategy: WATERMARK
-        bluegreen.gate.watermark.field-path: eventTime
-        # rest of the flinkConfiguration as in the BASIC example
+      # the template as in the BASIC example
       job:
         jarURI: local:///opt/flink/usrlib/my-job.jar
         upgradeMode: savepoint
-      # rest of the template as in the BASIC example
 ```
 
-The operator then adds the `-javaagent` flag to the JobManager JVM options, an init container that copies the agent out of the operator image, and `bluegreen.gate.injection.enabled: "true"`. At submission the agent inserts the gate into the job graph, and the JobManager log shows `[BlueGreen Agent] Gate injection applied to StreamGraph`.
-
-### Reading Each Record's Timestamp
-
-A job sets exactly one of the following, in its `flinkConfiguration`. A spec with none or more than one is rejected, and the job fails at startup when the chosen strategy cannot read the records at the gate.
-
-| Key                                        | Reads                                                                                                                                                             |
-|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `bluegreen.gate.watermark.field-path`      | A `long` field of the record, by dot-notation path, for example `eventTime` or `metadata.timestamp`. Public or private fields and getters are resolved, so protobuf classes work. Not for `RowData` records. |
-| `bluegreen.gate.watermark.field-index`     | A column of a `RowData` record, by 0-based position. The column must be `BIGINT` (epoch milliseconds), `TIMESTAMP(p)` or `TIMESTAMP_LTZ(p)`.                     |
-| `bluegreen.gate.watermark.extractor-class` | Anything else: the fully qualified name of a class implementing `org.apache.flink.kubernetes.operator.bluegreen.client.WatermarkExtractor<T>`, with a no-argument constructor, fully serializable, returning the epoch milliseconds or `null` when the record has none. |
-
-The value is used as it is, without unit conversion: a field in microseconds or seconds needs an extractor class that converts it. The path, position or extractor applies to the record at the gate, so it must match the type flowing there.
-
-### Gate Placement
-
-The gate is placed at a single point of the job graph, set by `bluegreen.gate.injection.position`:
-
-| Position                | Gate placement                                     | Works when                 |
-|-------------------------|----------------------------------------------------|----------------------------|
-| `BEFORE_SINK` (default) | In front of the operator that writes the records   | The job has exactly 1 sink   |
-| `AFTER_SOURCE`          | Behind the source                                  | The job has exactly 1 source |
-
-For a sink with a committer, the operator that writes the records is the sink's writer, not the committer behind it. Some sinks end in an operator that receives no records, the legacy Apache Iceberg `FlinkSink` for example, which runs as a writer, a committer and a no-op sink. The job then fails at startup until `bluegreen.gate.injection.before-uid` names the operator to gate by its uid, `<uidPrefix>-writer` for that sink.
-
-The gate joins the operator chain next to it: it copies the parallelism, the maximum parallelism and the slot sharing group of the operator it sits in front of, and keeps the partitioning of the edge it replaces. If it cannot chain, because chaining is disabled for the job or the neighbouring operator starts its own chain, it runs as a separate operator, the JobManager log names it, and every record costs one more serialization.
-
-For topologies that neither position fits, the gate can be placed in the job code instead. Set `bluegreen.gate.injection.enabled: "false"`, leave out the three extraction keys, and add the gate to the stream that matters:
+and place the gate in the job, in front of the operator that writes the records:
 
 ```java
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-DataStream<MyEvent> gated =
-        events.process(
-                        WatermarkGateProcessFunction.create(
-                                env.getConfiguration().toMap(),
-                                (WatermarkExtractor<MyEvent>) MyEvent::getEventTime))
-                .name("BlueGreen-Gate");
+events.process(
+                WatermarkGateProcessFunction.create(
+                        env.getConfiguration().toMap(), (MyEvent event) -> event.getEventTime()))
+        .name("BlueGreen-Gate")
+        .uid("bluegreen-gate")
+        .sinkTo(sink);
 ```
 
-The extractor passed in code is then the gate's extraction strategy, which is why the extraction keys must not be set.
+`WatermarkGateProcessFunction` is in `org.apache.flink.kubernetes.operator.bluegreen.client`. The operator sets the keys the gate needs in the job's configuration, from which `create` reads them: `bluegreen.active-deployment-type`, `bluegreen.configmap.name` and `kubernetes.namespace`. `ReadableConfig.toMap()` exists from Flink 1.19 on, on older versions cast the configuration to `Configuration` first. Outside a `FlinkBlueGreenDeployment` the keys are missing and `create` throws, so a job that also runs as a plain deployment can skip the gate when `bluegreen.configmap.name` is absent.
 
-### SQL and Table API Jobs
+A job in the `ADVANCED` mode without a gate never hands over: no gate reports to the controller, and the transition is aborted once the gate timeout expires. The gate timeout is configured with the other blue/green options in the resource's `configuration`, listed under [Configuration](#configuration). It must be longer than the deployment deletion delay, which the cutover point includes.
 
-Records in SQL and Table API jobs are `RowData`: values by position, without field names. They use `bluegreen.gate.watermark.field-index`:
+### The Extractor
 
-- **Which column**: the one the table's `WATERMARK FOR` clause is defined on, or one holding the same time.
-- **Which position**: its position in the row entering the gate. With `BEFORE_SINK` that is the column order of the table written by `INSERT INTO`. `BEFORE_SINK` is the safer choice, with `AFTER_SOURCE` the planner may pass on only the columns the query uses, so positions can change when the query changes.
-- **Which types**: the gate reads the column types from the job and checks the position and the type at startup.
-- **One sink**: a job with several `INSERT INTO` statements has several sinks, so `BEFORE_SINK` does not apply to it.
+The extractor returns the epoch milliseconds of a record's event time, the time the job's watermark is built from, or `null` for a record without one. The value is used as it is, without unit conversion: a field in microseconds or seconds must be converted. The extractor is shipped to the TaskManagers with the gate, so it must be serializable: `create` takes a `WatermarkExtractor<T>`, which makes a lambda or method reference passed to it serializable, while a class implementing it may only hold serializable fields.
 
-DataStream jobs that build `RowData` themselves, for example to feed a sink that takes `RowData`, can use `field-index` too, but the stream entering the gate must declare its row type with `returns(InternalTypeInfo.of(rowType))`. Without it Flink falls back to a generic serializer that carries no column types, and the job fails at startup. An extractor class reads the column itself and needs no declared type. Jobs that convert a table into a `DataStream<Row>` carry `Row` records, not `RowData`, and need an extractor class.
+### Gate Placement
 
-### Gate Configuration
+The gate belongs in front of the operator that writes the records: for a sink with a committer, the sink's writer, not the committer behind it. Placed there, it decides for every record that is written. A job with several sinks places it where the stream fans out to them.
 
-The gate is configured in the template's `flinkConfiguration`:
-
-| Key                                        | Default       | Description                                                                                         |
-|--------------------------------------------|---------------|-----------------------------------------------------------------------------------------------------|
-| `bluegreen.gate.strategy`                  | (none)        | The gate strategy, required in `ADVANCED` mode. `WATERMARK` is the only one available.              |
-| `bluegreen.gate.watermark.field-path`      | (none)        | See [Reading Each Record's Timestamp](#reading-each-records-timestamp), exactly one of the three.   |
-| `bluegreen.gate.watermark.field-index`     | (none)        | See [Reading Each Record's Timestamp](#reading-each-records-timestamp), exactly one of the three.   |
-| `bluegreen.gate.watermark.extractor-class` | (none)        | See [Reading Each Record's Timestamp](#reading-each-records-timestamp), exactly one of the three.   |
-| `bluegreen.gate.injection.enabled`         | `true`        | `false` places no gate, the job adds it in code, see [Gate Placement](#gate-placement).              |
-| `bluegreen.gate.injection.position`        | `BEFORE_SINK` | `BEFORE_SINK` or `AFTER_SOURCE`, see [Gate Placement](#gate-placement).                             |
-| `bluegreen.gate.injection.before-uid`      | (none)        | With `BEFORE_SINK`, the uid of the operator to place the gate in front of.                          |
-
-The gate timeout is configured with the other blue/green options in the resource's `configuration`, listed under [Configuration](#configuration). It must be longer than the deployment deletion delay, which the cutover point includes.
+With the same parallelism as the operator behind it, Flink chains the gate to that operator, so the gate costs no extra serialization. `process` takes the job's default parallelism, so a writer with a parallelism of its own needs the gate set to the same.
 
 ## Configuration
 
@@ -339,8 +293,7 @@ The blue/green resource itself does not emit Kubernetes events, failures surface
 
 - Only application clusters are supported: the template must define a `spec.job`. Session Mode is not supported.
 - In the `BASIC` transition mode both jobs process and emit the same records during the overlap, so delivery across the transition is at-least-once. The `ADVANCED` mode coordinates the two jobs record by record instead.
-- The `ADVANCED` gate is injected by rewriting the job graph through Flink internals, so it is tested against each supported Flink version and may need changes for new ones.
-- The automatic gate placement supports a single sink or a single source, other topologies place the gate in code.
+- The `ADVANCED` gate is placed in the job's code, on a `DataStream`: SQL jobs that write through `INSERT INTO` cannot use the `ADVANCED` mode.
 - In the `ADVANCED` mode, late records arriving right around the crossing of the cutover point can be written twice or dropped, and an abort after the cutover point may write records twice.
 - The state handoff is currently always savepoint-based: `last-state` transitions also take a savepoint instead of reusing the latest checkpoint information.
 - Suspend requests are deferred while a transition is in progress.
