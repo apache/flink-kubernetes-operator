@@ -77,8 +77,8 @@ jobs:
       - name: Build the Blue/Green ADVANCED mode example image
         if: ${{ inputs.test == 'test_bluegreen_advanced.sh' }}
         run: |
-          # The job bundles the gate client, built against the Flink version under test as in the
-          # client tests of ci.yml
+          # The job is built against the Flink version under test. It bundles the gate client as
+          # published, built against the operator's Flink version, which also serves Flink 2.x jobs
           case "${{ inputs.flink-version }}" in
             v2_2) FLINK_VERSION_ARG="-Dflink.version=2.2.1" ;;
             v2_1) FLINK_VERSION_ARG="-Dflink.version=2.1.1" ;;
@@ -87,7 +87,7 @@ jobs:
           esac
           mvn -B -ntp install -DskipTests -pl flink-kubernetes-operator-bluegreen-client -am
           mvn -B -ntp package -DskipTests ${FLINK_VERSION_ARG} \
-            -pl flink-kubernetes-operator-bluegreen-client,examples/flink-bluegreen-advanced-example
+            -pl examples/flink-bluegreen-advanced-example
           FLINK_IMAGE=$(sed --regexp-extended 's/v([0-9]+)_([0-9]+)/flink:\1.\2/g' <<< ${{ inputs.flink-version }})-java${{ inputs.java-version }}
           export SHELL=/bin/bash
           eval $(minikube -p minikube docker-env)

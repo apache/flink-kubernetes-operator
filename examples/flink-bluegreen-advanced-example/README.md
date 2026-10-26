@@ -30,9 +30,8 @@ The records carry a sequence id, and their event time follows the id: most are i
 than its neighbours. The file sink writes one line per record, `<color>,<id>,<eventTime>`, where the
 color is the deployment that wrote it, and commits on checkpoints.
 
-The job bundles the gate classes, `flink-kubernetes-operator-bluegreen-client`, built against the
-Flink version of the image: the default build targets Flink 1.x, and `-Dflink.version=<2.x>` builds
-it against Flink 2.x.
+The job bundles the gate classes, `flink-kubernetes-operator-bluegreen-client`, which serve Flink
+1.x and 2.x jobs alike.
 
 ## Usage
 
@@ -40,8 +39,7 @@ Build the job against the Flink version of the image, then the image:
 
 ```bash
 mvn install -DskipTests -pl flink-kubernetes-operator-bluegreen-client -am
-mvn package -DskipTests -Dflink.version=2.2.1 \
-  -pl flink-kubernetes-operator-bluegreen-client,examples/flink-bluegreen-advanced-example
+mvn package -DskipTests -Dflink.version=2.2.1 -pl examples/flink-bluegreen-advanced-example
 docker build --build-arg FLINK_IMAGE=flink:2.2-java17 -t flink-bluegreen-advanced-example:latest \
   examples/flink-bluegreen-advanced-example
 ```
