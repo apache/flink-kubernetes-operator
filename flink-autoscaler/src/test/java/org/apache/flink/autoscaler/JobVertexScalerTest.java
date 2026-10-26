@@ -633,6 +633,25 @@ public class JobVertexScalerTest {
     }
 
     @Test
+    public void testSharedScaleFactorStillRespectsVertexMaxParallelism() {
+        var metrics = evaluated(10, 100, 100);
+        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(16));
+
+        var change =
+                vertexScaler.computeScaleTargetParallelism(
+                        context,
+                        new JobVertexID(),
+                        NOT_ADJUST_INPUTS,
+                        null,
+                        metrics,
+                        Collections.emptySortedMap(),
+                        new DelayedScaleDown(),
+                        2.0);
+
+        assertThat(change.getNewParallelism()).isEqualTo(16);
+    }
+
+    @Test
     public void testDisableScaleDownInterval() {
         conf.set(UTILIZATION_TARGET, 1.);
         conf.set(AutoScalerOptions.SCALE_DOWN_INTERVAL, Duration.ofMinutes(0));
