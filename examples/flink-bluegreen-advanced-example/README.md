@@ -28,7 +28,8 @@ transition split the records between the two deployments. It is the job of the
 The records carry a sequence id, and their event time follows the id: most are in order, every
 10th is out of order within the 2 second watermark bound, and every 100th is late, 2 minutes older
 than its neighbours. The file sink writes one line per record, `<color>,<id>,<eventTime>`, where the
-color is the deployment that wrote it, and commits on checkpoints.
+color is the deployment that wrote it, and commits on checkpoints. The job places the gate in front
+of the sink, reading each record's event time from its `eventTime` field.
 
 The job bundles the gate classes, `flink-kubernetes-operator-bluegreen-client`, which serve Flink
 1.x and 2.x jobs alike.
@@ -44,5 +45,4 @@ docker build --build-arg FLINK_IMAGE=flink:2.2-java17 -t flink-bluegreen-advance
   examples/flink-bluegreen-advanced-example
 ```
 
-`e2e-tests/data/bluegreen-advanced.yaml` deploys it, with the gate reading the event time through
-`bluegreen.gate.watermark.field-path: eventTime`.
+`e2e-tests/data/bluegreen-advanced.yaml` deploys it.

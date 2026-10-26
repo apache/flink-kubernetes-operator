@@ -50,7 +50,7 @@ Continuity has a price, paid twice:
 Downstream consumers must tolerate the duplicates, through idempotent writes or by deduplicating on read, unless the transition coordinates the two jobs as described below.
 {{< /hint >}}
 
-The `ADVANCED` transition mode adds that coordination, record by record: a gate injected into both jobs decides which of them writes each record, by the record's event time and the watermarks of the two jobs, so the records that arrive within the watermark are written exactly once across the transition. It needs event-time watermarks and a Java 17 JobManager, and is described under [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
+The `ADVANCED` transition mode adds that coordination, record by record: a gate in both jobs decides which of them writes each record, by the record's event time and the watermarks of the two jobs, so the records that arrive within the watermark are written exactly once across the transition. It needs a gate in the job's code, event-time watermarks and Java 17, and is described under [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
 
 The transition is guarded in the other direction as well: if the new deployment does not become stable within a configurable grace period, the transition is aborted and the previous deployment keeps serving, with the failure reported on the resource.
 

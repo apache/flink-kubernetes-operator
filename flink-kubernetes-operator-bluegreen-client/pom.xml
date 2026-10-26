@@ -90,14 +90,6 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
-        <!-- Required by GateInjectorExecutor to detect SQL jobs via RowDataSerializer -->
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-table-runtime</artifactId>
-            <version>${flink.version}</version>
-            <optional>true</optional>
-        </dependency>
-
         <!-- Test dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -113,10 +105,9 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <!-- Flink 2.x moved StreamGraph/StreamNode/StreamEdge/ProcessOperator/SimpleOperatorFactory/
-             ProcessFunction/TimerService from flink-streaming-java into flink-runtime, so a build
-             against Flink 2.x needs it declared. On Flink 1.x those classes are also reachable via
-             flink-streaming-java. -->
+        <!-- Flink 2.x moved ProcessFunction and TimerService from flink-streaming-java into
+             flink-runtime, so a build against Flink 2.x needs it declared. On Flink 1.x those
+             classes are also reachable via flink-streaming-java. -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-runtime</artifactId>

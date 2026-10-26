@@ -17,38 +17,24 @@
 
 package org.apache.flink.kubernetes.operator.utils.bluegreen;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateContextOptions;
 import org.apache.flink.kubernetes.operator.api.bluegreen.GateMetrics;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
-import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
-import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.Container;
-import io.fabric8.kubernetes.api.model.ContainerBuilder;
-import io.fabric8.kubernetes.api.model.PodSpec;
-import io.fabric8.kubernetes.api.model.PodTemplateSpec;
-import io.fabric8.kubernetes.api.model.VolumeBuilder;
-import io.fabric8.kubernetes.api.model.VolumeMount;
-import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.naming.OperationNotSupportedException;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -69,34 +55,8 @@ public class BlueGreenTransitionUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(BlueGreenTransitionUtils.class);
 
-    private static final String GATE_INJECTION_ENABLED = "bluegreen.gate.injection.enabled";
-
     // The WATERMARK gate's cutover point (WatermarkGateContext.WATERMARK_TOGGLE_VALUE)
     private static final String WATERMARK_TOGGLE_VALUE = "watermark-toggle-value";
-
-    /** The WATERMARK gate's extraction strategies. A job sets exactly one. */
-    @VisibleForTesting
-    static final List<String> WATERMARK_EXTRACTOR_KEYS =
-            List.of(
-                    "bluegreen.gate.watermark.extractor-class",
-                    "bluegreen.gate.watermark.field-index",
-                    "bluegreen.gate.watermark.field-path");
-
-    /**
-     * Test override for the {@code OPERATOR_IMAGE} env lookup used by {@link
-     * #prepareTransitionMetadata}. {@code null} means read the environment (the production path).
-     */
-    private static String operatorImageOverride = null;
-
-    /**
-     * Overrides the {@code OPERATOR_IMAGE} env lookup for tests (including tests in other
-     * packages). Pass {@code null} to restore the production path of reading the environment
-     * variable.
-     */
-    @VisibleForTesting
-    public static void setOperatorImageOverride(String operatorImage) {
-        operatorImageOverride = operatorImage;
-    }
 
     @SneakyThrows
     public static TransitionMode getTransitionMode(BlueGreenContext context) {
@@ -128,7 +88,7 @@ public class BlueGreenTransitionUtils {
 
         upsertConfigMap(context, transitionDefaultMetadata);
 
-        // Preparing the FlinkConfiguration for the OutputDecider
+        // The keys WatermarkGateProcessFunction.create reads from the job's configuration
         flinkDeployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -139,37 +99,6 @@ public class BlueGreenTransitionUtils {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put("bluegreen.configmap.name", context.getConfigMapName());
-
-        // Auto-inject agent config and init container when a gate strategy is declared
-        ConfigObjectNode flinkConfig = flinkDeployment.getSpec().getFlinkConfiguration();
-        if (flinkConfig.has("bluegreen.gate.strategy")) {
-            String operatorImage =
-                    operatorImageOverride != null
-                            ? operatorImageOverride
-                            : System.getenv("OPERATOR_IMAGE");
-            injectGateAgent(
-                    flinkDeployment,
-                    flinkConfig,
-                    operatorImage,
-                    mergesPodTemplateArraysByName(context, flinkDeployment));
-        }
-    }
-
-    /**
-     * The {@code kubernetes.operator.pod-template.merge-arrays-by-name} the deployment is deployed
-     * with: its own flinkConfiguration over the operator's defaults.
-     */
-    private static boolean mergesPodTemplateArraysByName(
-            BlueGreenContext context, FlinkDeployment flinkDeployment) {
-        var spec = flinkDeployment.getSpec();
-        Configuration conf =
-                context.getCtxFactory()
-                        .getConfigManager()
-                        .getDefaultConfig(
-                                flinkDeployment.getMetadata().getNamespace(),
-                                spec.getFlinkVersion());
-        conf.addAll(spec.getFlinkConfiguration().asConfiguration());
-        return conf.get(KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME);
     }
 
     /**
@@ -344,71 +273,13 @@ public class BlueGreenTransitionUtils {
     }
 
     /**
-     * Validates that all required gate configuration properties are present when using ADVANCED
-     * mode. Returns an error message if any required property is missing, or {@link
-     * Optional#empty()} if the configuration is valid.
-     *
-     * <p>Required properties for ADVANCED mode:
-     *
-     * <ul>
-     *   <li>{@code bluegreen.gate.strategy} — must be set to a supported value (e.g. WATERMARK)
-     *   <li>exactly one of {@link #WATERMARK_EXTRACTOR_KEYS} when strategy is WATERMARK and the
-     *       gate is injected. With {@code bluegreen.gate.injection.enabled=false} the extractor
-     *       passed to {@code WatermarkGateProcessFunction.create} is the extraction strategy, so
-     *       none of them may be set: they would be ignored.
-     *   <li>a gate timeout longer than the deployment deletion delay, and an upgrade mode other
-     *       than STATELESS
-     * </ul>
+     * Validates the configuration of a deployment in the ADVANCED transition mode: the gate timeout
+     * must be longer than the deployment deletion delay, and the upgrade mode other than STATELESS.
+     * Returns an error message if it is invalid, or {@link Optional#empty()} if it is valid.
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
         if (TransitionMode.ADVANCED != getTransitionMode(context)) {
             return Optional.empty();
-        }
-
-        ConfigObjectNode flinkConfig =
-                context.getBgDeployment().getSpec().getTemplate().getSpec().getFlinkConfiguration();
-
-        if (!flinkConfig.has("bluegreen.gate.strategy")) {
-            return Optional.of(
-                    "[BlueGreen] ADVANCED mode requires 'bluegreen.gate.strategy' to be set "
-                            + "in flinkConfiguration. Supported values: WATERMARK");
-        }
-
-        String strategy = flinkConfig.get("bluegreen.gate.strategy").asText();
-        if (!"WATERMARK".equals(strategy)) {
-            return Optional.of(
-                    "[BlueGreen] Unknown gate strategy: '"
-                            + strategy
-                            + "'. Supported values: WATERMARK");
-        }
-
-        List<String> extractors =
-                WATERMARK_EXTRACTOR_KEYS.stream()
-                        .filter(flinkConfig::has)
-                        .collect(Collectors.toList());
-        boolean injected =
-                !flinkConfig.has(GATE_INJECTION_ENABLED)
-                        || Boolean.parseBoolean(flinkConfig.get(GATE_INJECTION_ENABLED).asText());
-        if (injected && extractors.size() != 1) {
-            return Optional.of(
-                    "[BlueGreen] Gate strategy WATERMARK requires exactly one of "
-                            + "'bluegreen.gate.watermark.extractor-class' (custom class), "
-                            + "'bluegreen.gate.watermark.field-index' (column position, for SQL / "
-                            + "Table API jobs) or 'bluegreen.gate.watermark.field-path' "
-                            + "(dot-notation field, no app code needed) in flinkConfiguration, "
-                            + "found: "
-                            + (extractors.isEmpty() ? "none" : String.join(", ", extractors))
-                            + ".");
-        }
-        if (!injected && !extractors.isEmpty()) {
-            return Optional.of(
-                    "[BlueGreen] With '"
-                            + GATE_INJECTION_ENABLED
-                            + "' set to false, the extractor passed to "
-                            + "WatermarkGateProcessFunction.create(...) is the gate's extraction "
-                            + "strategy. Remove "
-                            + String.join(", ", extractors)
-                            + " from flinkConfiguration: it would be ignored.");
         }
 
         long gateTimeout = getGateTimeout(context);
@@ -438,143 +309,5 @@ public class BlueGreenTransitionUtils {
         }
 
         return Optional.empty();
-    }
-
-    /**
-     * Wires the Blue/Green gate agent into the JobManager for ADVANCED-mode gate injection: enables
-     * gate injection, adds the {@code -javaagent} flag, and injects the init-container that pulls
-     * the agent jar from the operator image.
-     *
-     * <p>The agent can only be delivered when we know the operator image (the init-container copies
-     * the jar from {@code /opt/flink/artifacts} in that image). If {@code operatorImage} is
-     * null/empty we cannot deliver it, and adding the {@code -javaagent} flag anyway would
-     * guarantee a cryptic JobManager crash ("bluegreen-agent.jar" missing). We fail loudly instead
-     * of silently wiring a doomed deployment — a missing OPERATOR_IMAGE means the operator's Helm
-     * chart is misconfigured.
-     */
-    @VisibleForTesting
-    static void injectGateAgent(
-            FlinkDeployment flinkDeployment,
-            ConfigObjectNode flinkConfig,
-            String operatorImage,
-            boolean mergeArraysByName) {
-        if (operatorImage == null || operatorImage.isEmpty()) {
-            String strategy =
-                    flinkConfig.has("bluegreen.gate.strategy")
-                            ? flinkConfig.get("bluegreen.gate.strategy").asText()
-                            : "(unset)";
-            throw new IllegalStateException(
-                    "[BlueGreen] A gate strategy is declared ('bluegreen.gate.strategy'="
-                            + strategy
-                            + ") but the OPERATOR_IMAGE environment variable is not set on the"
-                            + " operator. The Blue/Green gate agent cannot be injected, so the"
-                            + " JobManager would fail to start with a missing -javaagent. This is a"
-                            + " misconfigured operator deployment: the Helm chart must set"
-                            + " OPERATOR_IMAGE on the operator container. Refusing to deploy a job"
-                            + " that would crash-loop.");
-        }
-
-        if (!flinkConfig.has(GATE_INJECTION_ENABLED)) {
-            flinkConfig.put(GATE_INJECTION_ENABLED, "true");
-        }
-
-        final String agentFlag = "-javaagent:/opt/flink/lib/bluegreen-agent.jar";
-        String existingOpts =
-                flinkConfig.has("env.java.opts.jobmanager")
-                        ? flinkConfig.get("env.java.opts.jobmanager").asText()
-                        : "";
-        if (!existingOpts.contains(agentFlag)) {
-            flinkConfig.put(
-                    "env.java.opts.jobmanager",
-                    existingOpts.isEmpty() ? agentFlag : existingOpts + " " + agentFlag);
-        }
-
-        injectAgentInitContainer(flinkDeployment, operatorImage, mergeArraysByName);
-    }
-
-    private static void injectAgentInitContainer(
-            FlinkDeployment flinkDeployment, String operatorImage, boolean mergeArraysByName) {
-        var spec = flinkDeployment.getSpec();
-
-        if (spec.getJobManager() == null) {
-            spec.setJobManager(new JobManagerSpec());
-        }
-        JobManagerSpec jmSpec = spec.getJobManager();
-
-        // The JobManager pod template is merged into the common one at deployment, by array
-        // position unless kubernetes.operator.pod-template.merge-arrays-by-name is set, so entries
-        // appended to it could be merged into the common template's entries at the same positions.
-        // Merging the common template in first, the same way, makes the JobManager template begin
-        // with the common template's entries, which that merge leaves as they are, and puts the
-        // agent's after them.
-        PodTemplateSpec podTemplate =
-                FlinkUtils.mergePodTemplates(
-                        spec.getPodTemplate(), jmSpec.getPodTemplate(), mergeArraysByName);
-        if (podTemplate == null) {
-            podTemplate = new PodTemplateSpec();
-        }
-        jmSpec.setPodTemplate(podTemplate);
-        if (podTemplate.getSpec() == null) {
-            podTemplate.setSpec(new PodSpec());
-        }
-        PodSpec podSpec = podTemplate.getSpec();
-
-        podSpec.getVolumes()
-                .add(
-                        new VolumeBuilder()
-                                .withName("bluegreen-agent")
-                                .withNewEmptyDir()
-                                .endEmptyDir()
-                                .build());
-
-        podSpec.getInitContainers()
-                .add(
-                        new ContainerBuilder()
-                                .withName("bluegreen-agent-init")
-                                .withImage(operatorImage)
-                                .withCommand(
-                                        "sh",
-                                        "-c",
-                                        // Fail with an actionable message instead of a cryptic
-                                        // `cp: cannot stat` if the operator image was built without
-                                        // the agent jar (see the Dockerfile agent-baking COPY).
-                                        "if [ ! -f /opt/flink/artifacts/bluegreen-agent.jar ]; then"
-                                                + " echo '[BlueGreen] FATAL:"
-                                                + " /opt/flink/artifacts/bluegreen-agent.jar missing"
-                                                + " from operator image — built without the gate"
-                                                + " agent (check Dockerfile agent baking).';"
-                                                + " exit 1; fi;"
-                                                + " cp /opt/flink/artifacts/bluegreen-agent.jar"
-                                                + " /bluegreen-agent/bluegreen-agent.jar")
-                                .withVolumeMounts(
-                                        new VolumeMountBuilder()
-                                                .withName("bluegreen-agent")
-                                                .withMountPath("/bluegreen-agent")
-                                                .build())
-                                .build());
-
-        VolumeMount agentMount =
-                new VolumeMountBuilder()
-                        .withName("bluegreen-agent")
-                        .withMountPath("/opt/flink/lib/bluegreen-agent.jar")
-                        .withSubPath("bluegreen-agent.jar")
-                        .build();
-
-        boolean foundMain = false;
-        for (Container c : podSpec.getContainers()) {
-            if ("flink-main-container".equals(c.getName())) {
-                c.getVolumeMounts().add(agentMount);
-                foundMain = true;
-                break;
-            }
-        }
-        if (!foundMain) {
-            podSpec.getContainers()
-                    .add(
-                            new ContainerBuilder()
-                                    .withName("flink-main-container")
-                                    .withVolumeMounts(agentMount)
-                                    .build());
-        }
     }
 }

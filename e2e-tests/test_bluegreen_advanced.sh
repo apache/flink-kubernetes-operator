@@ -19,7 +19,7 @@
 
 # This script tests the ADVANCED Blue/Green transition mode as follows:
 # - Create a FlinkBlueGreenDeployment in ADVANCED mode, which starts the "Blue" FlinkDeployment
-#   with the gate injected in front of its sink
+#   with the gate the job places in front of its sink
 # - Trigger a transition, which starts the "Green" FlinkDeployment from a savepoint of Blue
 # - Verify that the gates hand over: Blue is stopped and deleted, Green becomes the active one
 # - Let Green run past the cutover point, then suspend it, so that its output is committed
@@ -98,7 +98,6 @@ retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
 sleep 1
 wait_for_jobmanager_running $BLUE_CLUSTER_ID $TIMEOUT
-wait_for_logs $(get_jm_pod_name $BLUE_CLUSTER_ID) "Gate injection applied to StreamGraph" ${TIMEOUT} || exit 1
 wait_for_status $BLUE_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_BLUE ${TIMEOUT} || exit 1
 kubectl wait --for=condition=Ready --timeout=${TIMEOUT}s pod/$OUTPUT_READER || exit 1
@@ -110,7 +109,6 @@ echo "Triggering the Blue -> Green transition..."
 kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"execution.checkpointing.interval":"4s"}}}}}' || exit 1
 
 wait_for_jobmanager_running $GREEN_CLUSTER_ID $TIMEOUT
-wait_for_logs $(get_jm_pod_name $GREEN_CLUSTER_ID) "Gate injection applied to StreamGraph" ${TIMEOUT} || exit 1
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${TIMEOUT} || exit 1
 wait_for_deleted $BLUE_APPLICATION_IDENTIFIER ${TIMEOUT}
