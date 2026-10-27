@@ -61,7 +61,7 @@ The status is the operator's write-back half of the contract: users declare the 
 | `observedGeneration`         | Both              | The generation of the resource the operator last observed                                                                                                                  |
 | `jobManagerDeploymentStatus` | `FlinkDeployment` | The observed state of the JobManager's Kubernetes Deployment, see [JobManager Deployment Status](#jobmanager-deployment-status)                                            |
 | `clusterInfo`                | `FlinkDeployment` | The Flink version and revision of the running cluster, its total CPU and memory, the last observed state size, and the operator's cluster health bookkeeping               |
-| `taskManager`                | `FlinkDeployment` | The TaskManager label selector and replica count backing the Kubernetes scale subresource, populated in application mode only                                              |
+| `taskManager`                | `FlinkDeployment` | The TaskManager label selector and the number of TaskManagers registered with the running cluster at the last observation, backing the Kubernetes scale subresource |
 | `conditions`                 | `FlinkDeployment` | Kubernetes-standard conditions derived from the status, see [Conditions](#conditions)                                                                                      |
 
 ### Reconciliation Status
