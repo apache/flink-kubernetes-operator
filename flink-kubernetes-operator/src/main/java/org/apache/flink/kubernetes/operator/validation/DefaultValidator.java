@@ -530,9 +530,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private static double toComparableAmount(String key, Quantity quantity) {
         if (CrdConstants.MEMORY.equals(key)) {
-            return MemorySize.parse(
-                            ResourceConfigUtils.parseResourceMemoryString(quantity.toString()))
-                    .getBytes();
+            return ResourceConfigUtils.parseMemoryQuantity(quantity).getBytes();
         }
         return quantity.getNumericalAmount().doubleValue();
     }
@@ -555,10 +553,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 if (CrdConstants.MEMORY.equals(key)) {
                     // Validate the full quantity including its unit (e.g. "2Gi"); getAmount()
                     // would drop the unit. A negative memory value also fails to parse here.
-                    var memory =
-                            MemorySize.parse(
-                                    ResourceConfigUtils.parseResourceMemoryString(
-                                            quantity.toString()));
+                    var memory = ResourceConfigUtils.parseMemoryQuantity(quantity);
                     if (memory.getBytes() <= 0) {
                         errors.add(
                                 String.format(
