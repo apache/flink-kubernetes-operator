@@ -554,4 +554,4 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | labelSelector | java.lang.String | TaskManager label selector. |
-| replicas | int | Number of TaskManager replicas if defined in the spec. |
+| replicas | int | Number of TaskManagers registered with the running Flink cluster, as of the operator's last successful observation. |

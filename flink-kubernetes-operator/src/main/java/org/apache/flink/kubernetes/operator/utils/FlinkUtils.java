@@ -351,6 +351,10 @@ public class FlinkUtils {
                 || haMode.equalsIgnoreCase("kubernetes");
     }
 
+    public static String getTaskManagerLabelSelector(String clusterId) {
+        return "component=taskmanager,app=" + clusterId;
+    }
+
     public static int getNumTaskManagers(Configuration conf) {
         int parallelism = conf.get(CoreOptions.DEFAULT_PARALLELISM);
         return getNumTaskManagers(conf, parallelism);

@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -99,6 +100,29 @@ public class SessionObserverTest extends OperatorTestBase {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @Test
+    public void observeReportsActualTaskManagerReplicas() {
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        flinkService.setTaskManagerReplicas(5);
+        observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        var labelSelector =
+                FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 5), deployment.getStatus().getTaskManager());
+
+        flinkService.setTaskManagerReplicas(2);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 2), deployment.getStatus().getTaskManager());
     }
 
     @Test

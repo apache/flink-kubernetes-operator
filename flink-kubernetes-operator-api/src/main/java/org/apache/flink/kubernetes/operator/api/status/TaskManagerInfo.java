@@ -38,6 +38,9 @@ public class TaskManagerInfo {
     /** TaskManager label selector. */
     @LabelSelector private String labelSelector;
 
-    /** Number of TaskManager replicas if defined in the spec. */
+    /**
+     * Number of TaskManagers registered with the running Flink cluster, as of the operator's last
+     * successful observation.
+     */
     @StatusReplicas private int replicas = 0;
 }

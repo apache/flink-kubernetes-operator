@@ -117,7 +117,7 @@ public interface FlinkService {
 
     void disposeSavepoint(String savepointPath, Configuration conf) throws Exception;
 
-    Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
+    ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception;
 
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 

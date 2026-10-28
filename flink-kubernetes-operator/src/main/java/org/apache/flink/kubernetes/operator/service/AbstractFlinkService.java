@@ -803,8 +803,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf, @Nullable String jobId)
-            throws Exception {
+    public ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception {
         Map<String, String> clusterInfo = new HashMap<>();
 
         populateFlinkVersion(conf, clusterInfo);
@@ -819,7 +818,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
         populateStateSize(conf, jobId, clusterInfo);
 
-        return clusterInfo;
+        return new ClusterInfo(clusterInfo, taskManagerReplicas);
     }
 
     private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)

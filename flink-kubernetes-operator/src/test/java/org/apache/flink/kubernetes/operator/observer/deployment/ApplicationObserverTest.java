@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -87,6 +88,38 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 .getFlinkConfiguration()
                 .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
         deployment.getStatus().getJobStatus().setJobId(jobId);
+    }
+
+    @Test
+    public void observeReportsActualTaskManagerReplicas() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        flinkService.setTaskManagerReplicas(5);
+        observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        var labelSelector =
+                FlinkUtils.getTaskManagerLabelSelector(deployment.getMetadata().getName());
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 5), deployment.getStatus().getTaskManager());
+
+        flinkService.setTaskManagerReplicas(3);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 3), deployment.getStatus().getTaskManager());
+
+        flinkService.setTaskManagerReplicasError(true);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                new TaskManagerInfo(labelSelector, 3), deployment.getStatus().getTaskManager());
     }
 
     @Test
