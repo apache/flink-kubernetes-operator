@@ -21,27 +21,38 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Logic encapsulating canary tests. */
+/**
+ * Tracks the canary resources of one kind, labeled with {@link #CANARY_LABEL}, to verify that the
+ * operator still picks up and reconciles spec changes. Each canary spec is periodically updated by
+ * bumping its restart nonce, and the canary is reported unhealthy when the update is not reconciled
+ * within the canary resource timeout, or when the update itself keeps failing. Canaries are never
+ * deployed, their reconciliation stops at this class.
+ */
 @RequiredArgsConstructor
 public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(CanaryResourceManager.class);
 
     public static final String CANARY_LABEL = "flink.apache.org/canary";
+
+    @VisibleForTesting static final int MAX_FAILED_UPDATES = 3;
 
     private final ConcurrentHashMap<ResourceID, CanaryResourceState> canaryResources =
             new ConcurrentHashMap<>();
@@ -55,28 +66,36 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
     }
 
     public boolean handleCanaryResourceReconciliation(CR resource, KubernetesClient client) {
+        var resourceId = ResourceID.fromResource(resource);
         if (!isCanaryResource(resource)) {
+            if (canaryResources.remove(resourceId) != null) {
+                LOG.info(
+                        "Reconciled {} without the canary label. Stopping health checks",
+                        resourceId);
+            }
             return false;
         }
 
-        var resourceId = ResourceID.fromResource(resource);
-
         LOG.info("Reconciling canary resource");
 
-        canaryResources.compute(
-                resourceId,
-                (id, previousState) -> {
-                    boolean firstReconcile = false;
-                    if (previousState == null) {
-                        firstReconcile = true;
-                        previousState = new CanaryResourceState();
-                    }
-                    previousState.onReconcile(resource);
-                    if (firstReconcile) {
-                        updateSpecAndScheduleHealthCheck(resourceId, previousState, client);
-                    }
-                    return previousState;
-                });
+        var firstReconcile = new AtomicBoolean(false);
+        var state =
+                canaryResources.compute(
+                        resourceId,
+                        (id, previousState) -> {
+                            if (previousState == null) {
+                                firstReconcile.set(true);
+                                previousState = new CanaryResourceState();
+                                previousState.bumpedGeneration =
+                                        resource.getMetadata().getGeneration();
+                            }
+                            previousState.onReconcile(resource);
+                            return previousState;
+                        });
+
+        if (firstReconcile.get()) {
+            updateSpecAndScheduleHealthCheck(resourceId, state, client);
+        }
 
         return true;
     }
@@ -92,6 +111,23 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         return true;
     }
 
+    public void retainNamespaces(Set<String> namespaces) {
+        // The operator switched to watching all namespaces
+        if (namespaces.contains(Constants.WATCH_ALL_NAMESPACES)) {
+            return;
+        }
+
+        for (var resourceId : canaryResources.keySet()) {
+            var watched = resourceId.getNamespace().map(namespaces::contains).orElse(true);
+            if (!watched && canaryResources.remove(resourceId) != null) {
+                LOG.info(
+                        "Namespace of canary resource {} is no longer watched. Stopping health checks",
+                        resourceId);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
     private void updateSpecAndScheduleHealthCheck(
             ResourceID resourceID, CanaryResourceState crs, KubernetesClient client) {
         var canaryTimeout =
@@ -99,17 +135,58 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
                         .getDefaultConfig()
                         .get(KubernetesOperatorConfigOptions.CANARY_RESOURCE_TIMEOUT);
 
-        Long restartNonce = crs.resource.getSpec().getRestartNonce();
-        crs.resource.getSpec().setRestartNonce(restartNonce == null ? 1L : restartNonce + 1);
-        crs.previousGeneration = crs.resource.getMetadata().getGeneration();
+        Long newGeneration = null;
+        var deleted = false;
+        var labelRemoved = false;
+        try {
+            var canaryResource =
+                    client.resources((Class<CR>) crs.resource.getClass())
+                            .inNamespace(resourceID.getNamespace().orElse(null))
+                            .withName(resourceID.getName());
+            var latest = canaryResource.get();
+            if (latest == null) {
+                deleted = true;
+            } else if (!isCanaryResource(latest)) {
+                labelRemoved = true;
+            } else {
+                var restartNonce = latest.getSpec().getRestartNonce();
+                latest.getSpec().setRestartNonce(restartNonce == null ? 1L : restartNonce + 1);
+                newGeneration = client.resource(latest).update().getMetadata().getGeneration();
+            }
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) {
+                deleted = true;
+            } else {
+                LOG.warn("Could not bump canary resource {}, will retry", resourceID, e);
+            }
+        } catch (Exception e) {
+            LOG.warn("Could not bump canary resource {}, will retry", resourceID, e);
+        }
+
+        if (deleted) {
+            LOG.info(
+                    "Canary resource {} was deleted without cleanup. Stopping health checks",
+                    resourceID);
+            canaryResources.remove(resourceID, crs);
+            return;
+        }
+
+        if (labelRemoved) {
+            LOG.info(
+                    "Canary label removed from {}, skipping the spec bump. Stopping health checks",
+                    resourceID);
+            canaryResources.remove(resourceID, crs);
+            return;
+        }
+
+        if (newGeneration == null) {
+            crs.failedBumps++;
+        } else {
+            crs.bumpedGeneration = newGeneration;
+            crs.failedBumps = 0;
+        }
 
         LOG.info("Scheduling canary check for {} in {}s", resourceID, canaryTimeout.toSeconds());
-
-        try {
-            client.resource(ReconciliationUtils.clone(crs.resource)).replace();
-        } catch (Throwable t) {
-            LOG.warn("Could not bump canary deployment, it may have been deleted", t);
-        }
 
         executorService.schedule(
                 () -> checkHealth(resourceID, client),
@@ -125,20 +202,31 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
             return;
         }
 
-        // We did not reconcile since the last spec update within deadline
-        if (crs.canaryReconciledSinceUpdate()) {
+        if (crs.failedBumps >= MAX_FAILED_UPDATES) {
+            LOG.error(
+                    "Canary deployment {} spec could not be updated in {} consecutive attempts",
+                    resourceID,
+                    crs.failedBumps);
+            crs.isHealthy = false;
+        } else if (crs.canaryReconciledSinceUpdate() && crs.failedBumps > 0) {
+            LOG.warn(
+                    "Canary deployment {} healthy, verified against its last successful spec update. The last {} spec update attempts failed",
+                    resourceID,
+                    crs.failedBumps);
+            crs.isHealthy = true;
+        } else if (crs.canaryReconciledSinceUpdate()) {
             LOG.info("Canary deployment healthy");
             crs.isHealthy = true;
         } else {
+            // We did not reconcile since the last spec update within deadline
             LOG.error(
-                    "Canary deployment {} latest spec not reconciled. Expected generation larger than {}, received {}",
+                    "Canary deployment {} latest spec not reconciled. Expected generation at least {}, received {}",
                     resourceID,
-                    crs.previousGeneration,
+                    crs.bumpedGeneration,
                     crs.resource.getMetadata().getGeneration());
             crs.isHealthy = false;
         }
 
-        // Update spec and reschedule health check
         updateSpecAndScheduleHealthCheck(resourceID, crs, client);
     }
 
@@ -157,9 +245,8 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
 
     private class CanaryResourceState {
         CR resource;
-
-        long previousGeneration;
-
+        long bumpedGeneration;
+        int failedBumps;
         boolean isHealthy = true;
 
         void onReconcile(CR cr) {
@@ -167,7 +254,7 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         }
 
         boolean canaryReconciledSinceUpdate() {
-            return resource.getMetadata().getGeneration() > previousGeneration;
+            return resource.getMetadata().getGeneration() >= bumpedGeneration;
         }
     }
 }
