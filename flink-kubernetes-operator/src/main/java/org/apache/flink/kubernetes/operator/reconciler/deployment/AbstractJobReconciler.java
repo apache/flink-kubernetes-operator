@@ -104,8 +104,7 @@ public abstract class AbstractJobReconciler<
     }
 
     private boolean shouldWaitForPendingSavepoint(JobStatus jobStatus, Configuration conf) {
-        return !conf.getBoolean(
-                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
+        return !conf.get(KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
                 && SnapshotUtils.savepointInProgress(jobStatus);
     }
 
@@ -301,7 +300,7 @@ public abstract class AbstractJobReconciler<
                 boolean savepointPossible =
                         !StringUtils.isNullOrWhitespaceOnly(
                                 ctx.getObserveConfig()
-                                        .getString(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+                                        .get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
                 if (running && savepointPossible) {
                     LOG.info("Using savepoint to upgrade Flink version");
                     return JobUpgrade.savepoint(false);
@@ -511,7 +510,7 @@ public abstract class AbstractJobReconciler<
         var status = ctx.getResource().getStatus();
         var jobStatus = status.getJobStatus().getState();
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
-                && ctx.getObserveConfig().getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
+                && ctx.getObserveConfig().get(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");
             cleanupAfterFailedJob(ctx);
             status.setError(null);
@@ -576,7 +575,7 @@ public abstract class AbstractJobReconciler<
                             savepointDirectory,
                             triggerType,
                             SavepointFormatType.valueOf(savepointFormatType.name()),
-                            conf.getBoolean(
+                            conf.get(
                                     KubernetesOperatorConfigOptions
                                             .OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE));
 

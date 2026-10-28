@@ -51,7 +51,7 @@ public class KubernetesResourceScopeFormat extends ScopeFormat {
     }
 
     public static KubernetesResourceScopeFormat fromConfig(Configuration config) {
-        String format = config.getString(SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCE);
+        String format = config.get(SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCE);
         return new KubernetesResourceScopeFormat(format);
     }
 }

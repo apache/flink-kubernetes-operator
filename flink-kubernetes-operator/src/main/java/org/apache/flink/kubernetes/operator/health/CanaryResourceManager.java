@@ -106,7 +106,7 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         LOG.info("Scheduling canary check for {} in {}s", resourceID, canaryTimeout.toSeconds());
 
         try {
-            client.resource(ReconciliationUtils.clone(crs.resource)).replace();
+            client.resource(ReconciliationUtils.clone(crs.resource)).update();
         } catch (Throwable t) {
             LOG.warn("Could not bump canary deployment, it may have been deleted", t);
         }

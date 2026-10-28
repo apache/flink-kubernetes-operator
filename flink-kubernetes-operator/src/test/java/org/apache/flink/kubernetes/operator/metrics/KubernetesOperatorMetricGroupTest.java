@@ -71,7 +71,7 @@ public class KubernetesOperatorMetricGroupTest {
     @Test
     public void testGenerateScopeCustom() throws Exception {
         Configuration configuration = new Configuration();
-        configuration.setString(SCOPE_NAMING_KUBERNETES_OPERATOR, "foo.<host>.<name>.<namespace>");
+        configuration.set(SCOPE_NAMING_KUBERNETES_OPERATOR, "foo.<host>.<name>.<namespace>");
         MetricRegistryImpl registry = new MetricRegistryImpl(fromConfiguration(configuration));
 
         KubernetesOperatorMetricGroup group =

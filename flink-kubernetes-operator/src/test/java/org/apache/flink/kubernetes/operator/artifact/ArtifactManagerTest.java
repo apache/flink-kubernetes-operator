@@ -63,7 +63,7 @@ public class ArtifactManagerTest {
     private ArtifactManager artifactManagerWithPolicy(
             List<String> allowedSchemes, boolean disallowRestrictedHosts) {
         Configuration configuration = new Configuration();
-        configuration.setString(
+        configuration.set(
                 KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
                 tempDir.toAbsolutePath().toString());
         configuration.set(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, allowedSchemes);
@@ -76,7 +76,7 @@ public class ArtifactManagerTest {
     private ArtifactManager artifactManagerWithFetchLimits(
             Duration totalTimeout, long maxArtifactSizeBytes) {
         Configuration configuration = new Configuration();
-        configuration.setString(
+        configuration.set(
                 KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
                 tempDir.toAbsolutePath().toString());
         configuration.set(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("http"));
@@ -91,7 +91,7 @@ public class ArtifactManagerTest {
     private ArtifactManager artifactManagerWithSocketTimeout(
             Duration socketTimeout, Duration totalTimeout) {
         Configuration configuration = new Configuration();
-        configuration.setString(
+        configuration.set(
                 KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
                 tempDir.toAbsolutePath().toString());
         configuration.set(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("http"));

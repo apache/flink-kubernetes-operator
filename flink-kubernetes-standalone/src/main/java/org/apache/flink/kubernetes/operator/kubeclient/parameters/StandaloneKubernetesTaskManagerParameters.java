@@ -115,7 +115,7 @@ public class StandaloneKubernetesTaskManagerParameters extends AbstractKubernete
     }
 
     public double getTaskManagerCPU() {
-        return flinkConfig.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU);
+        return flinkConfig.get(KubernetesConfigOptions.TASK_MANAGER_CPU);
     }
 
     public int getRPCPort() {

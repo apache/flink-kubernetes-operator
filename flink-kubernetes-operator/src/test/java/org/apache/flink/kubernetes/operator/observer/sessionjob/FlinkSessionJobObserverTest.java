@@ -177,7 +177,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
         flinkService.setListJobConsumer(
                 (configuration) ->
-                        Assertions.assertEquals(8088, configuration.getInteger(RestOptions.PORT)));
+                        Assertions.assertEquals(8088, configuration.get(RestOptions.PORT)));
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
                 JobStatus.RUNNING, sessionJob.getStatus().getJobStatus().getState());
