@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.exception.FlinkResourceException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.SerializedThrowable;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -123,11 +122,11 @@ public final class FlinkResourceExceptionUtils {
             Map<String, String> labelMapper) {
         FlinkResourceException flinkResourceException = FlinkResourceException.builder().build();
 
-        String type =
-                throwable instanceof SerializedThrowable
-                        ? ((SerializedThrowable) throwable).getOriginalErrorClassName()
-                        : throwable.getClass().getName();
-        getSubstringWithMaxLength(type, lengthThreshold).ifPresent(flinkResourceException::setType);
+        getSubstringWithMaxLength(
+                        org.apache.flink.kubernetes.operator.utils.ExceptionUtils
+                                .getExceptionClassName(throwable),
+                        lengthThreshold)
+                .ifPresent(flinkResourceException::setType);
         getSubstringWithMaxLength(throwable.getMessage(), lengthThreshold)
                 .ifPresent(flinkResourceException::setMessage);
 
