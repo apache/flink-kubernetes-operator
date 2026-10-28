@@ -37,6 +37,8 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.utils.ExceptionUtils.getExceptionClassName;
+
 /** Flink Resource Exception utilities. */
 public final class FlinkResourceExceptionUtils {
 
@@ -122,10 +124,7 @@ public final class FlinkResourceExceptionUtils {
             Map<String, String> labelMapper) {
         FlinkResourceException flinkResourceException = FlinkResourceException.builder().build();
 
-        getSubstringWithMaxLength(
-                        org.apache.flink.kubernetes.operator.utils.ExceptionUtils
-                                .getExceptionClassName(throwable),
-                        lengthThreshold)
+        getSubstringWithMaxLength(getExceptionClassName(throwable), lengthThreshold)
                 .ifPresent(flinkResourceException::setType);
         getSubstringWithMaxLength(throwable.getMessage(), lengthThreshold)
                 .ifPresent(flinkResourceException::setMessage);
