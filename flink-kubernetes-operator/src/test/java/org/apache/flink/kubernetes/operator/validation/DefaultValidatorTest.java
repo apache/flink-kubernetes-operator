@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -70,7 +71,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
 import static org.apache.flink.configuration.JobManagerOptions.JVM_HEAP_MEMORY;
+import static org.apache.flink.configuration.JobManagerOptions.JVM_OVERHEAD_MAX;
 import static org.apache.flink.configuration.TaskManagerOptions.MANAGED_MEMORY_SIZE;
+import static org.apache.flink.configuration.TaskManagerOptions.NETWORK_MEMORY_MAX;
 import static org.apache.flink.configuration.TaskManagerOptions.TASK_HEAP_MEMORY;
 import static org.apache.flink.configuration.TaskManagerOptions.TOTAL_FLINK_MEMORY;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -287,7 +290,7 @@ public class DefaultValidatorTest {
         testSuccessDeprecatedResource(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
         testSuccessDeprecatedResource(
-                dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
+                dep -> dep.getSpec().getTaskManager().getResource().setMemory("2147483648"));
 
         // Test resource validation with k8s specification
         testSuccessDeprecatedResource(
@@ -1031,6 +1034,42 @@ public class DefaultValidatorTest {
                                                                 "cpu",
                                                                 new Quantity("2")))
                                                 .build()));
+    }
+
+    @Test
+    public void testInconsistentMemoryConfigurationIsRejected() {
+        Consumer<FlinkDeployment> tmNetworkMaxBelowMin =
+                dep -> dep.getSpec().getFlinkConfiguration().put(NETWORK_MEMORY_MAX.key(), "32m");
+        Consumer<FlinkDeployment> jmOverheadMaxBelowMin =
+                dep -> dep.getSpec().getFlinkConfiguration().put(JVM_OVERHEAD_MAX.key(), "32m");
+
+        testError(tmNetworkMaxBelowMin, "TaskManager memory configuration failed");
+        testErrorDeprecatedResource(
+                tmNetworkMaxBelowMin, "TaskManager memory configuration failed");
+        testError(jmOverheadMaxBelowMin, "JobManager memory configuration failed");
+        testErrorDeprecatedResource(
+                jmOverheadMaxBelowMin, "JobManager memory configuration failed");
+    }
+
+    @Test
+    public void testLegacyJobManagerHeapIsIgnoredWhenSpecSetsMemory() {
+        testSuccess(
+                dep -> dep.getSpec().getFlinkConfiguration().put("jobmanager.heap.size", "2048m"));
+    }
+
+    @Test
+    public void testDeprecatedResourceMemoryIsIgnoredWhenResourcesAreSet() {
+        testError(
+                dep -> {
+                    dep.getSpec()
+                            .getTaskManager()
+                            .setResources(
+                                    new ResourceRequirementsBuilder()
+                                            .withRequests(Map.of("cpu", new Quantity("1")))
+                                            .build());
+                    dep.getSpec().getTaskManager().setResource(new Resource(1.0, "2048m", "2G"));
+                },
+                "TaskManager resource memory must be defined using");
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
