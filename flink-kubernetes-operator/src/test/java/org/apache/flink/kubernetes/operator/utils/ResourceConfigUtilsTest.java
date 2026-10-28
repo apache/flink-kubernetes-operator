@@ -188,17 +188,6 @@ public class ResourceConfigUtilsTest {
     }
 
     @Test
-    public void testIsMemoryDefined() {
-        assertFalse(ResourceConfigUtils.isMemoryDefined(null));
-        assertFalse(ResourceConfigUtils.isMemoryDefined(new ResourceRequirements()));
-        assertTrue(
-                ResourceConfigUtils.isMemoryDefined(
-                        new ResourceRequirementsBuilder()
-                                .withLimits(Map.of(CrdConstants.MEMORY, new Quantity("1Gi")))
-                                .build()));
-    }
-
-    @Test
     public void testGetProcessMemory() {
         var deprecatedResource = new Resource(1.0, "1g", null);
         assertThat(ResourceConfigUtils.getProcessMemory(null, null)).isNull();

@@ -32,9 +32,10 @@ import java.util.OptionalDouble;
 /**
  * Utility methods for translating Kubernetes resource definitions ({@link ResourceRequirements} and
  * the deprecated {@code Resource} memory strings) into the values the operator feeds into the Flink
- * configuration. Kept in one place so the deploy path ({@code FlinkConfigBuilder}) and the
- * autoscaler memory tuning path ({@code KubernetesScalingRealizer}) parse and interpret resources
- * the same way, and so the parsing rules can be unit tested in isolation.
+ * configuration. Kept in one place so the deploy path ({@code FlinkConfigBuilder}), the validator
+ * ({@code DefaultValidator}) and the autoscaler memory tuning path ({@code
+ * KubernetesScalingRealizer}) parse and interpret resources the same way, and so the parsing rules
+ * can be unit tested in isolation.
  */
 public final class ResourceConfigUtils {
 
@@ -140,11 +141,6 @@ public final class ResourceConfigUtils {
             return OptionalDouble.empty();
         }
         return computeLimitFactor(resources.getRequests(), resources.getLimits(), key);
-    }
-
-    /** Returns true when memory is defined via either {@code requests} or {@code limits}. */
-    public static boolean isMemoryDefined(@Nullable ResourceRequirements resources) {
-        return getRequestOrLimit(resources, CrdConstants.MEMORY) != null;
     }
 
     /**
