@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -144,5 +145,23 @@ public final class ResourceConfigUtils {
     /** Returns true when memory is defined via either {@code requests} or {@code limits}. */
     public static boolean isMemoryDefined(@Nullable ResourceRequirements resources) {
         return getRequestOrLimit(resources, CrdConstants.MEMORY) != null;
+    }
+
+    /**
+     * Returns the total process memory a JobManager/TaskManager spec sets, parsed by {@link
+     * #parseResourceMemoryString}, or null when it sets none. The new {@code resources} field takes
+     * precedence: once it has any requirements, the deprecated {@code resource} field is ignored.
+     */
+    @Nullable
+    public static String getProcessMemory(
+            @Nullable ResourceRequirements resources, @Nullable Resource resource) {
+        if (hasResourceRequirements(resources)) {
+            Quantity memory = getRequestOrLimit(resources, CrdConstants.MEMORY);
+            return memory == null ? null : parseResourceMemoryString(memory.toString());
+        }
+        if (resource == null || resource.getMemory() == null) {
+            return null;
+        }
+        return parseResourceMemoryString(resource.getMemory());
     }
 }

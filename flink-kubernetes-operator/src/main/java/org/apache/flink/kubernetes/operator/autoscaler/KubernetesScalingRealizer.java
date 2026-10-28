@@ -25,7 +25,6 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
 
@@ -79,7 +78,10 @@ public class KubernetesScalingRealizer
             return;
         }
         TaskManagerSpec taskManager = flinkDeployment.getSpec().getTaskManager();
-        String currentMemoryString = getTaskManagerMemory(taskManager);
+        // Read the memory the way the deploy code path applies it.
+        final String currentMemoryString =
+                ResourceConfigUtils.getProcessMemory(
+                        taskManager.getResources(), taskManager.getResource());
         if (currentMemoryString == null) {
             // Memory is configured via neither the deprecated resource field nor resources, so
             // there is nothing to adjust (the operator cannot tune what was never set here).
@@ -88,31 +90,11 @@ public class KubernetesScalingRealizer
                             + "spec.taskManager.resource or spec.taskManager.resources.");
             return;
         }
-        // Make sure to parse in the same way as the original deploy code path.
-        var currentMemory =
-                MemorySize.parse(
-                        ResourceConfigUtils.parseResourceMemoryString(currentMemoryString));
+        var currentMemory = MemorySize.parse(currentMemoryString);
         if (!totalMemoryOverride.equals(currentMemory)) {
             // Adjust the resource memory to change the total TM memory
             setTaskManagerMemory(taskManager, currentMemory, totalMemoryOverride);
         }
-    }
-
-    /**
-     * Reads the TaskManager memory from whichever field is in effect. Mirrors {@link
-     * FlinkConfigBuilder}, which prefers {@code resources} (requests, falling back to limits) over
-     * the deprecated {@code resource} field.
-     */
-    @Nullable
-    private static String getTaskManagerMemory(TaskManagerSpec taskManager) {
-        if (ResourceConfigUtils.hasResourceRequirements(taskManager.getResources())) {
-            Quantity memory =
-                    ResourceConfigUtils.getRequestOrLimit(
-                            taskManager.getResources(), CrdConstants.MEMORY);
-            return memory != null ? memory.toString() : null;
-        }
-        Resource resource = taskManager.getResource();
-        return resource != null ? resource.getMemory() : null;
     }
 
     /**

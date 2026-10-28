@@ -368,6 +368,15 @@ public class FlinkConfigBuilder {
      */
     private void applyResourceConfig(
             ResourceRequirements resources, Resource resource, boolean isJM) {
+        final String processMemory = ResourceConfigUtils.getProcessMemory(resources, resource);
+        if (processMemory != null) {
+            effectiveConfig.setString(
+                    isJM
+                            ? JobManagerOptions.TOTAL_PROCESS_MEMORY.key()
+                            : TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                    processMemory);
+        }
+
         if (ResourceConfigUtils.hasResourceRequirements(resources)) {
             if (resource != null) {
                 LOG.warn(
@@ -378,7 +387,7 @@ public class FlinkConfigBuilder {
             }
             setResourceRequirements(resources, effectiveConfig, isJM);
         } else if (resource != null) {
-            setResource(resource, effectiveConfig, isJM);
+            configureCpu(resource, effectiveConfig, isJM);
         }
     }
 
@@ -396,8 +405,8 @@ public class FlinkConfigBuilder {
     }
 
     /**
-     * Sets Flink configuration from Kubernetes ResourceRequirements, handling both requests (for
-     * Flink config values) and limits (for computing limit factors).
+     * Sets the CPU Flink configuration from Kubernetes ResourceRequirements, along with the limit
+     * factors computed from its limits. Memory is set by {@link #applyResourceConfig}.
      *
      * @param resourceRequirements the Kubernetes resource requirements
      * @param effectiveConfig the Flink configuration to populate
@@ -411,21 +420,8 @@ public class FlinkConfigBuilder {
             return;
         }
 
-        var memoryConfigOption =
-                isJM
-                        ? JobManagerOptions.TOTAL_PROCESS_MEMORY
-                        : TaskManagerOptions.TOTAL_PROCESS_MEMORY;
-
         // Kubernetes defaults requests to limits when requests are omitted, so derive the Flink
         // configuration values from requests and fall back to limits when a request is absent.
-        Quantity memory =
-                ResourceConfigUtils.getRequestOrLimit(resourceRequirements, CrdConstants.MEMORY);
-        if (memory != null) {
-            effectiveConfig.setString(
-                    memoryConfigOption.key(),
-                    ResourceConfigUtils.parseResourceMemoryString(memory.toString()));
-        }
-
         Quantity cpu =
                 ResourceConfigUtils.getRequestOrLimit(resourceRequirements, CrdConstants.CPU);
         if (cpu != null) {
@@ -606,22 +602,6 @@ public class FlinkConfigBuilder {
     private static <T> void setDefaultConf(Configuration conf, ConfigOption<T> option, T value) {
         if (!conf.contains(option)) {
             conf.set(option, value);
-        }
-    }
-
-    private void setResource(Resource resource, Configuration effectiveConfig, boolean isJM) {
-        if (resource != null) {
-            var memoryConfigOption =
-                    isJM
-                            ? JobManagerOptions.TOTAL_PROCESS_MEMORY
-                            : TaskManagerOptions.TOTAL_PROCESS_MEMORY;
-            if (resource.getMemory() != null) {
-                effectiveConfig.setString(
-                        memoryConfigOption.key(),
-                        ResourceConfigUtils.parseResourceMemoryString(resource.getMemory()));
-            }
-
-            configureCpu(resource, effectiveConfig, isJM);
         }
     }
 

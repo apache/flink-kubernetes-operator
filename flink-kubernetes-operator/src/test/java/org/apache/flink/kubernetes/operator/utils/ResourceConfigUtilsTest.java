@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 import java.util.OptionalDouble;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -194,5 +196,36 @@ public class ResourceConfigUtilsTest {
                         new ResourceRequirementsBuilder()
                                 .withLimits(Map.of(CrdConstants.MEMORY, new Quantity("1Gi")))
                                 .build()));
+    }
+
+    @Test
+    public void testGetProcessMemory() {
+        var deprecatedResource = new Resource(1.0, "1g", null);
+        assertThat(ResourceConfigUtils.getProcessMemory(null, null)).isNull();
+        assertThat(ResourceConfigUtils.getProcessMemory(new ResourceRequirements(), null)).isNull();
+        assertThat(ResourceConfigUtils.getProcessMemory(null, deprecatedResource))
+                .isEqualTo("1 gb");
+        // An empty resources block does not suppress the deprecated field.
+        assertThat(
+                        ResourceConfigUtils.getProcessMemory(
+                                new ResourceRequirements(), deprecatedResource))
+                .isEqualTo("1 gb");
+        // Memory falls back to the limit when no request is set.
+        assertThat(
+                        ResourceConfigUtils.getProcessMemory(
+                                new ResourceRequirementsBuilder()
+                                        .withLimits(
+                                                Map.of(CrdConstants.MEMORY, new Quantity("2Gi")))
+                                        .build(),
+                                deprecatedResource))
+                .isEqualTo("2147483648");
+        // Once resources sets anything, the deprecated field is ignored, memory included.
+        assertThat(
+                        ResourceConfigUtils.getProcessMemory(
+                                new ResourceRequirementsBuilder()
+                                        .withRequests(Map.of(CrdConstants.CPU, new Quantity("1")))
+                                        .build(),
+                                deprecatedResource))
+                .isNull();
     }
 }
