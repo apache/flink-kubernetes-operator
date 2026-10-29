@@ -29,7 +29,10 @@ import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
+import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.RuntimeInfo;
+import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
+import io.javaoperatorsdk.operator.health.ControllerHealthInfo;
 import io.javaoperatorsdk.operator.health.InformerHealthIndicator;
 import io.javaoperatorsdk.operator.health.InformerWrappingEventSourceHealthIndicator;
 import io.javaoperatorsdk.operator.health.Status;
@@ -37,12 +40,15 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,6 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * @link Health probe unit tests
  */
+@SuppressWarnings("rawtypes")
 @EnableKubernetesMockClient(crud = true)
 public class HealthProbeTest {
     KubernetesClient client;
@@ -89,21 +96,9 @@ public class HealthProbeTest {
     @Test
     public void testHealthProbeInfomers() {
         var isRunning = new AtomicBoolean(false);
-        var unhealthyEventSources =
+        var eventSources =
                 new HashMap<String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
-        var runtimeInfo =
-                new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
-                    @Override
-                    public boolean isStarted() {
-                        return isRunning.get();
-                    }
-
-                    @Override
-                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                            unhealthyInformerWrappingEventSourceHealthIndicator() {
-                        return unhealthyEventSources;
-                    }
-                };
+        var runtimeInfo = runtimeInfo(isRunning, eventSources);
 
         // Test if a new event source becomes unhealthy
         HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
@@ -111,14 +106,14 @@ public class HealthProbeTest {
         assertFalse(HealthProbe.INSTANCE.isHealthy());
         isRunning.set(true);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
         assertFalse(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.clear();
+        eventSources.clear();
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         // Test if we detect when there is an unhealthy at start
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
@@ -126,7 +121,7 @@ public class HealthProbeTest {
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY))));
         HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
@@ -136,7 +131,7 @@ public class HealthProbeTest {
                         informerHealthIndicator(Map.of("i3", Status.UNHEALTHY))));
         assertFalse(HealthProbe.INSTANCE.isHealthy());
         assertFalse(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
@@ -145,39 +140,69 @@ public class HealthProbeTest {
                         "e2",
                         informerHealthIndicator(Map.of("i3", Status.HEALTHY))));
         assertTrue(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
                         informerHealthIndicator(
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.UNHEALTHY))));
         assertFalse(HealthProbe.INSTANCE.isHealthy());
-        unhealthyEventSources.clear();
+        eventSources.clear();
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         // All informers unhealthy at start:
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
         HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
         assertFalse(HealthProbe.INSTANCE.isHealthy());
     }
 
     @Test
-    public void testHealthProbeCanary() {
-        var runtimeInfo =
-                new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
-                    @Override
-                    public boolean isStarted() {
-                        return true;
-                    }
+    public void testHealthProbeInformersUnhealthyEventSourceAtStart() {
+        var isRunning = new AtomicBoolean(true);
+        var eventSources =
+                new HashMap<String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
+        var runtimeInfo = runtimeInfo(isRunning, eventSources);
 
-                    @Override
-                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                            unhealthyInformerWrappingEventSourceHealthIndicator() {
-                        return Collections.emptyMap();
-                    }
-                };
+        eventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(Map.of("i1", Status.HEALTHY)),
+                        "e2",
+                        informerHealthIndicator(Map.of("i2", Status.UNHEALTHY))));
+        eventSources.put(
+                "c2",
+                Map.of(
+                        "e3",
+                        informerHealthIndicator(Map.of("i3", Status.HEALTHY)),
+                        "e4",
+                        informerHealthIndicator(Map.of("i4", Status.UNHEALTHY))));
         HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        eventSources.put(
+                "c2",
+                Map.of(
+                        "e3",
+                        informerHealthIndicator(Map.of("i3", Status.UNHEALTHY)),
+                        "e4",
+                        informerHealthIndicator(Map.of("i4", Status.UNHEALTHY))));
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+
+        eventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(Map.of("i1", Status.UNHEALTHY)),
+                        "e2",
+                        informerHealthIndicator(Map.of("i2", Status.UNHEALTHY))));
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+    }
+
+    @Test
+    public void testHealthProbeCanary() {
+        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo(new AtomicBoolean(true), Map.of()));
 
         var canaryManager =
                 new CanaryResourceManager<FlinkDeployment>(
@@ -219,6 +244,88 @@ public class HealthProbeTest {
         connection.setConnectTimeout(100000);
         connection.connect();
         return connection.getResponseCode() == OK.code();
+    }
+
+    private RuntimeInfo runtimeInfo(
+            AtomicBoolean isRunning,
+            Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>> eventSources) {
+        return new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
+            @Override
+            public boolean isStarted() {
+                return isRunning.get();
+            }
+
+            @Override
+            @SuppressWarnings("rawtypes")
+            public Set<RegisteredController> getRegisteredControllers() {
+                Set<RegisteredController> controllers = new HashSet<>();
+                eventSources.forEach(
+                        (name, controllerEventSources) ->
+                                controllers.add(
+                                        registeredController(name, controllerEventSources)));
+                return controllers;
+            }
+
+            @Override
+            public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
+                    unhealthyInformerWrappingEventSourceHealthIndicator() {
+                var unhealthy =
+                        new HashMap<
+                                String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
+                eventSources.forEach(
+                        (name, controllerEventSources) ->
+                                unhealthy.put(
+                                        name,
+                                        controllerEventSources.entrySet().stream()
+                                                .filter(
+                                                        e ->
+                                                                e.getValue().getStatus()
+                                                                        == Status.UNHEALTHY)
+                                                .collect(
+                                                        Collectors.toMap(
+                                                                Map.Entry::getKey,
+                                                                Map.Entry::getValue))));
+                return unhealthy;
+            }
+        };
+    }
+
+    private static RegisteredController<FlinkDeployment> registeredController(
+            String name, Map<String, InformerWrappingEventSourceHealthIndicator> eventSources) {
+        return new RegisteredController<>() {
+            @Override
+            public ControllerConfiguration<FlinkDeployment> getConfiguration() {
+                return controllerConfiguration(name);
+            }
+
+            @Override
+            public ControllerHealthInfo getControllerHealthInfo() {
+                return new ControllerHealthInfo(null) {
+                    @Override
+                    public Map<String, InformerWrappingEventSourceHealthIndicator>
+                            informerEventSourceHealthIndicators() {
+                        return eventSources;
+                    }
+                };
+            }
+
+            @Override
+            public void changeNamespaces(Set<String> namespaces) {}
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ControllerConfiguration<FlinkDeployment> controllerConfiguration(String name) {
+        return (ControllerConfiguration<FlinkDeployment>)
+                Proxy.newProxyInstance(
+                        ControllerConfiguration.class.getClassLoader(),
+                        new Class<?>[] {ControllerConfiguration.class},
+                        (proxy, method, args) -> {
+                            if ("getName".equals(method.getName())) {
+                                return name;
+                            }
+                            throw new UnsupportedOperationException(method.getName());
+                        });
     }
 
     private static InformerWrappingEventSourceHealthIndicator informerHealthIndicator(

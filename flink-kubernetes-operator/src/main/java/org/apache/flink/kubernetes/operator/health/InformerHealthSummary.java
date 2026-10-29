@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
+import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.RuntimeInfo;
 import io.javaoperatorsdk.operator.health.InformerHealthIndicator;
 import io.javaoperatorsdk.operator.health.Status;
@@ -33,13 +34,16 @@ public class InformerHealthSummary {
     boolean anyHealthy;
     Set<InformerIdentifier> unhealthyInformers;
 
+    @SuppressWarnings("unchecked")
     public static InformerHealthSummary fromRuntimeInfo(RuntimeInfo runtimeInfo) {
         var newUnHealthy = new HashSet<InformerIdentifier>();
         boolean anyHealthy = false;
 
-        for (var controllerEntry :
-                runtimeInfo.unhealthyInformerWrappingEventSourceHealthIndicator().entrySet()) {
-            for (var eventSourceEntry : controllerEntry.getValue().entrySet()) {
+        for (RegisteredController<?> controller : runtimeInfo.getRegisteredControllers()) {
+            var controllerName = controller.getConfiguration().getName();
+            var eventSources =
+                    controller.getControllerHealthInfo().informerEventSourceHealthIndicators();
+            for (var eventSourceEntry : eventSources.entrySet()) {
                 Map<String, InformerHealthIndicator> informers =
                         eventSourceEntry.getValue().informerHealthIndicators();
                 for (var informerEntry : informers.entrySet()) {
@@ -48,7 +52,7 @@ public class InformerHealthSummary {
                     } else {
                         newUnHealthy.add(
                                 new InformerIdentifier(
-                                        controllerEntry.getKey(),
+                                        controllerName,
                                         eventSourceEntry.getKey(),
                                         informerEntry.getKey()));
                     }
