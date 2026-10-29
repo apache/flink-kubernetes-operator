@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 
 /** The manager of the informers. */
-public class InformerManager {
+public class InformerManager implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(InformerManager.class);
     private final Set<String> watchedNamespaces = ConcurrentHashMap.newKeySet();
@@ -138,6 +138,15 @@ public class InformerManager {
         LOG.info("Setting namespaces to {}", watchedNamespaces);
         this.watchedNamespaces.clear();
         this.watchedNamespaces.addAll(watchedNamespaces);
+        stopInformers();
+    }
+
+    @Override
+    public void close() {
+        stopInformers();
+    }
+
+    private void stopInformers() {
         if (flinkDepInformers != null) {
             synchronized (this) {
                 if (flinkDepInformers != null) {

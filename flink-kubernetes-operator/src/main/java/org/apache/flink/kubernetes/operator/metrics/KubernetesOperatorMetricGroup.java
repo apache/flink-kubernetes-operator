@@ -23,13 +23,15 @@ import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.dump.QueryScopeInfo;
 import org.apache.flink.runtime.metrics.groups.AbstractMetricGroup;
 import org.apache.flink.runtime.metrics.scope.ScopeFormat;
+import org.apache.flink.util.AutoCloseableAsync;
 
 import io.fabric8.kubernetes.client.CustomResource;
 
 import java.util.Map;
 
 /** Base metric group for Flink Operator System metrics. */
-public class KubernetesOperatorMetricGroup extends AbstractMetricGroup<AbstractMetricGroup<?>> {
+public class KubernetesOperatorMetricGroup extends AbstractMetricGroup<AbstractMetricGroup<?>>
+        implements AutoCloseable {
 
     protected final String namespace;
     protected final String name;
@@ -74,6 +76,14 @@ public class KubernetesOperatorMetricGroup extends AbstractMetricGroup<AbstractM
                 namespace,
                 name,
                 hostname);
+    }
+
+    @Override
+    public void close() {
+        super.close();
+        if (registry instanceof AutoCloseableAsync closeableRegistry) {
+            closeableRegistry.closeAsync();
+        }
     }
 
     @Override

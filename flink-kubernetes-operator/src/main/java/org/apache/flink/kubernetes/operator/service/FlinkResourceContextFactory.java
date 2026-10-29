@@ -53,7 +53,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Factory for creating the {@link FlinkResourceContext}. */
-public class FlinkResourceContextFactory {
+public class FlinkResourceContextFactory implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceContextFactory.class);
 
@@ -71,7 +71,7 @@ public class FlinkResourceContextFactory {
 
     private final FlinkConfigManager configManager;
     private final ArtifactManager artifactManager;
-    private final ExecutorService clientExecutorService;
+    @VisibleForTesting final ExecutorService clientExecutorService;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final EventRecorder eventRecorder;
 
@@ -180,5 +180,11 @@ public class FlinkResourceContextFactory {
         // remove the resource from the cache
         lastRecordedExceptionCache.remove(resourceId);
         LOG.debug("Removed resource {} from last recorded exception cache", resourceId);
+    }
+
+    /** Stops the executor used by the Flink REST cluster clients. */
+    @Override
+    public void close() {
+        clientExecutorService.shutdownNow();
     }
 }

@@ -25,6 +25,8 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkResourceContextFactory}. */
 public class FlinkResourceContextFactoryTest {
@@ -55,5 +57,17 @@ public class FlinkResourceContextFactoryTest {
                                 configManager,
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null));
+    }
+
+    @Test
+    public void testCloseStopsClientExecutor() {
+        try (var configManager = new FlinkConfigManager(new Configuration());
+                var metricGroup = TestUtils.createTestMetricGroup(new Configuration())) {
+            var contextFactory = new FlinkResourceContextFactory(configManager, metricGroup, null);
+            assertFalse(contextFactory.clientExecutorService.isShutdown());
+
+            contextFactory.close();
+            assertTrue(contextFactory.clientExecutorService.isShutdown());
+        }
     }
 }

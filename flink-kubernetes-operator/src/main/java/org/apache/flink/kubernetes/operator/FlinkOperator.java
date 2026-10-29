@@ -57,6 +57,7 @@ import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
+import org.apache.flink.util.IOUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -69,6 +70,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -199,6 +201,7 @@ public class FlinkOperator {
         var reconcilerFactory = new ReconcilerFactory(eventRecorder, statusRecorder, autoscaler);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
+        canaryResourceManagers.add(canaryResourceManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
         canaryResourceManagers.add(canaryResourceManager);
 
@@ -224,6 +227,7 @@ public class FlinkOperator {
         var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder, autoscaler);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
+        canaryResourceManagers.add(canaryResourceManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
         canaryResourceManagers.add(canaryResourceManager);
 
@@ -297,22 +301,41 @@ public class FlinkOperator {
         registerSessionJobController();
         registerSnapshotController();
         registerBlueGreenController();
-        operator.installShutdownHook(
-                baseConfig.get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT));
+        Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
         operator.start();
         if (operatorHealthService != null) {
             HealthProbe.INSTANCE.setRuntimeInfo(operator.getRuntimeInfo());
-            Runtime.getRuntime().addShutdownHook(new Thread(operatorHealthService::stop));
             operatorHealthService.start();
         }
     }
 
     public void stop() {
+        // in-flight reconciliations are drained first
         operator.stop();
+
+        var closeables = new ArrayList<AutoCloseable>();
+        closeables.add(ctxFactory);
+        closeables.addAll(canaryResourceManagers);
+        closeables.add(configManager);
+        closeables.add(metricGroup);
+        if (operatorHealthService != null) {
+            closeables.add(operatorHealthService);
+        }
+        try {
+            IOUtils.closeAll(closeables);
+        } catch (Exception e) {
+            LOG.warn("Failed to close operator components", e);
+        }
     }
 
     public static void main(String... args) {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Operator", args);
-        new FlinkOperator(null).run();
+        try {
+            new FlinkOperator(null).run();
+        } catch (Throwable t) {
+            // Non-daemon threads started before the failure would keep the JVM alive
+            LOG.error("Failed to start the operator", t);
+            System.exit(1);
+        }
     }
 }

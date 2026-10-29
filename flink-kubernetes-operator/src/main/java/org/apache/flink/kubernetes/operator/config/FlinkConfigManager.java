@@ -74,11 +74,12 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX;
 
 /** Configuration manager for the Flink operator. */
-public class FlinkConfigManager {
+public class FlinkConfigManager implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    @VisibleForTesting final ScheduledExecutorService executorService;
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration defaultOperatorConfiguration;
     // TODO: From 1.11 release, snapshot CRD should be mandatory and this can be removed.
@@ -133,7 +134,7 @@ public class FlinkConfigManager {
                                 });
 
         updateDefaultConfig(defaultConfig);
-        ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+        this.executorService = Executors.newSingleThreadScheduledExecutor();
         executorService.scheduleWithFixedDelay(
                 cache::cleanUp,
                 cacheTimeout.toMillis(),
@@ -147,6 +148,12 @@ public class FlinkConfigManager {
 
     public boolean isSnapshotCrdInstalled() {
         return snapshotCrdInstalled;
+    }
+
+    /** Stops the config cache cleanup and the dynamic config watcher. */
+    @Override
+    public void close() {
+        executorService.shutdownNow();
     }
 
     /**

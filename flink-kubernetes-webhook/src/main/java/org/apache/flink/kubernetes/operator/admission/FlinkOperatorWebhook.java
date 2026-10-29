@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.MutatorUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorPluginUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
+import org.apache.flink.util.IOUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.bootstrap.ServerBootstrap;
 import org.apache.flink.shaded.netty4.io.netty.channel.Channel;
@@ -53,6 +54,8 @@ import javax.annotation.Nullable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Set;
 
 /** Main Class for Flink native k8s operator. */
@@ -67,17 +70,23 @@ public class FlinkOperatorWebhook {
     @VisibleForTesting final Set<FlinkResourceMutator> mutators;
     @VisibleForTesting final AdmissionHandler admissionHandler;
 
+    private final Deque<AutoCloseable> ownedResources = new ArrayDeque<>();
+
     @VisibleForTesting
     FlinkOperatorWebhook(
             @Nullable InformerManager informerManager, @Nullable FlinkConfigManager configManager) {
         if (informerManager == null) {
-            informerManager = new InformerManager(new KubernetesClientBuilder().build());
+            var kubernetesClient = new KubernetesClientBuilder().build();
+            ownedResources.push(kubernetesClient);
+            informerManager = new InformerManager(kubernetesClient);
+            ownedResources.push(informerManager);
         }
         if (configManager == null) {
             configManager =
                     new FlinkConfigManager(
                             informerManager::setNamespaces,
                             KubernetesClientUtils.isCrdInstalled(FlinkStateSnapshot.class));
+            ownedResources.push(configManager);
         }
 
         var operatorConfig = configManager.getOperatorConfiguration();
@@ -119,12 +128,23 @@ public class FlinkOperatorWebhook {
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            try {
+                IOUtils.closeAll(ownedResources);
+            } catch (Exception e) {
+                LOG.warn("Failed to close webhook resources", e);
+            }
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
-        new FlinkOperatorWebhook(null, null).run();
+        try {
+            new FlinkOperatorWebhook(null, null).run();
+        } catch (Throwable t) {
+            // Non-daemon threads started before the failure would keep the JVM alive
+            LOG.error("Failed to start the webhook", t);
+            System.exit(1);
+        }
     }
 
     private static int getPort() {

@@ -46,7 +46,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * deployed, their reconciliation stops at this class.
  */
 @RequiredArgsConstructor
-public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
+public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
+        implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(CanaryResourceManager.class);
 
@@ -57,7 +58,8 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
     private final ConcurrentHashMap<ResourceID, CanaryResourceState> canaryResources =
             new ConcurrentHashMap<>();
 
-    private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
+    @VisibleForTesting
+    final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
 
     private final FlinkConfigManager configManager;
 
@@ -241,6 +243,12 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
             return false;
         }
         return "true".equalsIgnoreCase(labels.getOrDefault(CANARY_LABEL, "false"));
+    }
+
+    /** Stops the scheduled canary health checks. */
+    @Override
+    public void close() {
+        executorService.shutdownNow();
     }
 
     private class CanaryResourceState {
