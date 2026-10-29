@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.SerializedThrowable;
 
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -49,6 +50,7 @@ import java.util.stream.Stream;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.LABELS;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.getSubstringWithMaxLength;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -279,6 +281,34 @@ public class FlinkResourceExceptionUtilsTest {
 
                 assertEquals(expectedLabelMapperMetadata.size(), labelMapperList.size());
             }
+        }
+    }
+
+    @Test
+    public void testSerializedThrowableReportsOriginalType() throws JsonProcessingException {
+        FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+        SerializedThrowable serializedThrowable =
+                new SerializedThrowable(
+                        new FlinkRuntimeException(
+                                "job failed", new NumberFormatException("For input string: x1")));
+
+        for (AbstractFlinkResource resource : getTestResources()) {
+            updateFlinkResourceException(
+                    serializedThrowable, resource, configManager.getOperatorConfiguration());
+
+            FlinkResourceException flinkResourceException =
+                    new ObjectMapper()
+                            .readValue(
+                                    ((CommonStatus) resource.getStatus()).getError(),
+                                    FlinkResourceException.class);
+
+            assertThat(flinkResourceException.getType())
+                    .isEqualTo(FlinkRuntimeException.class.getName());
+            assertThat(flinkResourceException.getMessage())
+                    .isEqualTo(serializedThrowable.getMessage());
+            assertThat(flinkResourceException.getThrowableList())
+                    .extracting(FlinkResourceException::getType)
+                    .containsExactly(NumberFormatException.class.getName());
         }
     }
 

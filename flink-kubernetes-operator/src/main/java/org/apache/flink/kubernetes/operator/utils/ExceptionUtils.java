@@ -67,6 +67,19 @@ public class ExceptionUtils {
     }
 
     /**
+     * Returns the class name of the throwable. For a {@link SerializedThrowable}, returns the class
+     * name of the original error it wraps.
+     *
+     * @param throwable the throwable to be processed
+     * @return the class name of the throwable, or of the original error for a SerializedThrowable
+     */
+    public static String getExceptionClassName(Throwable throwable) {
+        return throwable instanceof SerializedThrowable
+                ? ((SerializedThrowable) throwable).getOriginalErrorClassName()
+                : throwable.getClass().getName();
+    }
+
+    /**
      * traverse the throwable and extract useful information for up to the first 3 possible
      * exceptions in the hierarchy.
      *

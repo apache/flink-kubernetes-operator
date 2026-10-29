@@ -63,6 +63,20 @@ public class ExceptionUtilsTest {
                 .isEqualTo(NonSerializableException.class.getName());
     }
 
+    @Test
+    void testGetExceptionClassName() {
+        assertThat(ExceptionUtils.getExceptionClassName(new IllegalStateException()))
+                .isEqualTo(IllegalStateException.class.getName());
+        assertThat(
+                        ExceptionUtils.getExceptionClassName(
+                                new SerializedThrowable(new IllegalStateException())))
+                .isEqualTo(IllegalStateException.class.getName());
+        assertThat(
+                        ExceptionUtils.getExceptionClassName(
+                                new SerializedThrowable(new NonSerializableException())))
+                .isEqualTo(NonSerializableException.class.getName());
+    }
+
     private static class NonSerializableException extends Exception {
 
         public NonSerializableException(String message) {
