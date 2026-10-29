@@ -122,6 +122,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
@@ -145,9 +146,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.api.common.JobStatus.CANCELLING;
+import static org.apache.flink.api.common.JobStatus.FAILED;
 import static org.apache.flink.api.common.JobStatus.FAILING;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_MODE;
+import static org.apache.flink.configuration.HighAvailabilityOptions.HA_STORAGE_PATH;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -456,15 +460,17 @@ public class AbstractFlinkServiceTest {
      * another terminal state" response previously caused the operator to always return
      * CancelResult.pending(), looping forever without completing the upgrade/deletion.
      */
-    @Test
-    public void cancelApplicationJobWithCancelModeAndTerminalStateMessage() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void cancelApplicationJobWithCancelModeAndTerminalStateMessage(boolean haEnabled)
+            throws Exception {
         var flinkService =
                 getTestingService(
                         "Job cancellation failed because the job has already reached another terminal state (FAILED).",
                         HttpResponseStatus.BAD_REQUEST);
 
         JobID jobID = JobID.generate();
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        FlinkDeployment deployment = buildApplicationCluster(haEnabled);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
@@ -480,12 +486,61 @@ public class AbstractFlinkServiceTest {
         // Must NOT be pending — the operator would otherwise loop forever on the upgrade
         assertFalse(result.isPending());
         assertEquals(FINISHED, jobStatus.getState());
+        assertEquals(
+                haEnabled
+                        ? List.of()
+                        : List.of(
+                                Tuple2.of(
+                                        deployment.getMetadata().getNamespace(),
+                                        deployment.getMetadata().getName())),
+                flinkService.deleted);
+    }
+
+    /** Suspending a job that has already stopped deletes its JobManager only without HA. */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void suspendTerminalJobTest(boolean haEnabled) throws Exception {
+        var flinkService =
+                new TestingService(
+                        new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME));
+
+        FlinkDeployment deployment = buildApplicationCluster(haEnabled);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(JobID.generate().toHexString());
+        jobStatus.setState(FAILED);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        flinkService.cancelJob(
+                deployment, SuspendMode.NOOP, configManager.getObserveConfig(deployment), false);
+        assertEquals(
+                haEnabled ? JobManagerDeploymentStatus.READY : JobManagerDeploymentStatus.MISSING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                haEnabled
+                        ? List.of()
+                        : List.of(
+                                Tuple2.of(
+                                        deployment.getMetadata().getNamespace(),
+                                        deployment.getMetadata().getName())),
+                flinkService.deleted);
+    }
+
+    private static FlinkDeployment buildApplicationCluster(boolean haEnabled) {
+        var deployment = TestUtils.buildApplicationCluster();
+        if (!haEnabled) {
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .remove(HA_MODE.key(), HA_STORAGE_PATH.key());
+        }
+        return deployment;
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    public void cancelJobWithSavepointUpgradeModeTest(boolean deleteAfterSavepoint)
-            throws Exception {
+    @CsvSource({"true,true", "true,false", "false,true", "false,false"})
+    public void cancelJobWithSavepointUpgradeModeTest(
+            boolean deleteAfterSavepoint, boolean haEnabled) throws Exception {
         var testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
@@ -502,7 +557,7 @@ public class AbstractFlinkServiceTest {
         var flinkService = new TestingService(testingClusterClient);
 
         JobID jobID = JobID.generate();
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        FlinkDeployment deployment = buildApplicationCluster(haEnabled);
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
@@ -519,6 +574,7 @@ public class AbstractFlinkServiceTest {
                         SuspendMode.SAVEPOINT,
                         configManager.getObserveConfig(deployment),
                         deleteAfterSavepoint);
+        boolean clusterDeleted = deleteAfterSavepoint || !haEnabled;
         assertEquals(savepointPath, result.getSavepointPath().get());
 
         assertTrue(stopWithSavepointFuture.isDone());
@@ -529,10 +585,10 @@ public class AbstractFlinkServiceTest {
         assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED);
         assertEquals(
                 deployment.getStatus().getJobManagerDeploymentStatus(),
-                deleteAfterSavepoint
+                clusterDeleted
                         ? JobManagerDeploymentStatus.MISSING
                         : JobManagerDeploymentStatus.READY);
-        if (deleteAfterSavepoint) {
+        if (clusterDeleted) {
             assertEquals(
                     List.of(
                             Tuple2.of(

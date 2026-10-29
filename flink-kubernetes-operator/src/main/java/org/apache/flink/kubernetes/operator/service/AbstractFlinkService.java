@@ -58,6 +58,7 @@ import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
@@ -354,7 +355,11 @@ public abstract class AbstractFlinkService implements FlinkService {
                     break;
             }
         }
-        if (suspendMode.deleteCluster() || deleteCluster) {
+        // Without HA nothing records that the job has terminated, so a restarted JobManager would
+        // submit the job again, ignoring the suspend savepoint.
+        if (suspendMode.deleteCluster()
+                || deleteCluster
+                || !HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
             deleteClusterDeployment(
                     deployment.getMetadata(), status, conf, suspendMode.deleteHaMeta());
         }
