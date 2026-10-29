@@ -467,4 +467,13 @@ public class FlinkConfigManagerTest {
         assertTrue(completed2.get());
         assertTrue(completed3.get());
     }
+
+    @Test
+    public void testCloseStopsExecutor() {
+        var configManager = new FlinkConfigManager(new Configuration());
+        assertFalse(configManager.executorService.isShutdown());
+
+        configManager.close();
+        assertTrue(configManager.executorService.isShutdown());
+    }
 }

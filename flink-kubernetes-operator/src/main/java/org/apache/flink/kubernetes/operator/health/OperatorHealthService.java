@@ -24,7 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Health probe service. */
-public class OperatorHealthService {
+public class OperatorHealthService implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(OperatorHealthService.class);
 
     private final HealthProbe probe = HealthProbe.INSTANCE;
@@ -52,7 +52,14 @@ public class OperatorHealthService {
     }
 
     public void stop() {
-        httpBootstrap.stop();
+        if (httpBootstrap != null) {
+            httpBootstrap.stop();
+        }
+    }
+
+    @Override
+    public void close() {
+        stop();
     }
 
     public static OperatorHealthService fromConfig(FlinkConfigManager configManager) {

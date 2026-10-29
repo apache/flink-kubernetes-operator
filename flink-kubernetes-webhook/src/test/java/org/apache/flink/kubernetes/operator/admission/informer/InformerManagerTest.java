@@ -73,6 +73,20 @@ public class InformerManagerTest {
     }
 
     @Test
+    public void testCloseStopsInformers() {
+        var informerManager = new InformerManager(kubernetesClient);
+        informerManager.setNamespaces(Set.of("ns1"));
+        var depInformer = informerManager.getFlinkDepInformer("ns1");
+        var sessionJobInformer = informerManager.getFlinkSessionJobInformer("ns1");
+        Assertions.assertTrue(depInformer.isRunning());
+        Assertions.assertTrue(sessionJobInformer.isRunning());
+
+        informerManager.close();
+        Assertions.assertFalse(depInformer.isRunning());
+        Assertions.assertFalse(sessionJobInformer.isRunning());
+    }
+
+    @Test
     public void testSetNamespacesStopsSessionJobInformers() {
         var informerManager = new InformerManager(kubernetesClient);
         informerManager.setNamespaces(DEFAULT_NAMESPACES_SET);

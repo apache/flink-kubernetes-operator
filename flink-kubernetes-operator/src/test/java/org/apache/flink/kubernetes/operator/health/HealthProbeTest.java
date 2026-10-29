@@ -37,6 +37,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Collections;
@@ -47,6 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -81,7 +83,7 @@ public class HealthProbeTest {
                 assertNotNull(HealthProbe.INSTANCE.getRuntimeInfo());
             } finally {
                 operator.stop();
-                assertFalse(callHealthEndpoint(conf));
+                assertThrows(ConnectException.class, () -> callHealthEndpoint(conf));
             }
         }
     }
@@ -256,5 +258,16 @@ public class HealthProbeTest {
                                 }));
 
         return () -> informers;
+    }
+
+    @Test
+    public void testCanaryResourceManagerCloseStopsExecutor() {
+        try (var configManager = new FlinkConfigManager(new Configuration())) {
+            var canaryManager = new CanaryResourceManager<FlinkDeployment>(configManager);
+            assertFalse(canaryManager.executorService.isShutdown());
+
+            canaryManager.close();
+            assertTrue(canaryManager.executorService.isShutdown());
+        }
     }
 }

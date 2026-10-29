@@ -29,6 +29,8 @@ import java.util.Map;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * @link KubernetesOperatorMetricGroup tests.
@@ -148,6 +150,24 @@ public class KubernetesOperatorMetricGroupTest {
                         "FlinkSessionJob"),
                 resourceGroup.getAllVariables());
         registry.close();
+    }
+
+    @Test
+    public void testCloseClosesRegistry() {
+        var configuration = new Configuration();
+        var registry = new MetricRegistryImpl(fromConfiguration(configuration));
+        var group =
+                KubernetesOperatorMetricGroup.create(
+                        registry,
+                        configuration,
+                        "default",
+                        "flink-kubernetes-operator",
+                        "localhost");
+        assertFalse(registry.isShutdown());
+
+        group.close();
+        assertTrue(group.isClosed());
+        assertTrue(registry.isShutdown());
     }
 
     private static MetricRegistryConfiguration fromConfiguration(Configuration configuration) {
