@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.util.NetUtils;
 
 import io.fabric8.kubernetes.client.Config;
@@ -188,25 +187,24 @@ public class HealthProbeTest {
         // No canary resources
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
-        var canary = TestUtils.createCanaryDeployment();
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
+        var canary = client.resource(TestUtils.createCanaryDeployment()).create();
+        var canaryId = ResourceID.fromResource(canary);
+        canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
 
         // Canary resource healthy before health check
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         // No reconciliation before health check
-        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
+        canaryManager.checkHealth(canaryId, client);
         assertFalse(HealthProbe.INSTANCE.isHealthy());
 
         // Healthy again
-        canary.getMetadata().setGeneration(2L);
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
-        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
+        canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
+        canaryManager.checkHealth(canaryId, client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
-        canary.getMetadata().setGeneration(3L);
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
-        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
+        canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
+        canaryManager.checkHealth(canaryId, client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
     }
 

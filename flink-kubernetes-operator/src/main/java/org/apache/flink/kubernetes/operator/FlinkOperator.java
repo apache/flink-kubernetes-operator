@@ -85,6 +85,7 @@ public class FlinkOperator {
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     @VisibleForTesting final Set<RegisteredController<?>> registeredControllers = new HashSet<>();
+    private final Set<CanaryResourceManager<?>> canaryResourceManagers = new HashSet<>();
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
     private final OperatorHealthService operatorHealthService;
@@ -147,6 +148,7 @@ public class FlinkOperator {
                         controller.changeNamespaces(namespaces);
                     }
                 });
+        canaryResourceManagers.forEach(manager -> manager.retainNamespaces(namespaces));
     }
 
     private void overrideOperatorConfigs(ConfigurationServiceOverrider overrider) {
@@ -198,6 +200,7 @@ public class FlinkOperator {
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
+        canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
                 new FlinkDeploymentController(
@@ -222,6 +225,7 @@ public class FlinkOperator {
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
+        canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
                 new FlinkSessionJobController(
