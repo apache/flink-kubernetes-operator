@@ -21,17 +21,24 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
+import io.fabric8.kubernetes.api.model.Status;
+import io.fabric8.kubernetes.api.model.StatusBuilder;
+import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.mockwebserver.http.RecordedRequest;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -43,6 +50,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /** Tests for ConfigMapView. */
 @EnableKubernetesMockClient(crud = true)
 public class ConfigMapViewTest {
+
+    private static final String CONFIG_MAPS_PATH = "/api/v1/namespaces/test/configmaps";
+
+    private static final String CONFIG_MAP_PATH = CONFIG_MAPS_PATH + "/configMapName";
 
     KubernetesClient kubernetesClient;
 
@@ -211,6 +222,180 @@ public class ConfigMapViewTest {
         assertThat(cmView.get("b")).isEqualTo("2");
     }
 
+    @Test
+    void testFlushAdoptsAnUpdateAppliedBeforeTheClientRetried() {
+        var stored = new AtomicReference<>(storedConfigMap("1", Map.of("a", "1")));
+        var sentVersions = new CopyOnWriteArrayList<String>();
+        mockWebServer
+                .expect()
+                .get()
+                .withPath(CONFIG_MAP_PATH)
+                .andReply(200, request -> stored.get())
+                .always();
+        // The API server applies the update but answers only after the client's request timeout.
+        mockWebServer
+                .expect()
+                .put()
+                .delay(2, TimeUnit.SECONDS)
+                .withPath(CONFIG_MAP_PATH)
+                .andReply(
+                        200,
+                        request -> {
+                            var applied = unmarshal(request);
+                            sentVersions.add(applied.getMetadata().getResourceVersion());
+                            applied.getMetadata().setResourceVersion("2");
+                            stored.set(applied);
+                            return applied;
+                        })
+                .once();
+        // The client's retry still carries resourceVersion 1.
+        mockWebServer
+                .expect()
+                .put()
+                .withPath(CONFIG_MAP_PATH)
+                .andReply(
+                        409,
+                        request -> {
+                            sentVersions.add(unmarshal(request).getMetadata().getResourceVersion());
+                            return status(409, "Conflict");
+                        })
+                .once();
+        expectUpdate(sentVersions);
+
+        try (var client = clientWithShortRequestTimeout()) {
+            var cmView = new ConfigMapView(createConfigMapSkeleton(), client::resource);
+            cmView.put("b", "2");
+            cmView.flush();
+            assertThat(cmView.get("b")).isEqualTo("2");
+
+            // The next update is sent with the adopted resourceVersion.
+            cmView.put("c", "3");
+            cmView.flush();
+        }
+        assertThat(sentVersions).isEqualTo(List.of("1", "1", "2"));
+    }
+
+    @Test
+    void testFlushAdoptsACreateAppliedBeforeTheClientRetried() {
+        var stored = new AtomicReference<ConfigMap>();
+        var sentVersions = new CopyOnWriteArrayList<String>();
+        mockWebServer
+                .expect()
+                .get()
+                .withPath(CONFIG_MAP_PATH)
+                .andReturn(404, status(404, "NotFound"))
+                .once();
+        mockWebServer
+                .expect()
+                .get()
+                .withPath(CONFIG_MAP_PATH)
+                .andReply(200, request -> stored.get())
+                .always();
+        // The API server creates the ConfigMap but answers only after the client's request timeout.
+        mockWebServer
+                .expect()
+                .post()
+                .delay(2, TimeUnit.SECONDS)
+                .withPath(CONFIG_MAPS_PATH)
+                .andReply(
+                        201,
+                        request -> {
+                            var created = unmarshal(request);
+                            created.getMetadata().setResourceVersion("1");
+                            stored.set(created);
+                            return created;
+                        })
+                .once();
+        // The client's retry finds the ConfigMap already created.
+        mockWebServer
+                .expect()
+                .post()
+                .withPath(CONFIG_MAPS_PATH)
+                .andReturn(409, status(409, "AlreadyExists"))
+                .once();
+        expectUpdate(sentVersions);
+
+        try (var client = clientWithShortRequestTimeout()) {
+            var cmView = new ConfigMapView(createConfigMapSkeleton(), client::resource);
+            cmView.put("a", "1");
+            cmView.flush();
+            assertThat(cmView.get("a")).isEqualTo("1");
+
+            // The next update is sent with the adopted resourceVersion.
+            cmView.put("b", "2");
+            cmView.flush();
+        }
+        assertThat(sentVersions).isEqualTo(List.of("1"));
+    }
+
+    @Test
+    void testFlushDoesNotAdoptAConflictingConfigMapOfAPreviousOwner() {
+        var stored = createConfigMapSkeleton();
+        stored.getMetadata().setResourceVersion("1");
+        stored.getMetadata().setOwnerReferences(List.of(ownerReference("uid-1")));
+        Function<ConfigMap, Resource<ConfigMap>> apiServer =
+                cm ->
+                        mockResource(
+                                () -> stored,
+                                () -> {
+                                    throw new KubernetesClientException("Conflict", 409, null);
+                                },
+                                () -> {
+                                    throw new UnsupportedOperationException("create");
+                                });
+
+        var skeleton = createConfigMapSkeleton();
+        skeleton.getMetadata().setOwnerReferences(List.of(ownerReference("uid-2")));
+        var cmView = new ConfigMapView(skeleton, apiServer);
+
+        // The stored data equals the local data, but the takeover was not applied.
+        var failure = assertThrows(KubernetesClientException.class, cmView::flush);
+        assertThat(failure.getCode()).isEqualTo(409);
+    }
+
+    /** Accepts one update and records the resourceVersion it was sent with. */
+    private void expectUpdate(List<String> sentVersions) {
+        mockWebServer
+                .expect()
+                .put()
+                .withPath(CONFIG_MAP_PATH)
+                .andReply(
+                        200,
+                        request -> {
+                            var updated = unmarshal(request);
+                            sentVersions.add(updated.getMetadata().getResourceVersion());
+                            return updated;
+                        })
+                .once();
+    }
+
+    private KubernetesClient clientWithShortRequestTimeout() {
+        var config =
+                new ConfigBuilder(kubernetesClient.getConfiguration())
+                        .withRequestTimeout(500)
+                        .withRequestRetryBackoffLimit(1)
+                        .build();
+        return new KubernetesClientBuilder().withConfig(config).build();
+    }
+
+    private ConfigMap unmarshal(RecordedRequest request) {
+        return kubernetesClient
+                .getKubernetesSerialization()
+                .unmarshal(request.getUtf8Body(), ConfigMap.class);
+    }
+
+    private static Status status(int code, String reason) {
+        return new StatusBuilder().withCode(code).withReason(reason).build();
+    }
+
+    private static ConfigMap storedConfigMap(String resourceVersion, Map<String, String> data) {
+        var stored = createConfigMapSkeleton();
+        stored.getMetadata().setResourceVersion(resourceVersion);
+        stored.setData(new HashMap<>(data));
+        return stored;
+    }
+
+    /** Like the API server, every read returns a new object. */
     @SuppressWarnings("unchecked")
     private static Resource<ConfigMap> mockResource(
             Supplier<ConfigMap> get, Supplier<ConfigMap> update, Supplier<ConfigMap> create) {
@@ -223,7 +408,7 @@ public class ConfigMapViewTest {
                                 throw new UnsupportedOperationException(method.getName());
                             }
                             return switch (method.getName()) {
-                                case "get" -> get.get();
+                                case "get" -> new ConfigMapBuilder(get.get()).build();
                                 case "update" -> update.get();
                                 case "create" -> create.get();
                                 case "toString" -> "mockResource";
