@@ -1224,6 +1224,9 @@ public class AbstractFlinkServiceTest {
                                 null,
                                 null),
                         List.of());
+        var checkpointingStatisticsResponse =
+                new AtomicReference<CompletableFuture<ResponseBody>>(
+                        CompletableFuture.completedFuture(checkpointingStatistics));
 
         var flinkService =
                 getTestingService(
@@ -1233,7 +1236,7 @@ public class AbstractFlinkServiceTest {
                             } else if (h instanceof TaskManagersHeaders) {
                                 return CompletableFuture.completedFuture(tmsInfo);
                             } else if (h instanceof CheckpointingStatisticsHeaders) {
-                                return CompletableFuture.completedFuture(checkpointingStatistics);
+                                return checkpointingStatisticsResponse.get();
                             }
                             fail("unknown request");
                             return null;
@@ -1264,6 +1267,16 @@ public class AbstractFlinkServiceTest {
                         .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
                         .build(),
                 flinkService.getClusterInfo(conf, JobID.generate().toHexString()).getInfo());
+
+        // Jobs without checkpointing (e.g. batch jobs) have no checkpoint statistics
+        checkpointingStatisticsResponse.set(
+                CompletableFuture.failedFuture(
+                        new RestClientException(
+                                "[Checkpointing has not been enabled.]",
+                                HttpResponseStatus.NOT_FOUND)));
+        clusterInfo = flinkService.getClusterInfo(conf, JobID.generate().toHexString());
+        assertEquals(1, clusterInfo.getTaskManagerReplicas());
+        assertEquals(expectedEntries, clusterInfo.getInfo());
     }
 
     @Test
