@@ -602,10 +602,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         try {
             latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
         } catch (Exception e) {
-            if (e instanceof ExecutionException
-                    && e.getMessage() != null
-                    && e.getMessage().contains("Checkpointing has not been enabled")) {
-                LOG.warn("Checkpointing not enabled for job {}", jobId, e);
+            if (isCheckpointingDisabled(e)) {
+                LOG.debug("Checkpointing not enabled for job {}", jobId);
                 return Optional.empty();
             }
             throw new ReconciliationException("Could not observe latest savepoint information", e);
@@ -853,13 +851,23 @@ public abstract class AbstractFlinkService implements FlinkService {
                 var parameters = checkpointingStatisticsHeaders.getUnresolvedMessageParameters();
                 parameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
 
-                CheckpointingStatistics checkpointingStatistics =
-                        clusterClient
-                                .sendRequest(
-                                        checkpointingStatisticsHeaders,
-                                        parameters,
-                                        EmptyRequestBody.getInstance())
-                                .get();
+                CheckpointingStatistics checkpointingStatistics;
+                try {
+                    checkpointingStatistics =
+                            clusterClient
+                                    .sendRequest(
+                                            checkpointingStatisticsHeaders,
+                                            parameters,
+                                            EmptyRequestBody.getInstance())
+                                    .get(
+                                            operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                            TimeUnit.SECONDS);
+                } catch (ExecutionException e) {
+                    if (isCheckpointingDisabled(e)) {
+                        return;
+                    }
+                    throw e;
+                }
                 CheckpointStatistics.CompletedCheckpointStatistics completedCheckpointStatistics =
                         checkpointingStatistics
                                 .getLatestCheckpoints()
@@ -871,6 +879,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                 }
             }
         }
+    }
+
+    private static boolean isCheckpointingDisabled(Exception e) {
+        return e instanceof ExecutionException
+                && e.getMessage() != null
+                && e.getMessage().contains("Checkpointing has not been enabled");
     }
 
     @Override
