@@ -41,6 +41,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.LifecycleMethodExecutionExceptionHandler;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.pulsar.PulsarContainer;
 
@@ -71,6 +77,9 @@ import static org.awaitility.Awaitility.await;
  */
 class KafkaPulsarPartitionMetricsITCase {
 
+    private static final Logger LOG =
+            LoggerFactory.getLogger(KafkaPulsarPartitionMetricsITCase.class);
+
     private static final String KAFKA_TOPIC_DOTTED = "orders.eu.v1";
     private static final int KAFKA_TOPIC_DOTTED_PARTITIONS = 3;
     private static final String KAFKA_TOPIC_HYPHEN = "my-topic";
@@ -92,6 +101,9 @@ class KafkaPulsarPartitionMetricsITCase {
     private static String restAddress;
     private static JobID jobId;
     private static Path driverLogFile;
+
+    @RegisterExtension
+    static final DriverLogOnFailure DRIVER_LOG_ON_FAILURE = new DriverLogOnFailure();
 
     @BeforeAll
     static void setup() throws Exception {
@@ -127,7 +139,7 @@ class KafkaPulsarPartitionMetricsITCase {
         if (driverResultFile != null) {
             Files.deleteIfExists(driverResultFile);
         }
-        if (driverLogFile != null) {
+        if (driverLogFile != null && !DRIVER_LOG_ON_FAILURE.failed) {
             Files.deleteIfExists(driverLogFile);
         }
         if (pulsar != null) {
@@ -275,24 +287,20 @@ class KafkaPulsarPartitionMetricsITCase {
      * Polls {@code resultFile} for the two lines {@link MiniClusterJobDriver} writes once ready.
      */
     private static void awaitDriverReady(Process process, Path resultFile) throws Exception {
-        long deadline = System.currentTimeMillis() + Duration.ofSeconds(90).toMillis();
-        List<String> resultLines = List.of();
-        while (resultLines.size() < 2 && System.currentTimeMillis() < deadline) {
-            if (!process.isAlive()) {
-                throw new IllegalStateException(
-                        "Driver process exited early with code " + process.exitValue());
-            }
-            if (Files.exists(resultFile)) {
-                resultLines = Files.readAllLines(resultFile, StandardCharsets.UTF_8);
-            }
-            if (resultLines.size() < 2) {
-                Thread.sleep(500);
-            }
-        }
-        if (resultLines.size() < 2) {
-            throw new IllegalStateException("Driver process did not become ready in time");
-        }
-        for (String line : resultLines) {
+        await().atMost(Duration.ofSeconds(90))
+                .pollInterval(Duration.ofMillis(500))
+                .until(
+                        () -> {
+                            if (!process.isAlive()) {
+                                throw new IllegalStateException(
+                                        "Driver process exited early with code "
+                                                + process.exitValue());
+                            }
+                            return Files.exists(resultFile)
+                                    && Files.readAllLines(resultFile, StandardCharsets.UTF_8).size()
+                                            >= 2;
+                        });
+        for (String line : Files.readAllLines(resultFile, StandardCharsets.UTF_8)) {
             if (line.startsWith(REST_ADDRESS_MARKER)) {
                 restAddress = line.substring(REST_ADDRESS_MARKER.length());
             } else if (line.startsWith(JOB_ID_MARKER)) {
@@ -361,6 +369,42 @@ class KafkaPulsarPartitionMetricsITCase {
                         client.newProducer(Schema.STRING).topic(partitionTopic).create()) {
                     producer.send("value-" + p);
                 }
+            }
+        }
+    }
+
+    static class DriverLogOnFailure
+            implements TestExecutionExceptionHandler, LifecycleMethodExecutionExceptionHandler {
+
+        private volatile boolean failed;
+
+        @Override
+        public void handleTestExecutionException(ExtensionContext context, Throwable throwable)
+                throws Throwable {
+            dumpDriverLog();
+            throw throwable;
+        }
+
+        @Override
+        public void handleBeforeAllMethodExecutionException(
+                ExtensionContext context, Throwable throwable) throws Throwable {
+            dumpDriverLog();
+            throw throwable;
+        }
+
+        private void dumpDriverLog() {
+            failed = true;
+            if (driverLogFile == null || !Files.exists(driverLogFile)) {
+                return;
+            }
+            try {
+                LOG.error(
+                        "Driver log kept at {}:{}{}",
+                        driverLogFile,
+                        System.lineSeparator(),
+                        Files.readString(driverLogFile));
+            } catch (IOException e) {
+                LOG.error("Failed to read driver log at {}", driverLogFile, e);
             }
         }
     }
