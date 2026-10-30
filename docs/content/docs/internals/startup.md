@@ -84,7 +84,7 @@ helm install -f custom-values.yaml  flink-kubernetes-operator  helm/flink-kubern
    ║          │                                                                   │       ║
    ║          ├──► cert-manager/* ─► Issuer + Certificate                         │       ║
    ║          │     (optional)       (cert-manager generates the                  │       ║
-   ║          │                      webhook-server-cert Secret)                  │       ║
+   ║          │                      flink-operator-webhook-server-cert Secret)   │       ║
    ║          │                                                                   │       ║
    ║          └──────────► controller/deployment.yaml ◄───────────────────────────┘       ║
    ╚══════════════════════════════════════════════════════════════════════════════════════╝

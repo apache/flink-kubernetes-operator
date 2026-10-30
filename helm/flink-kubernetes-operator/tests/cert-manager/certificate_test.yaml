@@ -33,6 +33,12 @@ tests:
       kind: Certificate
       name: flink-operator-serving-cert
 
+- it: Should use static webhook certificate secret name
+  asserts:
+  - equal:
+      path: spec.secretName
+      value: flink-operator-webhook-server-cert
+
 - it: Should use self signed issuer
   asserts:
   - equal:
