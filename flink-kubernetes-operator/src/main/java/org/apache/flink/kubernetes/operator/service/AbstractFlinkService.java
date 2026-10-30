@@ -54,6 +54,7 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -114,6 +115,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseSt
 import com.google.common.collect.Iterables;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -140,6 +142,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -172,6 +175,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
+    private static final String FORCE_DELETED_EVENT_KEY = "ForceDeleted";
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
     public static final String FIELD_NAME_STATE_SIZE = "state-size";
@@ -1240,6 +1244,74 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
                         });
         return conf;
+    }
+
+    @VisibleForTesting
+    protected void forceDeleteStuckPods(Map<String, String> labels, Deployment deployment) {
+        var now = Instant.now();
+        var stuckPods =
+                kubernetesClient
+                        .pods()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .withLabels(labels)
+                        .list()
+                        .getItems()
+                        .stream()
+                        .filter(pod -> isPastDeletionDeadline(pod, now))
+                        .collect(Collectors.toList());
+        stuckPods.forEach(pod -> kubernetesClient.resource(pod).withGracePeriod(0).delete());
+
+        if (!stuckPods.isEmpty()) {
+            EventUtils.createOrUpdateEventWithInterval(
+                    kubernetesClient,
+                    deployment,
+                    EventRecorder.Type.Warning,
+                    FORCE_DELETED_EVENT_KEY,
+                    String.format(
+                            "Force deleted %d pod(s) that did not terminate in time "
+                                    + "(likely their node became unreachable), blocking cluster resource cleanup.",
+                            stuckPods.size()),
+                    EventRecorder.Component.JobManagerDeployment,
+                    event -> {},
+                    FORCE_DELETED_EVENT_KEY,
+                    null);
+        }
+    }
+
+    // The deletion timestamp of a pod already includes its termination grace period
+    private static boolean isPastDeletionDeadline(Pod pod, Instant now) {
+        var deletionTimestamp = pod.getMetadata().getDeletionTimestamp();
+        return deletionTimestamp != null && now.isAfter(Instant.parse(deletionTimestamp));
+    }
+
+    protected Duration deleteDeploymentBlockingWithForceDelete(
+            String name,
+            Resource<Deployment> deployment,
+            DeletionPropagation propagation,
+            Duration timeout,
+            Map<String, String> podLabels,
+            Configuration conf) {
+        if (!conf.get(
+                KubernetesOperatorConfigOptions
+                        .OPERATOR_RESOURCE_CLEANUP_FORCE_DELETE_STUCK_PODS)) {
+            return deleteDeploymentBlocking(name, deployment, propagation, timeout);
+        }
+
+        // Give the pods half of the timeout to terminate on their own, then force delete the ones
+        // that are stuck and wait for the rest of the timeout
+        var firstWait = timeout.dividedBy(2);
+        var remaining = timeout.minus(firstWait);
+
+        try {
+            return remaining.plus(
+                    deleteDeploymentBlocking(name, deployment, propagation, firstWait));
+        } catch (KubernetesClientTimeoutException timeoutException) {
+            var current = deployment.get();
+            if (current != null) {
+                forceDeleteStuckPods(podLabels, current);
+            }
+            return deleteDeploymentBlocking(name, deployment, propagation, remaining);
+        }
     }
 
     /**

@@ -169,7 +169,14 @@ public class NativeFlinkService extends AbstractFlinkService {
                     shutdownJobManagersBlocking(
                             jmDeployment, namespace, clusterId, remainingTimeout);
         }
-        deleteDeploymentBlocking("JobManager", jmDeployment, deletionPropagation, remainingTimeout);
+
+        deleteDeploymentBlockingWithForceDelete(
+                "JobManager",
+                jmDeployment,
+                deletionPropagation,
+                remainingTimeout,
+                KubernetesUtils.getCommonLabels(clusterId),
+                conf);
     }
 
     @Override

@@ -49,9 +49,11 @@ import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders
 import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.WatchEvent;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentList;
 import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
@@ -59,6 +61,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import io.fabric8.mockwebserver.http.RecordedRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,16 +70,21 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -257,6 +265,263 @@ public class NativeFlinkServiceTest {
                                 TestUtils.TEST_DEPLOYMENT_NAME,
                                 configManager.getObserveConfig(deployment),
                                 DeletionPropagation.BACKGROUND));
+    }
+
+    @Test
+    public void testDeleteClusterInternalForceDeletesStuckPods() throws Exception {
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT,
+                Duration.ofSeconds(4));
+        var flinkService =
+                new NativeFlinkService(
+                        client,
+                        null,
+                        executorService,
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
+                        eventRecorder);
+
+        var dep = testDeployment();
+        var emptyList =
+                new DeploymentListBuilder().withMetadata(new ListMeta()).withItems().build();
+        var podForceDeleted = new AtomicBoolean(false);
+        mockServer
+                .expect()
+                .get()
+                .withPath(
+                        String.format(
+                                "/apis/apps/v1/namespaces/%s/deployments/%s",
+                                TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME))
+                .andReturn(200, dep)
+                .always();
+        // The Deployment only disappears after the stuck pod was force deleted
+        mockServer
+                .expect()
+                .get()
+                .withPath(deploymentGetUrl())
+                .andReply(200, req -> podForceDeleted.get() ? emptyList : deploymentList(dep))
+                .always();
+        mockServer
+                .expect()
+                .get()
+                .withPath(
+                        String.format(
+                                "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                                TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME))
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(5000)
+                .andEmit(new WatchEvent(dep, "DELETED"))
+                .done()
+                .always();
+        createTerminatingPod("tm-1");
+        mockServer
+                .expect()
+                .delete()
+                .withPath(
+                        String.format("/api/v1/namespaces/%s/pods/tm-1", TestUtils.TEST_NAMESPACE))
+                .andReply(
+                        200,
+                        req -> {
+                            podForceDeleted.set(true);
+                            return new PodBuilder()
+                                    .withNewMetadata()
+                                    .withName("tm-1")
+                                    .endMetadata()
+                                    .build();
+                        })
+                .always();
+
+        var start = Instant.now();
+        assertDoesNotThrow(() -> deleteCluster(flinkService));
+
+        // Pods are only force deleted in the second half of the budget, but before it ends
+        assertTrue(Duration.between(start, Instant.now()).toMillis() >= 2000);
+        assertTrue(Duration.between(start, Instant.now()).toSeconds() < 4);
+        assertEquals(1, forceDeletedEvents().size());
+    }
+
+    @Test
+    public void testDeleteClusterInternalDoesNotForceDeleteWhenDisabled() throws Exception {
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_FORCE_DELETE_STUCK_PODS,
+                false);
+        var flinkService = newFlinkServiceWithShortCleanupTimeout();
+        var dep = testDeployment();
+        mockDeploymentWait(dep, deploymentList(dep), -1);
+        createTerminatingPod("tm-1");
+
+        assertThrows(KubernetesClientTimeoutException.class, () -> deleteCluster(flinkService));
+        assertTrue(forceDeletedEvents().isEmpty());
+    }
+
+    @Test
+    public void testForceDeleteStuckPods() throws Exception {
+        var flinkService = newFlinkServiceWithShortCleanupTimeout();
+        // Two pods are stuck past their deletion deadline, one is still within its grace period
+        createTerminatingPod("tm-1");
+        createTerminatingPod("tm-2");
+        createPodWithDeletionTimestamp("tm-3", Instant.now().plusSeconds(300));
+        drainRequests();
+
+        forceDeleteStuckPods(flinkService);
+
+        // Only the overdue pods are deleted, without grace period
+        var deletes =
+                drainRequests().stream()
+                        .filter(r -> "DELETE".equals(r.getMethod()))
+                        .filter(r -> r.getPath().contains("/pods/"))
+                        .collect(Collectors.toList());
+        assertEquals(2, deletes.size());
+        assertTrue(deletes.stream().noneMatch(r -> r.getPath().endsWith("/pods/tm-3")));
+        for (var delete : deletes) {
+            assertTrue(delete.getBody().readUtf8().contains("\"gracePeriodSeconds\":0"));
+        }
+
+        var events = forceDeletedEvents();
+        assertEquals(1, events.size());
+        assertEquals(1, events.get(0).getCount());
+        assertTrue(events.get(0).getMessage().contains("2 pod(s)"));
+
+        // Later force deletions update the same event instead of creating new ones
+        createTerminatingPod("tm-4");
+        forceDeleteStuckPods(flinkService);
+        events = forceDeletedEvents();
+        assertEquals(1, events.size());
+        assertEquals(2, events.get(0).getCount());
+        assertTrue(events.get(0).getMessage().contains("3 pod(s)"));
+    }
+
+    @Test
+    public void testForceDeleteStuckPodsWithoutPods() {
+        var flinkService = newFlinkServiceWithShortCleanupTimeout();
+
+        forceDeleteStuckPods(flinkService);
+        assertTrue(forceDeletedEvents().isEmpty());
+    }
+
+    private List<RecordedRequest> drainRequests() throws InterruptedException {
+        var requests = new ArrayList<RecordedRequest>();
+        RecordedRequest request;
+        while ((request = mockServer.takeRequest(100, TimeUnit.MILLISECONDS)) != null) {
+            requests.add(request);
+        }
+        return requests;
+    }
+
+    private NativeFlinkService newFlinkServiceWithShortCleanupTimeout() {
+        configuration.set(
+                KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT,
+                Duration.ofMillis(200));
+        return new NativeFlinkService(
+                client,
+                null,
+                executorService,
+                FlinkOperatorConfiguration.fromConfiguration(configuration),
+                eventRecorder);
+    }
+
+    private void deleteCluster(NativeFlinkService flinkService) {
+        flinkService.deleteClusterInternal(
+                TestUtils.TEST_NAMESPACE,
+                TestUtils.TEST_DEPLOYMENT_NAME,
+                configuration,
+                DeletionPropagation.BACKGROUND);
+    }
+
+    private void forceDeleteStuckPods(NativeFlinkService flinkService) {
+        flinkService.forceDeleteStuckPods(
+                KubernetesUtils.getCommonLabels(TestUtils.TEST_DEPLOYMENT_NAME), testDeployment());
+    }
+
+    private Deployment testDeployment() {
+        return new DeploymentBuilder()
+                .withNewMetadata()
+                .withName(TestUtils.TEST_DEPLOYMENT_NAME)
+                .withNamespace(TestUtils.TEST_NAMESPACE)
+                .withUid("test-uid")
+                .endMetadata()
+                .build();
+    }
+
+    /** The finalizer keeps the pod in Terminating state like a pod on an unreachable node. */
+    private void createPodWithDeletionTimestamp(String name, Instant deletionTimestamp) {
+        client.resource(
+                        new PodBuilder()
+                                .withNewMetadata()
+                                .withName(name)
+                                .withNamespace(TestUtils.TEST_NAMESPACE)
+                                .withLabels(
+                                        KubernetesUtils.getCommonLabels(
+                                                TestUtils.TEST_DEPLOYMENT_NAME))
+                                .withDeletionTimestamp(deletionTimestamp.toString())
+                                .endMetadata()
+                                .build())
+                .create();
+    }
+
+    private void createTerminatingPod(String name) {
+        var pod =
+                new PodBuilder()
+                        .withNewMetadata()
+                        .withName(name)
+                        .withNamespace(TestUtils.TEST_NAMESPACE)
+                        .withLabels(KubernetesUtils.getCommonLabels(TestUtils.TEST_DEPLOYMENT_NAME))
+                        .withFinalizers("test.io/block")
+                        .endMetadata()
+                        .build();
+        client.resource(pod).create();
+        client.resource(pod).delete();
+    }
+
+    private DeploymentList deploymentList(Deployment dep) {
+        return new DeploymentListBuilder().withMetadata(new ListMeta()).withItems(dep).build();
+    }
+
+    private List<Event> forceDeletedEvents() {
+        return client.v1().events().inNamespace(TestUtils.TEST_NAMESPACE).list().getItems().stream()
+                .filter(event -> "ForceDeleted".equals(event.getReason()))
+                .collect(Collectors.toList());
+    }
+
+    private String deploymentGetUrl() {
+        return String.format(
+                "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+    }
+
+    /** Mocks a Deployment wait that never sees the DELETED event, so it times out. */
+    private void mockDeploymentWait(Deployment dep, DeploymentList list, int times) {
+        var watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
+                        TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+        mockServer
+                .expect()
+                .get()
+                .withPath(
+                        String.format(
+                                "/apis/apps/v1/namespaces/%s/deployments/%s",
+                                TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME))
+                .andReturn(200, dep)
+                .always();
+        var getExpectation = mockServer.expect().get().withPath(deploymentGetUrl());
+        var watchExpectation =
+                mockServer
+                        .expect()
+                        .get()
+                        .withPath(watchUrl)
+                        .andUpgradeToWebSocket()
+                        .open()
+                        .waitFor(5000)
+                        .andEmit(new WatchEvent(dep, "DELETED"))
+                        .done();
+        if (times < 0) {
+            getExpectation.andReturn(200, list).always();
+            watchExpectation.always();
+        } else {
+            getExpectation.andReturn(200, list).times(times);
+            watchExpectation.times(times);
+        }
     }
 
     @ParameterizedTest
