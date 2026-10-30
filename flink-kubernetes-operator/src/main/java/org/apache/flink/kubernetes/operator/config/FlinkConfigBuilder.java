@@ -69,6 +69,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -95,6 +96,11 @@ public class FlinkConfigBuilder {
 
     protected static final String GENERATED_FILE_PREFIX = "flink_op_generated_";
     protected static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
+
+    private static final String ACTIVE_PROCESSOR_COUNT_JVM_ARG = "-XX:ActiveProcessorCount";
+    // Pod env vars that Flink's config.sh prefers over the env.java.opts* config-map values.
+    private static final String FLINK_ENV_JAVA_OPTS_ENV_VAR = "FLINK_ENV_JAVA_OPTS";
+    private static final String JVM_ARGS_ENV_VAR = "JVM_ARGS";
 
     private final String namespace;
     private final String clusterId;
@@ -455,6 +461,150 @@ public class FlinkConfigBuilder {
                                         factor));
     }
 
+    /**
+     * Appends {@code -XX:ActiveProcessorCount}, pinned to the CPU request, to
+     * env.java.opts.{jobmanager,taskmanager} whenever the corresponding CPU limit factor is above
+     * 1. The container-aware JVM derives availableProcessors() from the cgroup CPU quota, which
+     * reflects the inflated limit rather than the request, while the memory model (including
+     * MaxDirectMemorySize) stays request-sized. Processor-count-driven direct buffer usage (e.g.
+     * the Netty pooled allocator arenas) then grows with the limit factor and can exhaust the
+     * unchanged direct-memory budget (OOM: Direct buffer memory). An explicit
+     * -XX:ActiveProcessorCount configured by the user — in any env.java.opts or
+     * env.java.default-opts key or in a JVM-options env var of the pod templates — always wins,
+     * which also makes repeated application idempotent.
+     */
+    protected FlinkConfigBuilder applyActiveProcessorCountForCpuLimitFactor() {
+        pinActiveProcessorCountToCpuRequest(
+                KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR,
+                effectiveConfig.get(KubernetesConfigOptions.JOB_MANAGER_CPU),
+                KubernetesConfigOptions.JOB_MANAGER_CPU.key(),
+                CoreOptions.FLINK_JM_JVM_OPTIONS,
+                CoreOptions.FLINK_DEFAULT_JM_JVM_OPTIONS,
+                spec.getJobManager() == null ? null : spec.getJobManager().getPodTemplate(),
+                "FLINK_ENV_JAVA_OPTS_JM");
+        pinActiveProcessorCountToCpuRequest(
+                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR,
+                getTaskManagerCpuRequest(),
+                KubernetesConfigOptions.TASK_MANAGER_CPU.key(),
+                CoreOptions.FLINK_TM_JVM_OPTIONS,
+                CoreOptions.FLINK_DEFAULT_TM_JVM_OPTIONS,
+                spec.getTaskManager() == null ? null : spec.getTaskManager().getPodTemplate(),
+                "FLINK_ENV_JAVA_OPTS_TM");
+        return this;
+    }
+
+    /**
+     * Mirrors TaskExecutorProcessUtils.getCpuCoresWithFallback, i.e. the CPU the TaskManager
+     * container actually requests: taskmanager.cpu-cores wins, and kubernetes.taskmanager.cpu falls
+     * back to taskmanager.numberOfTaskSlots when unset (-1).
+     */
+    private double getTaskManagerCpuRequest() {
+        if (effectiveConfig.contains(TaskManagerOptions.CPU_CORES)) {
+            return effectiveConfig.get(TaskManagerOptions.CPU_CORES);
+        }
+        var cpu = effectiveConfig.get(KubernetesConfigOptions.TASK_MANAGER_CPU);
+        return cpu > 0 ? cpu : effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS).doubleValue();
+    }
+
+    private void pinActiveProcessorCountToCpuRequest(
+            ConfigOption<Double> cpuLimitFactorOption,
+            double cpuRequest,
+            String cpuOptionKey,
+            ConfigOption<String> jvmOptionsOption,
+            ConfigOption<String> defaultJvmOptionsOption,
+            PodTemplateSpec componentPodTemplate,
+            String componentJvmOptsEnvVar) {
+        var cpuLimitFactor = effectiveConfig.get(cpuLimitFactorOption);
+        if (!(cpuLimitFactor > 1.0) || !Double.isFinite(cpuLimitFactor)) {
+            return;
+        }
+        if (isUserConfiguredActiveProcessorCount(
+                jvmOptionsOption,
+                defaultJvmOptionsOption,
+                componentPodTemplate,
+                componentJvmOptsEnvVar)) {
+            return;
+        }
+        if (!(cpuRequest > 0) || !Double.isFinite(cpuRequest) || cpuRequest > Integer.MAX_VALUE) {
+            LOG.warn(
+                    "Skipping {} pinning because {} resolves to a non-positive or unrepresentable CPU request: {}",
+                    ACTIVE_PROCESSOR_COUNT_JVM_ARG,
+                    cpuOptionKey,
+                    cpuRequest);
+            return;
+        }
+        // Rounding up with a minimum of 1 matches how a container-aware JVM turns a cgroup CPU
+        // quota into availableProcessors().
+        var activeProcessorCount = (int) Math.max(1, Math.ceil(cpuRequest));
+        var jvmArg = ACTIVE_PROCESSOR_COUNT_JVM_ARG + "=" + activeProcessorCount;
+        var existingOpts = effectiveConfig.get(jvmOptionsOption);
+        effectiveConfig.set(
+                jvmOptionsOption,
+                StringUtils.isNullOrWhitespaceOnly(existingOpts)
+                        ? jvmArg
+                        : existingOpts.trim() + " " + jvmArg);
+        LOG.debug(
+                "Appending {} to {} because {} ({}) is greater than 1",
+                jvmArg,
+                jvmOptionsOption.key(),
+                cpuLimitFactorOption.key(),
+                cpuLimitFactor);
+    }
+
+    private boolean isUserConfiguredActiveProcessorCount(
+            ConfigOption<String> jvmOptionsOption,
+            ConfigOption<String> defaultJvmOptionsOption,
+            PodTemplateSpec componentPodTemplate,
+            String componentJvmOptsEnvVar) {
+        // CoreOptions.FLINK_JVM_OPTIONS additionally resolves the legacy "env.java.opts" key.
+        // Note that env.java.opts.all requires Flink 1.16+ and env.java.default-opts.* requires
+        // Flink 1.18+; on older clusters those keys are inert, so skipping the injection there
+        // merely reverts to the pre-fix behavior.
+        for (ConfigOption<String> option :
+                List.of(
+                        CoreOptions.FLINK_JVM_OPTIONS,
+                        CoreOptions.FLINK_DEFAULT_JVM_OPTIONS,
+                        defaultJvmOptionsOption,
+                        jvmOptionsOption)) {
+            if (effectiveConfig
+                    .getOptional(option)
+                    .map(opts -> opts.contains(ACTIVE_PROCESSOR_COUNT_JVM_ARG))
+                    .orElse(false)) {
+                return true;
+            }
+        }
+        // config.sh prefers these env vars over the config-map values, so treat them as
+        // user-set as well.
+        return podTemplateSetsActiveProcessorCount(componentPodTemplate, componentJvmOptsEnvVar);
+    }
+
+    private boolean podTemplateSetsActiveProcessorCount(
+            PodTemplateSpec componentPodTemplate, String componentJvmOptsEnvVar) {
+        for (var podTemplate : Arrays.asList(spec.getPodTemplate(), componentPodTemplate)) {
+            if (podTemplate == null || podTemplate.getSpec() == null) {
+                continue;
+            }
+            for (var container : podTemplate.getSpec().getContainers()) {
+                if (!Constants.MAIN_CONTAINER_NAME.equals(container.getName())
+                        || container.getEnv() == null) {
+                    continue;
+                }
+                for (var envVar : container.getEnv()) {
+                    var name = envVar.getName();
+                    var value = envVar.getValue();
+                    if (value != null
+                            && (FLINK_ENV_JAVA_OPTS_ENV_VAR.equals(name)
+                                    || componentJvmOptsEnvVar.equals(name)
+                                    || JVM_ARGS_ENV_VAR.equals(name))
+                            && value.contains(ACTIVE_PROCESSOR_COUNT_JVM_ARG)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     protected FlinkConfigBuilder applyTaskManagerSpec() {
         if (spec.getTaskManager() != null) {
             applyResourceConfig(
@@ -595,6 +745,7 @@ public class FlinkConfigBuilder {
                 .applyPodTemplate()
                 .applyJobManagerSpec()
                 .applyTaskManagerSpec()
+                .applyActiveProcessorCountForCpuLimitFactor()
                 .applyJobOrSessionSpec()
                 .build();
     }
