@@ -48,7 +48,8 @@ The operator's handling of the custom resources is extensible at three points: v
 
 ### Custom Flink Resource Validators
 
-`FlinkResourceValidator`, an interface for validating the resources of `FlinkDeployment`, `FlinkSessionJob` and `FlinkStateSnapshot`, is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. A custom implementation of `FlinkResourceValidator` is packaged together with its service definition in `META-INF/services`.
+`FlinkResourceValidator`, an interface for validating the resources of `FlinkDeployment`, `FlinkSessionJob`, `FlinkStateSnapshot` and `FlinkMiniCluster`, is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. A custom implementation of `FlinkResourceValidator` is packaged together with its service definition in `META-INF/services`.
+`validateMiniCluster` has a default implementation that accepts every `FlinkMiniCluster`, so validators written before it was added keep working as before. This means a validator that does not override `validateMiniCluster` does not check `FlinkMiniCluster` resources at all. If your validator enforces a policy, such as allowed images, service accounts or configuration, implement `validateMiniCluster` before granting users access to `flinkminiclusters`.
 Validators run in two places: the validating admission webhook rejects an invalid spec already at apply time, and the controllers validate again during reconciliation, so an invalid spec is caught even when the webhooks are disabled, with the error reported on the resource status.
 The following steps demonstrate how to develop and use a custom validator.
 
@@ -124,7 +125,8 @@ The following steps demonstrate how to develop and use a custom validator.
 
 ### Custom Flink Resource Mutators
 
-`FlinkResourceMutator`, an interface for mutating the resources of `FlinkDeployment`, `FlinkSessionJob` and `FlinkStateSnapshot`, is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. A custom implementation of `FlinkResourceMutator` is packaged together with its service definition in `META-INF/services`.
+`FlinkResourceMutator`, an interface for mutating the resources of `FlinkDeployment`, `FlinkSessionJob`, `FlinkStateSnapshot` and `FlinkMiniCluster`, is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. A custom implementation of `FlinkResourceMutator` is packaged together with its service definition in `META-INF/services`.
+`mutateMiniCluster` has a default implementation that returns the `FlinkMiniCluster` unchanged, so mutators written before it was added keep working as before. This means a mutator that does not override `mutateMiniCluster` does not apply its changes, such as injected defaults or labels, to `FlinkMiniCluster` resources.
 Mutators run only in the mutating admission webhook: when the webhooks are disabled (`webhook.create: false`, or `webhook.mutator.create: false` for the mutating webhook alone), custom mutators are not applied.
 The following steps demonstrate how to develop and use a custom mutator.
 

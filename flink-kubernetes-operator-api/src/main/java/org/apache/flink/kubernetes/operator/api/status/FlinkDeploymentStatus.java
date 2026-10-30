@@ -67,12 +67,6 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     /** Condition of the CR . */
     private List<Condition> conditions = new ArrayList<>();
 
-    @JsonIgnore
-    @Override
-    public boolean isJobCancellable() {
-        return super.isJobCancellable() && jobManagerDeploymentStatus.isRestApiAvailable();
-    }
-
     /**
      * Update the conditions with a RUNNING condition if required.
      *
@@ -110,7 +104,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     @JsonIgnore
     @Override
-    public boolean isJmAccessible() {
-        return jobManagerDeploymentStatus.isRestApiAvailable();
+    public JobManagerDeploymentStatus getKubernetesDeploymentStatus() {
+        return jobManagerDeploymentStatus;
     }
 }

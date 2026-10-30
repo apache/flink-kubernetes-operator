@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.admission.mutator;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 /** The default mutator. */
 public class FlinkMutator implements Mutator<HasMetadata> {
@@ -53,79 +55,66 @@ public class FlinkMutator implements Mutator<HasMetadata> {
             throws NotAllowedException {
         if (operation == Operation.CREATE || operation == Operation.UPDATE) {
             LOG.debug("Mutating resource {}", resource);
-            if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
-                return mutateSessionJob(resource);
-            }
-            if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
-                return mutateDeployment(resource);
-            }
-            if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
-                return mutateStateSnapshot(resource);
+            try {
+                if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
+                    return mutateSessionJob(resource);
+                }
+                if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
+                    return mutateDeployment(resource);
+                }
+                if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
+                    return mutateStateSnapshot(resource);
+                }
+                if (CrdConstants.KIND_FLINK_MINI_CLUSTER.equals(resource.getKind())) {
+                    return mutateMiniCluster(resource);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         }
         return resource;
     }
 
     private HasMetadata mutateSessionJob(HasMetadata resource) {
-        try {
-            var sessionJob = mapper.convertValue(resource, FlinkSessionJob.class);
-            var originalSessionJob = mapper.valueToTree(sessionJob);
-            var namespace = sessionJob.getMetadata().getNamespace();
-            var deploymentName = sessionJob.getSpec().getDeploymentName();
-            var key = Cache.namespaceKeyFunc(namespace, deploymentName);
-            var deployment =
-                    informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
-
-            for (FlinkResourceMutator mutator : mutators) {
-                sessionJob = mutator.mutateSessionJob(sessionJob, Optional.ofNullable(deployment));
-            }
-            // Return the original resource if no mutation was applied to avoid
-            // the serialization round-trip producing a different object, which causes
-            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
-            if (originalSessionJob.equals(mapper.valueToTree(sessionJob))) {
-                return resource;
-            }
-            return sessionJob;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        var sessionJob = mapper.convertValue(resource, FlinkSessionJob.class);
+        var namespace = sessionJob.getMetadata().getNamespace();
+        var deploymentName = sessionJob.getSpec().getDeploymentName();
+        var key = Cache.namespaceKeyFunc(namespace, deploymentName);
+        var deployment =
+                Optional.ofNullable(
+                        informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key));
+        return applyMutators(
+                resource, sessionJob, (mutator, job) -> mutator.mutateSessionJob(job, deployment));
     }
 
     private HasMetadata mutateDeployment(HasMetadata resource) {
-        try {
-            var flinkDeployment = mapper.convertValue(resource, FlinkDeployment.class);
-            var originalFlinkDeployment = mapper.valueToTree(flinkDeployment);
-            for (FlinkResourceMutator mutator : mutators) {
-                flinkDeployment = mutator.mutateDeployment(flinkDeployment);
-            }
-            // Return the original resource if no mutation was applied to avoid
-            // the serialization round-trip producing a different object, which causes
-            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
-            if (originalFlinkDeployment.equals(mapper.valueToTree(flinkDeployment))) {
-                return resource;
-            }
-            return flinkDeployment;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        var flinkDeployment = mapper.convertValue(resource, FlinkDeployment.class);
+        return applyMutators(resource, flinkDeployment, FlinkResourceMutator::mutateDeployment);
+    }
+
+    private HasMetadata mutateMiniCluster(HasMetadata resource) {
+        var miniCluster = mapper.convertValue(resource, FlinkMiniCluster.class);
+        return applyMutators(resource, miniCluster, FlinkResourceMutator::mutateMiniCluster);
     }
 
     private HasMetadata mutateStateSnapshot(HasMetadata resource) {
-        try {
-            var snapshot = mapper.convertValue(resource, FlinkStateSnapshot.class);
-            var originalSnapshot = mapper.valueToTree(snapshot);
-            for (var mutator : mutators) {
-                snapshot = mutator.mutateStateSnapshot(snapshot);
-            }
-            // Return the original resource if no mutation was applied to avoid
-            // the serialization round-trip producing a different object, which causes
-            // kubectl to inconsistently omit the "(no change)" suffix on patch responses
-            if (originalSnapshot.equals(mapper.valueToTree(snapshot))) {
-                return resource;
-            }
-            return snapshot;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        var snapshot = mapper.convertValue(resource, FlinkStateSnapshot.class);
+        return applyMutators(resource, snapshot, FlinkResourceMutator::mutateStateSnapshot);
+    }
+
+    private <T extends HasMetadata> HasMetadata applyMutators(
+            HasMetadata resource, T converted, BiFunction<FlinkResourceMutator, T, T> mutation) {
+        var original = mapper.valueToTree(converted);
+        var mutated = converted;
+        for (FlinkResourceMutator mutator : mutators) {
+            mutated = mutation.apply(mutator, mutated);
         }
+        // Return the original resource if no mutation was applied to avoid
+        // the serialization round-trip producing a different object, which causes
+        // kubectl to inconsistently omit the "(no change)" suffix on patch responses
+        if (original.equals(mapper.valueToTree(mutated))) {
+            return resource;
+        }
+        return mutated;
     }
 }

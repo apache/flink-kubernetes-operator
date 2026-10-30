@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.validation;
 import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
@@ -55,4 +56,17 @@ public interface FlinkResourceValidator extends Plugin {
      */
     Optional<String> validateStateSnapshot(
             FlinkStateSnapshot savepoint, Optional<AbstractFlinkResource<?, ?>> target);
+
+    /**
+     * Validate and return optional error.
+     *
+     * <p>By default, accepts the resource, so validators written before {@link FlinkMiniCluster}
+     * existed can work unchanged.
+     *
+     * @param miniCluster the MiniCluster to be validated.
+     * @return Optional error string, should be present iff validation resulted in an error
+     */
+    default Optional<String> validateMiniCluster(FlinkMiniCluster miniCluster) {
+        return Optional.empty();
+    }
 }

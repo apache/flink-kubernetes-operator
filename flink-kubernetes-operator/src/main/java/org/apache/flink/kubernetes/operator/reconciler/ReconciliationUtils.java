@@ -298,13 +298,10 @@ public class ReconciliationUtils {
             return updateControl.rescheduleAfter(0);
         }
 
-        if (status instanceof FlinkDeploymentStatus) {
+        var deploymentStatus = status.getKubernetesDeploymentStatus();
+        if (deploymentStatus != null) {
             return updateControl.rescheduleAfter(
-                    rescheduleAfter(
-                                    ((FlinkDeploymentStatus) status)
-                                            .getJobManagerDeploymentStatus(),
-                                    (FlinkDeployment) current,
-                                    operatorConfiguration)
+                    rescheduleAfter(deploymentStatus, status.getJobStatus(), operatorConfiguration)
                             .toMillis());
         } else {
             return updateControl.rescheduleAfter(
@@ -315,7 +312,7 @@ public class ReconciliationUtils {
     @VisibleForTesting
     public static Duration rescheduleAfter(
             JobManagerDeploymentStatus status,
-            FlinkDeployment flinkDeployment,
+            JobStatus jobStatus,
             FlinkOperatorConfiguration operatorConfiguration) {
         Duration rescheduleAfter;
         switch (status) {
@@ -324,7 +321,7 @@ public class ReconciliationUtils {
                 break;
             case READY:
                 rescheduleAfter =
-                        savepointInProgress(flinkDeployment.getStatus().getJobStatus())
+                        savepointInProgress(jobStatus)
                                 ? operatorConfiguration.getProgressCheckInterval()
                                 : operatorConfiguration.getReconcileInterval();
                 break;

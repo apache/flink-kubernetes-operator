@@ -27,7 +27,7 @@ under the License.
 
 # Custom Resource Definition Reference
 
-This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkStateSnapshot and FlinkBlueGreenDeployment custom resource definitions, including all possible configuration parameters.
+This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkStateSnapshot, FlinkBlueGreenDeployment and FlinkMiniCluster custom resource definitions, including all possible configuration parameters.
 
 ## FlinkDeployment
 **Class**: org.apache.flink.kubernetes.operator.api.FlinkDeployment
@@ -68,3 +68,13 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | ----------| ---- | ---- |
 | spec | org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec | Spec that describes a Flink application with blue/green deployment capabilities. |
 | status | org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus | Last observed status of the Flink Blue/Green deployment. |
+
+## FlinkMiniCluster
+**Class**: org.apache.flink.kubernetes.operator.api.FlinkMiniCluster
+
+**Description**: Custom resource definition that represents a single Flink job running in a MiniCluster, with the JobManager and TaskManager merged into one process in a single pod.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| spec | org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec | Spec that describes a single Flink job running in a MiniCluster. |
+| status | org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus | Last observed status of the Flink MiniCluster. |
