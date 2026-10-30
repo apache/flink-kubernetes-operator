@@ -75,8 +75,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPL
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SERVICE_ACCOUNT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -1223,7 +1222,7 @@ public class FlinkConfigBuilderTest {
         List<String> classpaths =
                 ConfigUtils.decodeListFromConfig(
                         configuration, PipelineOptions.CLASSPATHS, String::toString);
-        assertThat(classpaths, containsInAnyOrder(correctedJarUri));
+        assertThat(classpaths).containsExactlyInAnyOrder(correctedJarUri);
 
         dep.getSpec().getTaskManager().setReplicas(null);
         dep.getSpec().getJob().setParallelism(10);
@@ -1278,6 +1277,68 @@ public class FlinkConfigBuilderTest {
                 5,
                 configuration.get(
                         StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
+    }
+
+    @Test
+    public void testJobParallelismNotDerivedFromReplicasOnlyAppliedForStandaloneMode()
+            throws URISyntaxException, IOException {
+        final FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getJob().setParallelism(4);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS.key(),
+                        "false");
+
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(4);
+        assertThat(
+                        configuration.get(
+                                StandaloneKubernetesConfigOptionsInternal
+                                        .KUBERNETES_TASKMANAGER_REPLICAS))
+                .isEqualTo(3);
+
+        dep.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(6);
+    }
+
+    @Test
+    public void testUnsetJobParallelismFallsBackToTaskManagerReplicas()
+            throws URISyntaxException, IOException {
+        final FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getJob().setParallelism(0);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        dep.getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS.key(),
+                        "false");
+
+        final Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        assertThat(configuration.get(CoreOptions.DEFAULT_PARALLELISM)).isEqualTo(6);
     }
 
     @Test
