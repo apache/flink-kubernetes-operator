@@ -127,6 +127,13 @@ public interface FlinkService {
     Map<String, String> getMetrics(Configuration conf, String jobId, List<String> metricNames)
             throws Exception;
 
+    /**
+     * For each operator metric of the job named {@code metricName}, its minimum over all subtasks,
+     * keyed by vertex and metric id. Empty if no operator of the job reports it.
+     */
+    Map<String, Double> getMinSubtaskMetrics(Configuration conf, String jobId, String metricName)
+            throws Exception;
+
     RestClusterClient<String> getClusterClient(Configuration conf) throws Exception;
 
     JobExceptionsInfoWithHistory getJobExceptions(

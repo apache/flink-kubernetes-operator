@@ -18,11 +18,16 @@
 package org.apache.flink.kubernetes.operator.controller.bluegreen;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDiffType;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionStage;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
@@ -31,9 +36,14 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils;
 import org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -46,12 +56,19 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_GATE_TIMEOUT;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deleteFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.deployCluster;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.isFlinkDeploymentReady;
 import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.suspendFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenKubernetesService.updateFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.updateTransitionStageFromJobStatus;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenTransitionUtils.validateAdvancedModeConfig;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.fetchSavepointInfo;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getDeploymentDeletionDelay;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getGateTimeout;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getReconciliationReschedInterval;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.getSpecDiff;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
@@ -59,6 +76,7 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.revertToLastSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.triggerSavepoint;
 
@@ -87,6 +105,7 @@ public class BlueGreenDeploymentService {
             Savepoint lastCheckpoint,
             boolean isFirstDeployment) {
         ObjectMeta bgMeta = context.getBgDeployment().getMetadata();
+        context.getDeploymentStatus().setError(null);
 
         FlinkDeployment flinkDeployment =
                 prepareFlinkDeployment(
@@ -95,6 +114,16 @@ public class BlueGreenDeploymentService {
                         lastCheckpoint,
                         isFirstDeployment,
                         bgMeta);
+
+        Optional<String> configError = validateAdvancedModeConfig(context);
+        if (configError.isPresent()) {
+            return rejectWithValidationError(context, configError.get());
+        }
+        if (isFirstDeployment) {
+            setLastReconciledSpec(context);
+        }
+        BlueGreenTransitionUtils.prepareTransitionMetadata(
+                context, nextBlueGreenDeploymentType, flinkDeployment, isFirstDeployment);
 
         deployCluster(context, flinkDeployment);
 
@@ -115,6 +144,10 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, BlueGreenDeploymentType currentBlueGreenDeploymentType) {
 
         BlueGreenDiffType specDiff = getSpecDiff(context);
+
+        if (specDiff == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+            return rejectImmutableFieldChange(context);
+        }
 
         if (specDiff != BlueGreenDiffType.IGNORE) {
             FlinkDeployment currentFlinkDeployment =
@@ -146,6 +179,21 @@ public class BlueGreenDeploymentService {
 
             if (currentFlinkDeployment != null && isFlinkDeploymentReady(currentFlinkDeployment)) {
                 if (specDiff == BlueGreenDiffType.TRANSITION) {
+                    Optional<String> configError = validateAdvancedModeConfig(context);
+                    if (configError.isEmpty() && isSavepointRequired(context)) {
+                        configError =
+                                BlueGreenUtils.validateTransitionStateBackend(
+                                        context.getCtxFactory()
+                                                .getResourceContext(
+                                                        currentFlinkDeployment,
+                                                        context.getJosdkContext())
+                                                .getObserveConfig(),
+                                        BlueGreenUtils.templateConfig(context));
+                    }
+                    if (configError.isPresent()) {
+                        return rejectWithValidationError(context, configError.get());
+                    }
+
                     boolean savepointTriggered = false;
                     try {
                         savepointTriggered = handleSavepoint(context, currentFlinkDeployment);
@@ -392,8 +440,15 @@ public class BlueGreenDeploymentService {
                     && !savepointFetchResult.getError().isEmpty()) {
                 throw new RuntimeException(
                         String.format(
-                                "Could not fetch savepoint with triggerId: %s. Error: %s",
-                                triggerId, savepointFetchResult.getError()));
+                                "Could not fetch savepoint with triggerId: %s. Error: %s%s",
+                                triggerId,
+                                savepointFetchResult.getError(),
+                                BlueGreenUtils.savepointFailureHint(
+                                        ctx.getFlinkVersion(),
+                                        ctx.getObserveConfig()
+                                                .get(
+                                                        KubernetesOperatorConfigOptions
+                                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE))));
             }
 
             return getSavepointObject(ctx, savepointFetchResult.getLocation());
@@ -488,6 +543,12 @@ public class BlueGreenDeploymentService {
         }
 
         if (isFlinkDeploymentReady(transitionState.nextDeployment)) {
+            if (BlueGreenTransitionUtils.moveToFirstTransitionStage(context)) {
+                // The gate phase starts now and gets its own deadline
+                BlueGreenUtils.setGateAbortTimestamp(context);
+                return patchStatusUpdateControl(context, null, null, null)
+                        .rescheduleAfter(getReconciliationReschedInterval(context));
+            }
             return shouldWeDelete(
                     context,
                     transitionState.currentDeployment,
@@ -518,7 +579,11 @@ public class BlueGreenDeploymentService {
         if (hasSpecChanged(context)) {
             BlueGreenDiffType diffType = getSpecDiff(context);
 
-            // Block SUSPEND during transition - wait for transition to complete first
+            if (diffType == BlueGreenDiffType.IMMUTABLE_FIELD_CHANGED) {
+                return rejectImmutableFieldChange(context);
+            }
+
+            // Block SUSPEND during transition
             if (diffType == BlueGreenDiffType.SUSPEND) {
                 LOG.info(
                         "Suspend requested during transition for '{}'. "
@@ -582,6 +647,36 @@ public class BlueGreenDeploymentService {
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState) {
 
+        // The standby is only stopped once the gate has handed over, and its gate metrics go with
+        // it: checking them again would wait until the gate timeout aborts the transition
+        if (currentDeployment != null
+                && currentDeployment.getSpec().getJob().getState() == JobState.SUSPENDED) {
+            return stopWithSavepointAndDelete(currentDeployment, context, nextState);
+        }
+
+        if (!BlueGreenTransitionUtils.isClearToTeardown(context)) {
+            // Wait until CLEAR_TO_TEARDOWN is set by the client
+            return waitForGate(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format("the gate did not reach %s", TransitionStage.CLEAR_TO_TEARDOWN));
+        }
+
+        // The first standby subtask past the toggle sets CLEAR_TO_TEARDOWN, the others may still
+        // owe records: their watermarks pass the toggle separately unless the gate is behind a
+        // shuffle
+        if (currentDeployment != null
+                && !BlueGreenTransitionUtils.isHandOverDone(context, currentDeployment)) {
+            return waitForGate(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format(
+                            "not every gate subtask of '%s' finished the hand-over",
+                            currentDeployment.getMetadata().getName()));
+        }
+
         var deploymentStatus = context.getDeploymentStatus();
 
         if (currentDeployment == null) {
@@ -589,7 +684,7 @@ public class BlueGreenDeploymentService {
             return finalizeBlueGreenDeployment(context, nextState);
         }
 
-        long deploymentDeletionDelayMs = BlueGreenUtils.getDeploymentDeletionDelay(context);
+        long deploymentDeletionDelayMs = getDeploymentDeletionDelay(context);
         long deploymentReadyTimestamp =
                 instantStrToMillis(deploymentStatus.getDeploymentReadyTimestamp());
 
@@ -607,10 +702,33 @@ public class BlueGreenDeploymentService {
         long deletionTimestamp = deploymentReadyTimestamp + deploymentDeletionDelayMs;
 
         if (deletionTimestamp < System.currentTimeMillis()) {
-            return deleteDeployment(currentDeployment, context, nextState);
+            return TransitionMode.ADVANCED == BlueGreenTransitionUtils.getTransitionMode(context)
+                    ? stopWithSavepointAndDelete(currentDeployment, context, nextState)
+                    : deleteDeployment(currentDeployment, context, nextState);
         } else {
             return waitBeforeDeleting(currentDeployment, deletionTimestamp);
         }
+    }
+
+    /** Waits for the gate until its deadline, then aborts the transition. */
+    private UpdateControl<FlinkBlueGreenDeployment> waitForGate(
+            BlueGreenContext context,
+            FlinkDeployment nextDeployment,
+            FlinkBlueGreenDeploymentState nextState,
+            String pending) {
+        long gateDeadline = instantStrToMillis(context.getDeploymentStatus().getAbortTimestamp());
+        if (gateDeadline > 0 && gateDeadline < System.currentTimeMillis()) {
+            var reason =
+                    String.format(
+                            "Aborting deployment '%s': %s within %d ms (%s)",
+                            nextDeployment.getMetadata().getName(),
+                            pending,
+                            getGateTimeout(context),
+                            BLUEGREEN_GATE_TIMEOUT.key());
+            return abortDeployment(context, nextDeployment, nextState, reason);
+        }
+        return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                .rescheduleAfter(getReconciliationReschedInterval(context));
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> waitBeforeDeleting(
@@ -623,6 +741,41 @@ public class BlueGreenDeploymentService {
                 delay / 1000);
 
         return UpdateControl.<FlinkBlueGreenDeployment>noUpdate().rescheduleAfter(delay);
+    }
+
+    /**
+     * Stops the standby with a savepoint, then deletes it. Its gate no longer emits, and the
+     * savepoint makes sinks that commit on checkpoints (Iceberg, Kafka exactly-once, files) commit
+     * what it wrote since its last checkpoint. Deleting a running job cancels it and discards that
+     * output, and the new deployment does not write those records again.
+     */
+    private UpdateControl<FlinkBlueGreenDeployment> stopWithSavepointAndDelete(
+            FlinkDeployment standby,
+            BlueGreenContext context,
+            FlinkBlueGreenDeploymentState nextState) {
+        var name = standby.getMetadata().getName();
+        if (standby.getStatus().getLifecycleState() == ResourceLifecycleState.SUSPENDED
+                || ReconciliationUtils.isJobInTerminalState(standby.getStatus())) {
+            return deleteDeployment(standby, context, nextState);
+        }
+        if (standby.getSpec().getJob().getState() != JobState.SUSPENDED) {
+            var ctx =
+                    context.getCtxFactory().getResourceContext(standby, context.getJosdkContext());
+            if (StringUtils.isNullOrWhitespaceOnly(
+                    ctx.getObserveConfig().get(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
+                LOG.warn(
+                        "No savepoint directory for '{}', deleting it without a savepoint: sinks"
+                                + " that commit on checkpoints lose what it wrote since its last one",
+                        name);
+                return deleteDeployment(standby, context, nextState);
+            }
+            LOG.info("Stopping '{}' with a savepoint before deleting it", name);
+            standby.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+            standby.getSpec().getJob().setState(JobState.SUSPENDED);
+            updateFlinkDeployment(standby, context);
+        }
+        return UpdateControl.<FlinkBlueGreenDeployment>noUpdate()
+                .rescheduleAfter(getReconciliationReschedInterval(context));
     }
 
     private UpdateControl<FlinkBlueGreenDeployment> deleteDeployment(
@@ -657,7 +810,11 @@ public class BlueGreenDeploymentService {
         }
 
         if (abortTimestamp < System.currentTimeMillis()) {
-            return abortDeployment(context, nextDeployment, nextState, deploymentName);
+            return abortDeployment(
+                    context,
+                    nextDeployment,
+                    nextState,
+                    String.format("Aborting deployment '%s'", deploymentName));
         } else {
             return retryDeployment(context, deploymentName);
         }
@@ -680,20 +837,66 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context,
             FlinkDeployment nextDeployment,
             FlinkBlueGreenDeploymentState nextState,
-            String deploymentName) {
+            String reason) {
 
         suspendFlinkDeployment(context, nextDeployment);
 
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
+        // Before resetGateOnAbort below drops the cutover point from the ConfigMap
+        var redeployed = redeployIfCutoverWasSet(context, nextDeployment, previousState);
         context.getDeploymentStatus().setBlueGreenState(previousState);
         resetTransitionMarkers(context.getDeploymentStatus());
 
         var error =
                 String.format(
-                        "Aborting deployment '%s', rolling B/G deployment back to %s",
-                        deploymentName, previousState);
-        return markDeploymentFailing(context, error);
+                        "%s, rolling B/G deployment back to %s%s",
+                        reason, previousState, redeployed);
+        var updateControl = markDeploymentFailing(context, error);
+        // Must follow the stage write in markDeploymentFailing, see resetGateOnAbort
+        BlueGreenTransitionUtils.resetGateOnAbort(context, previousState);
+        return updateControl;
+    }
+
+    /**
+     * Once the cutover point is set, the surviving deployment's gate skips the records from it on
+     * and leaves them to the aborted one, which may not have written or committed them yet. The
+     * survivor is then redeployed from the savepoint the aborted deployment started from, so those
+     * records are written again (along with duplicates of what was written since) instead of lost.
+     * Returns what was done, for the abort message.
+     */
+    private static String redeployIfCutoverWasSet(
+            BlueGreenContext context,
+            FlinkDeployment aborted,
+            FlinkBlueGreenDeploymentState previousState) {
+        if (TransitionMode.ADVANCED != BlueGreenTransitionUtils.getTransitionMode(context)
+                || previousState == FlinkBlueGreenDeploymentState.INITIALIZING_BLUE
+                || !BlueGreenTransitionUtils.isCutoverSet(context)) {
+            return "";
+        }
+        var survivor =
+                context.getDeploymentByType(
+                        previousState.name().contains("BLUE")
+                                ? BlueGreenDeploymentType.BLUE
+                                : BlueGreenDeploymentType.GREEN);
+        var savepoint = aborted.getSpec().getJob().getInitialSavepointPath();
+        if (survivor == null || StringUtils.isNullOrWhitespaceOnly(savepoint)) {
+            LOG.error(
+                    "The cutover point was set, but there is no savepoint to redeploy from: the"
+                            + " records from it on that '{}' did not write are lost",
+                    aborted.getMetadata().getName());
+            return ". The cutover point was set and there is no transition savepoint, so the"
+                    + " records from it on that the aborted deployment did not write are lost";
+        }
+        var job = survivor.getSpec().getJob();
+        job.setInitialSavepointPath(savepoint);
+        job.setSavepointRedeployNonce(
+                job.getSavepointRedeployNonce() == null ? 1L : job.getSavepointRedeployNonce() + 1);
+        updateFlinkDeployment(survivor, context);
+        return String.format(
+                ". The cutover point was set, so '%s' is redeployed from the transition savepoint"
+                        + " %s, and records written since may be written twice",
+                survivor.getMetadata().getName(), savepoint);
     }
 
     @NotNull
@@ -701,6 +904,33 @@ public class BlueGreenDeploymentService {
             BlueGreenContext context, String error) {
         LOG.error(error);
         return patchStatusUpdateControl(context, null, JobStatus.FAILING, error);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectWithValidationError(
+            BlueGreenContext context, String error) {
+        LOG.warn(error);
+        revertToLastSpec(context);
+        EventUtils.createOrUpdateEventWithInterval(
+                context.getJosdkContext().getClient(),
+                context.getBgDeployment(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.ValidationError.toString(),
+                error,
+                EventRecorder.Component.Operator,
+                e -> {},
+                null,
+                null);
+        context.getDeploymentStatus().setError(error);
+        return patchStatusUpdateControl(context, null, null, null);
+    }
+
+    private UpdateControl<FlinkBlueGreenDeployment> rejectImmutableFieldChange(
+            BlueGreenContext context) {
+        String error =
+                String.format(
+                        "transitionMode cannot be changed after initial deployment for '%s'. Reverting spec.",
+                        context.getBgDeployment().getMetadata().getName());
+        return rejectWithValidationError(context, error);
     }
 
     private static FlinkBlueGreenDeploymentState getPreviousState(
@@ -835,6 +1065,7 @@ public class BlueGreenDeploymentService {
         }
 
         if (jobState != null) {
+            updateTransitionStageFromJobStatus(context, jobState);
             deploymentStatus.getJobStatus().setState(jobState);
         }
 
@@ -848,6 +1079,7 @@ public class BlueGreenDeploymentService {
 
         deploymentStatus.setLastReconciledTimestamp(java.time.Instant.now().toString());
         flinkBlueGreenDeployment.setStatus(deploymentStatus);
+
         return UpdateControl.patchStatus(flinkBlueGreenDeployment);
     }
 
