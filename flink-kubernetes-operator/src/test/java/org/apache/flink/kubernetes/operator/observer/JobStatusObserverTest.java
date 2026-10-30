@@ -981,6 +981,60 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
+    void testJobNotFoundErrorClearedWhenJobIsFoundAgain() throws Exception {
+        // While the JobManager recovers jobs from HA the job overview can briefly miss a running
+        // job. The error must not outlive the job reappearing, otherwise a later deletion skips
+        // cancelling the job and leaves it running unmanaged on the session cluster.
+        var sessionJob = initSessionJob();
+        sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        var status = sessionJob.getStatus();
+        var jobStatus = status.getJobStatus();
+        jobStatus.setState(JobStatus.RUNNING);
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(
+                        sessionJob,
+                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+
+        assertFalse(observer.observe(ctx));
+        assertEquals(JobStatus.RECONCILING, jobStatus.getState());
+        assertEquals(JobStatusObserver.JOB_NOT_FOUND_ERR, status.getError());
+
+        flinkService.submitJobToSessionCluster(
+                sessionJob.getMetadata(),
+                sessionJob.getSpec(),
+                jobId,
+                ctx.getDeployConfig(sessionJob.getSpec()),
+                null);
+        assertTrue(observer.observe(ctx));
+
+        assertEquals(JobStatus.RUNNING, jobStatus.getState());
+        assertNull(status.getError());
+    }
+
+    @Test
+    void testOtherErrorsKeptWhenJobIsFound() throws Exception {
+        var sessionJob = initSessionJob();
+        var status = sessionJob.getStatus();
+        status.getJobStatus().setState(JobStatus.RUNNING);
+        status.setError("other error");
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(
+                        sessionJob,
+                        TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
+        flinkService.submitJobToSessionCluster(
+                sessionJob.getMetadata(),
+                sessionJob.getSpec(),
+                JobID.fromHexString(status.getJobStatus().getJobId()),
+                ctx.getDeployConfig(sessionJob.getSpec()),
+                null);
+
+        assertTrue(observer.observe(ctx));
+
+        assertEquals("other error", status.getError());
+    }
+
+    @Test
     void testMissingTerminalJobStillUnblocksPendingUpgrade() throws Exception {
         // Keeping the terminal job state must not keep a pending upgrade in the UPGRADING state,
         // the reconciliation state is still reset so the upgrade can be retried.
