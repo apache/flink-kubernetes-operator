@@ -66,6 +66,32 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.");
 
+    public static final ConfigOption<Boolean>
+            SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED =
+                    autoScalerConfig("scaling.max-scale-factor-per-slot-sharing-group.enabled")
+                            .booleanType()
+                            .defaultValue(false)
+                            .withFallbackKeys(
+                                    oldOperatorConfigKey(
+                                            "scaling.max-scale-factor-per-slot-sharing-group.enabled"))
+                            .withDescription(
+                                    "Use the highest calculated scale factor among non-excluded vertices in each slot sharing group. "
+                                            + "Each vertex's normal parallelism bounds and alignment are still applied. "
+                                            + "Disabled by default.");
+
+    public static final ConfigOption<Boolean>
+            SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_TASKMANAGER_REPLICAS_CHANGE_REQUIRED =
+                    autoScalerConfig(
+                                    "scaling.max-scale-factor-per-slot-sharing-group.taskmanager-replicas-change-required")
+                            .booleanType()
+                            .defaultValue(true)
+                            .withFallbackKeys(
+                                    oldOperatorConfigKey(
+                                            "scaling.max-scale-factor-per-slot-sharing-group.taskmanager-replicas-change-required"))
+                            .withDescription(
+                                    "When per-slot-sharing-group scaling is enabled, require the estimated TaskManager replica count to change before executing a scaling action. "
+                                            + "Disable this option to allow parallelism changes that do not change the estimated TaskManager replica count.");
+
     public static final ConfigOption<Duration> METRICS_WINDOW =
             autoScalerConfig("metrics.window")
                     .durationType()

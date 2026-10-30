@@ -914,6 +914,462 @@ public class ScalingExecutorTest {
                                 "8"));
     }
 
+    @Test
+    public void testMaxScaleFactorIsSharedPerSlotSharingGroup() {
+        var source = new JobVertexID();
+        var firstOperator = new JobVertexID();
+        var secondOperator = new JobVertexID();
+        var thirdOperator = new JobVertexID();
+        var fourthOperator = new JobVertexID();
+        var sink = new JobVertexID();
+        var firstSlotSharingGroup = new SlotSharingGroupId();
+        var secondSlotSharingGroup = new SlotSharingGroupId();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                firstSlotSharingGroup,
+                                Map.of(),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                firstOperator,
+                                firstSlotSharingGroup,
+                                Map.of(source, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                secondOperator,
+                                firstSlotSharingGroup,
+                                Map.of(firstOperator, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                thirdOperator,
+                                secondSlotSharingGroup,
+                                Map.of(secondOperator, HASH),
+                                6,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                fourthOperator,
+                                secondSlotSharingGroup,
+                                Map.of(thirdOperator, HASH),
+                                6,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                secondSlotSharingGroup,
+                                Map.of(fourthOperator, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var individualScaleFactors =
+                Map.of(
+                        source, 1.4,
+                        firstOperator, 0.8,
+                        secondOperator, 1.2,
+                        thirdOperator, 1.3,
+                        fourthOperator, 0.9,
+                        sink, 1.5);
+
+        var groupScaleFactors =
+                SlotSharingGroupScalingPolicy.computeMaxScaleFactorsPerSlotSharingGroup(
+                        individualScaleFactors, topology, List.of());
+
+        assertThat(groupScaleFactors)
+                .containsEntry(source, 1.4)
+                .containsEntry(firstOperator, 1.4)
+                .containsEntry(secondOperator, 1.4)
+                .containsEntry(thirdOperator, 1.5)
+                .containsEntry(fourthOperator, 1.5)
+                .containsEntry(sink, 1.5);
+
+        var excludedGroupScaleFactors =
+                SlotSharingGroupScalingPolicy.computeMaxScaleFactorsPerSlotSharingGroup(
+                        individualScaleFactors, topology, List.of(firstOperator.toHexString()));
+
+        assertThat(excludedGroupScaleFactors)
+                .doesNotContainKey(firstOperator)
+                .containsEntry(source, 1.4)
+                .containsEntry(secondOperator, 1.4)
+                .containsEntry(sink, 1.5);
+    }
+
+    @Test
+    public void testMaxScaleFactorPerSlotSharingGroupWithOneVertexPerGroup() {
+        var firstVertex = new JobVertexID();
+        var secondVertex = new JobVertexID();
+        var firstSlotSharingGroup = new SlotSharingGroupId();
+        var secondSlotSharingGroup = new SlotSharingGroupId();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                firstVertex,
+                                firstSlotSharingGroup,
+                                Map.of(),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                secondVertex,
+                                secondSlotSharingGroup,
+                                Map.of(firstVertex, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var individualScaleFactors = Map.of(firstVertex, 0.8, secondVertex, 1.2);
+
+        var groupScaleFactors =
+                SlotSharingGroupScalingPolicy.computeMaxScaleFactorsPerSlotSharingGroup(
+                        individualScaleFactors, topology, List.of());
+
+        // Each group's maximum is its sole vertex's scale factor.
+        assertThat(groupScaleFactors).isEqualTo(individualScaleFactors);
+    }
+
+    @Test
+    public void testMaxScaleFactorPerSlotSharingGroupAcrossSingleGroupPipeline() {
+        var source = new JobVertexID();
+        var operator = new JobVertexID();
+        var sink = new JobVertexID();
+        var slotSharingGroup = new SlotSharingGroupId();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                slotSharingGroup,
+                                Map.of(),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                operator,
+                                slotSharingGroup,
+                                Map.of(source, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                slotSharingGroup,
+                                Map.of(operator, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var individualScaleFactors = Map.of(source, 1.1, operator, 1.3, sink, 0.9);
+
+        var groupScaleFactors =
+                SlotSharingGroupScalingPolicy.computeMaxScaleFactorsPerSlotSharingGroup(
+                        individualScaleFactors, topology, List.of());
+        double highestScaleFactor =
+                individualScaleFactors.values().stream()
+                        .mapToDouble(Double::doubleValue)
+                        .max()
+                        .orElseThrow();
+
+        // Every vertex in the shared group receives the pipeline's highest factor.
+        assertThat(groupScaleFactors)
+                .containsEntry(source, highestScaleFactor)
+                .containsEntry(operator, highestScaleFactor)
+                .containsEntry(sink, highestScaleFactor);
+    }
+
+    @Test
+    public void testSlotSharingGroupScalingRequiresTaskManagerCountChange() {
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 2);
+        var source = new JobVertexID();
+        var operator = new JobVertexID();
+        var sink = new JobVertexID();
+        var firstSlotSharingGroup = new SlotSharingGroupId();
+        var secondSlotSharingGroup = new SlotSharingGroupId();
+        var vertexMetrics =
+                Map.of(
+                        source, evaluated(10, 100, 100),
+                        operator, evaluated(10, 100, 100),
+                        sink, evaluated(10, 100, 100));
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                firstSlotSharingGroup,
+                                Map.of(),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                operator,
+                                firstSlotSharingGroup,
+                                Map.of(source, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                secondSlotSharingGroup,
+                                Map.of(operator, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(ScalingMetric.NUM_TASK_SLOTS_USED, EvaluatedScalingMetric.of(20)));
+        var scaleDown = Map.of(operator, new ScalingSummary(10, 9, vertexMetrics.get(operator)));
+        var scaleUp = Map.of(operator, new ScalingSummary(10, 12, vertexMetrics.get(operator)));
+
+        assertThat(
+                        SlotSharingGroupScalingPolicy.scalingChangesTaskManagerCount(
+                                conf, metrics, topology, scaleDown))
+                .isFalse();
+        assertThat(
+                        SlotSharingGroupScalingPolicy.scalingChangesTaskManagerCount(
+                                conf, metrics, topology, scaleUp))
+                .isTrue();
+    }
+
+    @Test
+    public void testTaskManagerCountEstimateAccountsForOtherSessionJobs() {
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 10);
+        var source = new JobVertexID();
+        var operator = new JobVertexID();
+        var sink = new JobVertexID();
+        var slotSharingGroup = new SlotSharingGroupId();
+        var vertexMetrics =
+                Map.of(
+                        source, evaluated(10, 100, 100),
+                        operator, evaluated(10, 100, 100),
+                        sink, evaluated(10, 100, 100));
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                slotSharingGroup,
+                                Map.of(),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                operator,
+                                slotSharingGroup,
+                                Map.of(source, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                slotSharingGroup,
+                                Map.of(operator, HASH),
+                                10,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(ScalingMetric.NUM_TASK_SLOTS_USED, EvaluatedScalingMetric.of(20)));
+        var scaleUp = Map.of(operator, new ScalingSummary(10, 12, vertexMetrics.get(operator)));
+
+        assertThat(
+                        SlotSharingGroupScalingPolicy.scalingChangesTaskManagerCount(
+                                conf, metrics, topology, scaleUp))
+                .isTrue();
+    }
+
+    @Test
+    public void testScaleResourceAppliesSlotSharingGroupParallelismWhenReplicaCountChanges()
+            throws Exception {
+        testScaleResourceAppliesSlotSharingGroupParallelism(1, true, true);
+    }
+
+    @Test
+    public void testScaleResourceCanSkipTaskManagerReplicaCountGate() throws Exception {
+        testScaleResourceAppliesSlotSharingGroupParallelism(4, false, true);
+    }
+
+    @Test
+    public void testScaleResourceSkipsWhenTaskManagerReplicaCountDoesNotChange() throws Exception {
+        testScaleResourceAppliesSlotSharingGroupParallelism(4, true, false);
+    }
+
+    @Test
+    public void testScaleResourceSkipsWhenSlotSharingGroupMetadataIsUnavailable() throws Exception {
+        assertScaleSkippedWhenGateInputIsUnavailable(false, true);
+    }
+
+    @Test
+    public void testScaleResourceSkipsWhenTaskManagerSlotMetricsAreUnavailable() throws Exception {
+        assertScaleSkippedWhenGateInputIsUnavailable(true, false);
+    }
+
+    private void assertScaleSkippedWhenGateInputIsUnavailable(
+            boolean includeSlotSharingGroupMetadata, boolean includeTaskManagerSlotMetric)
+            throws Exception {
+        conf.set(AutoScalerOptions.SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED, true);
+        conf.set(
+                AutoScalerOptions
+                        .SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_TASKMANAGER_REPLICAS_CHANGE_REQUIRED,
+                true);
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 1);
+
+        var source = new JobVertexID();
+        var operator = new JobVertexID();
+        var sink = new JobVertexID();
+        var slotSharingGroup = includeSlotSharingGroupMetadata ? new SlotSharingGroupId() : null;
+        var vertexMetrics =
+                Map.of(
+                        source, evaluated(1, 100, 100),
+                        operator, evaluated(1, 110, 100),
+                        sink, evaluated(1, 100, 100));
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                slotSharingGroup,
+                                Map.of(),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                operator,
+                                slotSharingGroup,
+                                Map.of(source, HASH),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                slotSharingGroup,
+                                Map.of(operator, HASH),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var globalMetrics = new HashMap<>(dummyGlobalMetrics);
+        if (includeTaskManagerSlotMetric) {
+            globalMetrics.put(ScalingMetric.NUM_TASK_SLOTS_USED, EvaluatedScalingMetric.of(1));
+        }
+        var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
+
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                Instant.now(),
+                                topology,
+                                new DelayedScaleDown()))
+                .isFalse();
+        assertThat(getScaledParallelism(stateStore, context)).isEmpty();
+    }
+
+    private void testScaleResourceAppliesSlotSharingGroupParallelism(
+            int slotsPerTaskManager, boolean requireReplicaCountChange, boolean expectedScale)
+            throws Exception {
+        conf.set(AutoScalerOptions.SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED, true);
+        conf.set(
+                AutoScalerOptions
+                        .SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_TASKMANAGER_REPLICAS_CHANGE_REQUIRED,
+                requireReplicaCountChange);
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, slotsPerTaskManager);
+        var source = new JobVertexID();
+        var firstOperator = new JobVertexID();
+        var secondOperator = new JobVertexID();
+        var sink = new JobVertexID();
+        var slotSharingGroup = new SlotSharingGroupId();
+        var vertexMetrics =
+                Map.of(
+                        source, evaluated(1, 100, 100),
+                        firstOperator, evaluated(1, 110, 100),
+                        secondOperator, evaluated(1, 100, 100),
+                        sink, evaluated(1, 100, 100));
+        var topology =
+                new JobTopology(
+                        new VertexInfo(
+                                source,
+                                slotSharingGroup,
+                                Map.of(),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                firstOperator,
+                                slotSharingGroup,
+                                Map.of(source, HASH),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                secondOperator,
+                                slotSharingGroup,
+                                Map.of(firstOperator, HASH),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                slotSharingGroup,
+                                Map.of(secondOperator, HASH),
+                                1,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+        var metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.NUM_TASK_SLOTS_USED,
+                                EvaluatedScalingMetric.of(1),
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(Double.NaN),
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                                EvaluatedScalingMetric.of(Double.NaN)));
+
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                Instant.now(),
+                                topology,
+                                new DelayedScaleDown()))
+                .isEqualTo(expectedScale);
+        if (expectedScale) {
+            assertThat(getScaledParallelism(stateStore, context))
+                    .containsEntry(firstOperator, 2)
+                    .containsEntry(secondOperator, 2);
+        } else {
+            assertThat(getScaledParallelism(stateStore, context)).isEmpty();
+        }
+    }
+
     @ParameterizedTest
     @MethodSource("testDataForQuota")
     public void testQuota(
