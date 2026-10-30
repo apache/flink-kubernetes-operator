@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 import static java.time.Instant.ofEpochSecond;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +53,23 @@ class ClusterHealthInfoTest {
         assertEquals(2, clusterHealthInfoFromJson.getNumRestarts());
         assertFalse(clusterHealthInfoFromJson.getHealthResult().isHealthy());
         assertEquals("test-error", clusterHealthInfoFromJson.getHealthResult().getError());
+    }
+
+    @Test
+    public void deserializeShouldIgnoreLegacyHealthyField() {
+        final var clusterHealthInfoJson =
+                "{\"timeStamp\":1,\"numRestarts\":2,\"numRestartsEvaluationTimeStamp\":3,"
+                        + "\"numCompletedCheckpoints\":4,"
+                        + "\"numCompletedCheckpointsIncreasedTimeStamp\":5,\"healthy\":false}";
+        final var clusterHealthInfoFromJson = ClusterHealthInfo.deserialize(clusterHealthInfoJson);
+        assertThat(clusterHealthInfoFromJson.getTimeStamp()).isEqualTo(1);
+        assertThat(clusterHealthInfoFromJson.getNumRestarts()).isEqualTo(2);
+        assertThat(clusterHealthInfoFromJson.getNumRestartsEvaluationTimeStamp()).isEqualTo(3);
+        assertThat(clusterHealthInfoFromJson.getNumCompletedCheckpoints()).isEqualTo(4);
+        assertThat(clusterHealthInfoFromJson.getNumCompletedCheckpointsIncreasedTimeStamp())
+                .isEqualTo(5);
+        assertThat(clusterHealthInfoFromJson.getHealthResult())
+                .isEqualTo(ClusterHealthResult.healthy());
     }
 
     @Test
