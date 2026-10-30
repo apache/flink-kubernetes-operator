@@ -39,6 +39,7 @@ under the License.
     <modules>
         <module>autoscaling</module>
         <module>flink-beam-example</module>
+        <module>flink-bluegreen-advanced-example</module>
         <module>flink-sql-runner-example</module>
         <module>kubernetes-client-examples</module>
     </modules>

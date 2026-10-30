@@ -158,6 +158,14 @@ jobs:
           cd flink-autoscaler-plugin-jdbc
           mvn -B verify -Dit.skip=false
           cd ..
+      - name: Tests in the BlueGreen client and agent against Flink 2.x
+        # Both run inside the user's job, so they are tested against each supported Flink 2.x
+        # version; the build above covers Flink 1.x.
+        run: |
+          for flink_version in 2.0.1 2.1.1 2.2.1; do
+            mvn -B test -Dflink.version=${flink_version} \
+              -pl flink-kubernetes-operator-bluegreen-client,flink-kubernetes-operator-bluegreen-agent
+          done
   e2e_smoke_test:
     name: Smoke test
     strategy:
@@ -255,6 +263,9 @@ jobs:
           - test_flink_operator_ha.sh
           - test_snapshot.sh
           - test_batch_job.sh
+          - test_bluegreen_stateless.sh
+          - test_bluegreen_laststate.sh
+          - test_bluegreen_ingress_rotation.sh
         exclude:
           - mode: standalone
             test: test_autoscaler.sh
@@ -264,6 +275,27 @@ jobs:
       flink-version: ${{ matrix.flink-version }}
       test: ${{ matrix.test }}
       mode: ${{ matrix.mode }}
+  e2e_bluegreen_advanced:
+    name: Blue/Green ADVANCED mode tests
+    needs: e2e_smoke_test
+    strategy:
+      matrix:
+        flink-version:
+          - "v2_2"
+          - "v2_1"
+          - "v2_0"
+          - "v1_20"
+        mode:
+          - "native"
+          - "standalone"
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      java-version: 17
+      flink-version: ${{ matrix.flink-version }}
+      test: test_bluegreen_advanced.sh
+      mode: ${{ matrix.mode }}
+      # The JobManager loads the gate agent, which is Java 17 bytecode
+      append-java-version: true
   e2e_logging:
     name: Logging framework tests
     needs: e2e_smoke_test
