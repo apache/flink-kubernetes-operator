@@ -103,7 +103,7 @@ public class ScalingExecutorTest {
         scalingExecutor =
                 new ScalingExecutor<>(eventCollector, stateStore) {
                     @Override
-                    protected boolean scalingWouldExceedMaxResources(
+                    protected ScaleResult scalingWouldExceedMaxResources(
                             Configuration tunedConfig,
                             JobTopology jobTopology,
                             EvaluatedMetrics evaluatedMetrics,
@@ -256,7 +256,8 @@ public class ScalingExecutorTest {
                                 parallelism,
                                 Integer.MAX_VALUE,
                                 new IOMetrics(10000, 10000, 100)));
-        assertFalse(
+        assertEquals(
+                ScaleResult.BALANCED,
                 scalingExecutor.scaleResource(
                         context,
                         evaluated,
@@ -442,7 +443,8 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
         var now = Instant.now();
         var delayedScaleDown = new DelayedScaleDown();
-        assertFalse(
+        assertEquals(
+                ScaleResult.BALANCED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -453,7 +455,8 @@ public class ScalingExecutorTest {
                         delayedScaleDown));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -492,7 +495,8 @@ public class ScalingExecutorTest {
                         Map.of(source, evaluated(10, 110, 100), sink, evaluated(10, 110, 100)),
                         dummyGlobalMetrics);
         var delayedScaleDown = new DelayedScaleDown();
-        assertFalse(
+        assertEquals(
+                ScaleResult.BLOCKED_BY_EXCLUDED_PERIOD,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -508,7 +512,8 @@ public class ScalingExecutorTest {
                         .append(localTime.plusSeconds(300).toString().split("\\.")[0])
                         .toString();
         conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(excludedPeriod));
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -545,7 +550,8 @@ public class ScalingExecutorTest {
 
         // Would normally scale without resource usage check
         var delayedScaleDown = new DelayedScaleDown();
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -565,7 +571,8 @@ public class ScalingExecutorTest {
                         Collections.emptyList());
 
         // Scaling blocked due to unavailable resources
-        assertFalse(
+        assertEquals(
+                ScaleResult.BLOCKED_BY_CLUSTER_RESOURCES,
                 scalingExecutor.scaleResource(
                         TestingAutoscalerUtils.createResourceAwareContext(),
                         metrics,
@@ -613,7 +620,8 @@ public class ScalingExecutorTest {
                         new VertexInfo(sink, Map.of(source, REBALANCE), 10, 1000, false, null));
 
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -686,7 +694,7 @@ public class ScalingExecutorTest {
                 new EvaluatedMetrics(
                         Map.of(jobVertexID, evaluated(1, 110, 100)), dummyGlobalMetrics);
         assertEquals(
-                scalingEnabled,
+                scalingEnabled ? ScaleResult.SCALED : ScaleResult.BLOCKED_BY_CONFIG,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -696,7 +704,7 @@ public class ScalingExecutorTest {
                         jobTopology,
                         delayedScaleDown));
         assertEquals(
-                scalingEnabled,
+                scalingEnabled ? ScaleResult.SCALED : ScaleResult.BLOCKED_BY_CONFIG,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -736,7 +744,7 @@ public class ScalingExecutorTest {
                 new EvaluatedMetrics(
                         Map.of(jobVertexID, evaluated(1, 110, 101)), dummyGlobalMetrics);
         assertEquals(
-                scalingEnabled,
+                scalingEnabled ? ScaleResult.SCALED : ScaleResult.BLOCKED_BY_CONFIG,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -773,7 +781,8 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(Double.NaN)));
 
         // Baseline, no GC/Heap metrics
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -792,7 +801,8 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(0.49),
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
-        assertTrue(
+        assertEquals(
+                ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -813,7 +823,8 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(0.51),
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
-        assertFalse(
+        assertEquals(
+                ScaleResult.BLOCKED_BY_MEMORY,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -834,7 +845,8 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(0.49),
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.6, 0.81)));
-        assertFalse(
+        assertEquals(
+                ScaleResult.BLOCKED_BY_MEMORY,
                 scalingExecutor.scaleResource(
                         context,
                         metrics,
@@ -898,7 +910,7 @@ public class ScalingExecutorTest {
                                 now,
                                 jobTopology,
                                 new DelayedScaleDown()))
-                .isTrue();
+                .isEqualTo(ScaleResult.SCALED);
 
         Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
         // The source and keyed Operator should enable the parallelism adjustment, so the
@@ -1015,7 +1027,7 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(Double.NaN)));
 
         assertEquals(
-                !quotaReached,
+                quotaReached ? ScaleResult.BLOCKED_BY_QUOTA : ScaleResult.SCALED,
                 scalingExecutor.scaleResource(
                         ctx,
                         metrics,
@@ -1116,7 +1128,8 @@ public class ScalingExecutorTest {
             var executorWithFilter = executorWith(approveFilter);
 
             var now = Instant.now();
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1137,7 +1150,8 @@ public class ScalingExecutorTest {
             var executorWithFilter = executorWith(vetoFilter);
 
             var now = Instant.now();
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1163,7 +1177,8 @@ public class ScalingExecutorTest {
             var executorWithFilter = executorWith(modifyFilter);
 
             var now = Instant.now();
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1188,7 +1203,8 @@ public class ScalingExecutorTest {
             var executorWithFilter = executorWith(emptyMapFilter);
 
             var now = Instant.now();
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1212,7 +1228,8 @@ public class ScalingExecutorTest {
             var executorWithFilters = executorWith(approveFilter, vetoFilter);
 
             var now = Instant.now();
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilters.scaleResource(
                             context,
                             metrics,
@@ -1234,7 +1251,8 @@ public class ScalingExecutorTest {
             var executorWithFilters = executorWith(filter1, filter2);
 
             var now = Instant.now();
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilters.scaleResource(
                             context,
                             metrics,
@@ -1259,7 +1277,8 @@ public class ScalingExecutorTest {
                             Collections.emptyList());
 
             var now = Instant.now();
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorNoFilters.scaleResource(
                             context,
                             metrics,
@@ -1382,7 +1401,8 @@ public class ScalingExecutorTest {
                     executorWith(lowPriorityFilter, defaultPriorityFilter, highPriorityFilter);
 
             var now = Instant.now();
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilters.scaleResource(
                             context,
                             metrics,
@@ -1402,7 +1422,8 @@ public class ScalingExecutorTest {
 
             var executorWithFilter = executorWith(approveFilter);
 
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1421,7 +1442,8 @@ public class ScalingExecutorTest {
 
             var executorWithFilter = executorWith(vetoFilter);
 
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1447,7 +1469,8 @@ public class ScalingExecutorTest {
 
             var executorWithFilters = executorWith(approveFilter, vetoFilter);
 
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilters.scaleResource(
                             context,
                             metrics,
@@ -1471,7 +1494,8 @@ public class ScalingExecutorTest {
                             Collections.emptyList(),
                             Collections.emptyList());
 
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorNoFilters.scaleResource(
                             context,
                             metrics,
@@ -1499,7 +1523,8 @@ public class ScalingExecutorTest {
                             List.of(vetoFilter),
                             Collections.emptyList());
 
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1539,7 +1564,8 @@ public class ScalingExecutorTest {
                             List.of(vetoFilter),
                             Collections.emptyList());
 
-            assertFalse(
+            assertEquals(
+                    ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1584,7 +1610,8 @@ public class ScalingExecutorTest {
                             + ".allow-scale-down",
                     "true");
 
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1624,7 +1651,8 @@ public class ScalingExecutorTest {
                             + ".legacy-only",
                     "from-legacy");
 
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,
@@ -1666,7 +1694,8 @@ public class ScalingExecutorTest {
                             + ".threshold",
                     "canonical-value");
 
-            assertTrue(
+            assertEquals(
+                    ScaleResult.SCALED,
                     executorWithFilter.scaleResource(
                             context,
                             metrics,

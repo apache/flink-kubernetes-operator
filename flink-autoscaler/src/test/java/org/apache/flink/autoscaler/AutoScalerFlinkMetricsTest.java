@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -35,16 +36,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.AVERAGE;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.CURRENT;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.JOB_VERTEX_ID;
+import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.REASON;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** {@link AutoscalerFlinkMetrics} tests. */
 public class AutoScalerFlinkMetricsTest {
@@ -153,6 +158,76 @@ public class AutoScalerFlinkMetricsTest {
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));
         assertEquals(2000., getAverageMetricValue(TRUE_PROCESSING_RATE));
+    }
+
+    @Test
+    public void testBalancedCounterIsTaggedWithTheReason() {
+        metrics.incrementBalanced(ScaleResult.BLOCKED_BY_MEMORY);
+        metrics.incrementBalanced(ScaleResult.BLOCKED_BY_MEMORY);
+        metrics.incrementBalanced(ScaleResult.BALANCED);
+
+        // The untagged counter keeps the total, so existing dashboards are unaffected.
+        assertEquals(3, metrics.getNumBalancedCount());
+
+        // The tagged counters split the total by reason.
+        assertEquals(2, metrics.getNumBalancedCount(ScaleResult.BLOCKED_BY_MEMORY));
+        assertEquals(1, metrics.getNumBalancedCount(ScaleResult.BALANCED));
+
+        // Each reported reason registers a counter under the reason metric variable.
+        assertEquals(2L, getBalancedCounterValue(ScaleResult.BLOCKED_BY_MEMORY));
+        assertEquals(1L, getBalancedCounterValue(ScaleResult.BALANCED));
+    }
+
+    @Test
+    public void testTaggedCounterIsRegisteredOnlyForReportedReasons() {
+        assertNull(collectedMetrics.get(getBalancedCounterId(ScaleResult.BLOCKED_BY_COOLDOWN)));
+        assertEquals(0, metrics.getNumBalancedCount(ScaleResult.BLOCKED_BY_COOLDOWN));
+
+        metrics.incrementBalanced(ScaleResult.BLOCKED_BY_COOLDOWN);
+
+        assertNotNull(collectedMetrics.get(getBalancedCounterId(ScaleResult.BLOCKED_BY_COOLDOWN)));
+        // A reason that never fired must not create a counter.
+        assertNull(collectedMetrics.get(getBalancedCounterId(ScaleResult.BLOCKED_BY_QUOTA)));
+    }
+
+    @Test
+    public void testScalingsCounterIsTaggedWithTheReasons() {
+        metrics.incrementScaling(Set.of(ScaleReason.BACKLOG));
+        metrics.incrementScaling(Set.of(ScaleReason.BACKLOG, ScaleReason.HIGH_LOAD));
+        metrics.incrementScaling(Set.of(ScaleReason.HIGH_LOAD, ScaleReason.BACKLOG));
+
+        // The untagged counter keeps the total.
+        assertEquals(3, metrics.getNumScalingsCount());
+
+        // A combination of reasons is one tag, and the order it arrives in does not matter.
+        assertEquals(1, getScalingsCounterValue("backlog"));
+        assertEquals(2, getScalingsCounterValue("backlog|high_load"));
+    }
+
+    @Test
+    public void testScalingsCounterIsNotRegisteredWithoutAReason() {
+        metrics.incrementScaling(Set.of());
+
+        // The untagged counter still moves, but no tagged counter is created with an empty tag.
+        assertEquals(1, metrics.getNumScalingsCount());
+        assertNull(collectedMetrics.get(getScalingsCounterId("")));
+    }
+
+    private long getScalingsCounterValue(String tag) {
+        return ((Counter) collectedMetrics.get(getScalingsCounterId(tag))).getCount();
+    }
+
+    private String getScalingsCounterId(String tag) {
+        return metricGroup.getMetricIdentifier(String.join(DELIMITER, REASON, tag, "scalings"));
+    }
+
+    private long getBalancedCounterValue(ScaleResult reason) {
+        return ((Counter) collectedMetrics.get(getBalancedCounterId(reason))).getCount();
+    }
+
+    private String getBalancedCounterId(ScaleResult reason) {
+        return metricGroup.getMetricIdentifier(
+                String.join(DELIMITER, REASON, reason.getTag(), "balanced"));
     }
 
     private static Map<ScalingMetric, EvaluatedScalingMetric> testMetrics() {

@@ -214,10 +214,11 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         if (!metricsEvaluator.evaluate(ctx)) {
             return;
         }
-        if (scalingExecutor.execute(ctx)) {
-            autoscalerMetrics.incrementScaling();
+        var scaleResult = scalingExecutor.execute(ctx);
+        if (scaleResult.isScaled()) {
+            autoscalerMetrics.incrementScaling(cycleState.getScaleReasons());
         } else {
-            autoscalerMetrics.incrementBalanced();
+            autoscalerMetrics.incrementBalanced(scaleResult);
         }
     }
 
