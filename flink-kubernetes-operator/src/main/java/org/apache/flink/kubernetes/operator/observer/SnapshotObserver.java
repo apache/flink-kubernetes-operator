@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
@@ -171,6 +172,17 @@ public class SnapshotObserver<
 
         // In case of periodic and manual savepoint, we still use lastSavepoint
         savepointInfo.updateLastSavepoint(savepoint);
+
+        // Restores prefer the upgrade savepoint over lastSavepoint, so it has to follow the newest
+        // savepoint, otherwise a restore rolls the job back to the state of the last upgrade.
+        // Without one restores already use lastSavepoint, and the last-state marker means the
+        // latest state is only available in the HA metadata.
+        var jobStatus = resource.getStatus().getJobStatus();
+        var upgradeSavepointPath = jobStatus.getUpgradeSavepointPath();
+        if (upgradeSavepointPath != null
+                && !AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH.equals(upgradeSavepointPath)) {
+            jobStatus.setUpgradeSavepointPath(savepoint.getLocation());
+        }
     }
 
     private void observeTriggeredCheckpoint(FlinkResourceContext<CR> ctx, String jobID) {
