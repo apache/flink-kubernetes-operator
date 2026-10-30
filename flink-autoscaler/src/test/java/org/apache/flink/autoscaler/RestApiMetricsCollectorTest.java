@@ -182,7 +182,8 @@ class RestApiMetricsCollectorTest {
                                                         "taskSlotsTotal",
                                                         FlinkMetric.NUM_TASK_SLOTS_TOTAL,
                                                         "taskSlotsAvailable",
-                                                        FlinkMetric.NUM_TASK_SLOTS_AVAILABLE));
+                                                        FlinkMetric.NUM_TASK_SLOTS_AVAILABLE),
+                                                Duration.ofSeconds(10));
                                 assertThat(flinkMetricMetricMap)
                                         .hasSize(2)
                                         .hasEntrySatisfying(

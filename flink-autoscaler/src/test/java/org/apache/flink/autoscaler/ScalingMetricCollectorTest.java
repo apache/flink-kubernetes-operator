@@ -45,6 +45,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -402,7 +403,11 @@ public class ScalingMetricCollectorTest {
                         new InMemoryAutoScalerStateStore<>()) {
                     @Override
                     protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
-                            RestClusterClient<?> rc, JobID id, JobVertexID jvi, JobTopology t) {
+                            RestClusterClient<?> rc,
+                            JobID id,
+                            JobVertexID jvi,
+                            JobTopology t,
+                            Duration timeout) {
                         metricNameQueryCounter.compute(jvi, (j, c) -> c + 1);
                         return Map.of();
                     }
@@ -467,7 +472,10 @@ public class ScalingMetricCollectorTest {
                         new InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>>()) {
                     @Override
                     protected Collection<String> queryAggregatedMetricNames(
-                            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
+                            RestClusterClient<?> restClient,
+                            JobID jobID,
+                            JobVertexID jobVertexID,
+                            Duration timeout) {
                         return metricList;
                     }
                 };
@@ -516,7 +524,8 @@ public class ScalingMetricCollectorTest {
 
         assertEquals(
                 Set.of("a", "b"),
-                testCollector.queryAggregatedMetricNames(client, new JobID(), new JobVertexID()));
+                testCollector.queryAggregatedMetricNames(
+                        client, new JobID(), new JobVertexID(), Duration.ofSeconds(10)));
     }
 
     private void testRequiredMetrics(
@@ -530,7 +539,8 @@ public class ScalingMetricCollectorTest {
             metricList.addAll(requiredMetrics);
             metricList.remove(m);
             try {
-                testCollector.getFilteredVertexMetricNames(null, new JobID(), vertex, topology);
+                testCollector.getFilteredVertexMetricNames(
+                        null, new JobID(), vertex, topology, Duration.ofSeconds(10));
                 fail(m);
             } catch (Exception e) {
                 assertTrue(e.getMessage().startsWith("Could not find required metric "));
@@ -567,6 +577,6 @@ public class ScalingMetricCollectorTest {
                 MetricNotFoundException.class,
                 () ->
                         metricCollector.getFilteredVertexMetricNames(
-                                null, new JobID(), source, topology));
+                                null, new JobID(), source, topology, Duration.ofSeconds(10)));
     }
 }
