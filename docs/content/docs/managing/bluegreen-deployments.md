@@ -135,7 +135,7 @@ Not every spec change causes a transition. The controller compares the desired t
 | `savepointRedeployNonce` changed                                                                                                                                                              | A full transition that restores the new deployment from `initialSavepointPath` instead of taking a new savepoint |
 | Any other template change                                                                                                                                                                     | A full blue/green transition                                                                                     |
 
-Changes that arrive while a transition is already running are applied to the incoming deployment, so the transition completes directly with the newest spec. The one exception is suspending: a `job.state: suspended` request during a transition is deferred until the transition completes, and the then-active deployment is suspended afterwards.
+Changes that arrive while a transition is already running are applied to the incoming deployment, so the transition completes directly with the newest spec. The incoming deployment then has to become stable again with the updated spec before the old one is retired, and any deletion delay already running is restarted. The one exception is suspending: a `job.state: suspended` request during a transition is deferred until the transition completes, and the then-active deployment is suspended afterwards.
 
 ## Kubernetes Resources
 
@@ -150,7 +150,7 @@ Traffic switching happens through the active ingress: when a transition complete
 
 ## Health Monitoring and Recovery
 
-A new deployment is considered successful when its job reports `RUNNING` and the child resource reaches the `STABLE` lifecycle state ([Status and Lifecycle]({{< ref "docs/custom-resource/status-and-lifecycle" >}})). During a transition the controller re-checks these conditions on the rescheduling interval, and the new deployment has the length of the abort grace period to meet them.
+A new deployment is considered successful when its job reports `RUNNING`, the child resource reaches the `STABLE` lifecycle state ([Status and Lifecycle]({{< ref "docs/custom-resource/status-and-lifecycle" >}})) and that status describes the current spec of the child (`status.observedGeneration` matches `metadata.generation`). During a transition the controller re-checks these conditions on the rescheduling interval, and the new deployment has the length of the abort grace period to meet them. If it stops meeting them while the old deployment is still kept by the deletion delay, the delay starts over once it is stable again.
 
 If the grace period expires first, the transition is aborted:
 
