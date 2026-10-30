@@ -27,6 +27,8 @@ import org.apache.flink.util.Preconditions;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsServer;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Assertions;
@@ -36,6 +38,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.BindException;
@@ -43,9 +50,12 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.file.Path;
+import java.security.KeyStore;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Test for {@link ArtifactManager}. */
 public class ArtifactManagerTest {
@@ -525,6 +535,99 @@ public class ArtifactManagerTest {
                                         jobConfig,
                                         tempDir.toString()));
         Assertions.assertTrue(ex.getMessage().contains("scheme 'http'"), ex.getMessage());
+    }
+
+    @Test
+    public void testHttpFetchPreservesOriginalHostnameWhenConnectingToPinnedAddress()
+            throws Exception {
+        // "localhost" reads differently from the address it resolves to, so a matching Host
+        // header proves the original hostname was sent despite the pinned connection.
+        HttpServer httpServer = null;
+        try {
+            httpServer = startHttpServer();
+            var port = httpServer.getAddress().getPort();
+            var sourceFile = mockTheJarFile();
+            var receivedHostHeader = new AtomicReference<String>();
+            httpServer.createContext(
+                    "/download/file.jar",
+                    exchange -> {
+                        receivedHostHeader.set(exchange.getRequestHeaders().getFirst("Host"));
+                        new DownloadFileHttpHandler(sourceFile).handle(exchange);
+                    });
+
+            var file =
+                    artifactManager.fetch(
+                            String.format("http://localhost:%d/download/file.jar", port),
+                            new Configuration(),
+                            tempDir.toString());
+            Assertions.assertTrue(file.exists());
+            Assertions.assertEquals("localhost:" + port, receivedHostHeader.get());
+        } finally {
+            if (httpServer != null) {
+                httpServer.stop(0);
+            }
+        }
+    }
+
+    @Test
+    public void testHttpsFetchPinsAddressAndPreservesHostnameForTls() throws Exception {
+        // The test cert's SAN is "localhost", so this only passes if SNI/cert verification use
+        // "localhost", not the pinned IP the socket actually connects to.
+        var httpsManager = artifactManagerWithPolicy(List.of("https"), false);
+        var keyStore = loadTestKeyStore();
+        // Self-signed, so it's also the client's trust anchor; restore the JVM default after.
+        var originalDefaultFactory = HttpsURLConnection.getDefaultSSLSocketFactory();
+        HttpsServer httpsServer = null;
+        try {
+            var serverSslContext = sslContext(keyStore, true);
+            httpsServer = HttpsServer.create(new InetSocketAddress(0), 0);
+            httpsServer.setHttpsConfigurator(new HttpsConfigurator(serverSslContext));
+            var port = httpsServer.getAddress().getPort();
+            var sourceFile = mockTheJarFile();
+            httpsServer.createContext(
+                    "/download/file.jar", new DownloadFileHttpHandler(sourceFile));
+            httpsServer.start();
+
+            HttpsURLConnection.setDefaultSSLSocketFactory(
+                    sslContext(keyStore, false).getSocketFactory());
+            var file =
+                    httpsManager.fetch(
+                            String.format("https://localhost:%d/download/file.jar", port),
+                            new Configuration(),
+                            tempDir.toString());
+            Assertions.assertTrue(file.exists());
+            Assertions.assertEquals(sourceFile.length(), file.length());
+        } finally {
+            HttpsURLConnection.setDefaultSSLSocketFactory(originalDefaultFactory);
+            if (httpsServer != null) {
+                httpsServer.stop(0);
+            }
+        }
+    }
+
+    private static KeyStore loadTestKeyStore() throws Exception {
+        var keyStore = KeyStore.getInstance("PKCS12");
+        try (var in =
+                ArtifactManagerTest.class.getResourceAsStream("/artifact-fetch-pin-test.p12")) {
+            keyStore.load(in, "changeit".toCharArray());
+        }
+        return keyStore;
+    }
+
+    private static SSLContext sslContext(KeyStore keyStore, boolean forServer) throws Exception {
+        var sslContext = SSLContext.getInstance("TLS");
+        if (forServer) {
+            var keyManagerFactory =
+                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            keyManagerFactory.init(keyStore, "changeit".toCharArray());
+            sslContext.init(keyManagerFactory.getKeyManagers(), null, new SecureRandom());
+        } else {
+            var trustManagerFactory =
+                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            trustManagerFactory.init(keyStore);
+            sslContext.init(null, trustManagerFactory.getTrustManagers(), new SecureRandom());
+        }
+        return sslContext;
     }
 
     private HttpServer startHttpServer() throws IOException {
