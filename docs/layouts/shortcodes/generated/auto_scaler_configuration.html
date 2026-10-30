@@ -108,7 +108,7 @@
             <td><h5>job.autoscaler.metrics.custom-evaluators</h5></td>
             <td style="word-wrap: break-word;"></td>
             <td>List&lt;String&gt;</td>
-            <td>List of named custom metric evaluator instances to register with the autoscaler. For each &lt;name&gt; entry, the implementation class to instantiate must be set via 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.class', and additional per-instance options live under 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.&lt;option&gt;'. Only a single instance is honored for now: if more than one is configured, the autoscaler logs a warning and uses the first entry, ignoring the rest. Multi-instance support, including a priority/ordering contract, will be added as a follow-up.</td>
+            <td>List of named custom metric evaluator instances to register with the autoscaler. For each &lt;name&gt; entry, the implementation class to instantiate must be set via 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.class', and additional per-instance options live under 'job.autoscaler.metrics.custom-evaluator.&lt;name&gt;.&lt;option&gt;'. All configured instances are composed into an ordered chain by ascending ScalingMetricsEvaluatorPlugin.priority() (lower runs first). Each evaluator is applied on top of the metrics already overridden by the earlier ones.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.metrics.window</h5></td>
