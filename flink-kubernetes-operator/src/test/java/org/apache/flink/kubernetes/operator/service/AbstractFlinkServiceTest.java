@@ -139,6 +139,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1277,6 +1278,16 @@ public class AbstractFlinkServiceTest {
         clusterInfo = flinkService.getClusterInfo(conf, JobID.generate().toHexString());
         assertEquals(1, clusterInfo.getTaskManagerReplicas());
         assertEquals(expectedEntries, clusterInfo.getInfo());
+
+        // Any other checkpoint statistics failure still fails the cluster info
+        checkpointingStatisticsResponse.set(
+                CompletableFuture.failedFuture(
+                        new RestClientException(
+                                "Internal server error",
+                                HttpResponseStatus.INTERNAL_SERVER_ERROR)));
+        assertThrows(
+                ExecutionException.class,
+                () -> flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
     }
 
     @Test

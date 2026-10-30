@@ -864,8 +864,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             TimeUnit.SECONDS);
                 } catch (ExecutionException e) {
                     if (isCheckpointingDisabled(e)) {
-                        LOG.debug(
-                                "Checkpointing not enabled for job {}, skipping state size", jobId);
                         return;
                     }
                     throw e;
