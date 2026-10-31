@@ -73,6 +73,18 @@ public class ArtifactManagerTest {
         return new ArtifactManager(new FlinkConfigManager(configuration));
     }
 
+    private ArtifactManager artifactManagerWithAllowedUriPrefixes(List<String> allowedUriPrefixes) {
+        Configuration configuration = new Configuration();
+        configuration.setString(
+                KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
+                tempDir.toAbsolutePath().toString());
+        configuration.set(KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES, List.of("http"));
+        configuration.set(KubernetesOperatorConfigOptions.JAR_URI_DISALLOW_RESTRICTED_HOSTS, true);
+        configuration.set(
+                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_URI_PREFIXES, allowedUriPrefixes);
+        return new ArtifactManager(new FlinkConfigManager(configuration));
+    }
+
     private ArtifactManager artifactManagerWithFetchLimits(
             Duration totalTimeout, long maxArtifactSizeBytes) {
         Configuration configuration = new Configuration();
@@ -503,6 +515,40 @@ public class ArtifactManagerTest {
                                         jobConfig,
                                         tempDir.toString()));
         Assertions.assertTrue(ex.getMessage().contains("restricted address"), ex.getMessage());
+    }
+
+    @Test
+    public void testAllowedUriPrefixExemptsMatchingHostFromRestrictedHostPolicy() throws Exception {
+        HttpServer httpServer = null;
+        try {
+            httpServer = startHttpServer();
+            var port = httpServer.getAddress().getPort();
+            var sourceFile = mockTheJarFile();
+            httpServer.createContext("/download/file.jar", new DownloadFileHttpHandler(sourceFile));
+            var prefix = String.format("http://127.0.0.1:%d/download/", port);
+
+            var exemptManager = artifactManagerWithAllowedUriPrefixes(List.of(prefix));
+            var fetched =
+                    exemptManager.fetch(
+                            prefix + "file.jar", new Configuration(), tempDir.toString());
+            Assertions.assertTrue(fetched.exists());
+
+            // A host not covered by the allowlist is still rejected.
+            var strictManager = artifactManagerWithAllowedUriPrefixes(List.of());
+            var ex =
+                    Assertions.assertThrows(
+                            IOException.class,
+                            () ->
+                                    strictManager.fetch(
+                                            prefix + "file.jar",
+                                            new Configuration(),
+                                            tempDir.toString()));
+            Assertions.assertTrue(ex.getMessage().contains("restricted address"), ex.getMessage());
+        } finally {
+            if (httpServer != null) {
+                httpServer.stop(0);
+            }
+        }
     }
 
     @Test
