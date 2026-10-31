@@ -116,7 +116,7 @@ With `FlinkStateSnapshot` resources enabled, the savepoint taken when suspending
 
 The three upgrade modes are intended to support different scenarios:
 
-1. **stateless**: Stateless application upgrades from empty state.
+1. **stateless**: Stateless application upgrades from empty state. The mode only governs upgrades. With HA enabled, [recovering a missing deployment](#recovering-missing-deployments) or [restarting an unhealthy one](#restarting-unhealthy-deployments) represents a failover rather than an upgrade and restores from the latest checkpoint while the HA metadata holds one. A failover starts from an empty state only once that metadata is gone, whereas an upgrade always starts from an empty state.
 2. **last-state**: Quick upgrades in any application state (even for failing jobs), does not require a healthy job as it always uses the latest checkpoint information. Manual recovery may be necessary if HA metadata is lost. The time the job may fall back when picking up the latest checkpoint can be limited with `kubernetes.operator.job.upgrade.last-state.max.allowed.checkpoint.age`: if the checkpoint is older than the configured value, a savepoint is taken instead for healthy jobs.
 3. **savepoint**: Use savepoint for upgrade, providing maximal safety and the possibility to serve as a backup or fork point. The savepoint is created during the upgrade process. Note that the Flink job needs to be running to allow the savepoint to be created. If the job is in an unhealthy state, the last checkpoint is used instead (unless `kubernetes.operator.job.upgrade.last-state-fallback.enabled` is set to `false`). If the last checkpoint is not available, the job upgrade fails.
 
@@ -193,13 +193,13 @@ Beyond upgrades, the operator can also repair a job on its own. Each of the foll
 
 ### Recovering Missing Deployments
 
-The operator recovers Flink cluster deployments that were deleted by accident or by an external process. In application mode this requires HA, the job state is restored from the HA metadata, while a session cluster is simply recreated. The behavior is controlled with `kubernetes.operator.jm-deployment-recovery.enabled`, and keeping the default `true` is recommended.
+The operator recovers Flink cluster deployments that were deleted by accident or by an external process. In application mode the job state is restored from the HA metadata, so HA is required unless the job uses the `stateless` upgrade mode, which is redeployed from empty state when no HA metadata is available. A session cluster is simply recreated. The behavior is controlled with `kubernetes.operator.jm-deployment-recovery.enabled`, and keeping the default `true` is recommended.
 
 A missing deployment is not something that happens during normal operation and can indicate a deeper problem, so the operator also raises an Error event when it detects one. If a deployment cannot be recovered safely, see [Manual Recovery](#manual-recovery).
 
 ### Restarting Unhealthy Deployments
 
-When HA is enabled, the operator can also restart deployments it considers unhealthy. The feature is turned on with `kubernetes.operator.cluster.health-check.enabled` (default `false`) and requires [recovering missing deployments](#recovering-missing-deployments) to be enabled.
+The operator can also restart deployments it considers unhealthy. The restarted job is restored from the HA metadata, so HA is required unless the job uses the `stateless` upgrade mode, which is redeployed from empty state when no HA metadata is available. The feature is turned on with `kubernetes.operator.cluster.health-check.enabled` (default `false`) and requires [recovering missing deployments](#recovering-missing-deployments) to be enabled.
 
 A deployment is considered unhealthy when:
 
@@ -306,7 +306,7 @@ Every operation on this page is accompanied by Kubernetes events on the resource
 
 ### Self-Healing
 
-- Restarting unhealthy deployments exists only for application-mode `FlinkDeployment` resources and requires HA. Recovering missing deployments exists for both `FlinkDeployment` modes, and requires HA only in application mode, where the job state is restored through the HA metadata.
+- Restarting unhealthy deployments exists only for application-mode `FlinkDeployment` resources, recovering missing deployments for both `FlinkDeployment` modes. In application mode both restore the job state through the HA metadata and therefore require HA, except for jobs in the `stateless` upgrade mode, which are redeployed from empty state when no HA metadata is available.
 
 ### Rollbacks
 

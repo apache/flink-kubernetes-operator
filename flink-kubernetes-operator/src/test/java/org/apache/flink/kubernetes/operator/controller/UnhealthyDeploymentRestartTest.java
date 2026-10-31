@@ -34,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 
@@ -46,6 +47,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator.getLastValidClusterHealthInfo;
 import static org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator.setLastValidClusterHealthInfo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * @link Unhealthy deployment restart tests
@@ -235,5 +237,48 @@ public class UnhealthyDeploymentRestartTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void verifyStatelessUnhealthyRestartWithHa(boolean haDataAvailable) throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+
+        // 3 reconciliations to get ready (MISSING -> DEPLOYING -> DEPLOYED_NOT_READY -> READY)
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+        var jobId = appCluster.getStatus().getJobStatus().getJobId();
+
+        // Make deployment unhealthy, with or without the HA metadata
+        flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "100");
+        flinkService.setHaDataAvailable(haDataAvailable);
+
+        // 1 reconciliation to get deploying (READY -> DEPLOYING)
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        if (haDataAvailable) {
+            assertEquals(jobId, appCluster.getStatus().getJobStatus().getJobId());
+        } else {
+            assertNotEquals(jobId, appCluster.getStatus().getJobStatus().getJobId());
+        }
+
+        // Healing condition
+        flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "0");
+
+        // 2 reconciliations to get ready (DEPLOYING -> DEPLOYED_NOT_READY -> READY)
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
     }
 }
