@@ -33,9 +33,11 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -209,5 +211,50 @@ public class DeploymentRecoveryTest {
                     JobManagerDeploymentStatus.MISSING,
                     appCluster.getStatus().getJobManagerDeploymentStatus());
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void verifyStatelessApplicationJmRecoveryWithHa(boolean haDataAvailable)
+            throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+
+        // 3 reconciliations to get ready (MISSING -> DEPLOYING -> DEPLOYED_NOT_READY -> READY)
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
+        var jobId = appCluster.getStatus().getJobStatus().getJobId();
+
+        // Remove deployment, with or without the HA metadata
+        flinkService.setPortReady(false);
+        flinkService.clear();
+        flinkService.setHaDataAvailable(haDataAvailable);
+
+        // 1 reconciliation to get deploying (READY -> DEPLOYING)
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        if (haDataAvailable) {
+            assertEquals(jobId, appCluster.getStatus().getJobStatus().getJobId());
+        } else {
+            assertNotEquals(jobId, appCluster.getStatus().getJobStatus().getJobId());
+        }
+
+        // Healing condition
+        flinkService.setPortReady(true);
+
+        // 2 reconciliations to get ready (DEPLOYING -> DEPLOYED_NOT_READY -> READY)
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(RUNNING, appCluster.getStatus().getJobStatus().getState());
     }
 }
