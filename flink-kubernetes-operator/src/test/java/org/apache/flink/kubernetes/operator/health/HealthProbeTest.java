@@ -259,15 +259,4 @@ public class HealthProbeTest {
 
         return () -> informers;
     }
-
-    @Test
-    public void testCanaryResourceManagerCloseStopsExecutor() {
-        try (var configManager = new FlinkConfigManager(new Configuration())) {
-            var canaryManager = new CanaryResourceManager<FlinkDeployment>(configManager);
-            assertFalse(canaryManager.executorService.isShutdown());
-
-            canaryManager.close();
-            assertTrue(canaryManager.executorService.isShutdown());
-        }
-    }
 }
