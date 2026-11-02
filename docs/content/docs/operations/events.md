@@ -68,7 +68,7 @@ These events are emitted by the core reconcile and observe loops that manage Fli
 | `Rollback`    | Normal | JobManagerDeployment | A failed upgrade is being rolled back to the previous stable spec (`Rolling back failed deployment.`). Triggered automatically when [rollback]({{< ref "docs/managing/job-management#rollbacks" >}}) is enabled.       |
 | `Scaling`     | Normal | Job                  | In-place parallelism change applied to a running job via the Flink rescale API, without restart (`In-place scaling triggered`).                                                                                        |
 | `Cleanup`     | Normal | Operator             | The resource is being deleted (`Cleaning up FlinkDeployment` or `Cleaning up FlinkSessionJob`). The operator is tearing down associated Kubernetes objects and Flink state.                                            |
-| `ForceDeleted` | Warning | JobManagerDeployment | Cluster resource cleanup (suspend or deletion) timed out waiting TM/JM pod deletion. The operator force deleted those pods (grace period 0) and keeps waiting for the rest of the timeout. |
+| `ForceDeleted` | Warning | Operator | Cluster resource cleanup (suspend or deletion) timed out waiting TM/JM pod deletion. The operator force deleted those pods (grace period 0) and keeps waiting for the rest of the timeout. |
 
 ### Job Status
 

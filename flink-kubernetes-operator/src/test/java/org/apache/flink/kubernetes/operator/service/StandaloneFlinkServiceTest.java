@@ -421,6 +421,7 @@ public class StandaloneFlinkServiceTest {
                         .collect(Collectors.toList());
         assertEquals(1, events.size());
         assertEquals(jmDeploymentName, events.get(0).getInvolvedObject().getName());
+        assertEquals("Operator", events.get(0).getSource().getComponent());
     }
 
     class TestingStandaloneFlinkService extends StandaloneFlinkService {

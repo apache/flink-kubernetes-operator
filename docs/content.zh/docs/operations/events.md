@@ -63,18 +63,19 @@ These events are emitted by the core reconcile and observe loops that manage Fli
 | Reason        | Type   | Component            | Description                                                                                                                                                                                                            |
 |---------------|--------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Submit`      | Normal | JobManagerDeployment | A `FlinkDeployment` or `FlinkSessionJob` is being submitted to the cluster (`Starting deployment`). Emitted once per deployment attempt.                                                                               |
-| `SpecChanged` | Normal | JobManagerDeployment | The reconciler detected a difference between the desired and last reconciled spec. See [message formats](#operator-message-formats). **Dedup:** by resource generation, so each generation produces exactly one event. |
+| `SpecChanged` | Normal | JobManagerDeployment | The reconciler detected a difference between the desired and last reconciled spec. **Dedup:** by resource generation, so each generation produces exactly one event. |
 | `Suspended`   | Normal | JobManagerDeployment | The existing deployment is being suspended before an upgrade or spec-driven redeploy (`Suspending existing deployment.`).                                                                                              |
 | `Rollback`    | Normal | JobManagerDeployment | A failed upgrade is being rolled back to the previous stable spec (`Rolling back failed deployment.`). Triggered automatically when [rollback]({{< ref "docs/managing/job-management#rollbacks" >}}) is enabled.       |
 | `Scaling`     | Normal | Job                  | In-place parallelism change applied to a running job via the Flink rescale API, without restart (`In-place scaling triggered`).                                                                                        |
 | `Cleanup`     | Normal | Operator             | The resource is being deleted (`Cleaning up FlinkDeployment` or `Cleaning up FlinkSessionJob`). The operator is tearing down associated Kubernetes objects and Flink state.                                            |
+| `ForceDeleted` | Warning | Operator | Cluster resource cleanup (suspend or deletion) timed out waiting TM/JM pod deletion. The operator force deleted those pods (grace period 0) and keeps waiting for the rest of the timeout. |
 
 ### Job Status
 
 | Reason                | Type    | Component                 | Description                                                                                                                                                                                                                                                                                  |
 |-----------------------|---------|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `JobStatusChanged`    | Normal  | Job                       | The Flink job transitioned to a new state (e.g. `RUNNING`, `FINISHED`, `FAILED`, `CANCELED`). See [message formats](#operator-message-formats).                                                                                                                                              |
-| `JobException`        | Warning | Job                       | The job manager reported an exception (root cause or vertex-level). Annotations record the task name, task manager id and exception timestamp. See [message formats](#operator-message-formats). **Dedup:** by a hash of the formatted message (`messageKey = jobmanager-exception-<hash>`). |
+| `JobStatusChanged`    | Normal  | Job                       | The Flink job transitioned to a new state (e.g. `RUNNING`, `FINISHED`, `FAILED`, `CANCELED`).                                                                                                                                              |
+| `JobException`        | Warning | Job                       | The job manager reported an exception (root cause or vertex-level). Annotations record the task name, task manager id and exception timestamp. **Dedup:** by a hash of the formatted message (`messageKey = jobmanager-exception-<hash>`). |
 | `Missing`             | Warning | Job, JobManagerDeployment | The job (`Job Not Found`) or the JobManager deployment (`Missing JobManager deployment`) expected to exist on the cluster could not be found. May indicate a lost JobManager pod or a failed submission.                                                                                     |
 | `RecoverDeployment`   | Warning | Job                       | The operator detected that the JobManager deployment was lost and is attempting to recover it from the last reconciled state (`Recovering lost deployment`).                                                                                                                                 |
 | `RestartUnhealthyJob` | Warning | Job                       | The cluster health check failed (e.g. restart-count threshold exceeded) and the operator is restarting the job. The message is the error returned by the [health check]({{< ref "docs/operations/health" >}}), or `Restarting unhealthy job` as a fallback.                                  |
@@ -84,9 +85,9 @@ These events are emitted by the core reconcile and observe loops that manage Fli
 
 | Reason              | Type    | Component          | Description                                                                                                                                                                                                                                                                                                                                                 |
 |---------------------|---------|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SavepointError`    | Warning | Operator, Snapshot | A triggered savepoint failed. The message is a fixed phrase indicating periodic vs. nonce-triggered failure; the Flink-returned root cause is recorded in `status.error`, not in the event message. Emitted by the periodic savepoint trigger, the upgrade path, and the `FlinkStateSnapshot` controller. See [message formats](#operator-message-formats). |
-| `CheckpointError`   | Warning | Operator, Snapshot | A triggered checkpoint failed. Same shape as `SavepointError`: the message is the templated phrase, the root cause lives in `status.error`. Emitted by the periodic checkpoint trigger and the `FlinkStateSnapshot` controller. See [message formats](#operator-message-formats).                                                                           |
-| `SnapshotAbandoned` | Warning | Snapshot           | A `FlinkStateSnapshot` was abandoned because its referenced `FlinkDeployment`/`FlinkSessionJob` is no longer reconcilable (deleted or not running). See [message formats](#operator-message-formats).                                                                                                                                                       |
+| `SavepointError`    | Warning | Operator, Snapshot | A triggered savepoint failed. The message is a fixed phrase indicating periodic vs. nonce-triggered failure; the Flink-returned root cause is recorded in `status.error`, not in the event message. Emitted by the periodic savepoint trigger, the upgrade path, and the `FlinkStateSnapshot` controller. |
+| `CheckpointError`   | Warning | Operator, Snapshot | A triggered checkpoint failed. Same shape as `SavepointError`: the message is the templated phrase, the root cause lives in `status.error`. Emitted by the periodic checkpoint trigger and the `FlinkStateSnapshot` controller.                                                                           |
+| `SnapshotAbandoned` | Warning | Snapshot           | A `FlinkStateSnapshot` was abandoned because its referenced `FlinkDeployment`/`FlinkSessionJob` is no longer reconcilable (deleted or not running).                                                                                                                                                       |
 
 ### Validation and Configuration
 
@@ -95,100 +96,7 @@ These events are emitted by the core reconcile and observe loops that manage Fli
 | `ValidationError`         | Warning | Operator, Snapshot | The submitted spec failed one of the registered validators (e.g. invalid `upgradeMode`, conflicting fields, malformed `FlinkStateSnapshot`). The message is the validator-specific error string. Reconciliation is skipped until the spec is fixed.                      |
 | `UnsupportedFlinkVersion` | Warning | Operator           | The `spec.flinkVersion` is not supported by this operator release (`Flink version <version> is not supported by this operator version`). See [Compatibility Guarantees]({{< ref "docs/deployment/compatibility" >}}).                                                    |
 | `IngressManagement`       | Warning | Operator           | The resource defines `spec.ingress` but ingress management is disabled in the operator (`kubernetes.operator.ingress.manage`). The ingress section is ignored (`Ingress management is turned off but ingress set in spec`).                                              |
-| `CleanupFailed`           | Warning | Operator, Snapshot | Resource cleanup could not complete. Common causes: a session `FlinkDeployment` still has child `FlinkSessionJob` or non-terminated jobs, a job cancellation timed out, or a savepoint required during cleanup failed. See [message formats](#operator-message-formats). |
-
-### Operator Message Formats
-
-For events whose message follows a structured template, the verbatim formats are listed below.
-
-#### SpecChanged
-
-```
-<DiffType> change(s) detected (<diff>), starting reconciliation.
-```
-Where `<DiffType>` is one of `UPGRADE`, `SCALE`, `SAVEPOINT_REDEPLOY`.
-
-#### JobStatusChanged
-
-```
-Job status changed from <old> to <new>
-```
-On the first observation (no previous state), the operator instead emits:
-
-```
-Job status changed to <state>
-```
-
-#### JobException
-
-```
-<root exception class>: <message>
-<first N lines of the stack trace>
-... (<N> more lines)
-```
-The number of stack-trace lines included is controlled by the operator configuration; the trailing `... (<N> more lines)` suffix is only present when the trace was truncated.
-
-#### SavepointError
-
-One of (depending on the trigger type that initiated the savepoint):
-
-```
-Periodic savepoint failed
-```
-
-```
-Savepoint failed for savepointTriggerNonce: <nonce>
-```
-
-The root cause returned by Flink is stored in `status.error`, not in the event message.
-
-#### CheckpointError
-
-One of (depending on the trigger type that initiated the checkpoint):
-
-```
-Periodic checkpoint failed
-```
-
-```
-Checkpoint failed for checkpointTriggerNonce: <nonce>
-```
-
-The root cause returned by Flink is stored in `status.error`, not in the event message.
-
-#### SnapshotAbandoned
-
-One of (depending on why the snapshot's secondary resource is no longer reconcilable):
-
-```
-Secondary resource <jobReference> for savepoint <snapshotName> was not found
-```
-
-```
-Secondary resource <jobReference> for savepoint <snapshotName> is not running
-```
-
-Note: the literal word `savepoint` is used in both templates even when the snapshot is a checkpoint.
-
-#### CleanupFailed
-
-For a session `FlinkDeployment` whose child resources are still present:
-
-```
-The session jobs [<sessionJobName1>, <sessionJobName2>, ...] should be deleted first
-```
-
-For a session cluster with non-terminated unmanaged jobs (when `kubernetes.operator.session.block-on-unmanaged-jobs` is enabled):
-
-```
-The session cluster has non terminated jobs [<jobId1>, <jobId2>, ...] that should be cancelled first
-```
-
-For a `FlinkStateSnapshot` whose cleanup throws:
-
-```
-<exception message>
-```
+| `CleanupFailed`           | Warning | Operator, Snapshot | Resource cleanup could not complete. Common causes: a session `FlinkDeployment` still has child `FlinkSessionJob` or non-terminated jobs, a job cancellation timed out, or a savepoint required during cleanup failed. |
 
 ## Autoscaler Events
 
@@ -196,64 +104,12 @@ These events are emitted by the [Autoscaler]({{< ref "docs/managing/autoscaler" 
 
 | Reason                 | Type    | Component | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 |------------------------|---------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ScalingReport`        | Normal  | Operator  | The autoscaler produced a parallelism recommendation. The message is built from a header indicating whether scaling execution is enabled or disabled, followed by one summary entry per vertex. See [message formats](#autoscaler-message-formats). **Dedup:** interval + hash of the recommended parallelism (a new event is emitted only when the recommendation changes).                                                                                                                                                  |
+| `ScalingReport`        | Normal  | Operator  | The autoscaler produced a parallelism recommendation. The message is built from a header indicating whether scaling execution is enabled or disabled, followed by one summary entry per vertex. **Dedup:** interval + hash of the recommended parallelism (a new event is emitted only when the recommendation changes).                                                                                                                                                  |
 | `IneffectiveScaling`   | Normal  | Operator  | A previous scaling action did not produce the expected throughput increase (actual increase below [`job.autoscaler.scaling.effectiveness.threshold`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}})). When [`job.autoscaler.scaling.effectiveness.detection.enabled`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}}) is `true` the autoscaler blocks further scale-ups on that vertex. **Dedup:** interval + per-vertex `messageKey` (`ineffective<vertex><expectedIncrease>`). |
 | `ScalingLimited`       | Warning | Operator  | The recommended parallelism for a vertex could not be applied as-is because of key-group and partition alignment constraints, the configured `parallelismUpperLimit`, or the source partition count, and the autoscaler fell back to the closest aligned value. Emitted only by the deprecated legacy alignment modes (`scaling.key-group.partitions.adjust.mode`); the current [alignment modes]({{< ref "docs/managing/autoscaler#parallelism-alignment" >}}) never block. **Dedup:** interval + per-vertex `messageKey` (`ScalingLimited<vertex><newParallelism>`).                                                                                                                                                                          |
 | `MemoryPressure`       | Normal  | Operator  | The job is under memory pressure. Emitted when GC pressure exceeds [`job.autoscaler.memory.gc-pressure.threshold`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}}) or heap usage exceeds [`job.autoscaler.memory.heap-usage.threshold`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}}). Scaling is paused entirely while this condition holds. **Dedup:** interval, with `messageKey` distinguishing `gcPressure` from `heapUsage`.                                                |
 | `ResourceQuotaReached` | Warning | Operator  | The recommended scaling action would push the cluster beyond the configured resource quota ([`job.autoscaler.quota.cpu`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}}), [`job.autoscaler.quota.memory`]({{< ref "docs/deployment/configuration#autoscaler-configuration" >}})). The action is rejected. **Dedup:** by interval only.                                                                                                                                                |
 | `AutoscalerError`      | Warning | Operator  | The autoscaler failed with an unexpected exception during a scaling evaluation. The message is the exception text, or an abbreviated stack trace (max 2048 chars) when no message is available. **Dedup:** none.                                                                                                                                                                                                                                                                                                              |
-
-### Autoscaler Message Formats
-
-#### ScalingReport
-
-The header depends on whether scaling execution is enabled, gated by config, or gated by an excluded period. One of:
-
-```
-Scaling execution enabled, begin scaling vertices: <entry1>, <entry2>, ...
-```
-
-```
-Scaling execution disabled by config job.autoscaler.scaling.enabled:false, recommended parallelism change: <entry1>, <entry2>, ...
-```
-
-```
-Scaling execution disabled by config job.autoscaler.excluded.periods:<periods>, recommended parallelism change: <entry1>, <entry2>, ...
-```
-
-The header is followed by one entry per vertex:
-
-```
-{ Vertex ID <id> | Parallelism <old> -> <new> | Processing capacity <old> -> <new> | Target data rate <rate> }
-```
-
-#### IneffectiveScaling
-
-```
-Ineffective scaling detected for <vertex> (expected increase: <X>, actual increase <Y>). Blocking of ineffective scaling decisions is <enabled|disabled>
-```
-
-#### ScalingLimited
-
-```
-Scaling limited detected for <vertex> (expected parallelism: <X>, actual parallelism <Y>). Scaling limited due to numKeyGroupsOrPartitions : <N>，upperBoundForAlignment(maxParallelism or parallelismUpperLimit): <U>, parallelismLowerLimit: <L>.
-```
-
-#### MemoryPressure
-
-```
-GC Pressure <value> is above the allowed limit for scaling operations. Please adjust the available memory manually.
-```
-
-```
-Heap Usage <value> is above the allowed limit for scaling operations. Please adjust the available memory manually.
-```
-
-#### ResourceQuotaReached
-
-```
-Resource usage is above the allowed limit for scaling operations. Please adjust the resource quota manually.
-```
 
 ## Autotuning Events
 
@@ -262,15 +118,6 @@ Resource usage is above the allowed limit for scaling operations. Please adjust 
 | Reason                         | Type   | Component | Description                                                                                                                                                                                                                                                                                                                                                                                              |
 |--------------------------------|--------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Configuration recommendation` | Normal | Operator  | Memory tuning produced a new TaskManager memory configuration. The message lists the recommended values for managed memory, network memory, JVM overhead and metaspace, and indicates whether the recommendation is auto-applied. **Dedup:** `messageKey` `MemoryTuning`, on the `job.autoscaler.scaling.event.interval` window. |
-
-### Autotuning Message Format
-
-#### Configuration recommendation
-
-```
-Memory tuning recommends the following configuration (automatic tuning is <enabled|disabled>):
-<formatted_config>
-```
 
 ## Event Reporters
 

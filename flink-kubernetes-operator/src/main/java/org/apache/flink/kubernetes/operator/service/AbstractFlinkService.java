@@ -1272,7 +1272,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             "Force deleted %d pod(s) that did not terminate in time "
                                     + "(likely their node became unreachable), blocking cluster resource cleanup.",
                             stuckPods.size()),
-                    EventRecorder.Component.JobManagerDeployment,
+                    EventRecorder.Component.Operator,
                     event -> {},
                     FORCE_DELETED_EVENT_KEY,
                     null);

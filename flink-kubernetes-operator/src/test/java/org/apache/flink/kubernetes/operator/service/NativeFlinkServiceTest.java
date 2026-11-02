@@ -338,6 +338,7 @@ public class NativeFlinkServiceTest {
         assertTrue(Duration.between(start, Instant.now()).toMillis() >= 2000);
         assertTrue(Duration.between(start, Instant.now()).toSeconds() < 4);
         assertEquals(1, forceDeletedEvents().size());
+        assertEquals("Operator", forceDeletedEvents().get(0).getSource().getComponent());
     }
 
     @Test
