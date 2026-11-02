@@ -677,6 +677,11 @@ public class FlinkBlueGreenDeploymentControllerTest {
                 JobState.RUNNING,
                 getFlinkDeployments().get(0).getSpec().getJob().getState(),
                 "Blue must be running once ACTIVE_BLUE is established");
+        var stableSpec = rs.reconciledStatus.getLastStableSpec();
+        assertEquals(
+                rs.reconciledStatus.getLastReconciledSpec(),
+                stableSpec,
+                "the finalized Blue spec must be marked stable");
 
         // 2) Spec change -> savepoint Blue (sets savepointTriggerId) -> start the (first)
         //    transition to Green.
@@ -760,6 +765,15 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertNull(
                 rs.reconciledStatus.getSavepointTriggerId(),
                 "savepointTriggerId must be cleared on abort");
+        assertEquals(
+                stableSpec,
+                rs.reconciledStatus.getLastStableSpec(),
+                "lastStableSpec must still name the spec Blue is running after the abort");
+        assertEquals(
+                SpecUtils.writeSpecAsJSON(rs.deployment.getSpec(), "spec"),
+                rs.reconciledStatus.getLastReconciledSpec(),
+                "lastReconciledSpec keeps the attempted spec so the abort is not retried");
+        assertNotEquals(stableSpec, rs.reconciledStatus.getLastReconciledSpec());
 
         // 5) Redeploy: another spec change -> savepoint Blue again -> transition to Green again.
         simulateChangeInSpec(rs.deployment, UUID.randomUUID().toString(), 0, null);
@@ -1501,6 +1515,9 @@ public class FlinkBlueGreenDeploymentControllerTest {
         assertEquals(
                 SpecUtils.writeSpecAsJSON(rs.deployment.getSpec(), "spec"),
                 rs.reconciledStatus.getLastReconciledSpec());
+        assertEquals(
+                rs.reconciledStatus.getLastReconciledSpec(),
+                rs.reconciledStatus.getLastStableSpec());
         assertEquals(expectedBGDeploymentState, rs.reconciledStatus.getBlueGreenState());
         assertEquals(JobStatus.RUNNING, rs.reconciledStatus.getJobStatus().getState());
         assertEquals(0, instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()));
