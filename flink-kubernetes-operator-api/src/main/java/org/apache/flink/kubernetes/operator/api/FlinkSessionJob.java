@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import io.fabric8.crd.generator.annotation.AdditionalPrinterColumn;
 import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
@@ -34,6 +35,10 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Group(CrdConstants.API_GROUP)
 @Version(CrdConstants.API_VERSION)
 @ShortNames({"sessionjob"})
+@AdditionalPrinterColumn(
+        name = "Age",
+        jsonPath = ".metadata.creationTimestamp",
+        type = AdditionalPrinterColumn.Type.DATE)
 public class FlinkSessionJob
         extends AbstractFlinkResource<FlinkSessionJobSpec, FlinkSessionJobStatus> {
 
