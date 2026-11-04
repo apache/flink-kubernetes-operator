@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -68,6 +69,12 @@ public class FlinkStateSnapshotController
     @Override
     public UpdateControl<FlinkStateSnapshot> reconcile(
             FlinkStateSnapshot flinkStateSnapshot, Context<FlinkStateSnapshot> josdkContext) {
+        if (CanaryResourceManager.isCanaryResource(flinkStateSnapshot)) {
+            LOG.warn(
+                    "Canary resources must be FlinkDeployment resources, skipping the canary FlinkStateSnapshot");
+            return UpdateControl.noUpdate();
+        }
+
         // status might be null here
         flinkStateSnapshot.setStatus(
                 Objects.requireNonNullElseGet(
