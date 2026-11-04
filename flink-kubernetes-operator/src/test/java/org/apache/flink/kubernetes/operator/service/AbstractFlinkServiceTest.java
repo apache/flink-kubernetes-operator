@@ -139,6 +139,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1224,6 +1225,9 @@ public class AbstractFlinkServiceTest {
                                 null,
                                 null),
                         List.of());
+        var checkpointingStatisticsResponse =
+                new AtomicReference<CompletableFuture<ResponseBody>>(
+                        CompletableFuture.completedFuture(checkpointingStatistics));
 
         var flinkService =
                 getTestingService(
@@ -1233,7 +1237,7 @@ public class AbstractFlinkServiceTest {
                             } else if (h instanceof TaskManagersHeaders) {
                                 return CompletableFuture.completedFuture(tmsInfo);
                             } else if (h instanceof CheckpointingStatisticsHeaders) {
-                                return CompletableFuture.completedFuture(checkpointingStatistics);
+                                return checkpointingStatisticsResponse.get();
                             }
                             fail("unknown request");
                             return null;
@@ -1264,6 +1268,26 @@ public class AbstractFlinkServiceTest {
                         .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
                         .build(),
                 flinkService.getClusterInfo(conf, JobID.generate().toHexString()).getInfo());
+
+        // Jobs without checkpointing (e.g. batch jobs) have no checkpoint statistics
+        checkpointingStatisticsResponse.set(
+                CompletableFuture.failedFuture(
+                        new RestClientException(
+                                "[Checkpointing has not been enabled.]",
+                                HttpResponseStatus.NOT_FOUND)));
+        clusterInfo = flinkService.getClusterInfo(conf, JobID.generate().toHexString());
+        assertEquals(1, clusterInfo.getTaskManagerReplicas());
+        assertEquals(expectedEntries, clusterInfo.getInfo());
+
+        // Any other checkpoint statistics failure still fails the cluster info
+        checkpointingStatisticsResponse.set(
+                CompletableFuture.failedFuture(
+                        new RestClientException(
+                                "Internal server error",
+                                HttpResponseStatus.INTERNAL_SERVER_ERROR)));
+        assertThrows(
+                ExecutionException.class,
+                () -> flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
     }
 
     @Test
