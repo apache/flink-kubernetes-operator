@@ -76,6 +76,8 @@ If the CRD does not exist yet, the command fails, and `kubectl apply` should be 
 
 ### 3. Upgrading the Helm Deployment
 
+If the current installation uses the `webhook-server-cert` Secret, read the [webhook certificate upgrade note]({{< ref "docs/deployment/helm/cert-manager#upgrading-from-the-previous-secret-name" >}}) before running the Helm upgrade. Cert-manager must be running to create the renamed Secret.
+
 {{< hint warning >}}
 Before upgrading, diff the newly rendered manifests against the running ones, and keep a copy of the current manifests as a backup for rollback:
 {{< /hint >}}

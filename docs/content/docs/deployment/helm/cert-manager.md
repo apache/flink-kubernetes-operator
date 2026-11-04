@@ -44,6 +44,14 @@ With the webhooks enabled, the chart creates two cert-manager resources alongsid
 
 Cert-manager also closes the trust chain from the other side: its CA injector patches the certificate's CA bundle into the Mutating and Validating webhook configurations, through the `cert-manager.io/inject-ca-from` annotation, so the Kubernetes API server trusts the webhook it calls.
 
+## Upgrading from the Previous Secret Name
+
+{{< hint warning >}}
+When upgrading an installation that uses `webhook-server-cert`, the chart changes the webhook certificate Secret name to `flink-operator-webhook-server-cert`. Cert-manager must be running and able to issue certificates during this upgrade. The new operator pod cannot start until cert-manager creates the new Secret. With the default `Recreate` strategy, the operator is unavailable during this time, and the fail-closed webhooks reject `FlinkDeployment` and `FlinkSessionJob` create and update requests.
+{{< /hint >}}
+
+The old `webhook-server-cert` Secret remains after the upgrade. Once the new Secret exists and the operator and webhooks are ready, update any external references to the old name. You can then delete the old Secret if no other workload uses it.
+
 ## Disabling the Webhooks
 
 The webhooks can be disabled at installation time by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly, with `webhook.validator.create` and `webhook.mutator.create` overriding it per webhook. With all webhooks disabled, neither cert-manager nor any of the resources above are required.
