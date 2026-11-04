@@ -64,6 +64,7 @@ public class FlinkOperatorConfiguration {
     boolean kubernetesClientMetricsHttpResponseCodeGroupsEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
+    Duration cleanupFinalizerTimeout;
     String artifactsBaseDir;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
@@ -115,6 +116,11 @@ public class FlinkOperatorConfiguration {
         Duration flinkShutdownClusterTimeout =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT);
+
+        Duration cleanupFinalizerTimeout =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_RESOURCE_CLEANUP_FINALIZER_TIMEOUT);
 
         String artifactsBaseDir =
                 operatorConfig.get(
@@ -249,6 +255,7 @@ public class FlinkOperatorConfiguration {
                 kubernetesClientMetricsHttpResponseCodeGroupsEnabled,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
+                cleanupFinalizerTimeout,
                 artifactsBaseDir,
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,

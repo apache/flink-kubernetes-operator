@@ -58,6 +58,7 @@ import io.javaoperatorsdk.operator.api.reconciler.ResourceOperations;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
 import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
+import lombok.Setter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -203,6 +204,24 @@ public class TestUtils extends BaseTestUtils {
     public static <T extends HasMetadata> Context<T> createContextWithInProgressDeployment(
             KubernetesClient client) {
         return createContextWithDeployment(createDeployment(false), client);
+    }
+
+    public static <T extends HasMetadata> Context<T> withRetryInfo(
+            Context<T> context, int attemptCount, boolean lastAttempt) {
+        ((TestingContext<T>) context)
+                .setRetryInfo(
+                        new RetryInfo() {
+                            @Override
+                            public int getAttemptCount() {
+                                return attemptCount;
+                            }
+
+                            @Override
+                            public boolean isLastAttempt() {
+                                return lastAttempt;
+                            }
+                        });
+        return context;
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment() {
@@ -545,9 +564,11 @@ public class TestUtils extends BaseTestUtils {
      * @param <T> Resource type
      */
     public static class TestingContext<T extends HasMetadata> implements Context<T> {
+        @Setter private RetryInfo retryInfo;
+
         @Override
         public Optional<RetryInfo> getRetryInfo() {
-            return Optional.empty();
+            return Optional.ofNullable(retryInfo);
         }
 
         @Override

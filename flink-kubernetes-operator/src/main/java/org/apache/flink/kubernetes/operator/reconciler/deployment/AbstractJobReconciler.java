@@ -49,6 +49,7 @@ import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
+import org.apache.flink.util.TimeUtils;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Value;
@@ -265,24 +266,32 @@ public abstract class AbstractJobReconciler<
             return JobUpgrade.savepoint(true);
         }
 
-        if (ReconciliationUtils.isJobCancelling(status)) {
-            LOG.info("Cancellation is in progress. Waiting for cancelled state.");
-            return JobUpgrade.pendingCancellation();
-        }
-
         boolean running = ReconciliationUtils.isJobRunning(status);
         boolean versionChanged =
                 flinkVersionChanged(
                         ReconciliationUtils.getDeployedSpec(resource), resource.getSpec());
 
+        if (ReconciliationUtils.isJobCancelling(status)) {
+            boolean fallbackAllowed =
+                    !versionChanged
+                            && (upgradeMode == UpgradeMode.LAST_STATE
+                                    || lastStateFallbackEnabled(deployConfig));
+            if (!fallbackAllowed || !cancellationTimedOut(ctx)) {
+                LOG.info("Cancellation is in progress. Waiting for cancelled state.");
+                return JobUpgrade.pendingCancellation();
+            }
+            LOG.warn(
+                    "Job cancellation did not complete within {}",
+                    TimeUtils.formatWithHighestUnit(
+                            ctx.getOperatorConfig().getFlinkShutdownClusterTimeout()));
+            return JobUpgrade.cancellationTimedOut();
+        }
+
         if (upgradeMode == UpgradeMode.SAVEPOINT) {
             if (running) {
                 LOG.info("Job is in running state, ready for upgrade with savepoint");
                 return JobUpgrade.savepoint(false);
-            } else if (versionChanged
-                    || deployConfig.get(
-                            KubernetesOperatorConfigOptions
-                                    .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)) {
+            } else if (versionChanged || lastStateFallbackEnabled(deployConfig)) {
                 LOG.info("Falling back to last-state upgrade mode from savepoint");
                 ctx.getResource()
                         .getSpec()
@@ -329,6 +338,22 @@ public abstract class AbstractJobReconciler<
         }
 
         return JobUpgrade.unavailable();
+    }
+
+    private static boolean lastStateFallbackEnabled(Configuration deployConfig) {
+        return deployConfig.get(
+                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED);
+    }
+
+    protected boolean cancellationTimedOut(FlinkResourceContext<CR> ctx) {
+        var updateTime = ctx.getResource().getStatus().getJobStatus().getUpdateTime();
+        return updateTime != null
+                && clock.instant()
+                        .isAfter(
+                                Instant.ofEpochMilli(Long.parseLong(updateTime))
+                                        .plus(
+                                                ctx.getOperatorConfig()
+                                                        .getFlinkShutdownClusterTimeout()));
     }
 
     /**
@@ -739,6 +764,10 @@ public abstract class AbstractJobReconciler<
 
         static JobUpgrade pendingCancellation() {
             return new JobUpgrade(null, null, false, false, false);
+        }
+
+        static JobUpgrade cancellationTimedOut() {
+            return new JobUpgrade(null, null, false, true, false);
         }
 
         static JobUpgrade pendingUpgrade() {

@@ -128,7 +128,8 @@ public class SessionJobReconciler
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
+    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx)
+            throws Exception {
         var status = ctx.getResource().getStatus();
         var rescheduleDelete =
                 DeleteControl.noFinalizerRemoval()
@@ -136,8 +137,7 @@ public class SessionJobReconciler
                                 ctx.getOperatorConfig().getProgressCheckInterval().toMillis());
         var jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
 
-        if (status.getReconciliationStatus().isBeforeFirstDeployment()
-                || ReconciliationUtils.isJobInTerminalState(status)
+        if (ReconciliationUtils.isJobInTerminalState(status)
                 || status.getReconciliationStatus()
                                 .deserializeLastReconciledSpec()
                                 .getJob()
@@ -192,25 +192,32 @@ public class SessionJobReconciler
         // Only check for pending cancellation once the cluster is ready, so that other deletion
         // paths (cluster missing, deleting, unhealthy without HA) are not blocked.
         if (ReconciliationUtils.isJobCancelling(status)) {
+            if (cancellationTimedOut(ctx)) {
+                eventRecorder.triggerEvent(
+                        ctx.getResource(),
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.CleanupFailed,
+                        EventRecorder.Component.Operator,
+                        String.format(
+                                "Cancellation of job %s did not complete in time, removing finalizer. "
+                                        + "The job may still be running in the session cluster and require manual cancellation.",
+                                jobID),
+                        ctx.getKubernetesClient());
+                return DeleteControl.defaultDelete();
+            }
             LOG.info("Waiting for pending cancellation");
             return rescheduleDelete;
         }
 
-        try {
-            var suspendMode =
-                    ctx.getObserveConfig()
-                                    .get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
-                            ? SuspendMode.SAVEPOINT
-                            : SuspendMode.STATELESS;
-            if (cancelJob(ctx, suspendMode)) {
-                LOG.info("Waiting for pending cancellation");
-                return rescheduleDelete;
-            }
-            return DeleteControl.defaultDelete();
-        } catch (Exception e) {
-            LOG.error("Failed to cancel job, rescheduling deletion.", e);
+        var suspendMode =
+                ctx.getObserveConfig().get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                        ? SuspendMode.SAVEPOINT
+                        : SuspendMode.STATELESS;
+        if (cancelJob(ctx, suspendMode)) {
+            LOG.info("Waiting for pending cancellation");
             return rescheduleDelete;
         }
+        return DeleteControl.defaultDelete();
     }
 
     public static boolean sessionClusterReady(Optional<FlinkDeployment> flinkDeploymentOpt) {

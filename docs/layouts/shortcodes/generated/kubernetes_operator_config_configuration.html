@@ -363,6 +363,12 @@
             <td>The maximum number of threads running the reconciliation loop. Use -1 for infinite.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.resource.cleanup.finalizer.timeout</h5></td>
+            <td style="word-wrap: break-word;">2 h</td>
+            <td>Duration</td>
+            <td>Maximum amount of time after the deletion of a resource that a failing cleanup is retried. After this the operator gives up and removes the finalizer. Without this a resource whose cleanup can never succeed (e.g. a pod stuck Terminating) would stay in Terminating state forever, blocking any future redeploy under the same name. Resources may be orphaned when this happens and require manual cleanup. Set to 0 to never give up, the cleanup is then only retried according to the kubernetes.operator.retry.* settings.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.resource.cleanup.force-delete-stuck-pods.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
@@ -372,7 +378,7 @@
             <td><h5>kubernetes.operator.resource.cleanup.timeout</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>
-            <td>The timeout for the resource clean up to wait for flink to shutdown cluster.</td>
+            <td>The timeout for the resource clean up to wait for flink to shutdown cluster. It is also the time after which an in-progress job cancellation is considered stuck during upgrades and deletion.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.resource.deletion.propagation</h5></td>

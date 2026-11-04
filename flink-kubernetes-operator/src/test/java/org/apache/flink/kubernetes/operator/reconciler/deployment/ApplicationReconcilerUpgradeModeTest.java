@@ -798,6 +798,103 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         }
     }
 
+    @Test
+    public void testUpgradeWithStuckCancellationFallsBackToHaMetadata() throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CANCEL_JOB
+                                .key(),
+                        "true");
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        deployment.getSpec().setImage("new-image");
+        reconciler.reconcile(deployment, context);
+        assertEquals(CANCELLING, deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Cancellation is still pending within the timeout, keep waiting
+        reconciler.reconcile(deployment, context);
+        assertEquals(CANCELLING, deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // The cancellation never completes, the upgrade continues from the HA metadata
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setUpdateTime(
+                        String.valueOf(
+                                System.currentTimeMillis() - Duration.ofMinutes(10).toMillis()));
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+        assertEquals(
+                "new-image",
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getImage());
+        assertEquals(1, flinkService.getRunningCount());
+        assertEquals(
+                UpgradeMode.LAST_STATE,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getUpgradeMode());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testCancellationTimeoutDoesNotFallBackWhenNotAllowed(boolean versionChange)
+            throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                .key(),
+                        Boolean.toString(versionChange));
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        if (versionChange) {
+            deployment
+                    .getSpec()
+                    .setFlinkVersion(
+                            deployment.getSpec().getFlinkVersion() == FlinkVersion.v1_19
+                                    ? FlinkVersion.v1_20
+                                    : FlinkVersion.v1_19);
+        }
+
+        var jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.CANCELLING);
+        jobStatus.setJobId(new JobID().toString());
+        jobStatus.setUpdateTime(
+                String.valueOf(System.currentTimeMillis() - Duration.ofMinutes(10).toMillis()));
+
+        var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
+        var ctx = getResourceContext(deployment);
+        // Neither a version change nor a disabled last-state fallback may be bypassed
+        assertEquals(
+                AbstractJobReconciler.JobUpgrade.pendingCancellation(),
+                jobReconciler.getJobUpgrade(ctx, ctx.getDeployConfig(deployment.getSpec())));
+    }
+
     private static Stream<Arguments> testUpgradeJmDeployCannotStartParams() {
         var args = new ArrayList<Arguments>();
         for (UpgradeMode from : UpgradeMode.values()) {
