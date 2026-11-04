@@ -682,10 +682,17 @@ public class BlueGreenDeploymentService {
             FlinkBlueGreenDeploymentState nextState,
             String deploymentName) {
 
-        suspendFlinkDeployment(context, nextDeployment);
-
         FlinkBlueGreenDeploymentState previousState =
                 getPreviousState(nextState, context.getDeployments());
+
+        if (context.getDeployments().getNumberOfDeployments() == 2) {
+            LOG.info(
+                    "Deleting aborted FlinkDeployment '{}' so its HA metadata cannot seed the next transition",
+                    deploymentName);
+            deleteFlinkDeployment(nextDeployment, context);
+        } else {
+            suspendFlinkDeployment(context, nextDeployment);
+        }
         context.getDeploymentStatus().setBlueGreenState(previousState);
         resetTransitionMarkers(context.getDeploymentStatus());
 
