@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.utils.ConditionsUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.crd.generator.annotation.PrinterColumn;
 import io.fabric8.kubernetes.api.model.Condition;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -54,6 +55,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     private Map<String, String> clusterInfo = new HashMap<>();
 
     /** Last observed status of the JobManager deployment. */
+    @PrinterColumn(name = "JobManager Status")
     private JobManagerDeploymentStatus jobManagerDeploymentStatus =
             JobManagerDeploymentStatus.MISSING;
 

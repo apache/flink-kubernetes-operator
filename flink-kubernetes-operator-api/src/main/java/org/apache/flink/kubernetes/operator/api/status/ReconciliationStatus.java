@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.api.utils.SpecWithMeta;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -49,6 +50,7 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     private String lastStableSpec;
 
     /** Deployment state of the last reconciled spec. */
+    @PrinterColumn(name = "Reconciliation Status", priority = 1)
     private ReconciliationState state = ReconciliationState.UPGRADING;
 
     @JsonIgnore
