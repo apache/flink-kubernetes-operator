@@ -39,9 +39,12 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link CanaryResourceManager}. */
@@ -73,11 +76,11 @@ public class CanaryResourceManagerTest {
         assertEquals(1, canaryManager.getNumberOfActiveCanaries());
         assertTrue(canaryManager.allCanariesHealthy());
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertFalse(canaryManager.allCanariesHealthy());
 
         reconcileLatest();
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertTrue(canaryManager.allCanariesHealthy());
     }
 
@@ -95,7 +98,7 @@ public class CanaryResourceManagerTest {
                             return cr;
                         });
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
 
         var canary = latest();
         assertEquals("label", canary.getMetadata().getLabels().get("test"));
@@ -140,22 +143,22 @@ public class CanaryResourceManagerTest {
         reconcileLatest();
         reconcileLatest();
         try (var unreachableClient = unreachableClient()) {
-            canaryManager.checkHealth(canaryId, unreachableClient);
+            checkHealth(unreachableClient);
             assertTrue(canaryManager.allCanariesHealthy());
 
             for (int i = 1; i < CanaryResourceManager.MAX_FAILED_UPDATES; i++) {
-                canaryManager.checkHealth(canaryId, unreachableClient);
+                checkHealth(unreachableClient);
                 assertTrue(canaryManager.allCanariesHealthy());
             }
 
-            canaryManager.checkHealth(canaryId, unreachableClient);
+            checkHealth(unreachableClient);
             assertFalse(canaryManager.allCanariesHealthy());
             assertEquals(1, canaryManager.getNumberOfActiveCanaries());
         }
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         reconcileLatest();
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertTrue(canaryManager.allCanariesHealthy());
     }
 
@@ -163,11 +166,11 @@ public class CanaryResourceManagerTest {
     public void testLateReconcileRecoversWhileBumpsFail() {
         reconcileLatest();
         try (var unreachableClient = unreachableClient()) {
-            canaryManager.checkHealth(canaryId, unreachableClient);
+            checkHealth(unreachableClient);
             assertFalse(canaryManager.allCanariesHealthy());
 
             reconcileLatest();
-            canaryManager.checkHealth(canaryId, unreachableClient);
+            checkHealth(unreachableClient);
             assertTrue(canaryManager.allCanariesHealthy());
         }
     }
@@ -177,7 +180,7 @@ public class CanaryResourceManagerTest {
         try (var unreachableClient = unreachableClient()) {
             assertTrue(
                     canaryManager.handleCanaryResourceReconciliation(latest(), unreachableClient));
-            canaryManager.checkHealth(canaryId, unreachableClient);
+            checkHealth(unreachableClient);
             assertTrue(canaryManager.allCanariesHealthy());
         }
     }
@@ -188,7 +191,7 @@ public class CanaryResourceManagerTest {
 
         client.resource(latest()).delete();
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
         assertTrue(canaryManager.allCanariesHealthy());
     }
@@ -205,7 +208,7 @@ public class CanaryResourceManagerTest {
                             return cr;
                         });
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
         assertEquals(nonce, latest().getSpec().getRestartNonce());
     }
@@ -226,7 +229,7 @@ public class CanaryResourceManagerTest {
         canaryManager.retainNamespaces(Set.of("other"));
         assertEquals(1, canaryManager.getNumberOfActiveCanaries());
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertEquals(1, canaryManager.getNumberOfActiveCanaries());
         assertEquals(nonce, latest().getSpec().getRestartNonce());
         assertTrue(canaryManager.allCanariesHealthy());
@@ -241,6 +244,68 @@ public class CanaryResourceManagerTest {
         formerCanary.getMetadata().getLabels().remove(CanaryResourceManager.CANARY_LABEL);
         assertFalse(canaryManager.handleCanaryResourceReconciliation(formerCanary, client));
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(0, pendingChecks());
+    }
+
+    @Test
+    public void testRecreateKeepsOneHealthCheck() {
+        reconcileLatest();
+        assertEquals(1, pendingChecks());
+
+        assertTrue(canaryManager.handleCanaryResourceDeletion(latest()));
+        assertEquals(0, pendingChecks());
+
+        client.resource(latest()).delete();
+        client.resource(TestUtils.createCanaryDeployment()).create();
+        reconcileLatest();
+        assertEquals(1, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(1, pendingChecks());
+    }
+
+    @Test
+    public void testRecreateWithoutCleanup() {
+        reconcileLatest();
+        reconcileLatest();
+        var oldUid = latest().getMetadata().getUid();
+
+        client.resource(latest()).delete();
+        client.resource(TestUtils.createCanaryDeployment()).create();
+        assertNotEquals(oldUid, latest().getMetadata().getUid());
+
+        reconcileLatest();
+        assertEquals(1, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(1, pendingChecks());
+
+        reconcileLatest();
+        checkHealth(client);
+        assertTrue(canaryManager.allCanariesHealthy());
+    }
+
+    @Test
+    public void testOutdatedCheckHasNoEffect() {
+        reconcileLatest();
+        var oldState = canaryManager.canaryResources.get(canaryId);
+
+        client.resource(latest()).delete();
+        client.resource(TestUtils.createCanaryDeployment()).create();
+        reconcileLatest();
+        var nonce = latest().getSpec().getRestartNonce();
+
+        canaryManager.checkHealth(canaryId, oldState, client);
+        assertEquals(nonce, latest().getSpec().getRestartNonce());
+        assertEquals(1, pendingChecks());
+        assertTrue(canaryManager.allCanariesHealthy());
+    }
+
+    @Test
+    public void testNamespaceWatchedAgain() {
+        reconcileLatest();
+        canaryManager.retainNamespaces(Set.of("other"));
+        assertEquals(0, pendingChecks());
+
+        reconcileLatest();
+        assertEquals(1, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(1, pendingChecks());
     }
 
     @Test
@@ -248,13 +313,23 @@ public class CanaryResourceManagerTest {
         reconcileLatest();
         assertTrue(canaryManager.handleCanaryResourceDeletion(latest()));
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(0, pendingChecks());
 
-        canaryManager.checkHealth(canaryId, client);
+        checkHealth(client);
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
     }
 
     private void reconcileLatest() {
         assertTrue(canaryManager.handleCanaryResourceReconciliation(latest(), client));
+    }
+
+    private void checkHealth(KubernetesClient client) {
+        canaryManager.checkHealth(canaryId, canaryManager.canaryResources.get(canaryId), client);
+    }
+
+    private long pendingChecks() {
+        return ((ScheduledThreadPoolExecutor) canaryManager.executorService)
+                .getQueue().stream().filter(check -> !((Future<?>) check).isCancelled()).count();
     }
 
     private static KubernetesClient unreachableClient() {
