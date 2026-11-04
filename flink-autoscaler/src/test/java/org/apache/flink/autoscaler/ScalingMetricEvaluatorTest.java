@@ -26,7 +26,10 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetricsEvaluatorPlugin;
+import org.apache.flink.autoscaler.metrics.TestChainingEvaluator;
+import org.apache.flink.autoscaler.metrics.TestConfigurableEvaluator;
 import org.apache.flink.autoscaler.metrics.TestCustomEvaluator;
+import org.apache.flink.autoscaler.metrics.TestThrowingEvaluator;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.ConfigOption;
@@ -39,12 +42,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
@@ -55,8 +60,6 @@ import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1197,97 +1200,257 @@ public class ScalingMetricEvaluatorTest {
     }
 
     @Test
-    void testGetCustomEvaluatorIfRequired() {
-        ScalingMetricsEvaluatorPlugin testCustomEvaluator = new TestCustomEvaluator();
-        var customEvaluatorAwareEvaluator =
-                new ScalingMetricEvaluator<>(List.of(testCustomEvaluator));
+    void testResolveCustomEvaluators() {
+        var evaluator =
+                new ScalingMetricEvaluator<>(
+                        List.of(new TestCustomEvaluator(), new TestChainingEvaluator()));
 
-        String testCustomEvaluatorName = "test-custom-evaluator";
-        String testCustomEvaluatorClassName = TestCustomEvaluator.class.getName();
+        String name = "test-custom-evaluator";
+        String className = TestCustomEvaluator.class.getName();
         ConfigOption<String> classOpt =
-                ConfigOptions.key(
-                                AutoScalerOptions.customEvaluatorClassKey(testCustomEvaluatorName))
+                ConfigOptions.key(AutoScalerOptions.customEvaluatorClassKey(name))
                         .stringType()
                         .noDefaultValue();
 
         var conf = new Configuration();
 
-        // Case 1: Single custom evaluator instance configured with its FQN class.
-        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
-        conf.set(classOpt, testCustomEvaluatorClassName);
-
-        var customEvaluatorWithConfig =
-                customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf);
-        assertNotNull(customEvaluatorWithConfig);
-        assertInstanceOf(ScalingMetricsEvaluatorPlugin.class, customEvaluatorWithConfig.f0);
+        // Case 1: a single configured instance resolves to a one-element chain, and its scoped
+        // config exposes only the .class key at this point.
+        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(name));
+        conf.set(classOpt, className);
+        var resolved = new ArrayList<>(evaluator.resolveCustomEvaluators(conf));
+        assertEquals(1, resolved.size());
+        assertEquals(name, resolved.get(0).getKey());
+        assertEquals(className, resolved.get(0).getValue().getClass().getName());
         assertEquals(
-                testCustomEvaluatorClassName, customEvaluatorWithConfig.f0.getClass().getName());
-        var customEvaluatorConfig = customEvaluatorWithConfig.f1;
-        assertNotNull(customEvaluatorConfig);
-        // Only the .class key lives under the instance namespace at this point.
-        assertEquals(Set.of("class"), customEvaluatorConfig.keySet());
+                Set.of("class"),
+                AutoScalerOptions.customEvaluatorConfiguration(conf, name).keySet());
 
-        // Case 2: Custom evaluator with additional per-instance options.
+        // Case 2: additional per-instance options are surfaced through the scoped config.
         conf.set(
                 ConfigOptions.key(
                                 AutoScalerOptions.AUTOSCALER_CONF_PREFIX
                                         + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
-                                        + testCustomEvaluatorName
+                                        + name
                                         + ".k1")
                         .stringType()
                         .noDefaultValue(),
                 "v1");
+        assertEquals(
+                Set.of("class", "k1"),
+                AutoScalerOptions.customEvaluatorConfiguration(conf, name).keySet());
+
+        // Case 3: a configured class FQN matching no registered evaluator is skipped.
+        conf.set(classOpt, "org.apache.flink.autoscaler.metrics.UnknownEvaluator");
+        assertTrue(evaluator.resolveCustomEvaluators(conf).isEmpty());
+
+        // Case 4: an instance listed without a .class option is skipped.
+        conf.removeConfig(classOpt);
+        assertTrue(evaluator.resolveCustomEvaluators(conf).isEmpty());
+
+        // Case 5: nothing configured resolves to an empty chain.
+        conf.removeConfig(AutoScalerOptions.CUSTOM_EVALUATORS);
+        assertTrue(evaluator.resolveCustomEvaluators(conf).isEmpty());
+
+        // Case 6: all configured instances are resolved and ordered by ascending priority. The
+        // chaining evaluator (priority 100) is listed first but sorts last, behind the priority-0
+        // TestCustomEvaluator.
+        String chainingName = "chaining-evaluator";
+        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(chainingName, name));
+        conf.set(classOpt, className);
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption(chainingName),
+                TestChainingEvaluator.class.getName());
+        var chain = new ArrayList<>(evaluator.resolveCustomEvaluators(conf));
+        assertEquals(2, chain.size());
+        assertEquals(name, chain.get(0).getKey());
+        assertEquals(
+                TestCustomEvaluator.class.getName(), chain.get(0).getValue().getClass().getName());
+        assertEquals(chainingName, chain.get(1).getKey());
+        assertEquals(
+                TestChainingEvaluator.class.getName(),
+                chain.get(1).getValue().getClass().getName());
+
+        // Case 7: no evaluators registered at all resolves to an empty chain even when configured.
+        assertTrue(
+                new ScalingMetricEvaluator<>(Collections.emptyList())
+                        .resolveCustomEvaluators(conf)
+                        .isEmpty());
+    }
+
+    @Test
+    void testCustomEvaluatorChain() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var collectedMetrics = createChainTestMetrics(source, sink);
+
+        var conf = new Configuration();
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
+
+        var baseName = "base";
+        var chainingName = "chaining";
+        // The chaining evaluator is listed first but has priority 100, so it runs AFTER the
+        // priority-0 base evaluator.
+        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(chainingName, baseName));
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption(baseName),
+                TestCustomEvaluator.class.getName());
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption(chainingName),
+                TestChainingEvaluator.class.getName());
+
+        var evaluator =
+                new ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>>(
+                        List.of(new TestCustomEvaluator(), new TestChainingEvaluator()));
+
+        var ctx = createDefaultJobAutoScalerContext();
+        ctx.getScalingCycleState().setCollectedMetrics(collectedMetrics);
+
+        var evaluatedMetrics =
+                evaluator
+                        .computeEvaluatedMetrics(ctx, conf, collectedMetrics, Duration.ZERO)
+                        .getVertexMetrics();
+
+        // The base evaluator sets the source TARGET_DATA_RATE to 100000; the chaining evaluator
+        // then sees that value and increments it to 100001, proving both the priority ordering and
+        // that each evaluator composes on top of the previous one's output.
+        assertEquals(
+                EvaluatedScalingMetric.avg(100001.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.TARGET_DATA_RATE));
+    }
+
+    @Test
+    void testCustomEvaluatorChainContinuesAfterFailure() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var collectedMetrics = createChainTestMetrics(source, sink);
+
+        var conf = new Configuration();
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
+
+        // Priorities 0 (base), 50 (always throws) and 100 (chaining) give a fully defined order.
+        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of("base", "failing", "chaining"));
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption("base"),
+                TestCustomEvaluator.class.getName());
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption("failing"),
+                TestThrowingEvaluator.class.getName());
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption("chaining"),
+                TestChainingEvaluator.class.getName());
+
+        var evaluator =
+                new ScalingMetricEvaluator<JobID, JobAutoScalerContext<JobID>>(
+                        List.of(
+                                new TestCustomEvaluator(),
+                                new TestThrowingEvaluator(),
+                                new TestChainingEvaluator()));
+
+        var ctx = createDefaultJobAutoScalerContext();
+        ctx.getScalingCycleState().setCollectedMetrics(collectedMetrics);
+
+        var evaluatedMetrics =
+                evaluator
+                        .computeEvaluatedMetrics(ctx, conf, collectedMetrics, Duration.ZERO)
+                        .getVertexMetrics();
+
+        // The failing evaluator is isolated, so the base evaluator's 100000 survives and the
+        // priority-100 chaining evaluator still composes on top of it.
+        assertEquals(
+                EvaluatedScalingMetric.avg(100001.0),
+                evaluatedMetrics.get(source).get(ScalingMetric.TARGET_DATA_RATE));
+    }
+
+    @Test
+    void testSameEvaluatorClassRegisteredUnderMultipleInstances() {
+        var evaluator = new ScalingMetricEvaluator<>(List.of(new TestConfigurableEvaluator()));
+
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of("first", "second"));
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption("first"),
+                TestConfigurableEvaluator.class.getName());
+        conf.set(
+                AutoScalerOptions.customEvaluatorClassOption("second"),
+                TestConfigurableEvaluator.class.getName());
+        setCustomEvaluatorOption(
+                conf, "first", TestConfigurableEvaluator.TARGET_DATA_RATE_KEY, "1000.0");
+        setCustomEvaluatorOption(
+                conf, "second", TestConfigurableEvaluator.TARGET_DATA_RATE_KEY, "2000.0");
+
+        var resolved = new ArrayList<>(evaluator.resolveCustomEvaluators(conf));
+
+        // Both instances resolve. Selection is by class FQN, so they share a single plugin object,
+        // which is why implementations must not keep per-instance state.
+        assertEquals(2, resolved.size());
+        assertEquals(
+                Set.of("first", "second"),
+                resolved.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+        assertSame(resolved.get(0).getValue(), resolved.get(1).getValue());
+
+        // Each instance still gets its own prefix-stripped configuration.
+        assertEquals(
+                "1000.0",
+                AutoScalerOptions.customEvaluatorConfiguration(conf, "first")
+                        .getString(TestConfigurableEvaluator.TARGET_DATA_RATE_KEY, null));
+        assertEquals(
+                "2000.0",
+                AutoScalerOptions.customEvaluatorConfiguration(conf, "second")
+                        .getString(TestConfigurableEvaluator.TARGET_DATA_RATE_KEY, null));
+    }
+
+    /** Builds the two vertex (source, sink) metric history shared by the custom evaluator tests. */
+    private static CollectedMetricHistory createChainTestMetrics(
+            JobVertexID source, JobVertexID sink) {
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG, 0.,
+                                        ScalingMetric.NUM_RECORDS_IN, 0.,
+                                        ScalingMetric.NUM_RECORDS_OUT, 0.,
+                                        ScalingMetric.LOAD, .1),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 0., ScalingMetric.LOAD, .1)),
+                        Map.of()));
+        metricHistory.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG, 0.,
+                                        ScalingMetric.NUM_RECORDS_IN, 100.,
+                                        ScalingMetric.NUM_RECORDS_OUT, 200.,
+                                        ScalingMetric.LOAD, .4),
+                                sink,
+                                Map.of(ScalingMetric.NUM_RECORDS_IN, 200., ScalingMetric.LOAD, .2)),
+                        Map.of()));
+
+        return new CollectedMetricHistory(topology, metricHistory, Instant.now());
+    }
+
+    /** Sets a per-instance custom evaluator option, mirroring the configuration users write. */
+    private static void setCustomEvaluatorOption(
+            Configuration conf, String instance, String key, String value) {
         conf.set(
                 ConfigOptions.key(
                                 AutoScalerOptions.AUTOSCALER_CONF_PREFIX
                                         + AutoScalerOptions.CUSTOM_EVALUATOR_CONF_PREFIX
-                                        + testCustomEvaluatorName
-                                        + ".k2")
+                                        + instance
+                                        + "."
+                                        + key)
                         .stringType()
                         .noDefaultValue(),
-                "v2");
-
-        var customEvaluatorWithConfigContainingAdditionalKeys =
-                customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf);
-        assertNotNull(customEvaluatorWithConfigContainingAdditionalKeys);
-        assertInstanceOf(
-                ScalingMetricsEvaluatorPlugin.class,
-                customEvaluatorWithConfigContainingAdditionalKeys.f0);
-        var customEvaluatorConfigContainingAdditionalKeys =
-                customEvaluatorWithConfigContainingAdditionalKeys.f1;
-        assertNotNull(customEvaluatorConfigContainingAdditionalKeys);
-        assertEquals(
-                Set.of("class", "k1", "k2"),
-                customEvaluatorConfigContainingAdditionalKeys.keySet());
-
-        // Case 3: Configured class FQN does not match any registered evaluator -> null + warn.
-        conf.set(classOpt, "org.apache.flink.autoscaler.metrics.UnknownEvaluator");
-        assertNull(customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf));
-
-        // Case 4: Instance listed but no .class option set -> null + warn.
-        conf.removeConfig(classOpt);
-        assertNull(customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf));
-
-        // Case 5: Custom evaluators list not configured at all.
-        conf.removeConfig(AutoScalerOptions.CUSTOM_EVALUATORS);
-        assertNull(customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf));
-
-        // Case 6: More than one instance configured -> warn + first-wins (single-instance
-        // constraint).
-        conf.set(
-                AutoScalerOptions.CUSTOM_EVALUATORS,
-                List.of(testCustomEvaluatorName, "another-instance"));
-        conf.set(classOpt, testCustomEvaluatorClassName);
-        var firstWinsResult = customEvaluatorAwareEvaluator.getCustomEvaluatorIfRequired(conf);
-        assertNotNull(firstWinsResult);
-        assertEquals(testCustomEvaluatorClassName, firstWinsResult.f0.getClass().getName());
-        conf.removeConfig(AutoScalerOptions.CUSTOM_EVALUATORS);
-        conf.removeConfig(classOpt);
-
-        // Case 7: No custom evaluators registered at all -> null even when configured.
-        var noCustomEvaluator = new ScalingMetricEvaluator<>(Collections.emptyList());
-        conf.set(AutoScalerOptions.CUSTOM_EVALUATORS, List.of(testCustomEvaluatorName));
-        conf.set(classOpt, testCustomEvaluatorClassName);
-        assertNull(noCustomEvaluator.getCustomEvaluatorIfRequired(conf));
+                value);
     }
 }
