@@ -219,6 +219,12 @@
             <td>Indicate whether the job should be drained when stopping with savepoint.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.parallelism.derive-from-replicas</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether, in standalone mode, the job parallelism is derived from the TaskManager replicas times the number of task slots when the TaskManager replicas are set, ignoring the job parallelism. If false, a job parallelism larger than 0 is used as is and the remaining slots stay free, for example as standby capacity. Has no effect in native mode, where slotmanager.redundant-taskmanager-num can be used instead.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.restart.failed</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>

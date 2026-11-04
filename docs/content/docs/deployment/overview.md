@@ -83,6 +83,8 @@ In Standalone mode the operator creates every Kubernetes resource itself: the Jo
 
 The replica count is also exposed through the Kubernetes scale subresource: `kubectl scale flinkdeployment <name> --replicas=<n>` and a [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) targeting the resource both drive `spec.taskManager.replicas` directly, a natural pairing with Reactive Mode. In Native mode the field has no effect, there the TaskManager count follows the job's slot needs.
 
+When `spec.taskManager.replicas` is set, it takes precedence over `spec.job.parallelism`: the job runs with a parallelism of `replicas × taskmanager.numberOfTaskSlots` and occupies every slot. To keep spare slots that the job can fail over onto right away when a TaskManager pod is lost, set `kubernetes.operator.job.parallelism.derive-from-replicas` to `false`. A `spec.job.parallelism` larger than `0` is then used as is, and the remaining slots stay free. Since a standalone cluster cannot add TaskManagers, the operator rejects a parallelism, including `pipeline.jobvertex-parallelism-overrides`, larger than the slots of the replicas. The option has no effect in Native mode, where `slotmanager.redundant-taskmanager-num` serves the same purpose.
+
 The main reason to choose Standalone is isolation. A Flink cluster with no Kubernetes API access cannot create or modify anything in the cluster, which adds a layer of protection when running unknown or external user code.
 
 ## Flink Deployment Modes
