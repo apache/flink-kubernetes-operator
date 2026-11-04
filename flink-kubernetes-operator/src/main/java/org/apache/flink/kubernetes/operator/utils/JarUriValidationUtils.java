@@ -55,21 +55,13 @@ public final class JarUriValidationUtils {
             return Optional.of("jarURI must include a scheme");
         }
 
-        Set<String> normalizedAllowedSchemes =
-                allowedSchemes.stream()
-                        .map(s -> s.toLowerCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-        if (!normalizedAllowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
-            return Optional.of(
-                    String.format(
-                            "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
-                            scheme,
-                            normalizedAllowedSchemes,
-                            KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key()));
+        Set<String> normalizedAllowedSchemes = normalizeSchemes(allowedSchemes);
+        Optional<String> schemeError = checkSchemeAllowed(scheme, normalizedAllowedSchemes);
+        if (schemeError.isPresent()) {
+            return schemeError;
         }
 
-        if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && disallowRestrictedHosts) {
+        if (isHttpOrHttps(scheme) && disallowRestrictedHosts) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");
@@ -92,11 +84,119 @@ public final class JarUriValidationUtils {
         return Optional.empty();
     }
 
+    /**
+     * Like {@link #validateJarURI}, but also returns the resolved address for a validated
+     * http/https jarURI, so callers that connect can pin to it instead of re-resolving the hostname
+     * later and reopening the restricted-host check's DNS-rebinding gap. Resolution runs regardless
+     * of {@code disallowRestrictedHosts}; only the restricted-address rejection is conditional on
+     * that flag.
+     */
+    public static Result validateAndResolve(
+            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+        if (jarURI == null) {
+            return Result.valid(null);
+        }
+
+        URI uri;
+        try {
+            uri = new URI(jarURI);
+        } catch (URISyntaxException e) {
+            return Result.invalid("jarURI is not a valid URI: " + e.getMessage());
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null) {
+            return Result.invalid("jarURI must include a scheme");
+        }
+
+        Set<String> normalizedAllowedSchemes = normalizeSchemes(allowedSchemes);
+        Optional<String> schemeError = checkSchemeAllowed(scheme, normalizedAllowedSchemes);
+        if (schemeError.isPresent()) {
+            return Result.invalid(schemeError.get());
+        }
+
+        if (!isHttpOrHttps(scheme)) {
+            return Result.valid(null);
+        }
+
+        String host = uri.getHost();
+        if (host == null || host.isEmpty()) {
+            return Result.invalid("jarURI must include a host for http/https schemes");
+        }
+        InetAddress[] addresses;
+        try {
+            addresses = InetAddress.getAllByName(host);
+        } catch (UnknownHostException e) {
+            return Result.invalid("jarURI host '" + host + "' cannot be resolved");
+        }
+        if (disallowRestrictedHosts) {
+            for (InetAddress addr : addresses) {
+                if (isRestricted(addr)) {
+                    return Result.invalid(
+                            "jarURI host '" + host + "' resolves to a restricted address");
+                }
+            }
+        }
+        return Result.valid(addresses[0]);
+    }
+
+    private static Set<String> normalizeSchemes(Collection<String> allowedSchemes) {
+        return allowedSchemes.stream()
+                .map(s -> s.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+    }
+
+    private static Optional<String> checkSchemeAllowed(
+            String scheme, Set<String> normalizedAllowedSchemes) {
+        if (!normalizedAllowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
+            return Optional.of(
+                    String.format(
+                            "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
+                            scheme,
+                            normalizedAllowedSchemes,
+                            KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_SCHEMES.key()));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isHttpOrHttps(String scheme) {
+        return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
+    }
+
     private static boolean isRestricted(InetAddress addr) {
         return addr.isLoopbackAddress()
                 || addr.isLinkLocalAddress()
                 || addr.isSiteLocalAddress()
                 || addr.isAnyLocalAddress()
                 || addr.isMulticastAddress();
+    }
+
+    /**
+     * Outcome of {@link #validateAndResolve}: an error, or the address to pin the connection to.
+     */
+    public static final class Result {
+        private final String error;
+        private final InetAddress resolvedAddress;
+
+        private Result(String error, InetAddress resolvedAddress) {
+            this.error = error;
+            this.resolvedAddress = resolvedAddress;
+        }
+
+        private static Result invalid(String error) {
+            return new Result(error, null);
+        }
+
+        private static Result valid(InetAddress resolvedAddress) {
+            return new Result(null, resolvedAddress);
+        }
+
+        public Optional<String> getError() {
+            return Optional.ofNullable(error);
+        }
+
+        public Optional<InetAddress> getResolvedAddress() {
+            return Optional.ofNullable(resolvedAddress);
+        }
     }
 }
