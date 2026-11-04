@@ -178,7 +178,8 @@ public class JobAutoScalerImplTest {
                             protected Collection<String> queryAggregatedMetricNames(
                                     RestClusterClient<?> restClient,
                                     JobID jobID,
-                                    JobVertexID jobVertexID) {
+                                    JobVertexID jobVertexID,
+                                    Duration timeout) {
                                 throw new NotReadyException(new Exception());
                             }
                         };

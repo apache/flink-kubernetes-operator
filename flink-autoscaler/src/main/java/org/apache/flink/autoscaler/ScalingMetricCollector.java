@@ -304,12 +304,15 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
     private void updateKafkaPulsarSourceNumPartitions(
             Context ctx, JobID jobId, JobTopology topology) throws Exception {
+        var clientTimeout = ctx.getConfiguration().get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT);
         try (var restClient = ctx.getRestClusterClient()) {
             for (var vertexInfo : topology.getVertexInfos().values()) {
                 if (topology.isSource(vertexInfo.getId())) {
                     var sourceVertex = vertexInfo.getId();
                     var numPartitions =
-                            queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
+                            queryAggregatedMetricNames(
+                                            restClient, jobId, sourceVertex, clientTimeout)
+                                    .stream()
                                     .map(
                                             v -> {
                                                 String key =
@@ -462,6 +465,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     @SneakyThrows
     private Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
             Context ctx, JobTopology topology, Stream<JobVertexID> vertexStream) {
+        var clientTimeout = ctx.getConfiguration().get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT);
         try (var restClient = ctx.getRestClusterClient()) {
             return vertexStream
                     .filter(v -> !topology.getFinishedVertices().contains(v))
@@ -470,7 +474,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                     v -> v,
                                     v ->
                                             getFilteredVertexMetricNames(
-                                                    restClient, ctx.getJobID(), v, topology)));
+                                                    restClient,
+                                                    ctx.getJobID(),
+                                                    v,
+                                                    topology,
+                                                    clientTimeout)));
         }
     }
 
@@ -479,9 +487,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             RestClusterClient<?> restClient,
             JobID jobID,
             JobVertexID jobVertexID,
-            JobTopology topology) {
+            JobTopology topology,
+            Duration clientTimeout) {
 
-        var allMetricNames = queryAggregatedMetricNames(restClient, jobID, jobVertexID);
+        var allMetricNames =
+                queryAggregatedMetricNames(restClient, jobID, jobVertexID, clientTimeout);
         var filteredMetrics = new HashMap<String, FlinkMetric>();
         var requiredMetrics = new HashSet<FlinkMetric>();
 
@@ -529,7 +539,10 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     @VisibleForTesting
     @SneakyThrows
     protected Collection<String> queryAggregatedMetricNames(
-            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
+            RestClusterClient<?> restClient,
+            JobID jobID,
+            JobVertexID jobVertexID,
+            Duration clientTimeout) {
         var parameters = new AggregatedSubtaskMetricsParameters();
         var pathIt = parameters.getPathParameters().iterator();
 
@@ -541,7 +554,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                         AggregatedSubtaskMetricsHeaders.getInstance(),
                         parameters,
                         EmptyRequestBody.getInstance())
-                .get()
+                .get(clientTimeout.toSeconds(), TimeUnit.SECONDS)
                 .getMetrics()
                 .stream()
                 .map(AggregatedMetric::getId)

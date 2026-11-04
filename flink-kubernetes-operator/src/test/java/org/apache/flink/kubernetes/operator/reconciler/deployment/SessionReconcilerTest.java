@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
@@ -303,7 +304,8 @@ public class SessionReconcilerTest extends OperatorTestBase {
         var resourceContext = getResourceContext(deployment, context);
 
         var sessionReconciler = (SessionReconciler) reconciler.getReconciler();
-        Set<JobID> nonTerminalJobs = sessionReconciler.getNonTerminalJobs(resourceContext);
+        Set<JobID> nonTerminalJobs =
+                sessionReconciler.getNonTerminalJobs(resourceContext).orElseThrow();
 
         // Verify all non-terminal jobs are identified - should be 4 (2 managed + 2 unmanaged
         // running)
@@ -330,7 +332,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
                                         || job.f1.getJobId().equals(managedJobId2));
 
         Set<JobID> nonTerminalJobsAfterSessionJobsRemoval =
-                sessionReconciler.getNonTerminalJobs(resourceContext);
+                sessionReconciler.getNonTerminalJobs(resourceContext).orElseThrow();
 
         assertEquals(
                 2,
@@ -346,12 +348,111 @@ public class SessionReconcilerTest extends OperatorTestBase {
                                         || job.f1.getJobId().equals(unmanagedRunningJobId2));
 
         Set<JobID> nonTerminalJobsAfterRemoval =
-                sessionReconciler.getNonTerminalJobs(resourceContext);
+                sessionReconciler.getNonTerminalJobs(resourceContext).orElseThrow();
 
         assertEquals(
                 0,
                 nonTerminalJobsAfterRemoval.size(),
                 "Should have no non-terminal jobs when only terminated jobs exist");
+    }
+
+    @Test
+    public void testCleanupBlocksWhenNonTerminalJobsCannotBeDetermined() throws Exception {
+        flinkService =
+                new TestingFlinkService(kubernetesClient) {
+                    @Override
+                    public RestClusterClient<String> getClusterClient(Configuration config)
+                            throws Exception {
+                        throw new Exception("JobManager unreachable");
+                    }
+                };
+
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS.key(), "true");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key(), "true");
+
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        var context =
+                new TestUtils.TestingContext<FlinkDeployment>() {
+                    @Override
+                    public Optional<FlinkDeployment> getSecondaryResource(
+                            Class expectedType, String eventSourceName) {
+                        var session = TestUtils.buildSessionCluster();
+                        session.getStatus()
+                                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                        session.getStatus()
+                                .getReconciliationStatus()
+                                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+                        return Optional.of(session);
+                    }
+
+                    @Override
+                    public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
+                        return Set.of();
+                    }
+
+                    @Override
+                    public KubernetesClient getClient() {
+                        return kubernetesClient;
+                    }
+                };
+        var resourceContext = getResourceContext(deployment, context);
+        var sessionReconciler = (SessionReconciler) reconciler.getReconciler();
+
+        assertTrue(
+                sessionReconciler.getNonTerminalJobs(resourceContext).isEmpty(),
+                "Job detection must be indeterminate when the cluster cannot be queried");
+
+        DeleteControl deleteControl = sessionReconciler.cleanupInternal(resourceContext);
+
+        assertFalse(
+                deleteControl.isRemoveFinalizer(),
+                "Deletion must be blocked when running jobs cannot be determined");
+    }
+
+    @Test
+    public void testCleanupDeletesImmediatelyWhenNeverDeployed() throws Exception {
+        flinkService =
+                new TestingFlinkService(kubernetesClient) {
+                    @Override
+                    public RestClusterClient<String> getClusterClient(Configuration config)
+                            throws Exception {
+                        throw new Exception("JobManager unreachable");
+                    }
+                };
+
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_SESSION_JOBS.key(), "true");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.BLOCK_ON_UNMANAGED_JOBS.key(), "true");
+
+        assertTrue(
+                deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment(),
+                "Precondition: deployment must never have been reconciled");
+
+        var context =
+                TestUtils.<FlinkDeployment>createContextWithReadyFlinkDeployment(kubernetesClient);
+        var resourceContext = getResourceContext(deployment, context);
+        var sessionReconciler = (SessionReconciler) reconciler.getReconciler();
+
+        DeleteControl deleteControl = sessionReconciler.cleanupInternal(resourceContext);
+
+        assertTrue(
+                deleteControl.isRemoveFinalizer(),
+                "Deletion must proceed immediately for a session cluster that never deployed, "
+                        + "even though the JobManager cannot be reached and blocking is enabled");
     }
 
     @Test

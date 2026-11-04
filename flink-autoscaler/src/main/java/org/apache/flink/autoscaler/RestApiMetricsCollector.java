@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
@@ -42,8 +43,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_MAX;
@@ -110,7 +113,11 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                                     AggregatedSubtaskMetricsHeaders.getInstance(),
                                     parameters,
                                     EmptyRequestBody.getInstance())
-                            .get();
+                            .get(
+                                    ctx.getConfiguration()
+                                            .get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT)
+                                            .toSeconds(),
+                                    TimeUnit.SECONDS);
 
             return aggregateByFlinkMetric(metrics, responseBody);
         }
@@ -124,13 +131,18 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                         "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
                         "taskSlotsAvailable", FlinkMetric.NUM_TASK_SLOTS_AVAILABLE);
         try (var restClient = ctx.getRestClusterClient()) {
-            return queryJmMetrics(restClient, metrics);
+            return queryJmMetrics(
+                    restClient,
+                    metrics,
+                    ctx.getConfiguration().get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT));
         }
     }
 
     @SneakyThrows
     protected Map<FlinkMetric, Metric> queryJmMetrics(
-            RestClusterClient<?> restClient, Map<String, FlinkMetric> metrics) {
+            RestClusterClient<?> restClient,
+            Map<String, FlinkMetric> metrics,
+            Duration clientTimeout) {
 
         var parameters = new JobManagerMetricsMessageParameters();
         var queryParamIt = parameters.getQueryParameters().iterator();
@@ -144,7 +156,7 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                                 JobManagerMetricsHeaders.getInstance(),
                                 parameters,
                                 EmptyRequestBody.getInstance())
-                        .get();
+                        .get(clientTimeout.toSeconds(), TimeUnit.SECONDS);
 
         return responseBody.getMetrics().stream()
                 .collect(Collectors.toMap(m -> metrics.get(m.getId()), m -> m));
@@ -152,6 +164,7 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     @Override
     protected Map<FlinkMetric, AggregatedMetric> queryTmMetrics(Context ctx) throws Exception {
+        var clientTimeout = ctx.getConfiguration().get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT);
         try (var restClient = ctx.getRestClusterClient()) {
             // Unfortunately we cannot simply query for all metric names as Flink doesn't return
             // anything if any of the metric names is missing
@@ -161,7 +174,9 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                             k -> {
                                 boolean gcMetricsFound =
                                         !queryAggregatedTmMetrics(
-                                                        restClient, TM_METRIC_NAMES_WITH_GC)
+                                                        restClient,
+                                                        TM_METRIC_NAMES_WITH_GC,
+                                                        clientTimeout)
                                                 .isEmpty();
                                 if (!gcMetricsFound) {
                                     LOG.debug("No GC metrics found, using only heap information");
@@ -173,7 +188,8 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
             var tmMetrics =
                     queryAggregatedTmMetrics(
                             restClient,
-                            hasGcMetrics ? TM_METRIC_NAMES_WITH_GC : COMMON_TM_METRIC_NAMES);
+                            hasGcMetrics ? TM_METRIC_NAMES_WITH_GC : COMMON_TM_METRIC_NAMES,
+                            clientTimeout);
             if (!tmMetrics.isEmpty()) {
                 return tmMetrics;
             } else {
@@ -187,7 +203,9 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     @SneakyThrows
     protected Map<FlinkMetric, AggregatedMetric> queryAggregatedTmMetrics(
-            RestClusterClient<?> restClient, Map<String, FlinkMetric> metrics) {
+            RestClusterClient<?> restClient,
+            Map<String, FlinkMetric> metrics,
+            Duration clientTimeout) {
 
         var parameters = new AggregateTaskManagerMetricsParameters();
         var queryParamIt = parameters.getQueryParameters().iterator();
@@ -209,7 +227,7 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                                 AggregatedTaskManagerMetricsHeaders.getInstance(),
                                 parameters,
                                 EmptyRequestBody.getInstance())
-                        .get();
+                        .get(clientTimeout.toSeconds(), TimeUnit.SECONDS);
 
         return aggregateByFlinkMetric(metrics, responseBody);
     }
