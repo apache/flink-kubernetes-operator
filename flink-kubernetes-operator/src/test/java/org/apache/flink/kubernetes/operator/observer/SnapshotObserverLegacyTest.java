@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 
@@ -39,6 +40,10 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -486,6 +491,68 @@ public class SnapshotObserverLegacyTest extends OperatorTestBase {
         assertEquals(
                 SnapshotTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
         assertNull(savepointInfo.getLastSavepoint().getTriggerNonce());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = SnapshotTriggerType.class,
+            names = {"PERIODIC", "MANUAL"})
+    public void testCompletedSavepointAdvancesUpgradeSavepointPath(SnapshotTriggerType triggerType)
+            throws Exception {
+        var conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);
+        configManager.updateDefaultConfig(conf);
+
+        var deployment = TestUtils.buildApplicationCluster();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        status.getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        jobStatus.setState(JobStatus.RUNNING);
+        // Savepoint the running job was started from by the last upgrade
+        jobStatus.setUpgradeSavepointPath("upgrade_sp");
+
+        flinkService.triggerSavepointLegacy(null, triggerType, deployment, conf);
+        // Pending
+        observer.observeSavepointStatus(getResourceContext(deployment));
+        // Completed
+        observer.observeSavepointStatus(getResourceContext(deployment));
+
+        var lastSavepoint = jobStatus.getSavepointInfo().getLastSavepoint();
+        assertEquals(triggerType, lastSavepoint.getTriggerType());
+        // Restoring from the upgrade savepoint now would roll the job back past the newer one
+        assertEquals(lastSavepoint.getLocation(), jobStatus.getUpgradeSavepointPath());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH})
+    public void testCompletedSavepointKeepsUnrecordedUpgradeSavepointPath(
+            String upgradeSavepointPath) throws Exception {
+        var conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED, false);
+        configManager.updateDefaultConfig(conf);
+
+        var deployment = TestUtils.buildApplicationCluster();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        status.getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        jobStatus.setState(JobStatus.RUNNING);
+        // Without a recorded upgrade savepoint restores already fall back to lastSavepoint, and
+        // the last-state marker means the latest state is only available in the HA metadata
+        jobStatus.setUpgradeSavepointPath(upgradeSavepointPath);
+
+        flinkService.triggerSavepointLegacy(null, SnapshotTriggerType.PERIODIC, deployment, conf);
+        // Pending
+        observer.observeSavepointStatus(getResourceContext(deployment));
+        // Completed
+        observer.observeSavepointStatus(getResourceContext(deployment));
+
+        assertEquals(
+                SnapshotTriggerType.PERIODIC,
+                jobStatus.getSavepointInfo().getLastSavepoint().getTriggerType());
+        assertEquals(upgradeSavepointPath, jobStatus.getUpgradeSavepointPath());
     }
 
     @Test
