@@ -50,7 +50,11 @@ Cert-manager also closes the trust chain from the other side: its CA injector pa
 When upgrading an installation that uses `webhook-server-cert`, the chart changes the webhook certificate Secret name to `flink-operator-webhook-server-cert`. Cert-manager must be running and able to issue certificates during this upgrade. The new operator pod cannot start until cert-manager creates the new Secret. With the default `Recreate` strategy, the operator is unavailable during this time, and the fail-closed webhooks reject `FlinkDeployment` and `FlinkSessionJob` create and update requests.
 {{< /hint >}}
 
-The old `webhook-server-cert` Secret remains after the upgrade. Once the new Secret exists and the operator and webhooks are ready, update any external references to the old name. You can then delete the old Secret if no other workload uses it.
+The old `webhook-server-cert` Secret remains after the upgrade. Once the new Secret exists and the operator and webhooks are ready, update any external references to the old name.
+
+{{< hint warning >}}
+Other Kubernetes operators also use the `webhook-server-cert` Secret name. Before deleting the old Secret, check whether other operators or workloads in the same namespace still depend on it. Removing a Secret that they still use can disrupt their services. Delete it only after you confirm that no other operator or workload needs it.
+{{< /hint >}}
 
 ## Disabling the Webhooks
 
