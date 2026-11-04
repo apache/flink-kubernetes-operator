@@ -18,6 +18,8 @@
 package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.ScaleReason;
+import org.apache.flink.autoscaler.ScaleResult;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -25,9 +27,12 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
@@ -41,11 +46,27 @@ public class AutoscalerFlinkMetrics {
     @VisibleForTesting public static final String AVERAGE = "Average";
     @VisibleForTesting public static final String JOB_VERTEX_ID = "jobVertexID";
 
+    @VisibleForTesting public static final String REASON = "reason";
+
     private final Counter numScalings;
 
     private final Counter numErrors;
 
     private final Counter numBalanced;
+
+    /**
+     * Tagged variants of {@link #numBalanced}, one per observed {@link ScaleResult}. Registered
+     * lazily, on the first cycle that reports the reason, so that the metric cardinality of a job
+     * tracks the reasons it really hits rather than every reason that exists.
+     */
+    private final Map<ScaleResult, Counter> numBalancedByReason = new ConcurrentHashMap<>();
+
+    /**
+     * Tagged variants of {@link #numScalings}, one per observed combination of {@link ScaleReason}.
+     * Registered lazily for the same reason as {@link #numBalancedByReason}. Four reasons give at
+     * most 15 combinations, and a job normally produces only a few of them.
+     */
+    private final Map<Set<ScaleReason>, Counter> numScalingsByReason = new ConcurrentHashMap<>();
 
     private final MetricGroup metricGroup;
 
@@ -58,16 +79,42 @@ public class AutoscalerFlinkMetrics {
         this.metricGroup = metricGroup;
     }
 
-    public void incrementScaling() {
+    /**
+     * Increments the untagged {@code scalings} counter and the counter tagged with the reasons. The
+     * untagged counter is kept so that existing dashboards and alerts continue to work.
+     *
+     * @param reasons why this cycle changed the parallelism, unioned over every scaled vertex
+     */
+    public void incrementScaling(Set<ScaleReason> reasons) {
         numScalings.inc();
+        if (reasons.isEmpty()) {
+            // A scaled cycle always has a reason. Guard anyway so that a future caller cannot
+            // register a counter with an empty tag.
+            return;
+        }
+        numScalingsByReason
+                .computeIfAbsent(
+                        EnumSet.copyOf(reasons),
+                        r -> metricGroup.addGroup(REASON, ScaleReason.toTag(r)).counter("scalings"))
+                .inc();
     }
 
     public void incrementError() {
         numErrors.inc();
     }
 
-    public void incrementBalanced() {
+    /**
+     * Increments the untagged {@code balanced} counter and the counter tagged with {@code reason}.
+     * The untagged counter is kept so that existing dashboards and alerts continue to work.
+     *
+     * @param reason why this cycle applied no parallelism change
+     */
+    public void incrementBalanced(ScaleResult reason) {
         numBalanced.inc();
+        numBalancedByReason
+                .computeIfAbsent(
+                        reason, r -> metricGroup.addGroup(REASON, r.getTag()).counter("balanced"))
+                .inc();
     }
 
     public void registerScalingMetrics(
@@ -136,6 +183,13 @@ public class AutoscalerFlinkMetrics {
         return numScalings.getCount();
     }
 
+    /** Returns the count for one reason combination, or 0 if it has not been reported yet. */
+    @VisibleForTesting
+    public long getNumScalingsCount(Set<ScaleReason> reasons) {
+        var counter = numScalingsByReason.get(reasons);
+        return counter == null ? 0 : counter.getCount();
+    }
+
     @VisibleForTesting
     public long getNumErrorsCount() {
         return numErrors.getCount();
@@ -144,6 +198,13 @@ public class AutoscalerFlinkMetrics {
     @VisibleForTesting
     public long getNumBalancedCount() {
         return numBalanced.getCount();
+    }
+
+    /** Returns the count for one reason, or 0 if that reason has not been reported yet. */
+    @VisibleForTesting
+    public long getNumBalancedCount(ScaleResult reason) {
+        var counter = numBalancedByReason.get(reason);
+        return counter == null ? 0 : counter.getCount();
     }
 
     @VisibleForTesting

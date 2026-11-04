@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -133,9 +134,10 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
      * state of the given context. The delayed scale down state is loaded from and persisted to the
      * {@link AutoScalerStateStore} owned by this executor.
      *
-     * @return {@code true} if a parallelism change was applied, {@code false} otherwise.
+     * @return {@link ScaleResult#SCALED} if a parallelism change was applied, otherwise the reason
+     *     why no change was applied.
      */
-    public boolean execute(Context context) throws Exception {
+    public ScaleResult execute(Context context) throws Exception {
         var cycleState = context.getScalingCycleState();
         var delayedScaleDown = autoScalerStateStore.getDelayedScaleDown(context);
 
@@ -157,7 +159,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     @VisibleForTesting
-    boolean scaleResource(
+    ScaleResult scaleResource(
             Context context,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
@@ -169,24 +171,27 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         var conf = context.getConfiguration();
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
-        var scalingSummaries =
-                computeScalingSummary(
+        var computation =
+                computeScalingSummaryWithReason(
                         context,
                         evaluatedMetrics,
                         scalingHistory,
                         restartTime,
                         jobTopology,
                         delayedScaleDown);
+        var scalingSummaries = computation.summaries;
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
-            return false;
+            return computation.reason;
         }
 
         updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
-        if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)) {
-            return false;
+        var blockedReason =
+                checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now);
+        if (blockedReason != null) {
+            return blockedReason;
         }
 
         var configOverrides =
@@ -198,13 +203,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         autoScalerEventHandler);
 
         var memoryTuningEnabled = conf.get(AutoScalerOptions.MEMORY_TUNING_ENABLED);
-        if (scalingWouldExceedMaxResources(
-                memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
-                jobTopology,
-                evaluatedMetrics,
-                scalingSummaries,
-                context)) {
-            return false;
+        var resourceLimit =
+                scalingWouldExceedMaxResources(
+                        memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
+                        jobTopology,
+                        evaluatedMetrics,
+                        scalingSummaries,
+                        context);
+        if (resourceLimit != null) {
+            return resourceLimit;
         }
 
         scalingSummaries =
@@ -213,7 +220,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         memoryTuningEnabled ? configOverrides.newConfigWithOverrides(conf) : conf,
                         scalingSummaries);
         if (scalingSummaries == null || scalingSummaries.isEmpty()) {
-            return false;
+            return ScaleResult.BLOCKED_BY_CUSTOM_EXECUTOR;
         }
 
         autoScalerEventHandler.handleScalingEvent(
@@ -238,7 +245,19 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Try to clear all delayed scale down requests after scaling.
         delayedScaleDown.clearAll();
 
-        return true;
+        // Publish the reasons of every scaled vertex so that the job level scalings counter can
+        // be tagged. The decision is final at this point, after the custom executors ran.
+        context.getScalingCycleState().setScaleReasons(aggregateScaleReasons(scalingSummaries));
+
+        return ScaleResult.SCALED;
+    }
+
+    /** Unions the reasons of every vertex that this cycle scales. */
+    private static Set<ScaleReason> aggregateScaleReasons(
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        var reasons = EnumSet.noneOf(ScaleReason.class);
+        scalingSummaries.values().forEach(summary -> reasons.addAll(summary.getScaleReasons()));
+        return reasons;
     }
 
     private void updateRecommendedParallelism(
@@ -262,14 +281,52 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Duration restartTime,
             JobTopology jobTopology,
             DelayedScaleDown delayedScaleDown) {
+        return computeScalingSummaryWithReason(
+                        context,
+                        evaluatedMetrics,
+                        scalingHistory,
+                        restartTime,
+                        jobTopology,
+                        delayedScaleDown)
+                .getSummaries();
+    }
+
+    /**
+     * The outcome of {@link #computeScalingSummary}. An empty summary map has three distinct
+     * causes, so the map alone cannot explain the cycle. This pairs the map with the reason, which
+     * lets {@link #scaleResource} tag the {@code autoscaler.balanced} counter.
+     */
+    private static class SummaryComputation {
+        private final Map<JobVertexID, ScalingSummary> summaries;
+        private final ScaleResult reason;
+
+        private SummaryComputation(Map<JobVertexID, ScalingSummary> summaries, ScaleResult reason) {
+            this.summaries = summaries;
+            this.reason = reason;
+        }
+
+        private Map<JobVertexID, ScalingSummary> getSummaries() {
+            return summaries;
+        }
+    }
+
+    private SummaryComputation computeScalingSummaryWithReason(
+            Context context,
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            Duration restartTime,
+            JobTopology jobTopology,
+            DelayedScaleDown delayedScaleDown) {
         LOG.debug("Restart time used in scaling summary computation: {}", restartTime);
 
         if (isJobUnderMemoryPressure(context, evaluatedMetrics.getGlobalMetrics())) {
             LOG.info("Skipping vertex scaling due to memory pressure");
-            return Map.of();
+            return new SummaryComputation(Map.of(), ScaleResult.BLOCKED_BY_MEMORY);
         }
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
+        var noChangeReasons =
+                EnumSet.noneOf(JobVertexScaler.ParallelismChange.NoChangeReason.class);
 
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
@@ -298,6 +355,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                                 restartTime,
                                                 delayedScaleDown);
                                 if (parallelismChange.isNoChange()) {
+                                    noChangeReasons.add(parallelismChange.getNoChangeReason());
                                     return;
                                 }
                                 if (parallelismChange.isOutsideUtilizationBound()) {
@@ -308,17 +366,34 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         new ScalingSummary(
                                                 currentParallelism,
                                                 parallelismChange.getNewParallelism(),
-                                                metrics));
+                                                metrics,
+                                                parallelismChange.getScaleReasons()));
                             }
                         });
 
         // If the Utilization of all tasks is within range, we can skip scaling.
         if (!anyVertexOutsideBound.get()) {
             LOG.info("All vertex processing rates are within target.");
-            return Map.of();
+            return new SummaryComputation(Map.of(), aggregateNoChangeReason(noChangeReasons));
         }
 
-        return out;
+        return new SummaryComputation(out, ScaleResult.SCALED);
+    }
+
+    /**
+     * Reduces the per vertex no-change reasons to one job level result. A vertex that is blocked is
+     * more informative than a vertex that is balanced, so any blocking reason wins over {@link
+     * JobVertexScaler.ParallelismChange.NoChangeReason#BALANCED}. When several vertices are blocked
+     * for different reasons, the first one in declaration order wins, which keeps the tag stable
+     * across cycles.
+     */
+    private static ScaleResult aggregateNoChangeReason(
+            Set<JobVertexScaler.ParallelismChange.NoChangeReason> reasons) {
+        return reasons.stream()
+                .filter(r -> r != JobVertexScaler.ParallelismChange.NoChangeReason.BALANCED)
+                .findFirst()
+                .map(JobVertexScaler.ParallelismChange.NoChangeReason::getScaleResult)
+                .orElse(ScaleResult.BALANCED);
     }
 
     private boolean isJobUnderMemoryPressure(
@@ -352,8 +427,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         return false;
     }
 
+    /**
+     * @return the blocking {@link ScaleResult}, or {@code null} when the change fits within both
+     *     the cluster capacity and the configured quota. The two limits are reported separately
+     *     because an operator resolves them differently: one needs more cluster capacity, the other
+     *     needs the quota raised.
+     */
     @VisibleForTesting
-    protected boolean scalingWouldExceedMaxResources(
+    @Nullable
+    protected ScaleResult scalingWouldExceedMaxResources(
             Configuration tunedConfig,
             JobTopology jobTopology,
             EvaluatedMetrics evaluatedMetrics,
@@ -361,7 +443,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Context ctx) {
         if (scalingWouldExceedClusterResources(
                 tunedConfig, evaluatedMetrics, scalingSummaries, ctx)) {
-            return true;
+            return ScaleResult.BLOCKED_BY_CLUSTER_RESOURCES;
         }
         if (scalingWouldExceedResourceQuota(tunedConfig, jobTopology, scalingSummaries, ctx)) {
             autoScalerEventHandler.handleEvent(
@@ -371,9 +453,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                     RESOURCE_QUOTA_REACHED_MESSAGE,
                     null,
                     tunedConfig.get(SCALING_EVENT_INTERVAL));
-            return true;
+            return ScaleResult.BLOCKED_BY_QUOTA;
         }
-        return false;
+        return null;
     }
 
     private boolean scalingWouldExceedClusterResources(
@@ -508,7 +590,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         return overrides;
     }
 
-    private boolean checkIfBlockedAndTriggerScalingEvent(
+    /**
+     * @return the blocking {@link ScaleResult}, or {@code null} when scaling is permitted now.
+     */
+    @Nullable
+    private ScaleResult checkIfBlockedAndTriggerScalingEvent(
             Context context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             Configuration conf,
@@ -518,7 +604,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         if (scaleEnabled && !isExcluded) {
             // Not blocked. The scaling report is emitted later, once the decision is final
             // (after memory tuning, the max-resource check, and the custom scaling executors).
-            return false;
+            return null;
         }
         String message;
         if (!scaleEnabled) {
@@ -538,7 +624,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
         autoScalerEventHandler.handleScalingEvent(
                 context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
-        return true;
+        return !scaleEnabled
+                ? ScaleResult.BLOCKED_BY_CONFIG
+                : ScaleResult.BLOCKED_BY_EXCLUDED_PERIOD;
     }
 
     /**
