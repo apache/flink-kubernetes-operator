@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
@@ -299,15 +300,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private static boolean isMemoryDefined(Resource resource) {
-        return resource != null && !StringUtils.isNullOrWhitespaceOnly(resource.getMemory());
-    }
-
-    private static boolean isMemoryDefined(ResourceRequirements resources) {
-        // Kubernetes defaults requests to limits, so memory defined via either is sufficient.
-        return ResourceConfigUtils.isMemoryDefined(resources);
-    }
-
     @VisibleForTesting
     static Optional<String> validateJarURI(
             String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
@@ -328,37 +320,44 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
-        Configuration conf = Configuration.fromMap(confMap);
-        // Either the resource memory or the resource requirements memory must be defined.
-        boolean jmMemoryDefined =
-                jmSpec != null
-                        && (isMemoryDefined(jmSpec.getResource())
-                                || isMemoryDefined(jmSpec.getResources()));
-        Optional<String> jmMemoryValidation =
-                jmMemoryDefined ? Optional.empty() : validateJmMemoryConfig(conf);
-
         if (jmSpec == null) {
-            return jmMemoryValidation;
+            return validateJmMemoryConfig(null, confMap);
         }
 
         return firstPresent(
-                jmMemoryValidation,
-                validateResources("JobManager", jmSpec.getResource()),
-                validateResourceRequirements("JobManager", jmSpec.getResources()),
-                validateJmReplicas(jmSpec.getReplicas(), confMap));
+                        validateResources("JobManager", jmSpec.getResource()),
+                        validateResourceRequirements("JobManager", jmSpec.getResources()),
+                        validateJmReplicas(jmSpec.getReplicas(), confMap))
+                .or(() -> validateJmMemoryConfig(jmSpec, confMap));
     }
 
-    private Optional<String> validateJmMemoryConfig(Configuration conf) {
+    private Optional<String> validateJmMemoryConfig(
+            @Nullable JobManagerSpec jmSpec, Map<String, String> confMap) {
+        final String processMemory =
+                jmSpec == null
+                        ? null
+                        : ResourceConfigUtils.getProcessMemory(
+                                jmSpec.getResources(), jmSpec.getResource());
+        final Configuration conf = Configuration.fromMap(confMap);
+        if (processMemory != null) {
+            conf.setString(JobManagerOptions.TOTAL_PROCESS_MEMORY.key(), processMemory);
+        }
         try {
+            // As on deploy, the legacy heap option is ignored once the spec sets the memory.
             JobManagerProcessUtils.processSpecFromConfigWithNewOptionToInterpretLegacyHeap(
-                    conf, JobManagerOptions.JVM_HEAP_MEMORY);
+                    conf,
+                    processMemory == null
+                            ? JobManagerOptions.JVM_HEAP_MEMORY
+                            : JobManagerOptions.TOTAL_PROCESS_MEMORY);
+            return Optional.empty();
         } catch (Exception e) {
+            if (processMemory != null) {
+                return Optional.of(e.getMessage());
+            }
             return Optional.of(
                     "JobManager resource memory must be defined using `spec.jobManager.resource.memory`"
                             + " or `spec.jobManager.resources.requests.memory`");
         }
-
-        return Optional.empty();
     }
 
     private Optional<String> validateJmReplicas(int replicas, Map<String, String> confMap) {
@@ -374,35 +373,39 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateTmSpec(TaskManagerSpec tmSpec, Map<String, String> confMap) {
-        Configuration conf = Configuration.fromMap(confMap);
-
-        var tmMemoryDefined =
-                tmSpec != null
-                        && (isMemoryDefined(tmSpec.getResource())
-                                || isMemoryDefined(tmSpec.getResources()));
-        Optional<String> tmMemoryConfigValidation =
-                tmMemoryDefined ? Optional.empty() : validateTmMemoryConfig(conf);
-
         if (tmSpec == null) {
-            return tmMemoryConfigValidation;
+            return validateTmMemoryConfig(null, confMap);
         }
 
         return firstPresent(
-                tmMemoryConfigValidation,
-                validateResources("TaskManager", tmSpec.getResource()),
-                validateResourceRequirements("TaskManager", tmSpec.getResources()),
-                validateTmReplicas(tmSpec));
+                        validateResources("TaskManager", tmSpec.getResource()),
+                        validateResourceRequirements("TaskManager", tmSpec.getResources()),
+                        validateTmReplicas(tmSpec))
+                .or(() -> validateTmMemoryConfig(tmSpec, confMap));
     }
 
-    private Optional<String> validateTmMemoryConfig(Configuration conf) {
+    private Optional<String> validateTmMemoryConfig(
+            @Nullable TaskManagerSpec tmSpec, Map<String, String> confMap) {
+        final String processMemory =
+                tmSpec == null
+                        ? null
+                        : ResourceConfigUtils.getProcessMemory(
+                                tmSpec.getResources(), tmSpec.getResource());
+        final Configuration conf = Configuration.fromMap(confMap);
+        if (processMemory != null) {
+            conf.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), processMemory);
+        }
         try {
             TaskExecutorProcessUtils.processSpecFromConfig(conf);
+            return Optional.empty();
         } catch (Exception e) {
+            if (processMemory != null) {
+                return Optional.of(e.getMessage());
+            }
             return Optional.of(
                     "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`"
                             + " or `spec.taskManager.resources.requests.memory`");
         }
-        return Optional.empty();
     }
 
     private Optional<String> validateTmReplicas(TaskManagerSpec tmSpec) {
