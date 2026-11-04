@@ -203,7 +203,6 @@ public class FlinkOperator {
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
         canaryResourceManagers.add(canaryResourceManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
-        canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
                 new FlinkDeploymentController(
@@ -229,7 +228,6 @@ public class FlinkOperator {
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
         canaryResourceManagers.add(canaryResourceManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
-        canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
                 new FlinkSessionJobController(
