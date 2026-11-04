@@ -353,9 +353,7 @@ public class ApplicationReconciler
                 cleanupAfterFailedJob(ctx);
             }
 
-            resubmitJob(
-                    ctx,
-                    HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig()));
+            resubmitJob(ctx, requireHaMetadataForResubmit(ctx, observeConfig));
             return true;
         }
 
@@ -403,6 +401,22 @@ public class ApplicationReconciler
         }
 
         return restartNeeded;
+    }
+
+    private boolean requireHaMetadataForResubmit(
+            FlinkResourceContext<FlinkDeployment> ctx, Configuration observeConfig) {
+        if (!HighAvailabilityMode.isHighAvailabilityModeActivated(observeConfig)) {
+            return false;
+        }
+        if (ctx.getResource().getSpec().getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+            return true;
+        }
+        if (ctx.getFlinkService().isHaMetadataAvailable(observeConfig)) {
+            LOG.info("HA metadata available, resubmitting stateless job from last state");
+            return true;
+        }
+        LOG.info("HA metadata not available, resubmitting stateless job from empty state");
+        return false;
     }
 
     private boolean cleanupTerminalJmAfterTtl(
