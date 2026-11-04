@@ -23,11 +23,14 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Shared jarURI validation (scheme allowlist plus restricted-host checks), used both at
@@ -35,10 +38,54 @@ import java.util.stream.Collectors;
  */
 public final class JarUriValidationUtils {
 
+    private static final List<AddressRange> RESTRICTED_RANGES =
+            Stream.of(
+                            "0.0.0.0/8",
+                            "10.0.0.0/8",
+                            "100.64.0.0/10",
+                            "127.0.0.0/8",
+                            "169.254.0.0/16",
+                            "172.16.0.0/12",
+                            "192.0.0.0/24",
+                            "192.0.2.0/24",
+                            "192.88.99.0/24",
+                            "192.168.0.0/16",
+                            "198.18.0.0/15",
+                            "198.51.100.0/24",
+                            "203.0.113.0/24",
+                            "224.0.0.0/4",
+                            "240.0.0.0/4",
+                            "::/128",
+                            "::1/128",
+                            "64:ff9b:1::/48",
+                            "100::/64",
+                            "2001:2::/48",
+                            "2001:db8::/32",
+                            "3fff::/20",
+                            "5f00::/16",
+                            "fc00::/7",
+                            "fe80::/10",
+                            "fec0::/10",
+                            "ff00::/8")
+                    .map(AddressRange::parse)
+                    .collect(Collectors.toUnmodifiableList());
+
+    private static final AddressRange IPV4_MAPPED =
+            new AddressRange(
+                    new byte[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (byte) 0xff, (byte) 0xff, 0, 0, 0, 0},
+                    96);
+    private static final AddressRange IPV4_COMPATIBLE = AddressRange.parse("::/96");
+    private static final AddressRange NAT64 = AddressRange.parse("64:ff9b::/96");
+    private static final AddressRange SIX_TO_FOUR = AddressRange.parse("2002::/16");
+    private static final AddressRange TEREDO = AddressRange.parse("2001::/32");
+
     private JarUriValidationUtils() {}
 
     public static Optional<String> validateJarURI(
-            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+            String jarURI,
+            Collection<String> allowedSchemes,
+            boolean disallowRestrictedHosts,
+            Collection<String> allowedUriPrefixes) {
         if (jarURI == null) {
             return Optional.empty();
         }
@@ -69,7 +116,8 @@ public final class JarUriValidationUtils {
         }
 
         if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && disallowRestrictedHosts) {
+                && disallowRestrictedHosts
+                && !isExempt(uri, allowedUriPrefixes)) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return Optional.of("jarURI must include a host for http/https schemes");
@@ -92,11 +140,134 @@ public final class JarUriValidationUtils {
         return Optional.empty();
     }
 
+    private static boolean isExempt(URI uri, Collection<String> allowedUriPrefixes) {
+        if (uri.getRawUserInfo() != null || hasDotSegment(uri.getPath())) {
+            return false;
+        }
+        return allowedUriPrefixes.stream().anyMatch(prefix -> matchesPrefix(uri, prefix));
+    }
+
+    private static boolean matchesPrefix(URI uri, String prefix) {
+        URI prefixUri;
+        try {
+            prefixUri = new URI(prefix.trim());
+        } catch (URISyntaxException e) {
+            return false;
+        }
+        if (prefixUri.getScheme() == null
+                || prefixUri.getHost() == null
+                || prefixUri.getRawUserInfo() != null
+                || prefixUri.getRawQuery() != null
+                || prefixUri.getRawFragment() != null
+                || hasDotSegment(prefixUri.getPath())) {
+            return false;
+        }
+        if (!prefixUri.getScheme().equalsIgnoreCase(uri.getScheme())
+                || !prefixUri.getHost().equalsIgnoreCase(uri.getHost())
+                || effectivePort(prefixUri) != effectivePort(uri)) {
+            return false;
+        }
+        String prefixPath = prefixUri.getPath();
+        if (prefixPath.isEmpty() || prefixPath.equals("/")) {
+            return true;
+        }
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        String prefixDir = prefixPath.endsWith("/") ? prefixPath : prefixPath + "/";
+        return path.equals(prefixPath) || path.startsWith(prefixDir);
+    }
+
+    private static int effectivePort(URI uri) {
+        if (uri.getPort() != -1) {
+            return uri.getPort();
+        }
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            return 443;
+        }
+        if ("http".equalsIgnoreCase(uri.getScheme())) {
+            return 80;
+        }
+        return -1;
+    }
+
+    private static boolean hasDotSegment(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (String segment : path.split("/", -1)) {
+            int paramStart = segment.indexOf(';');
+            String name = paramStart == -1 ? segment : segment.substring(0, paramStart);
+            if (name.equals(".") || name.equals("..")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean isRestricted(InetAddress addr) {
-        return addr.isLoopbackAddress()
-                || addr.isLinkLocalAddress()
-                || addr.isSiteLocalAddress()
-                || addr.isAnyLocalAddress()
-                || addr.isMulticastAddress();
+        return isRestricted(addr.getAddress());
+    }
+
+    private static boolean isRestricted(byte[] address) {
+        if (RESTRICTED_RANGES.stream().anyMatch(range -> range.contains(address))) {
+            return true;
+        }
+        return embeddedIpv4(address).map(JarUriValidationUtils::isRestricted).orElse(false);
+    }
+
+    private static Optional<byte[]> embeddedIpv4(byte[] address) {
+        if (IPV4_MAPPED.contains(address)
+                || IPV4_COMPATIBLE.contains(address)
+                || NAT64.contains(address)) {
+            return Optional.of(Arrays.copyOfRange(address, 12, 16));
+        }
+        if (SIX_TO_FOUR.contains(address)) {
+            return Optional.of(Arrays.copyOfRange(address, 2, 6));
+        }
+        if (TEREDO.contains(address)) {
+            byte[] client = Arrays.copyOfRange(address, 12, 16);
+            for (int i = 0; i < client.length; i++) {
+                client[i] = (byte) ~client[i];
+            }
+            return Optional.of(client);
+        }
+        return Optional.empty();
+    }
+
+    private static final class AddressRange {
+        private final byte[] network;
+        private final int prefixLength;
+
+        private AddressRange(byte[] network, int prefixLength) {
+            this.network = network;
+            this.prefixLength = prefixLength;
+        }
+
+        private static AddressRange parse(String cidr) {
+            String[] parts = cidr.split("/", 2);
+            try {
+                return new AddressRange(
+                        InetAddress.getByName(parts[0]).getAddress(), Integer.parseInt(parts[1]));
+            } catch (UnknownHostException e) {
+                throw new IllegalArgumentException("Invalid address range " + cidr, e);
+            }
+        }
+
+        private boolean contains(byte[] address) {
+            if (address.length != network.length) {
+                return false;
+            }
+            int fullBytes = prefixLength / 8;
+            for (int i = 0; i < fullBytes; i++) {
+                if (address[i] != network[i]) {
+                    return false;
+                }
+            }
+            int remainingBits = prefixLength % 8;
+            if (remainingBits == 0) {
+                return true;
+            }
+            int mask = (0xff << (8 - remainingBits)) & 0xff;
+            return (address[fullBytes] & mask) == (network[fullBytes] & mask);
+        }
     }
 }
