@@ -147,11 +147,13 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                         .inNamespace(namespace)
                         .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId));
         var remainingTimeout =
-                deleteDeploymentBlocking(
+                deleteDeploymentBlockingWithForceDelete(
                         "JobManager",
                         jmDeployment,
                         deletionPropagation,
-                        operatorConfig.getFlinkShutdownClusterTimeout());
+                        operatorConfig.getFlinkShutdownClusterTimeout(),
+                        StandaloneKubernetesUtils.getJobManagerSelectors(clusterId),
+                        conf);
 
         var tmDeployment =
                 kubernetesClient
@@ -160,8 +162,13 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                         .inNamespace(namespace)
                         .withName(
                                 StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId));
-        deleteDeploymentBlocking(
-                "TaskManager", tmDeployment, deletionPropagation, remainingTimeout);
+        deleteDeploymentBlockingWithForceDelete(
+                "TaskManager",
+                tmDeployment,
+                deletionPropagation,
+                remainingTimeout,
+                StandaloneKubernetesUtils.getTaskManagerSelectors(clusterId),
+                conf);
     }
 
     @Override

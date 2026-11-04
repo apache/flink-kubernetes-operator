@@ -57,6 +57,12 @@
             <td>The interval for the controller to reschedule the reconcile process.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.resource.cleanup.force-delete-stuck-pods.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether to force delete (grace period 0) the JobManager/TaskManager pods that are still Terminating past their deletion deadline (e.g. stuck due to their node becoming unreachable) while waiting for the cluster resources to be deleted. Stuck pods are force deleted once, after half of resource.cleanup.timeout has elapsed. Pods whose termination grace period is longer than that are left alone, increase resource.cleanup.timeout for those.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.resource.cleanup.timeout</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>

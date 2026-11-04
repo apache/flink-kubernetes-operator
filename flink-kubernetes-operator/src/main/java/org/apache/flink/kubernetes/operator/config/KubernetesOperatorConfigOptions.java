@@ -179,6 +179,19 @@ public class KubernetesOperatorConfigOptions {
                             "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
     @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<Boolean> OPERATOR_RESOURCE_CLEANUP_FORCE_DELETE_STUCK_PODS =
+            operatorConfig("resource.cleanup.force-delete-stuck-pods.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to force delete (grace period 0) the JobManager/TaskManager pods that are "
+                                    + "still Terminating past their deletion deadline (e.g. stuck due to their node "
+                                    + "becoming unreachable) while waiting for the cluster resources to be deleted. "
+                                    + "Stuck pods are force deleted once, after half of resource.cleanup.timeout has "
+                                    + "elapsed. Pods whose termination grace period is longer than that are left "
+                                    + "alone, increase resource.cleanup.timeout for those.");
+
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
     public static final ConfigOption<Duration> OPERATOR_JOB_SUBMISSION_TIMEOUT =
             operatorConfig("job.submission.timeout")
                     .durationType()
