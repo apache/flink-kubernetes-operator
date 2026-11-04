@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContext;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.FlinkBlueGreenDeploymentSpecDiff;
 import org.apache.flink.util.Preconditions;
@@ -44,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -379,9 +381,21 @@ public class BlueGreenUtils {
         // Deployment metadata
         ObjectMeta flinkDeploymentMeta = getDependentObjectMeta(context.getBgDeployment());
         flinkDeploymentMeta.setName(childDeploymentName);
-        flinkDeploymentMeta.setLabels(
-                Map.of(BlueGreenDeploymentType.LABEL_KEY, blueGreenDeploymentType.toString()));
+        flinkDeploymentMeta.setLabels(childLabels(context, blueGreenDeploymentType));
         flinkDeployment.setMetadata(flinkDeploymentMeta);
         return flinkDeployment;
+    }
+
+    /** Builds the child labels: the parent's labels plus the Blue/Green type marker. */
+    private static Map<String, String> childLabels(
+            BlueGreenContext context, BlueGreenDeploymentType blueGreenDeploymentType) {
+        Map<String, String> labels = new HashMap<>();
+        // Inherit the parent's labels so children match the operator's label selector
+        Optional.ofNullable(context.getBgDeployment().getMetadata().getLabels())
+                .ifPresent(labels::putAll);
+        // The canary marker would make the FlinkDeployment controller skip the child
+        labels.remove(CanaryResourceManager.CANARY_LABEL);
+        labels.put(BlueGreenDeploymentType.LABEL_KEY, blueGreenDeploymentType.toString());
+        return labels;
     }
 }
