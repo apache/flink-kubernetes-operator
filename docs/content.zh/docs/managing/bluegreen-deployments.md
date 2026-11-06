@@ -345,6 +345,7 @@ The blue/green resource itself does not emit Kubernetes events, failures surface
 - The `ADVANCED` gate is injected by rewriting the job graph through Flink internals, so it is tested against each supported Flink version and may need changes for new ones.
 - The automatic gate placement supports a single sink or a single source, other topologies place the gate in code.
 - In the `ADVANCED` mode, late records arriving right around the crossing of the cutover point can be written twice or dropped, and an abort after the cutover point may write records twice.
+- In the `ADVANCED` mode, a restart of the new deployment after the transition compares records with the cutover point again until its watermark passes it, so late records older than the cutover point that arrive in between are dropped.
 - The state handoff is currently always savepoint-based: `last-state` transitions also take a savepoint instead of reusing the latest checkpoint information.
 - Suspend requests are deferred while a transition is in progress.
 - A Flink 2.x job using the async state API takes only native savepoints, so a transition cannot change its state backend.
