@@ -2340,6 +2340,33 @@ public class FlinkBlueGreenDeploymentControllerTest {
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyAdvancedModeSuspendCompletes(FlinkVersion flinkVersion) throws Exception {
+        var rs =
+                executeAdvancedDeployment(
+                        buildAdvancedSessionCluster(
+                                TEST_DEPLOYMENT_NAME,
+                                TEST_NAMESPACE,
+                                flinkVersion,
+                                null,
+                                UpgradeMode.SAVEPOINT));
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+
+        rs.deployment.getSpec().getTemplate().getSpec().getJob().setState(JobState.SUSPENDED);
+        kubernetesClient.resource(rs.deployment).createOrReplace();
+        rs = reconcile(rs.deployment);
+        simulateSuccessfulSuspend(getFlinkDeployments().get(0));
+        rs = reconcile(rs.deployment);
+
+        // The parent finishes suspending, like in BASIC mode, instead of failing every
+        // reconciliation once its child has stopped
+        assertEquals(JobStatus.SUSPENDED, rs.reconciledStatus.getJobStatus().getState());
+        assertEquals(
+                FlinkBlueGreenDeploymentState.ACTIVE_BLUE, rs.reconciledStatus.getBlueGreenState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyAdvancedModeGateTimeoutAborts(FlinkVersion flinkVersion) throws Exception {
         var gateTimeoutMs = 2000;
         var deployment =

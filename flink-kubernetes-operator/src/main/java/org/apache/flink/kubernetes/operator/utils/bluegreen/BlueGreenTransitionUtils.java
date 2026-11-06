@@ -211,6 +211,10 @@ public class BlueGreenTransitionUtils {
             case RECONCILING:
                 transitionStage = TransitionStage.INITIALIZING;
                 break;
+            case SUSPENDED:
+                // The deployment is being stopped, so there is no gate to signal: the stage stays
+                // as it is until the deployment is resumed
+                return;
             default:
                 throw new RuntimeException("Unsupported JobStatus: " + jobStatus);
         }
