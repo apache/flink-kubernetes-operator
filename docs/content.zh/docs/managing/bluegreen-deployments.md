@@ -183,7 +183,7 @@ In the `ADVANCED` transition mode the jobs of both deployments run a gate, an op
 
 The gates use two kinds of time:
 
-- **The job's watermark**, produced by its `WatermarkStrategy` (or the `WATERMARK FOR` clause in SQL), drives the gates. When the new deployment is ready, the old deployment's gate proposes its own watermark plus the deployment deletion delay as the cutover point. Every subtask of that gate may propose one, the first written to the ConfigMap wins and all of them use it. The old deployment stops writing once its watermark passes the cutover point, and the new deployment writes every record once its own watermark passes it.
+- **The job's watermark**, produced by its `WatermarkStrategy` (or the `WATERMARK FOR` clause in SQL), drives the gates. When the new deployment is ready, the old deployment's gate proposes its own watermark plus the deployment deletion delay as the cutover point. Every subtask of that gate may propose one, the first written to the ConfigMap wins and all of them use it. The old deployment stops writing once its watermark passes the cutover point, and the new deployment writes every record once its own watermark passes it. Until the cutover point is set, the old deployment writes every record, including those up to the job's out-of-orderness ahead of its watermark, so the deployment deletion delay must be at least that out-of-orderness, or the new deployment writes those records again. `ADVANCED` therefore rejects a resource that leaves the delay unset; `0ms` is only right for a job whose event times never go backwards.
 - **Each record's timestamp**, read by the extractor the job passes to the gate, decides who writes the record until then: the old deployment writes records older than the cutover point, the new deployment the rest.
 
 What this gives you:
@@ -211,13 +211,14 @@ The gate phase, from the moment the new deployment is ready until every subtask 
 
 - **Java 17**: the gate client is compiled to Java 17 bytecode, so the job must run on Java 17: on Java 11 it fails with `UnsupportedClassVersionError` as soon as it loads the gate. `BASIC` deployments are not affected.
 - **Event-time watermarks**: the cutover point and both crossings come from the job's watermark.
+- **An explicit deployment deletion delay**: `kubernetes.operator.bluegreen.deployment-deletion.delay` must be set, to at least the job's maximum out-of-orderness, see [How the Hand-Over Works](#how-the-hand-over-works). A resource that leaves it unset is rejected.
 - **The `savepoint` or `last-state` upgrade mode**: the new deployment must start from the transition savepoint of the old one, and an abort after the cutover point redeploys the old deployment from it. `stateless` is rejected. On Flink 2.x, a job using the async state API needs that savepoint in the native format, see [Requirements](#requirements).
 - **A gate in the job**: placed on the `DataStream` the job writes, see [Enabling It](#enabling-it). SQL jobs that write through `INSERT INTO` have no such stream.
 - **The gate client in the job JAR**: add `org.apache.flink:flink-kubernetes-operator-bluegreen-client` at the operator's version, bundled into the job JAR rather than `provided`, so that the TaskManagers can load it. The same artifact serves Flink 1.x and 2.x jobs. The `examples/flink-bluegreen-advanced-example` job bundles it.
 
 ### Enabling It
 
-Set the transition mode:
+Set the transition mode and the deployment deletion delay:
 
 ```yaml
 apiVersion: flink.apache.org/v1beta1
@@ -227,6 +228,8 @@ metadata:
 spec:
   transitionMode: ADVANCED
   configuration:
+    # At least the job's maximum out-of-orderness
+    kubernetes.operator.bluegreen.deployment-deletion.delay: "10s"
     kubernetes.operator.bluegreen.gate.timeout: "10 min"
   template:
     spec:
@@ -270,7 +273,7 @@ Blue/green behavior is configured on the resource itself, in the `configuration`
 |--------------------------------------------------------------------|---------|--------------------------------------------------------------------------------------------|
 | `kubernetes.operator.bluegreen.abort.grace-period`                 | 10 min  | Maximum time the new deployment is given to become stable before the transition is aborted |
 | `kubernetes.operator.bluegreen.reconciliation.reschedule-interval` | 15 s    | How often the controller re-checks progress during savepointing and transitions            |
-| `kubernetes.operator.bluegreen.deployment-deletion.delay`          | 0 ms    | Extra time the old deployment is kept running after the new one becomes stable             |
+| `kubernetes.operator.bluegreen.deployment-deletion.delay`          | 0 ms    | Extra time the old deployment is kept running after the new one becomes stable. Required in `ADVANCED` mode, where it must be at least the job's maximum out-of-orderness: see [How the Hand-Over Works](#how-the-hand-over-works) |
 | `kubernetes.operator.bluegreen.gate.timeout`                       | (none)  | `ADVANCED` mode only: maximum time the gate is given to hand over once the new deployment is ready, the abort grace period when unset. Must be longer than the deployment deletion delay |
 
 The same options are listed with their formal defaults under [Blue/Green Deployment Configuration]({{< ref "docs/deployment/configuration#bluegreen-configuration" >}}).

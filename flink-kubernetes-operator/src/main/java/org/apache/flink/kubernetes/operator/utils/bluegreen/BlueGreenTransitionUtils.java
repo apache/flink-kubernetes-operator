@@ -277,13 +277,30 @@ public class BlueGreenTransitionUtils {
     }
 
     /**
-     * Validates the configuration of a deployment in the ADVANCED transition mode: the gate timeout
-     * must be longer than the deployment deletion delay, and the upgrade mode other than STATELESS.
-     * Returns an error message if it is invalid, or {@link Optional#empty()} if it is valid.
+     * Validates the configuration of a deployment in the ADVANCED transition mode: the deployment
+     * deletion delay must be set explicitly, the gate timeout must be longer than that delay, and
+     * the upgrade mode other than STATELESS. Returns an error message if it is invalid, or {@link
+     * Optional#empty()} if it is valid.
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
         if (TransitionMode.ADVANCED != getTransitionMode(context)) {
             return Optional.empty();
+        }
+
+        // The cutover point is the old deployment's watermark plus this delay, while the old
+        // deployment has already written records up to its out-of-orderness ahead of its
+        // watermark: a shorter delay would let the new deployment write them again
+        Map<String, String> configuration = context.getBgDeployment().getSpec().getConfiguration();
+        if (configuration == null
+                || !configuration.containsKey(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key())) {
+            return Optional.of(
+                    "[BlueGreen] ADVANCED mode requires "
+                            + BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key()
+                            + " to be set: the cutover point is the old deployment's watermark plus"
+                            + " this delay, so it must be at least the job's maximum"
+                            + " out-of-orderness, or the new deployment writes again records the"
+                            + " old one already wrote. Use 0ms only if the job's event times never"
+                            + " go backwards.");
         }
 
         long gateTimeout = getGateTimeout(context);
