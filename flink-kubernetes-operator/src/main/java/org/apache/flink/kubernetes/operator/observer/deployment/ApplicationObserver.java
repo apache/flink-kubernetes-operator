@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -24,6 +25,7 @@ import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
@@ -39,18 +41,19 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
     public ApplicationObserver(EventRecorder eventRecorder) {
         super(eventRecorder);
         this.savepointObserver = new SnapshotObserver<>(eventRecorder);
-        this.jobStatusObserver = new ApplicationJobObserver(eventRecorder);
+        this.jobStatusObserver = new JobStatusObserver<>(eventRecorder);
         this.clusterHealthObserver = new ClusterHealthObserver();
     }
 
     @Override
-    protected void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx) {
-        logger.debug("Observing application cluster");
+    protected void observeJob(FlinkResourceContext<FlinkDeployment> ctx) {
+        logger.debug("Observing application job");
         boolean jobFound = jobStatusObserver.observe(ctx);
         if (jobFound) {
             var observeConfig = ctx.getObserveConfig();
             savepointObserver.observeSavepointStatus(ctx);
             savepointObserver.observeCheckpointStatus(ctx);
+            observeStateSize(ctx);
             if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)
                     && !ReconciliationUtils.isJobInTerminalState(ctx.getResource().getStatus())) {
                 clusterHealthObserver.observe(ctx);
@@ -58,14 +61,21 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         }
     }
 
-    private class ApplicationJobObserver extends JobStatusObserver<FlinkDeployment> {
-        public ApplicationJobObserver(EventRecorder eventRecorder) {
-            super(eventRecorder);
-        }
-
-        @Override
-        public void onTimeout(FlinkResourceContext<FlinkDeployment> ctx) {
-            observeJmDeployment(ctx);
+    private void observeStateSize(FlinkResourceContext<FlinkDeployment> ctx) {
+        var status = ctx.getResource().getStatus();
+        try {
+            ctx.getFlinkService()
+                    .getStateSize(
+                            ctx.getObserveConfig(),
+                            JobID.fromHexString(status.getJobStatus().getJobId()))
+                    .ifPresent(
+                            stateSize ->
+                                    status.getClusterInfo()
+                                            .put(
+                                                    AbstractFlinkService.FIELD_NAME_STATE_SIZE,
+                                                    String.valueOf(stateSize)));
+        } catch (Exception e) {
+            logger.warn("Exception while fetching the state size", e);
         }
     }
 }
