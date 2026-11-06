@@ -22,10 +22,20 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 
+import net.bytebuddy.jar.asm.ClassReader;
+import net.bytebuddy.jar.asm.ClassVisitor;
+import net.bytebuddy.jar.asm.MethodVisitor;
+import net.bytebuddy.jar.asm.Opcodes;
+import net.bytebuddy.jar.asm.Type;
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Checks the Flink methods the agent depends on by name against the Flink version on the test
@@ -36,16 +46,65 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 public class FlinkContractTest {
 
     @Test
-    public void environmentsDeclareTheInterceptedExecute() {
-        // GateInjectionAgent instruments execute(StreamGraph) on both environments
+    public void environmentDeclaresTheInterceptedExecuteAsync() {
+        // GateInjectionAgent instruments executeAsync(StreamGraph) on this class only
+        assertEquals(
+                GateInjectionAgent.INSTRUMENTED_TYPE, StreamExecutionEnvironment.class.getName());
         assertDoesNotThrow(
                 () ->
                         StreamExecutionEnvironment.class.getDeclaredMethod(
-                                "execute", StreamGraph.class));
-        assertDoesNotThrow(
-                () ->
-                        StreamContextEnvironment.class.getDeclaredMethod(
-                                "execute", StreamGraph.class));
+                                "executeAsync", StreamGraph.class));
+    }
+
+    @Test
+    public void applicationModeEnvironmentSubmitsThroughTheInterceptedExecuteAsync()
+            throws Exception {
+        // StreamContextEnvironment overrides executeAsync(StreamGraph): the agent only reaches its
+        // submissions, and GateInjectionAgentTest only stands for the agent, if it calls the base
+        // method
+        String descriptor =
+                Type.getMethodDescriptor(
+                        StreamExecutionEnvironment.class.getMethod(
+                                "executeAsync", StreamGraph.class));
+        String base = Type.getInternalName(StreamExecutionEnvironment.class);
+        AtomicBoolean callsBase = new AtomicBoolean();
+        try (InputStream bytecode =
+                StreamContextEnvironment.class.getResourceAsStream(
+                        StreamContextEnvironment.class.getSimpleName() + ".class")) {
+            new ClassReader(bytecode)
+                    .accept(
+                            new ClassVisitor(Opcodes.ASM9) {
+                                @Override
+                                public MethodVisitor visitMethod(
+                                        int access,
+                                        String name,
+                                        String desc,
+                                        String signature,
+                                        String[] exceptions) {
+                                    if (!name.equals("executeAsync") || !desc.equals(descriptor)) {
+                                        return null;
+                                    }
+                                    return new MethodVisitor(Opcodes.ASM9) {
+                                        @Override
+                                        public void visitMethodInsn(
+                                                int opcode,
+                                                String owner,
+                                                String calledName,
+                                                String calledDesc,
+                                                boolean isInterface) {
+                                            if (opcode == Opcodes.INVOKESPECIAL
+                                                    && owner.equals(base)
+                                                    && calledName.equals("executeAsync")
+                                                    && calledDesc.equals(descriptor)) {
+                                                callsBase.set(true);
+                                            }
+                                        }
+                                    };
+                                }
+                            },
+                            ClassReader.SKIP_DEBUG);
+        }
+        assertTrue(callsBase.get());
     }
 
     @Test

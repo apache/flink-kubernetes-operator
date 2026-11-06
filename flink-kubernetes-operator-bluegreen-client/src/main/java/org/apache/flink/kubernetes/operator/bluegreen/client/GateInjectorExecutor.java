@@ -66,8 +66,8 @@ import java.util.stream.Stream;
  *
  * <p>Can be used programmatically (wrap your executor) or automatically via the {@code
  * flink-kubernetes-operator-bluegreen-agent}, which intercepts {@code
- * StreamExecutionEnvironment.execute(StreamGraph)} and calls {@link #injectGates} without any user
- * code changes.
+ * StreamExecutionEnvironment.executeAsync(StreamGraph)} and calls {@link #injectGates} without any
+ * user code changes.
  */
 @AllArgsConstructor
 public class GateInjectorExecutor implements PipelineExecutor {

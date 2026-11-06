@@ -30,17 +30,17 @@ import java.util.concurrent.Callable;
 
 /**
  * Byte Buddy interceptor invoked in place of {@code
- * StreamExecutionEnvironment.execute(StreamGraph)}.
+ * StreamExecutionEnvironment.executeAsync(StreamGraph)}.
  *
  * <p>When {@code bluegreen.gate.injection.enabled=true}:
  *
  * <ol>
  *   <li>Loads {@code GateInjectorExecutor} from the <em>user code classloader</em> (thread context
- *       CL at the time execute() is called). This ensures that the injected {@code
+ *       CL at the time executeAsync() is called). This ensures that the injected {@code
  *       WatermarkGateProcessFunction} instances are created by the user classloader and can be
  *       deserialized on TaskManagers from the user JAR.
  *   <li>Calls {@code GateInjectorExecutor.injectGates(StreamGraph, Configuration)} reflectively,
- *       mutating the graph in-place before the original execute() runs.
+ *       mutating the graph in-place before the original executeAsync() runs.
  * </ol>
  *
  * <p>Failure contract:

@@ -19,15 +19,21 @@ package org.apache.flink.kubernetes.operator.bluegreen.client;
 
 import org.apache.flink.configuration.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Test stub that matches the class name and method signature the agent looks for. Tracks whether
- * injectGates was called so tests can assert on it.
+ * injectGates was called, and on which graphs, so tests can assert on it.
  */
 public class GateInjectorExecutor {
 
     public static boolean injected = false;
 
+    public static final List<Object> INJECTED_GRAPHS = new ArrayList<>();
+
     public static void injectGates(Object streamGraph, Configuration config) {
         injected = true;
+        INJECTED_GRAPHS.add(streamGraph);
     }
 }
