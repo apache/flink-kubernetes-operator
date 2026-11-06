@@ -49,9 +49,12 @@ public class FlinkBlueGreenDeployments {
             Context<FlinkBlueGreenDeployment> context) {
         Set<FlinkDeployment> secondaryResources =
                 context.getSecondaryResources(FlinkDeployment.class);
+        if (secondaryResources == null) {
+            secondaryResources = Set.of();
+        }
 
         if (secondaryResources.isEmpty() || secondaryResources.size() > 2) {
-            throw new RuntimeException(
+            FlinkBlueGreenDeploymentController.logAndThrow(
                     "Unexpected number of dependent deployments: " + secondaryResources.size());
         }
 
@@ -63,13 +66,13 @@ public class FlinkBlueGreenDeployments {
 
             if (flinkBlueGreenDeploymentType == BlueGreenDeploymentType.BLUE) {
                 if (flinkBlueGreenDeployments.getFlinkDeploymentBlue() != null) {
-                    throw new RuntimeException(
+                    FlinkBlueGreenDeploymentController.logAndThrow(
                             "Detected multiple Dependent Deployments of type BLUE");
                 }
                 flinkBlueGreenDeployments.setFlinkDeploymentBlue(dependentDeployment);
             } else {
                 if (flinkBlueGreenDeployments.getFlinkDeploymentGreen() != null) {
-                    throw new RuntimeException(
+                    FlinkBlueGreenDeploymentController.logAndThrow(
                             "Detected multiple Dependent Deployments of type GREEN");
                 }
                 flinkBlueGreenDeployments.setFlinkDeploymentGreen(dependentDeployment);

@@ -93,6 +93,7 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | ----------| ---- | ---- |
 | configuration | java.util.Map<java.lang.String,java.lang.String> |  |
 | ingress | org.apache.flink.kubernetes.operator.api.spec.IngressSpec |  |
+| transitionMode | org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode |  |
 | template | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentTemplateSpec |  |
 
 ### FlinkDeploymentSpec
