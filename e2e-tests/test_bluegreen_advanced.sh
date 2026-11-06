@@ -122,6 +122,8 @@ wait_for_written_id GREEN $((blue_max_id + LATE_IDS_BEHIND + LATE_IDS_UNCHECKED_
 echo "Suspending Green, so that all of its output is committed..."
 kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"job":{"state":"suspended"}}}}}' || exit 1
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' SUSPENDED ${TIMEOUT} || exit 1
+# The parent records the suspension too, rather than staying in reconciliation
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' SUSPENDED ${TIMEOUT} || exit 1
 
 echo "Checking the output..."
 read_output | awk -F, \
