@@ -74,6 +74,23 @@ public class BlueGreenTransitionUtilsTest {
     }
 
     @Test
+    public void testValidate_deletionDelayUnset_returnsError() {
+        BlueGreenContext context = buildContext(TransitionMode.ADVANCED);
+        var configuration = context.getBgDeployment().getSpec().getConfiguration();
+        configuration.remove(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key());
+
+        // The default 0 ms is a cutover right at the old deployment's watermark, which is too
+        // early unless the job's event times never go backwards, so it must be chosen explicitly
+        Optional<String> result = BlueGreenTransitionUtils.validateAdvancedModeConfig(context);
+        assertTrue(result.isPresent());
+        assertTrue(result.get().contains(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key()), result.get());
+        assertTrue(result.get().contains("out-of-orderness"), result.get());
+
+        configuration.put(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(), "0ms");
+        assertFalse(BlueGreenTransitionUtils.validateAdvancedModeConfig(context).isPresent());
+    }
+
+    @Test
     public void testValidate_statelessUpgradeMode_returnsError() {
         BlueGreenContext context = buildContext(TransitionMode.ADVANCED);
         context.getBgDeployment()
@@ -106,9 +123,12 @@ public class BlueGreenTransitionUtilsTest {
                         .job(JobSpec.builder().upgradeMode(UpgradeMode.LAST_STATE).build())
                         .build();
 
+        // ADVANCED rejects an unset deletion delay, as a test above checks
+        var configuration = new HashMap<String, String>();
+        configuration.put(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key(), "0ms");
         var bgDeploymentSpec =
                 new FlinkBlueGreenDeploymentSpec(
-                        new HashMap<>(),
+                        configuration,
                         null,
                         transitionMode,
                         FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build());
