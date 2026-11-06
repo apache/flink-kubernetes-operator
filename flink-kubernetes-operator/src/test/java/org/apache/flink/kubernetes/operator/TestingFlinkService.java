@@ -49,7 +49,6 @@ import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
-import org.apache.flink.kubernetes.operator.service.ClusterInfo;
 import org.apache.flink.kubernetes.operator.service.SuspendMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -136,6 +135,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean isFlinkJobNotFound = false;
     @Setter private boolean isFlinkJobTerminatedWithoutCancellation = false;
     @Setter private boolean isPortReady = true;
+    @Setter private boolean restApiAvailable = true;
     @Setter private boolean haDataAvailable = true;
     @Setter private boolean checkpointAvailable = true;
     @Setter private boolean jobManagerReady = true;
@@ -160,6 +160,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Setter private Integer taskManagerReplicas = null;
     @Setter private boolean taskManagerReplicasError = false;
+    @Setter private Long stateSize = null;
 
     @Getter private Configuration submittedConf;
 
@@ -321,6 +322,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             throws Exception {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
+        }
+        if (!restApiAvailable) {
+            throw new TimeoutException("Flink REST API is not answering");
         }
 
         if (jobFailedErr != null) {
@@ -722,18 +726,32 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public ClusterInfo getClusterInfo(Configuration conf, String jobId) throws TimeoutException {
+    public Map<String, String> getClusterInfo(Configuration conf) throws TimeoutException {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
+        }
+        if (!restApiAvailable) {
+            throw new TimeoutException("Flink REST API is not answering");
+        }
+        return CLUSTER_INFO;
+    }
+
+    @Override
+    public int getTaskManagerReplicas(Configuration conf) throws Exception {
+        if (!isPortReady || !restApiAvailable) {
+            throw new TimeoutException("Flink REST API is not answering");
         }
         if (taskManagerReplicasError) {
             throw new RuntimeException("Failed to fetch TaskManager count");
         }
-        int replicas =
-                taskManagerReplicas != null
-                        ? taskManagerReplicas
-                        : FlinkUtils.getNumTaskManagers(conf);
-        return new ClusterInfo(CLUSTER_INFO, replicas);
+        return taskManagerReplicas != null
+                ? taskManagerReplicas
+                : FlinkUtils.getNumTaskManagers(conf);
+    }
+
+    @Override
+    public Optional<Long> getStateSize(Configuration conf, JobID jobId) {
+        return Optional.ofNullable(stateSize);
     }
 
     @Override
