@@ -805,28 +805,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public ClusterInfo getClusterInfo(Configuration conf, @Nullable String jobId) throws Exception {
-        Map<String, String> clusterInfo = new HashMap<>();
-
-        populateFlinkVersion(conf, clusterInfo);
-
-        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_CPU,
-                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
-        clusterInfo.put(
-                FIELD_NAME_TOTAL_MEMORY,
-                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
-
-        populateStateSize(conf, jobId, clusterInfo);
-
-        return new ClusterInfo(clusterInfo, taskManagerReplicas);
-    }
-
-    private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
-            throws Exception {
+    public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
-
             CustomDashboardConfiguration dashboardConfiguration =
                     clusterClient
                             .sendRequest(
@@ -837,51 +817,52 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     operatorConfig.getFlinkClientTimeout().toSeconds(),
                                     TimeUnit.SECONDS);
 
+            Map<String, String> clusterInfo = new HashMap<>();
             clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
                     dashboardConfiguration.getFlinkVersion());
             clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     dashboardConfiguration.getFlinkRevision());
+            return clusterInfo;
         }
     }
 
-    private void populateStateSize(
-            Configuration conf, @Nullable String jobId, Map<String, String> clusterInfo)
-            throws Exception {
-        if (jobId != null) {
-            try (RestClusterClient<String> clusterClient = getClusterClient(conf)) {
-                var checkpointingStatisticsHeaders = CheckpointingStatisticsHeaders.getInstance();
-                var parameters = checkpointingStatisticsHeaders.getUnresolvedMessageParameters();
-                parameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
+    @Override
+    public int getTaskManagerReplicas(Configuration conf) throws Exception {
+        return getTaskManagersInfo(conf).getTaskManagerInfos().size();
+    }
 
-                CheckpointingStatistics checkpointingStatistics;
-                try {
-                    checkpointingStatistics =
-                            clusterClient
-                                    .sendRequest(
-                                            checkpointingStatisticsHeaders,
-                                            parameters,
-                                            EmptyRequestBody.getInstance())
-                                    .get(
-                                            operatorConfig.getFlinkClientTimeout().toSeconds(),
-                                            TimeUnit.SECONDS);
-                } catch (ExecutionException e) {
-                    if (isCheckpointingDisabled(e)) {
-                        return;
-                    }
-                    throw e;
+    @Override
+    public Optional<Long> getStateSize(Configuration conf, JobID jobId) throws Exception {
+        try (RestClusterClient<String> clusterClient = getClusterClient(conf)) {
+            var checkpointingStatisticsHeaders = CheckpointingStatisticsHeaders.getInstance();
+            var parameters = checkpointingStatisticsHeaders.getUnresolvedMessageParameters();
+            parameters.jobPathParameter.resolve(jobId);
+
+            CheckpointingStatistics checkpointingStatistics;
+            try {
+                checkpointingStatistics =
+                        clusterClient
+                                .sendRequest(
+                                        checkpointingStatisticsHeaders,
+                                        parameters,
+                                        EmptyRequestBody.getInstance())
+                                .get(
+                                        operatorConfig.getFlinkClientTimeout().toSeconds(),
+                                        TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                if (isCheckpointingDisabled(e)) {
+                    // Jobs without checkpointing (e.g. batch jobs) have no state size
+                    return Optional.empty();
                 }
-                CheckpointStatistics.CompletedCheckpointStatistics completedCheckpointStatistics =
-                        checkpointingStatistics
-                                .getLatestCheckpoints()
-                                .getCompletedCheckpointStatistics();
-                if (completedCheckpointStatistics != null) {
-                    clusterInfo.put(
-                            FIELD_NAME_STATE_SIZE,
-                            String.valueOf(completedCheckpointStatistics.getStateSize()));
-                }
+                throw e;
             }
+            return Optional.ofNullable(
+                            checkpointingStatistics
+                                    .getLatestCheckpoints()
+                                    .getCompletedCheckpointStatistics())
+                    .map(CheckpointStatistics.CompletedCheckpointStatistics::getStateSize);
         }
     }
 

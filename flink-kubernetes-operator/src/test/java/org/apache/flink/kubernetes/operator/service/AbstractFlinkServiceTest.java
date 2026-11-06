@@ -26,10 +26,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
-import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
-import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -124,7 +121,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 
 import java.io.File;
 import java.io.IOException;
@@ -137,6 +133,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -1244,30 +1241,27 @@ public class AbstractFlinkServiceTest {
                         });
 
         var conf = new Configuration();
-        conf.set(JobManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(1000));
-        conf.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(1000));
 
-        Map<String, String> expectedEntries =
+        assertEquals(
                 Map.of(
                         DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
                         testVersion,
                         DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
-                        testRevision,
-                        AbstractFlinkService.FIELD_NAME_TOTAL_CPU,
-                        "2.0",
-                        AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
-                        "" + MemorySize.ofMebiBytes(1000).getBytes() * 2);
+                        testRevision),
+                flinkService.getClusterInfo(conf));
+        assertEquals(1, flinkService.getTaskManagerReplicas(conf));
+        assertEquals(Optional.of(42424242L), flinkService.getStateSize(conf, JobID.generate()));
 
-        var clusterInfo = flinkService.getClusterInfo(conf, null);
-        assertEquals(1, clusterInfo.getTaskManagerReplicas());
-        assertEquals(expectedEntries, clusterInfo.getInfo());
-
-        assertEquals(
-                ImmutableMap.<String, String>builder()
-                        .putAll(expectedEntries)
-                        .put(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "42424242")
-                        .build(),
-                flinkService.getClusterInfo(conf, JobID.generate().toHexString()).getInfo());
+        // No completed checkpoint yet
+        checkpointingStatisticsResponse.set(
+                CompletableFuture.completedFuture(
+                        new CheckpointingStatistics(
+                                checkpointingStatistics.getCounts(),
+                                checkpointingStatistics.getSummary(),
+                                new CheckpointingStatistics.LatestCheckpoints(
+                                        null, null, null, null),
+                                List.of())));
+        assertEquals(Optional.empty(), flinkService.getStateSize(conf, JobID.generate()));
 
         // Jobs without checkpointing (e.g. batch jobs) have no checkpoint statistics
         checkpointingStatisticsResponse.set(
@@ -1275,19 +1269,16 @@ public class AbstractFlinkServiceTest {
                         new RestClientException(
                                 "[Checkpointing has not been enabled.]",
                                 HttpResponseStatus.NOT_FOUND)));
-        clusterInfo = flinkService.getClusterInfo(conf, JobID.generate().toHexString());
-        assertEquals(1, clusterInfo.getTaskManagerReplicas());
-        assertEquals(expectedEntries, clusterInfo.getInfo());
+        assertEquals(Optional.empty(), flinkService.getStateSize(conf, JobID.generate()));
 
-        // Any other checkpoint statistics failure still fails the cluster info
+        // Any other checkpoint statistics failure still fails the state size
         checkpointingStatisticsResponse.set(
                 CompletableFuture.failedFuture(
                         new RestClientException(
                                 "Internal server error",
                                 HttpResponseStatus.INTERNAL_SERVER_ERROR)));
         assertThrows(
-                ExecutionException.class,
-                () -> flinkService.getClusterInfo(conf, JobID.generate().toHexString()));
+                ExecutionException.class, () -> flinkService.getStateSize(conf, JobID.generate()));
     }
 
     @Test

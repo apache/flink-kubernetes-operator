@@ -113,7 +113,7 @@ public class KubernetesOperatorConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
-                            "Final delay before deployment is marked ready after port becomes accessible.");
+                            "Delay between the JobManager REST port becoming accessible and the first readiness check of the REST API, and the interval between checks until the API answers.");
 
     @Documentation.Section(SECTION_SYSTEM_STARTUP)
     public static final ConfigOption<Integer> OPERATOR_RECONCILE_PARALLELISM =
