@@ -360,8 +360,8 @@ public class BlueGreenTransitionUtils {
      *       gate is injected. With {@code bluegreen.gate.injection.enabled=false} the extractor
      *       passed to {@code WatermarkGateProcessFunction.create} is the extraction strategy, so
      *       none of them may be set: they would be ignored.
-     *   <li>a gate timeout longer than the deployment deletion delay, and an upgrade mode other
-     *       than STATELESS
+     *   <li>an explicit deployment deletion delay, a gate timeout longer than that delay, and an
+     *       upgrade mode other than STATELESS
      * </ul>
      */
     public static Optional<String> validateAdvancedModeConfig(BlueGreenContext context) {
@@ -413,6 +413,22 @@ public class BlueGreenTransitionUtils {
                             + "strategy. Remove "
                             + String.join(", ", extractors)
                             + " from flinkConfiguration: it would be ignored.");
+        }
+
+        // The cutover point is the old deployment's watermark plus this delay, while the old
+        // deployment has already written records up to its out-of-orderness ahead of its
+        // watermark: a shorter delay would let the new deployment write them again
+        Map<String, String> configuration = context.getBgDeployment().getSpec().getConfiguration();
+        if (configuration == null
+                || !configuration.containsKey(BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key())) {
+            return Optional.of(
+                    "[BlueGreen] ADVANCED mode requires "
+                            + BLUEGREEN_DEPLOYMENT_DELETION_DELAY.key()
+                            + " to be set: the cutover point is the old deployment's watermark plus"
+                            + " this delay, so it must be at least the job's maximum"
+                            + " out-of-orderness, or the new deployment writes again records the"
+                            + " old one already wrote. Use 0ms only if the job's event times never"
+                            + " go backwards.");
         }
 
         long gateTimeout = getGateTimeout(context);
