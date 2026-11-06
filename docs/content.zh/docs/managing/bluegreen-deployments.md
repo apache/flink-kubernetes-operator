@@ -298,6 +298,7 @@ The blue/green resource itself does not emit Kubernetes events, failures surface
 - In the `BASIC` transition mode both jobs process and emit the same records during the overlap, so delivery across the transition is at-least-once. The `ADVANCED` mode coordinates the two jobs record by record instead.
 - The `ADVANCED` gate is placed in the job's code, on a `DataStream`: SQL jobs that write through `INSERT INTO` cannot use the `ADVANCED` mode.
 - In the `ADVANCED` mode, late records arriving right around the crossing of the cutover point can be written twice or dropped, and an abort after the cutover point may write records twice.
+- In the `ADVANCED` mode, a restart of the new deployment after the transition compares records with the cutover point again until its watermark passes it, so late records older than the cutover point that arrive in between are dropped.
 - The state handoff is currently always savepoint-based: `last-state` transitions also take a savepoint instead of reusing the latest checkpoint information.
 - Suspend requests are deferred while a transition is in progress.
 - A Flink 2.x job using the async state API takes only native savepoints, so a transition cannot change its state backend.
