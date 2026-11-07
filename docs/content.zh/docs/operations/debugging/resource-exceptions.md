@@ -65,7 +65,7 @@ The value stored in `status.error` is a JSON serialization of a `FlinkResourceEx
 ```json
 {
   "type": "org.apache.flink.kubernetes.operator.exception.DeploymentFailedException",
-  "message": "[flink-main-container] back-off 10s restarting failed container=flink-main-container pod=basic-example-...",
+  "message": "[flink-main-container] CrashLoopBackOff, last termination OOMKilled (exit code 137)",
   "stackTrace": "org.apache.flink.kubernetes.operator.exception.DeploymentFailedException: ...",
   "additionalMetadata": {
     "reason": "CrashLoopBackOff"

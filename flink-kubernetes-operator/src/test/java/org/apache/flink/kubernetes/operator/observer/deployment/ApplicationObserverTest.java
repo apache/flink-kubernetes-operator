@@ -54,6 +54,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -832,6 +833,30 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 .flatMap(
                         reason ->
                                 Stream.of(Arguments.of(reason, true), Arguments.of(reason, false)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void observeCrashLoopInEveryPhase(boolean inBackOff) {
+        bringToReadyStatus(deployment);
+        observer.observe(deployment, readyContext);
+
+        // The JM container was OOM killed and restarted, sampled either in the kubelet back-off
+        // or while it is running again between two kills
+        flinkService.setPodList(TestUtils.createCrashLoopPodList("OOMKilled", 137, 3, inBackOff));
+        flinkService.setPortReady(false);
+        var exception =
+                assertThrows(
+                        DeploymentFailedException.class,
+                        () ->
+                                observer.observe(
+                                        deployment,
+                                        TestUtils.createContextWithInProgressDeployment(
+                                                kubernetesClient)));
+        assertEquals(
+                "[c1] CrashLoopBackOff, last termination OOMKilled (exit code 137)",
+                exception.getMessage());
+        assertEquals("CrashLoopBackOff", exception.getReason());
     }
 
     @Test

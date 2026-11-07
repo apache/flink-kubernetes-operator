@@ -115,6 +115,49 @@ public class TestUtils extends BaseTestUtils {
         return new PodListBuilder().withItems(pod).build();
     }
 
+    public static PodList createCrashLoopPodList(
+            String terminatedReason, int exitCode, int restartCount, boolean inBackOff) {
+        var cs =
+                new ContainerStatusBuilder()
+                        .withName("c1")
+                        .withRestartCount(restartCount)
+                        .withNewLastState()
+                        .withNewTerminated()
+                        .withReason(terminatedReason)
+                        .withExitCode(exitCode)
+                        .endTerminated()
+                        .endLastState();
+        if (inBackOff) {
+            cs.withNewState()
+                    .withNewWaiting()
+                    .withReason("CrashLoopBackOff")
+                    .withMessage(
+                            "back-off 10s restarting failed container=c1 pod=p_default(0e9bd0f1)")
+                    .endWaiting()
+                    .endState();
+        } else {
+            cs.withNewState().withNewRunning().endRunning().endState();
+        }
+
+        Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(new PodStatusBuilder().withContainerStatuses(cs.build()).build());
+        return new PodListBuilder().withItems(pod).build();
+    }
+
+    public static PodList createRunningPodList() {
+        var cs =
+                new ContainerStatusBuilder()
+                        .withName("c1")
+                        .withNewState()
+                        .withNewRunning()
+                        .endRunning()
+                        .endState()
+                        .build();
+        Pod pod = getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(new PodStatusBuilder().withContainerStatuses(cs).build());
+        return new PodListBuilder().withItems(pod).build();
+    }
+
     public static PodList createFailedInitContainerPodList(String crashLoopMessage, String reason) {
         ContainerStatus cs =
                 new ContainerStatusBuilder()
