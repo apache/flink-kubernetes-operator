@@ -229,6 +229,7 @@ public class ApplicationReconciler
         var status = resource.getStatus();
         var userJobId = deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID);
         if (userJobId != null) {
+            LOG.info("Using job ID {} from the spec", userJobId);
             status.getJobStatus().setJobId(userJobId);
             statusRecorder.patchAndCacheStatus(resource, client);
             return;
@@ -239,12 +240,12 @@ public class ApplicationReconciler
             String jobId = JobID.generate().toHexString();
             // record before first deployment to ensure we use it on any retry
             status.getJobStatus().setJobId(jobId);
-            LOG.info("Assigning JobId override to {}", jobId);
+            LOG.info("Generated job ID {}", jobId);
             statusRecorder.patchAndCacheStatus(resource, client);
         }
 
         String jobId = status.getJobStatus().getJobId();
-        LOG.debug("Setting {} to {}", PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
+        LOG.info("Deploying with job ID {}", jobId);
         deployConfig.set(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
     }
 
@@ -382,15 +383,13 @@ public class ApplicationReconciler
                 LOG.debug("Cluster info contains job health info");
                 if (!clusterHealthInfo.getHealthResult().isHealthy()) {
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
-                        LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
+                        LOG.info("Restarting the unhealthy job, it is stateless");
                         restartNeeded = true;
                     } else if (ctx.getFlinkService().isHaMetadataAvailable(observeConfig)) {
-                        LOG.debug(
-                                "HA metadata available, recovering unhealthy jobmanager deployment");
+                        LOG.info("Restarting the unhealthy job, HA metadata is available");
                         restartNeeded = true;
                     } else {
-                        LOG.warn(
-                                "Could not recover unhealthy jobmanager deployment, HA metadata not available");
+                        LOG.warn("Cannot restart the unhealthy job, HA metadata is not available");
                     }
 
                     if (restartNeeded) {
@@ -398,7 +397,8 @@ public class ApplicationReconciler
                     }
                 }
             } else {
-                LOG.debug("Cluster info not contains job health info, skipping health check");
+                LOG.debug(
+                        "Cluster info does not contain job health info, skipping the health check");
             }
         }
 

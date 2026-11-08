@@ -192,7 +192,7 @@ public class SessionJobReconciler
         // Only check for pending cancellation once the cluster is ready, so that other deletion
         // paths (cluster missing, deleting, unhealthy without HA) are not blocked.
         if (ReconciliationUtils.isJobCancelling(status)) {
-            LOG.info("Waiting for pending cancellation");
+            LOG.info("Cancellation already in progress, waiting for it to complete");
             return rescheduleDelete;
         }
 
@@ -203,7 +203,7 @@ public class SessionJobReconciler
                             ? SuspendMode.SAVEPOINT
                             : SuspendMode.STATELESS;
             if (cancelJob(ctx, suspendMode)) {
-                LOG.info("Waiting for pending cancellation");
+                LOG.info("Cancellation triggered, waiting for it to complete");
                 return rescheduleDelete;
             }
             return DeleteControl.defaultDelete();
@@ -219,7 +219,7 @@ public class SessionJobReconciler
             var jobmanagerDeploymentStatus = flinkdep.getStatus().getJobManagerDeploymentStatus();
             if (jobmanagerDeploymentStatus != JobManagerDeploymentStatus.READY) {
                 LOG.info(
-                        "Session cluster deployment is in {} status, not ready for serve",
+                        "Session cluster deployment is in {} status, not ready to serve requests",
                         jobmanagerDeploymentStatus);
                 return false;
             } else {
