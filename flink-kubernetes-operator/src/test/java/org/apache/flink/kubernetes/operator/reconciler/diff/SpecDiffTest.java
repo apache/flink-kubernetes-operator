@@ -297,6 +297,17 @@ public class SpecDiffTest {
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
+
+        var leftMiniCluster = BaseTestUtils.buildMiniCluster().getSpec();
+        leftMiniCluster.setPodTemplate(om.readValue(oldTemplate, PodTemplateSpec.class));
+        var rightMiniCluster = BaseTestUtils.buildMiniCluster().getSpec();
+        rightMiniCluster.setPodTemplate(om.readValue(newTemplate, PodTemplateSpec.class));
+
+        var miniClusterDiff =
+                new ReflectiveDiffBuilder<>(
+                                KubernetesDeploymentMode.NATIVE, leftMiniCluster, rightMiniCluster)
+                        .build();
+        assertEquals(DiffType.IGNORE, miniClusterDiff.getType());
     }
 
     @Test

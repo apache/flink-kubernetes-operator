@@ -24,28 +24,55 @@ import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGrou
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.minicluster.MiniClusterFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+
+import javax.annotation.Nullable;
 
 import java.util.Map;
 
 /** Flink service factory mock for tests. */
 public class TestingFlinkResourceContextFactory extends FlinkResourceContextFactory {
     private final FlinkService flinkService;
+    @Nullable private final MiniClusterFlinkService miniClusterFlinkService;
 
     public TestingFlinkResourceContextFactory(
             FlinkConfigManager configManager,
             KubernetesOperatorMetricGroup operatorMetricGroup,
             FlinkService flinkService,
             EventRecorder eventRecorder) {
+        this(configManager, operatorMetricGroup, flinkService, null, eventRecorder);
+    }
+
+    /**
+     * @param flinkService Flink service of FlinkDeployment and FlinkSessionJob resources
+     * @param miniClusterFlinkService Flink service of FlinkMiniCluster resources
+     */
+    public TestingFlinkResourceContextFactory(
+            FlinkConfigManager configManager,
+            KubernetesOperatorMetricGroup operatorMetricGroup,
+            FlinkService flinkService,
+            @Nullable MiniClusterFlinkService miniClusterFlinkService,
+            EventRecorder eventRecorder) {
         super(configManager, operatorMetricGroup, eventRecorder);
         this.flinkService = flinkService;
+        this.miniClusterFlinkService = miniClusterFlinkService;
     }
 
     @Override
     protected FlinkService getFlinkService(FlinkResourceContext<?> ctx) {
         return flinkService;
+    }
+
+    @Override
+    protected MiniClusterFlinkService getMiniClusterFlinkService(FlinkResourceContext<?> ctx) {
+        if (miniClusterFlinkService == null) {
+            throw new IllegalStateException(
+                    "The factory was created without a MiniClusterFlinkService for FlinkMiniCluster resources");
+        }
+        return miniClusterFlinkService;
     }
 
     public Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup> getMetricGroups() {

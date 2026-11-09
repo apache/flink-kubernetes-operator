@@ -39,6 +39,17 @@ class CommonStatusTest {
         assertThat(status.getKubernetesDeploymentStatus()).isEqualTo(deploymentStatus);
     }
 
+    @ParameterizedTest
+    @EnumSource(JobManagerDeploymentStatus.class)
+    void testFlinkMiniClusterSetsPodDeploymentStatus(JobManagerDeploymentStatus deploymentStatus) {
+        var status = new FlinkMiniClusterStatus();
+
+        status.setKubernetesDeploymentStatus(deploymentStatus);
+
+        assertThat(status.getPodDeploymentStatus()).isEqualTo(deploymentStatus);
+        assertThat(status.getKubernetesDeploymentStatus()).isEqualTo(deploymentStatus);
+    }
+
     @Test
     void testFlinkSessionJobHasNoDeploymentStatusToSet() {
         var status = new FlinkSessionJobStatus();

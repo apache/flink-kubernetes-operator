@@ -290,7 +290,7 @@ public final class MiniClusterResourceConfigUtils {
      * @param podTemplate pod template of the MiniCluster
      * @return a message for the user if the memory doesn't fit the budget, otherwise empty
      */
-    static Optional<String> checkMemoryBudget(
+    public static Optional<String> checkMemoryBudget(
             Configuration conf,
             @Nullable ResourceRequirements resources,
             @Nullable PodTemplateSpec podTemplate) {

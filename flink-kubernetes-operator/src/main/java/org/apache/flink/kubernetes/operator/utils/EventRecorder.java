@@ -330,6 +330,7 @@ public class EventRecorder {
         ScalingReport,
         IneffectiveScaling,
         MemoryPressure,
+        InsufficientMemory,
         ResourceQuotaReached,
         AutoscalerError,
         Scaling,

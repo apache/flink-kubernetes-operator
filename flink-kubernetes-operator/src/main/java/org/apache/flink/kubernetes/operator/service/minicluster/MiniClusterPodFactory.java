@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.ResourceConfigUtils;
@@ -91,10 +90,12 @@ public final class MiniClusterPodFactory {
      *
      * @param spec spec to deploy, not necessarily the current spec of the resource
      * @param deployConfig the effective Flink configuration to deploy with
+     * @param startupProbeEnabled whether to add a startup probe to the main container
      * @return the Deployment, and the Service and ConfigMap that accompany it
      */
     public static KubernetesJobManagerSpecification build(
-            FlinkMiniClusterSpec spec, Configuration deployConfig) throws IOException {
+            FlinkMiniClusterSpec spec, Configuration deployConfig, boolean startupProbeEnabled)
+            throws IOException {
         // The REST port needs to be exposed, so it is updated to a fixed value at deploy time
         var conf = new Configuration(deployConfig);
         KubernetesUtils.checkAndUpdatePortConfigOption(
@@ -116,7 +117,7 @@ public final class MiniClusterPodFactory {
                     new FlinkConfMountDecorator(parameters)
                 };
 
-        var flinkPod = loadPodTemplate(spec, conf);
+        var flinkPod = loadPodTemplate(spec, startupProbeEnabled);
         var accompanyingResources = new ArrayList<HasMetadata>();
         for (var stepDecorator : stepDecorators) {
             flinkPod = stepDecorator.decorateFlinkPod(flinkPod);
@@ -145,7 +146,8 @@ public final class MiniClusterPodFactory {
      * the main container, into the shaded Kubernetes model used by Flink's decorators. This
      * separates the main container from the rest of the pod.
      */
-    private static FlinkPod loadPodTemplate(FlinkMiniClusterSpec spec, Configuration conf) {
+    private static FlinkPod loadPodTemplate(
+            FlinkMiniClusterSpec spec, boolean startupProbeEnabled) {
         var podTemplate =
                 spec.getPodTemplate() == null
                         ? new PodTemplateSpec()
@@ -160,7 +162,7 @@ public final class MiniClusterPodFactory {
             applyResourcesToMainContainer(podTemplate.getSpec(), spec.getResources());
         }
         // The MiniCluster pod is the JobManager, so it is probed in the same way
-        if (conf.get(KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED)) {
+        if (startupProbeEnabled) {
             FlinkUtils.addStartupProbe(podTemplate);
         }
 

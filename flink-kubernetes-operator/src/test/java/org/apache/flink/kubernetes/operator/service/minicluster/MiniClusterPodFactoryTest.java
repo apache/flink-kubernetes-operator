@@ -36,7 +36,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.ConfigMap;
@@ -160,7 +159,7 @@ class MiniClusterPodFactoryTest {
                                 "blockOwnerDeletion", "true",
                                 "controller", "false")));
 
-        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf);
+        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true);
 
         assertThat(resources.getDeployment().getMetadata().getOwnerReferences())
                 .singleElement()
@@ -558,14 +557,9 @@ class MiniClusterPodFactoryTest {
 
     @Test
     void testStartupProbeDisabled() throws IOException {
-        miniCluster
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED.key(),
-                        "false");
+        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), deployConfig(), false);
 
-        assertThat(mainContainer(podSpec(build())).getStartupProbe()).isNull();
+        assertThat(mainContainer(podSpec(resources)).getStartupProbe()).isNull();
     }
 
     @Test
@@ -630,7 +624,8 @@ class MiniClusterPodFactoryTest {
         var resources =
                 MiniClusterPodFactory.build(
                         stableSpec,
-                        configManager.getDeployConfig(miniCluster.getMetadata(), stableSpec));
+                        configManager.getDeployConfig(miniCluster.getMetadata(), stableSpec),
+                        true);
 
         assertThat(mainContainer(podSpec(resources)).getImage()).isEqualTo("flink:stable");
     }
@@ -726,7 +721,7 @@ class MiniClusterPodFactoryTest {
         var conf = deployConfig();
         conf.set(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, "/custom-entrypoint.sh");
         conf.set(RestOptions.PORT, 9091);
-        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf);
+        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true);
 
         var container = mainContainer(podSpec(resources));
         assertThat(container.getCommand()).containsExactly("/custom-entrypoint.sh");
@@ -739,7 +734,7 @@ class MiniClusterPodFactoryTest {
         var conf = deployConfig();
         conf.set(RestOptions.PORT, 9091);
         conf.set(RestOptions.BIND_PORT, "9092");
-        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf);
+        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true);
 
         assertThat(mainContainer(podSpec(resources)).getPorts().get(0).getContainerPort())
                 .isEqualTo(9092);
@@ -783,7 +778,7 @@ class MiniClusterPodFactoryTest {
         // The Service can't target a random port, so the REST endpoint listens on a fixed one
         var conf = deployConfig();
         conf.set(RestOptions.BIND_PORT, "0");
-        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf);
+        var resources = MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true);
 
         assertThat(mainContainer(podSpec(resources)).getPorts().get(0).getContainerPort())
                 .isEqualTo(Constants.REST_PORT);
@@ -800,7 +795,7 @@ class MiniClusterPodFactoryTest {
         var conf = deployConfig();
         conf.set(RestOptions.BIND_PORT, "50100-50200");
 
-        assertThatThrownBy(() -> MiniClusterPodFactory.build(miniCluster.getSpec(), conf))
+        assertThatThrownBy(() -> MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true))
                 .hasMessageContaining("rest.bind-port should be specified to a fixed port");
     }
 
@@ -1045,7 +1040,8 @@ class MiniClusterPodFactoryTest {
         var conf = deployConfig();
         conf.set(PipelineOptions.CLASSPATHS, List.of());
 
-        var written = loadConfigFile(MiniClusterPodFactory.build(miniCluster.getSpec(), conf));
+        var written =
+                loadConfigFile(MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true));
 
         assertThat(written.get(ApplicationConfiguration.APPLICATION_ARGS))
                 .containsExactly("a;b", "c,d");
@@ -1071,7 +1067,8 @@ class MiniClusterPodFactoryTest {
         conf.set(TaskManagerOptions.HOST, "localhost");
         conf.set(KubernetesConfigOptions.KUBE_CONFIG_FILE, "/kubeconfig");
 
-        var written = loadConfigFile(MiniClusterPodFactory.build(miniCluster.getSpec(), conf));
+        var written =
+                loadConfigFile(MiniClusterPodFactory.build(miniCluster.getSpec(), conf, true));
 
         assertThat(written.contains(RestOptions.BIND_ADDRESS)).isFalse();
         assertThat(written.contains(JobManagerOptions.BIND_HOST)).isFalse();
@@ -1107,7 +1104,7 @@ class MiniClusterPodFactoryTest {
     }
 
     private KubernetesJobManagerSpecification build() throws IOException {
-        return MiniClusterPodFactory.build(miniCluster.getSpec(), deployConfig());
+        return MiniClusterPodFactory.build(miniCluster.getSpec(), deployConfig(), true);
     }
 
     private static PodSpec podSpec(KubernetesJobManagerSpecification resources) {

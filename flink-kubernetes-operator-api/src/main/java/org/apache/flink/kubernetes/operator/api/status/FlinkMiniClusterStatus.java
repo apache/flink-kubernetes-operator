@@ -64,4 +64,10 @@ public class FlinkMiniClusterStatus extends CommonStatus<FlinkMiniClusterSpec> {
     public JobManagerDeploymentStatus getKubernetesDeploymentStatus() {
         return podDeploymentStatus;
     }
+
+    @JsonIgnore
+    @Override
+    public void setKubernetesDeploymentStatus(JobManagerDeploymentStatus deploymentStatus) {
+        podDeploymentStatus = deploymentStatus;
+    }
 }
