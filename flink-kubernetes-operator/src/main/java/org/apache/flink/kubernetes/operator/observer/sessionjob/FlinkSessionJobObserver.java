@@ -59,7 +59,7 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
     }
 
     @Override
-    protected boolean checkIfAlreadyUpgraded(FlinkResourceContext<FlinkSessionJob> ctx) {
+    protected boolean isPendingUpgradeDeployed(FlinkResourceContext<FlinkSessionJob> ctx) {
         var flinkSessionJob = ctx.getResource();
         try {
             var jobStatus = flinkSessionJob.getStatus().getJobStatus();

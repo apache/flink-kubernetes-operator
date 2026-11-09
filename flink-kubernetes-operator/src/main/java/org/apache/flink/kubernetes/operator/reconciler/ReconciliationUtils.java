@@ -494,7 +494,6 @@ public class ReconciliationUtils {
         if (lastSpecWithMeta.getMeta().isFirstDeployment()) {
             LOG.info("Clearing last reconciled spec after initial deploy failure");
             reconStatus.setLastReconciledSpec(null);
-            reconStatus.setState(ReconciliationState.UPGRADING);
         }
     }
 

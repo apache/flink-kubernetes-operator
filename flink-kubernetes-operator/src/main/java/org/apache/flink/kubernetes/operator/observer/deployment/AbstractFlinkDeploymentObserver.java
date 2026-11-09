@@ -245,19 +245,20 @@ public abstract class AbstractFlinkDeploymentObserver
     }
 
     @Override
-    protected boolean checkIfAlreadyUpgraded(FlinkResourceContext<FlinkDeployment> ctx) {
+    protected boolean isPendingUpgradeDeployed(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkDep = ctx.getResource();
         var status = flinkDep.getStatus();
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
-            // We know that the current deployment is not missing, nothing to check
+            // Every deploy persists MISSING before creating the new JobManager Deployment, so a
+            // non-MISSING JobManager is the old one and the pending upgrade was not submitted yet
             return false;
         }
 
         // We are performing a full upgrade
         Optional<Deployment> depOpt = ctx.getJosdkContext().getSecondaryResource(Deployment.class);
 
-        if (!depOpt.isPresent()) {
+        if (depOpt.isEmpty()) {
             // Nothing is deployed, so definitely not upgraded
             return false;
         }
@@ -282,7 +283,7 @@ public abstract class AbstractFlinkDeploymentObserver
         Long upgradeTargetGeneration = ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
 
         if (deployedGeneration.equals(upgradeTargetGeneration)) {
-            logger.info("Pending upgrade is already deployed, updating status.");
+            logger.info("Pending upgrade is already deploying, updating status.");
             status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             return true;
         } else {
