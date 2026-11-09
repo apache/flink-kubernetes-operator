@@ -34,7 +34,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
-import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -184,23 +183,20 @@ public abstract class AbstractFlinkDeploymentObserver
                 ctx.getFlinkService().getJmPodList(ctx.getResource(), ctx.getObserveConfig());
         for (Pod pod : jmPods.getItems()) {
             var podStatus = pod.getStatus();
-            Stream.concat(
-                            podStatus.getContainerStatuses().stream(),
-                            podStatus.getInitContainerStatuses().stream())
-                    .forEach(AbstractFlinkDeploymentObserver::checkContainerError);
+            // Covers the kubelet back-off and the other waiting errors
+            var failure =
+                    Stream.concat(
+                                    podStatus.getContainerStatuses().stream(),
+                                    podStatus.getInitContainerStatuses().stream())
+                            .map(DeploymentFailedException::fromContainerStatus)
+                            .flatMap(Optional::stream)
+                            .findFirst();
+            if (failure.isPresent()) {
+                throw failure.get();
+            }
 
             // No obvious errors were found, check for volume mount issues
             EventUtils.checkForVolumeMountErrors(ctx.getKubernetesClient(), pod);
-        }
-    }
-
-    private static void checkContainerError(ContainerStatus cs) {
-        if (cs.getState() == null || cs.getState().getWaiting() == null) {
-            return;
-        }
-        if (DeploymentFailedException.CONTAINER_ERROR_REASONS.contains(
-                cs.getState().getWaiting().getReason())) {
-            throw DeploymentFailedException.forContainerStatus(cs);
         }
     }
 
@@ -211,7 +207,7 @@ public abstract class AbstractFlinkDeploymentObserver
     protected void clearErrorsIfDeploymentIsHealthy(FlinkDeployment dep) {
         FlinkDeploymentStatus status = dep.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
-        if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
+        if (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.READY
                 && !JobStatus.FAILED.equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
             status.setError(null);

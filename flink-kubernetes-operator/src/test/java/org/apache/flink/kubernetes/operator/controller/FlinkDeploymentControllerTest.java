@@ -930,6 +930,83 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
+    public void testCrashLoopDetectedBetweenRestarts() throws Exception {
+        flinkService.setPodList(TestUtils.createCrashLoopPodList("OOMKilled", 137, 2, false));
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        testController.reconcile(appCluster, context);
+        testController.reconcile(
+                appCluster, TestUtils.createContextWithInProgressDeployment(kubernetesClient));
+
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getError()
+                        .contains("CrashLoopBackOff, last termination OOMKilled (exit code 137)"));
+
+        var event =
+                testController.flinkResourceEvents().stream()
+                        .filter(e -> "CrashLoopBackOff".equals(e.getReason()))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals("Warning", event.getType());
+        assertEquals(
+                "[c1] CrashLoopBackOff, last termination OOMKilled (exit code 137)",
+                event.getMessage());
+    }
+
+    @Test
+    public void testErrorSurvivesUntilJobManagerIsReady() throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),
+                appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+
+        // The stable JobManager starts crash-looping
+        flinkService.setPodList(TestUtils.createCrashLoopPodList("OOMKilled", 137, 1, true));
+        flinkService.setPortReady(false);
+        Context<FlinkDeployment> inProgress =
+                TestUtils.createContextWithInProgressDeployment(kubernetesClient);
+        testController.reconcile(appCluster, inProgress);
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        var error = appCluster.getStatus().getError();
+        assertTrue(error.contains("OOMKilled (exit code 137)"));
+
+        // A sample that only finds a fresh pod starting must not wipe the error
+        flinkService.setPodList(TestUtils.createRunningPodList());
+        testController.reconcile(appCluster, inProgress);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(error, appCluster.getStatus().getError());
+
+        // Only a JobManager that serves REST again clears it
+        flinkService.setPortReady(true);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(error, appCluster.getStatus().getError());
+
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertNull(appCluster.getStatus().getError());
+    }
+
+    @Test
     public void testValidationError() throws Exception {
         assertTrue(testController.flinkResourceEvents().isEmpty());
         var flinkDeployment = TestUtils.buildApplicationCluster();
