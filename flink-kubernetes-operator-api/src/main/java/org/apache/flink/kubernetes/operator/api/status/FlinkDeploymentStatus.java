@@ -109,4 +109,10 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     public JobManagerDeploymentStatus getKubernetesDeploymentStatus() {
         return jobManagerDeploymentStatus;
     }
+
+    @JsonIgnore
+    @Override
+    public void setKubernetesDeploymentStatus(JobManagerDeploymentStatus deploymentStatus) {
+        jobManagerDeploymentStatus = deploymentStatus;
+    }
 }

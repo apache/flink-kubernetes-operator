@@ -155,4 +155,17 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public JobManagerDeploymentStatus getKubernetesDeploymentStatus() {
         return null;
     }
+
+    /**
+     * Sets the status of the Kubernetes Deployment this resource owns.
+     *
+     * @param deploymentStatus the Deployment status
+     * @throws UnsupportedOperationException for resources that don't own a Deployment (such as
+     *     {@link FlinkSessionJobStatus}).
+     */
+    @JsonIgnore
+    public void setKubernetesDeploymentStatus(JobManagerDeploymentStatus deploymentStatus) {
+        throw new UnsupportedOperationException(
+                getClass().getSimpleName() + " has no Kubernetes Deployment");
+    }
 }
