@@ -215,7 +215,13 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
+        deployApplicationCluster(
+                jobSpec, prepareApplicationClusterDeployment(conf, requireHaMetadata));
+    }
 
+    /** Prepares the HA metadata and configuration for deploying an application cluster. */
+    protected Configuration prepareApplicationClusterDeployment(
+            Configuration conf, boolean requireHaMetadata) throws Exception {
         // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
         // the newly changed job config (e.g. parallelism) could take effect
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
@@ -230,7 +236,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             validateHaMetadataExists(conf);
         }
 
-        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+        return removeOperatorConfigs(conf);
     }
 
     @Override

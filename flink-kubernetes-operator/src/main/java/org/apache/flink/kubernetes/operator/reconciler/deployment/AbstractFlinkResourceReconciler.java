@@ -22,7 +22,6 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -486,7 +485,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * the Deployment must be missing while the resource expects it to run, and the job must be
      * stateless or HA must be enabled.
      */
-    protected boolean shouldRecoverDeployment(Configuration conf, FlinkDeployment deployment) {
+    protected boolean shouldRecoverDeployment(Configuration conf, CR deployment) {
         boolean result = false;
 
         if (conf.get(KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
@@ -513,7 +512,7 @@ public abstract class AbstractFlinkResourceReconciler<
         return result;
     }
 
-    private boolean jmMissingForRunningDeployment(FlinkDeployment deployment) {
+    private boolean jmMissingForRunningDeployment(CR deployment) {
         var deployedJob = ReconciliationUtils.getDeployedSpec(deployment).getJob();
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
@@ -524,7 +523,7 @@ public abstract class AbstractFlinkResourceReconciler<
                         && !jobStatus.getState().isGloballyTerminalState();
         boolean jmShouldBeRunning = sessionCluster || nonTerminalApplication;
         return jmShouldBeRunning
-                && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING);
+                && (status.getKubernetesDeploymentStatus() == JobManagerDeploymentStatus.MISSING);
     }
 
     protected boolean flinkVersionChanged(SPEC oldSpec, SPEC newSpec) {
