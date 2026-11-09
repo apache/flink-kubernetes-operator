@@ -148,12 +148,14 @@ The table assumes a job is present, a `FlinkDeployment` in application mode or a
 
 ## Observing the Status
 
-The two most important fields are exposed as printer columns, so a plain `kubectl get` already answers the operational question:
+The JobManager deployment status, the job status and the lifecycle state are exposed as printer columns next to the resource age, so a plain `kubectl get` already answers the operational question:
 
 ```shell
 kubectl get flinkdeployment
-NAME            JOB STATUS   LIFECYCLE STATE
-basic-example   RUNNING      STABLE
+NAME            AGE   JOBMANAGER STATUS   JOB STATUS   LIFECYCLE STATE
+basic-example   10m   READY               RUNNING      STABLE
 ```
+
+A `FlinkSessionJob` prints the same columns except the JobManager status, which belongs to its session cluster.
 
 The full status is part of the resource, available through `kubectl describe` or `kubectl get -o yaml`. How the status is persisted, and what deleting the resource erases, is covered under [State → Custom Resource Status]({{< ref "docs/operations/state#custom-resource-status" >}}).

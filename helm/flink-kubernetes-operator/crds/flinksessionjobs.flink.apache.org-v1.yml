@@ -14,6 +14,10 @@ spec:
   scope: "Namespaced"
   versions:
   - additionalPrinterColumns:
+    - jsonPath: ".metadata.creationTimestamp"
+      name: "Age"
+      priority: 0
+      type: "date"
     - jsonPath: ".status.jobStatus.state"
       name: "Job Status"
       priority: 0
