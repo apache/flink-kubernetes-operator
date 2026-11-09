@@ -228,7 +228,7 @@ Application clusters need extra care during deploy, upgrade, and cancel operatio
 
 - Random JobResultStore path: to prevent terminated applications from restarting on JobManager failover, job result cleanup is disabled and every deployment gets a unique job result store path, with the manual cleanup that entails, as described under [High Availability → JobResultStore Cleanup]({{< ref "docs/deployment/leader-election#jobresultstore-cleanup" >}}).
 - Random job ids: Flink derives deterministic job ids from the cluster id, which is the resource name, and that would make checkpoint paths collide whenever a job restarts from empty state. The operator generates a random job id instead.
-- Terminal JobManager cleanup: JobManager processes are not terminated automatically after shutdown or failure, keeping the terminal state observable, and the operator cleans up the JobManager deployment once the terminal state has been recorded, after a configurable TTL.
+- Terminal JobManager cleanup: JobManager processes are not terminated automatically after shutdown or failure, keeping the terminal state observable, and the operator cleans up the JobManager deployment once the terminal state has been recorded, after a configurable TTL. Without high availability, the operator deletes the JobManager deployment as soon as it suspends the job, because nothing records that the job has terminated and a restarted JobManager would submit it again.
 
 ### Snapshot Reconciliation
 
