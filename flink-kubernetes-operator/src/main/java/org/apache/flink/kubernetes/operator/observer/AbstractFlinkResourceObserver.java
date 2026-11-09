@@ -81,7 +81,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
         // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             // We must check if the upgrade went through without the status upgrade for some reason
-            if (checkIfAlreadyUpgraded(ctx)) {
+            if (isPendingUpgradeDeployed(ctx)) {
                 ReconciliationUtils.updateStatusForAlreadyUpgraded(resource);
             } else {
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(resource);
@@ -101,13 +101,11 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
     protected abstract void observeInternal(FlinkResourceContext<CR> ctx);
 
     /**
-     * Checks a resource that is currently in the UPGRADING state whether it was already deployed
-     * but we simply miss the status information. After comparing the target resource generation
-     * with the one from the possible deployment if they match we update the status to the already
-     * DEPLOYED state.
+     * Checks whether the pending upgrade is already deployed and only its status write was lost, so
+     * that it gets recorded instead of deployed again.
      *
      * @param ctx Context for resource.
-     * @return true if the resource was already upgraded, false otherwise.
+     * @return true if the pending upgrade is already deployed, false otherwise.
      */
-    protected abstract boolean checkIfAlreadyUpgraded(FlinkResourceContext<CR> ctx);
+    protected abstract boolean isPendingUpgradeDeployed(FlinkResourceContext<CR> ctx);
 }

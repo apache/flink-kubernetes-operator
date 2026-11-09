@@ -191,7 +191,11 @@ public class ApplicationReconciler
         setRandomApplicationResultStorePath(deployConfig);
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
-            Preconditions.checkArgument(ReconciliationUtils.isJobInTerminalState(status));
+            Preconditions.checkState(
+                    ReconciliationUtils.isJobInTerminalState(status),
+                    "Refusing to replace the JobManager of %s, its job is %s and not terminal",
+                    relatedResource.getMetadata().getName(),
+                    status.getJobStatus().getState());
             LOG.info("Deleting cluster with terminated application before new deployment");
             flinkService.deleteClusterDeployment(
                     relatedResource.getMetadata(), status, deployConfig, !requireHaMetadata);
