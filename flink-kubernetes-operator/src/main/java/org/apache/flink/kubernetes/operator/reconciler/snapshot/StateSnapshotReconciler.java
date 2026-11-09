@@ -131,7 +131,7 @@ public class StateSnapshotReconciler {
                         resourceName);
                 return DeleteControl.defaultDelete();
             default:
-                LOG.info("Unknown savepoint state for {}: {}", resourceName, state);
+                LOG.warn("Unknown savepoint state for {}: {}", resourceName, state);
                 return DeleteControl.defaultDelete();
         }
     }

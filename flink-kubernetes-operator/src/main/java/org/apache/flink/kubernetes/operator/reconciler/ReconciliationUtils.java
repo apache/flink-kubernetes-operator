@@ -453,7 +453,7 @@ public class ReconciliationUtils {
         retryInfo.ifPresent(
                 r ->
                         LOG.warn(
-                                "Attempt count: {}, last attempt: {}",
+                                "Reconciliation failed, retry attempt {} (last attempt: {})",
                                 r.getAttemptCount(),
                                 r.isLastAttempt()));
 

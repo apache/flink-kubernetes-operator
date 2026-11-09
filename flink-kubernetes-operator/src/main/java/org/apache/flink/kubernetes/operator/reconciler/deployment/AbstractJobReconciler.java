@@ -135,8 +135,7 @@ public abstract class AbstractJobReconciler<
             if (!jobUpgrade.isAvailable()) {
                 // If job upgrade is currently not available for some reason we must still check if
                 // other reconciliation action may be taken while we wait...
-                LOG.info(
-                        "Job is not running and checkpoint information is not available for executing the upgrade, waiting for upgradeable state");
+                LOG.info("Upgrade not possible yet, waiting for an upgradeable state");
                 return !jobUpgrade.allowOtherReconcileActions;
             }
             LOG.debug("Job upgrade available: {}", jobUpgrade);

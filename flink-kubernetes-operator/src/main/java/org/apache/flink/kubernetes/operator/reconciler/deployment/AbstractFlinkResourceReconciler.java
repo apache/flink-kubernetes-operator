@@ -482,30 +482,30 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     /**
-     * Checks whether the JobManager Kubernetes Deployment recovery logic should be initiated. This
-     * is triggered only if, jm deployment missing, recovery config and HA enabled. This logic is
-     * only used by the Session and Application reconcilers.
-     *
-     * @param conf Flink cluster configuration.
-     * @param deployment FlinkDeployment object.
-     * @return True if recovery should be executed.
+     * Checks whether a lost JobManager Deployment should be recovered: recovery must be enabled,
+     * the Deployment must be missing while the resource expects it to run, and the job must be
+     * stateless or HA must be enabled.
      */
     protected boolean shouldRecoverDeployment(Configuration conf, FlinkDeployment deployment) {
         boolean result = false;
 
         if (conf.get(KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
-            LOG.debug("Checking whether jobmanager deployment needs recovery");
+            LOG.debug("Checking whether the JobManager Deployment needs recovery");
 
             if (jmMissingForRunningDeployment(deployment)) {
-                LOG.debug("Jobmanager deployment is missing, trying to recover");
+                LOG.warn("JobManager Deployment is missing, trying to recover it");
                 var jobSpec = deployment.getSpec().getJob();
                 boolean stateless =
                         jobSpec != null && jobSpec.getUpgradeMode() == UpgradeMode.STATELESS;
-                if (stateless || HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
-                    LOG.debug("HA is enabled, recovering lost jobmanager deployment");
+                if (stateless) {
+                    LOG.info("Recovering the lost JobManager Deployment of a stateless job");
+                    result = true;
+                } else if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+                    LOG.info("Recovering the lost JobManager Deployment, HA is enabled");
                     result = true;
                 } else {
-                    LOG.warn("Could not recover lost jobmanager deployment without HA enabled");
+                    LOG.warn(
+                            "Cannot recover the lost JobManager Deployment, the job is stateful and HA is not enabled");
                 }
             }
         }
