@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 
@@ -26,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 
 /** An observer to observe the cluster health. */
 public class ClusterHealthObserver {
@@ -45,14 +45,13 @@ public class ClusterHealthObserver {
      * Observe the health of the flink cluster.
      *
      * @param ctx Resource context.
+     * @param clusterInfo Cluster info in the status of the resource, which the health is recorded
+     *     into.
      */
-    public void observe(FlinkResourceContext<FlinkDeployment> ctx) {
-        var flinkApp = ctx.getResource();
+    public void observe(FlinkResourceContext<?> ctx, Map<String, String> clusterInfo) {
         try {
             LOG.debug("Observing cluster health");
-            var deploymentStatus = flinkApp.getStatus();
-            var jobStatus = deploymentStatus.getJobStatus();
-            var jobId = jobStatus.getJobId();
+            var jobId = ctx.getResource().getStatus().getJobStatus().getJobId();
             var metrics =
                     ctx.getFlinkService()
                             .getMetrics(
@@ -88,9 +87,7 @@ public class ClusterHealthObserver {
             LOG.debug("Observed cluster health: {}", observedClusterHealthInfo);
 
             clusterHealthEvaluator.evaluate(
-                    ctx.getObserveConfig(),
-                    deploymentStatus.getClusterInfo(),
-                    observedClusterHealthInfo);
+                    ctx.getObserveConfig(), clusterInfo, observedClusterHealthInfo);
         } catch (Exception e) {
             LOG.warn("Exception while observing cluster health: {}", e.getMessage());
             // Intentionally not throwing exception since we handle fetch metrics failure as
