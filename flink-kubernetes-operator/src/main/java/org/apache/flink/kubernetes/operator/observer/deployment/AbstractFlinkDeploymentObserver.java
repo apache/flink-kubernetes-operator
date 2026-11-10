@@ -34,18 +34,14 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
-import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 /** Base observer for session and application clusters. */
 public abstract class AbstractFlinkDeploymentObserver
@@ -139,7 +135,7 @@ public abstract class AbstractFlinkDeploymentObserver
             }
 
             try {
-                checkFailedCreate(status);
+                EventUtils.checkFailedCreate(status);
                 // checking the pod is expensive; only do it when the deployment isn't ready
                 checkContainerErrors(ctx);
             } catch (DeploymentFailedException dfe) {
@@ -169,35 +165,10 @@ public abstract class AbstractFlinkDeploymentObserver
         }
     }
 
-    private void checkFailedCreate(DeploymentStatus status) {
-        List<DeploymentCondition> conditions = status.getConditions();
-        for (DeploymentCondition dc : conditions) {
-            if ("FailedCreate".equals(dc.getReason()) && "ReplicaFailure".equals(dc.getType())) {
-                throw new DeploymentFailedException(dc);
-            }
-        }
-    }
-
     private void checkContainerErrors(FlinkResourceContext<FlinkDeployment> ctx) {
         PodList jmPods =
                 ctx.getFlinkService().getJmPodList(ctx.getResource(), ctx.getObserveConfig());
-        for (Pod pod : jmPods.getItems()) {
-            var podStatus = pod.getStatus();
-            // Covers the kubelet back-off and the other waiting errors
-            var failure =
-                    Stream.concat(
-                                    podStatus.getContainerStatuses().stream(),
-                                    podStatus.getInitContainerStatuses().stream())
-                            .map(DeploymentFailedException::fromContainerStatus)
-                            .flatMap(Optional::stream)
-                            .findFirst();
-            if (failure.isPresent()) {
-                throw failure.get();
-            }
-
-            // No obvious errors were found, check for volume mount issues
-            EventUtils.checkForVolumeMountErrors(ctx.getKubernetesClient(), pod);
-        }
+        EventUtils.checkContainerErrors(ctx.getKubernetesClient(), jmPods);
     }
 
     protected boolean isJmDeploymentReady(FlinkDeployment dep) {
