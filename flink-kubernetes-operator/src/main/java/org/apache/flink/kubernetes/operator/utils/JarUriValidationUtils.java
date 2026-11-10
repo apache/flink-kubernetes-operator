@@ -39,20 +39,31 @@ public final class JarUriValidationUtils {
 
     public static Optional<String> validateJarURI(
             String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+        return validateAndResolve(jarURI, allowedSchemes, disallowRestrictedHosts).getError();
+    }
+
+    /**
+     * Validates the jarURI against the scheme allowlist and, if {@code disallowRestrictedHosts} is
+     * set, the restricted-host policy. For an http(s) jarURI that passed the policy, the result
+     * carries the first resolved address (all of them passed), so a caller can connect to an
+     * address that was checked.
+     */
+    public static Result validateAndResolve(
+            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
         if (jarURI == null) {
-            return Optional.empty();
+            return Result.accepted();
         }
 
         URI uri;
         try {
             uri = new URI(jarURI);
         } catch (URISyntaxException e) {
-            return Optional.of("jarURI is not a valid URI: " + e.getMessage());
+            return Result.rejected("jarURI is not a valid URI: " + e.getMessage());
         }
 
         String scheme = uri.getScheme();
         if (scheme == null) {
-            return Optional.of("jarURI must include a scheme");
+            return Result.rejected("jarURI must include a scheme");
         }
 
         Set<String> normalizedAllowedSchemes =
@@ -60,7 +71,7 @@ public final class JarUriValidationUtils {
                         .map(s -> s.toLowerCase(Locale.ROOT))
                         .collect(Collectors.toSet());
         if (!normalizedAllowedSchemes.contains(scheme.toLowerCase(Locale.ROOT))) {
-            return Optional.of(
+            return Result.rejected(
                     String.format(
                             "jarURI scheme '%s' is not in the allowlist %s. Configure '%s' to extend the allowlist.",
                             scheme,
@@ -72,7 +83,7 @@ public final class JarUriValidationUtils {
                 && disallowRestrictedHosts) {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
-                return Optional.of("jarURI must include a host for http/https schemes");
+                return Result.rejected("jarURI must include a host for http/https schemes");
             }
             InetAddress[] addresses;
             try {
@@ -80,16 +91,17 @@ public final class JarUriValidationUtils {
                 // multiple A/AAAA records.
                 addresses = InetAddress.getAllByName(host);
             } catch (UnknownHostException e) {
-                return Optional.of("jarURI host '" + host + "' cannot be resolved");
+                return Result.rejected("jarURI host '" + host + "' cannot be resolved");
             }
             for (InetAddress addr : addresses) {
                 if (isRestricted(addr)) {
-                    return Optional.of(
+                    return Result.rejected(
                             "jarURI host '" + host + "' resolves to a restricted address");
                 }
             }
+            return Result.acceptedAt(addresses[0]);
         }
-        return Optional.empty();
+        return Result.accepted();
     }
 
     private static boolean isRestricted(InetAddress addr) {
@@ -98,5 +110,39 @@ public final class JarUriValidationUtils {
                 || addr.isSiteLocalAddress()
                 || addr.isAnyLocalAddress()
                 || addr.isMulticastAddress();
+    }
+
+    /**
+     * Outcome of {@link #validateAndResolve}: rejected with an error, or accepted, carrying the
+     * checked address when the restricted-host policy resolved one.
+     */
+    public static final class Result {
+        private final String error;
+        private final InetAddress checkedAddress;
+
+        private Result(String error, InetAddress checkedAddress) {
+            this.error = error;
+            this.checkedAddress = checkedAddress;
+        }
+
+        private static Result rejected(String error) {
+            return new Result(error, null);
+        }
+
+        private static Result accepted() {
+            return new Result(null, null);
+        }
+
+        private static Result acceptedAt(InetAddress checkedAddress) {
+            return new Result(null, checkedAddress);
+        }
+
+        public Optional<String> getError() {
+            return Optional.ofNullable(error);
+        }
+
+        public Optional<InetAddress> getCheckedAddress() {
+            return Optional.ofNullable(checkedAddress);
+        }
     }
 }
