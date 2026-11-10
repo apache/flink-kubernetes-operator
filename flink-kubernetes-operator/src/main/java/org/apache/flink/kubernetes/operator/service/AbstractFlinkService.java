@@ -839,7 +839,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         return new ClusterInfo(clusterInfo, taskManagerReplicas);
     }
 
-    private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
+    protected void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
             throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
 
@@ -862,7 +862,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private void populateStateSize(
+    protected void populateStateSize(
             Configuration conf, @Nullable String jobId, Map<String, String> clusterInfo)
             throws Exception {
         if (jobId != null) {
@@ -1171,7 +1171,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
+    protected TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(
