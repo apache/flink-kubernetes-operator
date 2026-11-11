@@ -127,6 +127,12 @@ public class FlinkValidator implements Validator<HasMetadata> {
                                 .getFlinkSessionJobInformer(namespace)
                                 .getStore()
                                 .getByKey(key);
+            } else if (JobKind.FLINK_MINI_CLUSTER.equals(jobRef.getKind())) {
+                targetResource =
+                        informerManager
+                                .getFlinkMiniClusterInformer(namespace)
+                                .getStore()
+                                .getByKey(key);
             }
         }
 

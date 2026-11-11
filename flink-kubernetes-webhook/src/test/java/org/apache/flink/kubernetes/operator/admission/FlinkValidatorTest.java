@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
@@ -49,6 +50,7 @@ import java.util.Set;
 import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -239,6 +241,46 @@ class FlinkValidatorTest {
         var snapshot = createStateSnapshotWithJobRef(JobKind.FLINK_SESSION_JOB, "test-session-job");
 
         assertDoesNotThrow(() -> validator.validate(snapshot, null, operation));
+    }
+
+    @Test
+    void stateSnapshotWithFlinkMiniClusterJobRefValidation() {
+        var miniCluster = createMiniCluster();
+        miniCluster.setStatus(null);
+        kubernetesClient.resource(miniCluster).create();
+
+        var targets = new ArrayList<Optional<AbstractFlinkResource<?, ?>>>();
+        var validator =
+                createValidator(
+                        new FlinkResourceValidator() {
+                            @Override
+                            public Optional<String> validateDeployment(FlinkDeployment deployment) {
+                                return Optional.empty();
+                            }
+
+                            @Override
+                            public Optional<String> validateSessionJob(
+                                    FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+                                return Optional.empty();
+                            }
+
+                            @Override
+                            public Optional<String> validateStateSnapshot(
+                                    FlinkStateSnapshot savepoint,
+                                    Optional<AbstractFlinkResource<?, ?>> target) {
+                                targets.add(target);
+                                return Optional.empty();
+                            }
+                        });
+
+        validator.validate(
+                createStateSnapshotWithJobRef(JobKind.FLINK_MINI_CLUSTER, "test-minicluster"),
+                null,
+                Operation.CREATE);
+
+        assertEquals(1, targets.size());
+        assertTrue(targets.get(0).isPresent());
+        assertInstanceOf(FlinkMiniCluster.class, targets.get(0).get());
     }
 
     @ParameterizedTest
