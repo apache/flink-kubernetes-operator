@@ -20,9 +20,11 @@ package org.apache.flink.kubernetes.operator.admission;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -172,6 +174,32 @@ class FlinkValidatorTest {
         assertEquals("Unexpected resource: Pod", exception.getMessage());
     }
 
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE", "DELETE", "CONNECT"})
+    void miniClusterPassesValidation(Operation operation) {
+        var validator = createValidator(passingValidator());
+        var miniCluster = createMiniCluster();
+
+        assertDoesNotThrow(() -> validator.validate(miniCluster, null, operation));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE", "DELETE", "CONNECT"})
+    void miniClusterFailsValidation(Operation operation) {
+        var validator = createValidator(failingValidator("minicluster is invalid"));
+        var miniCluster = createMiniCluster();
+
+        var exception =
+                assertThrows(
+                        NotAllowedException.class,
+                        () -> validator.validate(miniCluster, null, operation));
+        assertEquals("minicluster is invalid", exception.getMessage());
+    }
+
     @Test
     void firstValidatorErrorStopsValidation() {
         FlinkResourceValidator first = failingValidator("first error");
@@ -280,6 +308,11 @@ class FlinkValidatorTest {
             }
 
             @Override
+            public Optional<String> validateMiniCluster(FlinkMiniCluster miniCluster) {
+                return Optional.of(errorMessage);
+            }
+
+            @Override
             public Optional<String> validateSessionJob(
                     FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
                 return Optional.of(errorMessage);
@@ -301,6 +334,15 @@ class FlinkValidatorTest {
         deployment.setMetadata(meta);
         deployment.setSpec(new FlinkDeploymentSpec());
         return deployment;
+    }
+
+    private FlinkMiniCluster createMiniCluster() {
+        var miniCluster = new FlinkMiniCluster();
+        miniCluster.setMetadata(new ObjectMeta());
+        miniCluster.getMetadata().setName("test-minicluster");
+        miniCluster.getMetadata().setNamespace("default");
+        miniCluster.setSpec(new FlinkMiniClusterSpec());
+        return miniCluster;
     }
 
     private FlinkSessionJob createSessionJob() {

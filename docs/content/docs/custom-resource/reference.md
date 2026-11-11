@@ -27,7 +27,7 @@ under the License.
 
 # Custom Resource Definition Reference
 
-This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkStateSnapshot and FlinkBlueGreenDeployment custom resource definitions, including all possible configuration parameters.
+This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkStateSnapshot, FlinkBlueGreenDeployment and FlinkMiniCluster custom resource definitions, including all possible configuration parameters.
 
 ## FlinkDeployment
 **Class**: org.apache.flink.kubernetes.operator.api.FlinkDeployment
@@ -69,6 +69,16 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | spec | org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec | Spec that describes a Flink application with blue/green deployment capabilities. |
 | status | org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus | Last observed status of the Flink Blue/Green deployment. |
 
+## FlinkMiniCluster
+**Class**: org.apache.flink.kubernetes.operator.api.FlinkMiniCluster
+
+**Description**: Custom resource definition that represents a single Flink job running in a MiniCluster, with the JobManager and TaskManager merged into one process in a single pod.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| spec | org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec | Spec that describes a single Flink job running in a MiniCluster. |
+| status | org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus | Last observed status of the Flink MiniCluster. |
+
 ## Spec
 
 ### CheckpointSpec
@@ -102,7 +112,7 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments, session jobs and MiniClusters. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
 | flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
@@ -126,6 +136,25 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | metadata | io.fabric8.kubernetes.api.model.ObjectMeta |  |
 | spec | org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec |  |
 
+### FlinkMiniClusterSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec
+
+**Description**: Spec that describes a single Flink job running in a MiniCluster.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments, session jobs and MiniClusters. Null for session clusters. |
+| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
+| flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
+| image | java.lang.String | Flink docker image used to start the MiniCluster pod. |
+| imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
+| serviceAccount | java.lang.String | Kubernetes service account used by the MiniCluster pod. |
+| flinkVersion | org.apache.flink.kubernetes.operator.api.spec.FlinkVersion | Flink image version. |
+| ingress | org.apache.flink.kubernetes.operator.api.spec.IngressSpec | Ingress specs, routing to the REST endpoint of the MiniCluster. |
+| podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | Pod template for the MiniCluster pod. |
+| resources | io.fabric8.kubernetes.api.model.ResourceRequirements | Resource requests and limits for the main container of the MiniCluster pod. |
+| logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the MiniCluster. Format logConfigFileName -> configContent. |
+
 ### FlinkSessionJobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec
 
@@ -133,7 +162,7 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments, session jobs and MiniClusters. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
 | flinkConfiguration | org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
@@ -391,15 +420,43 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
-| error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
-| observedGeneration | java.lang.Long | Last observed generation of the FlinkDeployment/FlinkSessionJob. |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job. |
+| error | java.lang.String | Error information about the resource. |
+| observedGeneration | java.lang.Long | Last observed generation of the resource. |
 | lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | clusterInfo | java.util.Map<java.lang.String,java.lang.String> | Information from running clusters. |
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
 | taskManager | org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo | Information about the TaskManagers for the scale subresource. |
 | conditions | java.util.List<io.fabric8.kubernetes.api.model.Condition> | Condition of the CR . |
+
+### FlinkMiniClusterReconciliationStatus
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterReconciliationStatus
+
+**Description**: Status of the last reconcile step for the Flink MiniCluster.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
+| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are necessary. |
+| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback strategy is defined this will be the target to roll back to. |
+| state | org.apache.flink.kubernetes.operator.api.status.ReconciliationState | Deployment state of the last reconciled spec. |
+
+### FlinkMiniClusterStatus
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus
+
+**Description**: Last observed status of the Flink MiniCluster.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job. |
+| error | java.lang.String | Error information about the resource. |
+| observedGeneration | java.lang.Long | Last observed generation of the resource. |
+| lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
+| clusterInfo | java.util.Map<java.lang.String,java.lang.String> | Information from the running MiniCluster. |
+| podDeploymentStatus | org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus | Last observed status of the Deployment that runs the MiniCluster pod. |
+| reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterReconciliationStatus | Status of the last reconcile operation. |
+| conditions | java.util.List<io.fabric8.kubernetes.api.model.Condition> | Condition of the CR. |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus
@@ -420,9 +477,9 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
-| error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
-| observedGeneration | java.lang.Long | Last observed generation of the FlinkDeployment/FlinkSessionJob. |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job. |
+| error | java.lang.String | Error information about the resource. |
+| observedGeneration | java.lang.Long | Last observed generation of the resource. |
 | lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
 

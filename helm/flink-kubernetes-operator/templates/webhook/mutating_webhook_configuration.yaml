@@ -43,6 +43,7 @@ webhooks:
         resources:
           - flinksessionjobs
           - flinkdeployments
+          - flinkminiclusters
     sideEffects: None
     {{- if .Values.watchNamespaces }}
     namespaceSelector:
