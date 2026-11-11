@@ -275,18 +275,9 @@ public class EventSourceUtils {
                         .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
                         .withPrimaryToSecondaryMapper(
                                 (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
-                                        snapshot -> {
-                                            if (!JobKind.FLINK_SESSION_JOB.equals(
-                                                    snapshot.getSpec()
-                                                            .getJobReference()
-                                                            .getKind())) {
-                                                return Set.of();
-                                            }
-                                            return Set.of(
-                                                    FlinkStateSnapshotUtils
-                                                            .getSnapshotJobReferenceResourceId(
-                                                                    snapshot));
-                                        })
+                                        snapshot ->
+                                                getSnapshotJobResourceIds(
+                                                        snapshot, JobKind.FLINK_SESSION_JOB))
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
