@@ -68,6 +68,7 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
     public static MetricManager<FlinkMiniCluster> createFlinkMiniClusterMetricManager(
             Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
         MetricManager<FlinkMiniCluster> metricManager = new MetricManager<>();
+        registerFlinkMiniClusterMetrics(conf, metricGroup, metricManager);
         registerLifecycleMetrics(conf, metricGroup, metricManager);
         return metricManager;
     }
@@ -94,6 +95,15 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
             MetricManager<FlinkDeployment> metricManager) {
         if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
             metricManager.register(new FlinkDeploymentMetrics(metricGroup, conf));
+        }
+    }
+
+    private static void registerFlinkMiniClusterMetrics(
+            Configuration conf,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkMiniCluster> metricManager) {
+        if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(new FlinkMiniClusterMetrics(metricGroup, conf));
         }
     }
 

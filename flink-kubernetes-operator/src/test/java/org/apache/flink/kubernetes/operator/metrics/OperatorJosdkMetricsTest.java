@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -116,6 +117,32 @@ public class OperatorJosdkMetricsTest {
             assertEquals(3, getHistogram("cleanup", "failed").getCount());
             assertEquals(1, getHistogram("cleanup", "failed").getStatistics().getMin());
         }
+    }
+
+    @Test
+    public void testMiniClusterMetrics() {
+        var miniCluster = new FlinkMiniCluster();
+        miniCluster.getMetadata().setName("minicluster");
+        miniCluster.getMetadata().setNamespace("testns");
+        var miniClusterMetadata =
+                Map.<String, Object>of(
+                        Constants.RESOURCE_GVK_KEY,
+                        GroupVersionKind.gvkFor(FlinkMiniCluster.class));
+
+        operatorMetrics.reconciliationSubmitted(miniCluster, null, miniClusterMetadata);
+
+        assertEquals(
+                1,
+                listener.getCounter(
+                                listener.getResourceMetricId(
+                                        FlinkMiniCluster.class,
+                                        "testns",
+                                        "minicluster",
+                                        "JOSDK",
+                                        "Reconciliation",
+                                        "Count"))
+                        .get()
+                        .getCount());
     }
 
     @Test
