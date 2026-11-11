@@ -729,10 +729,11 @@ public class DefaultValidatorTest {
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "https://example.com/path/to/job.jar", defaultAllowed, true));
+                        "https://example.com/path/to/job.jar", defaultAllowed, true, List.of()));
         // Null jarURI is allowed (e.g. for entryClass-only jobs).
         Assertions.assertEquals(
-                Optional.empty(), DefaultValidator.validateJarURI(null, defaultAllowed, true));
+                Optional.empty(),
+                DefaultValidator.validateJarURI(null, defaultAllowed, true, List.of()));
 
         // Disallowed schemes are rejected.
         for (String disallowed :
@@ -741,7 +742,8 @@ public class DefaultValidatorTest {
                         "file:///var/run/secrets/kubernetes.io/serviceaccount/token",
                         "s3://my-bucket/job.jar",
                         "local:///tmp/sample.jar")) {
-            var error = DefaultValidator.validateJarURI(disallowed, defaultAllowed, true);
+            var error =
+                    DefaultValidator.validateJarURI(disallowed, defaultAllowed, true, List.of());
             assertTrue(error.isPresent(), "expected error for " + disallowed);
             assertTrue(
                     error.get().startsWith("jarURI scheme '"),
@@ -749,12 +751,15 @@ public class DefaultValidatorTest {
         }
 
         // Missing scheme is rejected.
-        var noScheme = DefaultValidator.validateJarURI("/no/scheme/job.jar", defaultAllowed, true);
+        var noScheme =
+                DefaultValidator.validateJarURI(
+                        "/no/scheme/job.jar", defaultAllowed, true, List.of());
         assertTrue(noScheme.isPresent());
         assertTrue(noScheme.get().startsWith("jarURI must include a scheme"));
 
         // Malformed URI is rejected.
-        var malformed = DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true);
+        var malformed =
+                DefaultValidator.validateJarURI("ht tp://bad uri", defaultAllowed, true, List.of());
         assertTrue(malformed.isPresent());
         assertTrue(malformed.get().startsWith("jarURI is not a valid URI"));
 
@@ -762,33 +767,189 @@ public class DefaultValidatorTest {
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "S3://my-bucket/job.jar", List.of("https", "s3"), true));
+                        "S3://my-bucket/job.jar", List.of("https", "s3"), true, List.of()));
     }
 
     @Test
     public void testJarUriHostValidation() {
         var defaultAllowed = List.of("https");
 
-        // Cloud-metadata link-local, loopback, site-local and wildcard addresses must be rejected.
         for (String restricted :
                 List.of(
                         "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
                         "https://127.0.0.1/job.jar",
                         "https://localhost/job.jar",
                         "https://10.0.0.1/job.jar",
-                        "https://192.168.1.1/job.jar")) {
-            var error = DefaultValidator.validateJarURI(restricted, defaultAllowed, true);
+                        "https://172.16.0.1/job.jar",
+                        "https://192.168.1.1/job.jar",
+                        "https://0.0.0.0/job.jar",
+                        "https://0.1.2.3/job.jar",
+                        "https://100.100.100.200/job.jar",
+                        "https://192.0.0.1/job.jar",
+                        "https://192.0.2.1/job.jar",
+                        "https://192.88.99.1/job.jar",
+                        "https://198.18.0.1/job.jar",
+                        "https://198.19.255.255/job.jar",
+                        "https://198.51.100.1/job.jar",
+                        "https://203.0.113.1/job.jar",
+                        "https://224.0.0.1/job.jar",
+                        "https://240.0.0.1/job.jar",
+                        "https://255.255.255.255/job.jar",
+                        "https://[::]/job.jar",
+                        "https://[::1]/job.jar",
+                        "https://[fd00:ec2::254]/job.jar",
+                        "https://[fc00::1]/job.jar",
+                        "https://[fe80::1]/job.jar",
+                        "https://[fec0::1]/job.jar",
+                        "https://[ff02::1]/job.jar",
+                        "https://[100::1]/job.jar",
+                        "https://[2001:2::1]/job.jar",
+                        "https://[2001:db8::1]/job.jar",
+                        "https://[3fff::1]/job.jar",
+                        "https://[5f00::1]/job.jar",
+                        "https://[64:ff9b:1::1]/job.jar",
+                        "https://[::ffff:169.254.169.254]/job.jar",
+                        "https://[::169.254.169.254]/job.jar",
+                        "https://[64:ff9b::a9fe:a9fe]/job.jar",
+                        "https://[64:ff9b::10.0.0.1]/job.jar",
+                        "https://[2002:a9fe:a9fe::1]/job.jar",
+                        "https://[2002:0a00:0001::1]/job.jar",
+                        "https://[2001:0:4136:e378:8000:63bf:5601:5656]/job.jar")) {
+            var error =
+                    DefaultValidator.validateJarURI(restricted, defaultAllowed, true, List.of());
             assertTrue(error.isPresent(), "expected error for " + restricted);
             assertTrue(
                     error.get().contains("resolves to a restricted address"),
                     "unexpected message for " + restricted + ": " + error.get());
         }
 
+        for (String globallyReachable :
+                List.of(
+                        "https://8.8.8.8/job.jar",
+                        "https://100.63.255.255/job.jar",
+                        "https://100.128.0.1/job.jar",
+                        "https://172.32.0.1/job.jar",
+                        "https://198.17.255.255/job.jar",
+                        "https://198.20.0.1/job.jar",
+                        "https://[2606:4700:4700::1111]/job.jar",
+                        "https://[64:ff9b::808:808]/job.jar",
+                        "https://[2002:808:808::1]/job.jar")) {
+            Assertions.assertEquals(
+                    Optional.empty(),
+                    DefaultValidator.validateJarURI(
+                            globallyReachable, defaultAllowed, true, List.of()),
+                    "expected no error for " + globallyReachable);
+        }
+
         // Disabling the restricted-host check allows loopback.
         Assertions.assertEquals(
                 Optional.empty(),
                 DefaultValidator.validateJarURI(
-                        "https://127.0.0.1/job.jar", defaultAllowed, false));
+                        "https://127.0.0.1/job.jar", defaultAllowed, false, List.of()));
+
+        // A jarURI matching a configured allowed-uri-prefix is exempt from the restricted-host
+        // check, even with the check enabled.
+        Assertions.assertEquals(
+                Optional.empty(),
+                DefaultValidator.validateJarURI(
+                        "https://10.0.0.1/repo/job.jar",
+                        defaultAllowed,
+                        true,
+                        List.of("https://10.0.0.1/repo/")));
+
+        // A jarURI that doesn't match any configured prefix is still rejected.
+        var notExempted =
+                DefaultValidator.validateJarURI(
+                        "https://10.0.0.2/job.jar",
+                        defaultAllowed,
+                        true,
+                        List.of("https://10.0.0.1/repo/"));
+        assertTrue(notExempted.isPresent());
+        assertTrue(notExempted.get().contains("resolves to a restricted address"));
+    }
+
+    @Test
+    public void testAllowedUriPrefixMatchesParsedComponents() {
+        var defaultAllowed = List.of("https");
+
+        for (var exempted :
+                List.of(
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1"),
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1/"),
+                        List.of("https://10.0.0.1:443/job.jar", "https://10.0.0.1"),
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1:443/"),
+                        List.of("HTTPS://Repo.Internal/job.jar", "https://repo.internal/"),
+                        List.of("https://10.0.0.1/repo/job.jar", "https://10.0.0.1/repo"),
+                        List.of("https://10.0.0.1/repo/a/job.jar", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/repo/job.jar", "https://10.0.0.1/repo/job.jar"),
+                        List.of("https://10.0.0.1/repo/job.jar", " https://10.0.0.1/repo/ "))) {
+            Assertions.assertEquals(
+                    Optional.empty(),
+                    DefaultValidator.validateJarURI(
+                            exempted.get(0), defaultAllowed, true, List.of(exempted.get(1))),
+                    "expected " + exempted.get(0) + " to be exempted by " + exempted.get(1));
+        }
+
+        for (var notExempted :
+                List.of(
+                        List.of(
+                                "https://10.0.0.1@169.254.169.254/latest/meta-data/",
+                                "https://10.0.0.1"),
+                        List.of("https://user@10.0.0.1/job.jar", "https://10.0.0.1/"),
+                        List.of("https://10.0.0.123/job.jar", "https://10.0.0.1"),
+                        List.of("https://10.0.0.1:8443/job.jar", "https://10.0.0.1"),
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1:8443/"),
+                        List.of("https://10.0.0.1/repository/job.jar", "https://10.0.0.1/repo"),
+                        List.of("https://10.0.0.1/repo/../admin/x", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/repo/./job.jar", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/repo/%2e%2e/admin/x", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/repo/..%2fadmin/x", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/repo/..;/admin/x", "https://10.0.0.1/repo/"),
+                        List.of("https://10.0.0.1/job.jar", "http://10.0.0.1/"),
+                        List.of("https://10.0.0.1/job.jar", ""),
+                        List.of("https://10.0.0.1/job.jar", "   "),
+                        List.of("https://10.0.0.1/job.jar", "/job.jar"),
+                        List.of("https://10.0.0.1/job.jar", "https://user@10.0.0.1/"),
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1/?a=b"),
+                        List.of("https://10.0.0.1/job.jar", "https://10.0.0.1/#frag"),
+                        List.of("https://10.0.0.1/admin/x", "https://10.0.0.1/repo/../"),
+                        List.of("https://10.0.0.1/job.jar", "ht tp://bad uri"))) {
+            var error =
+                    DefaultValidator.validateJarURI(
+                            notExempted.get(0), defaultAllowed, true, List.of(notExempted.get(1)));
+            assertTrue(
+                    error.isPresent(),
+                    "expected "
+                            + notExempted.get(0)
+                            + " not to be exempted by "
+                            + notExempted.get(1));
+            assertTrue(
+                    error.get().contains("resolves to a restricted address"),
+                    "unexpected message for " + notExempted.get(0) + ": " + error.get());
+        }
+    }
+
+    @Test
+    public void testAllowedUriPrefixesAreSplitOnSemicolon() {
+        var operatorConf = new Configuration();
+        operatorConf.setString(
+                KubernetesOperatorConfigOptions.JAR_URI_ALLOWED_URI_PREFIXES.key(),
+                "https://10.0.0.1/repo/;https://10.0.0.2/");
+        var validator = new DefaultValidator(new FlinkConfigManager(operatorConf));
+
+        for (String exempted :
+                List.of("https://10.0.0.1/repo/job.jar", "https://10.0.0.2/job.jar")) {
+            var sessionJob = TestUtils.buildSessionJob();
+            sessionJob.getSpec().getJob().setJarURI(exempted);
+            Assertions.assertEquals(
+                    Optional.empty(), validator.validateSessionJob(sessionJob, Optional.empty()));
+        }
+
+        var sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getSpec().getJob().setJarURI("https://10.0.0.3/job.jar");
+        var error = validator.validateSessionJob(sessionJob, Optional.empty());
+        assertTrue(error.isPresent());
+        assertTrue(error.get().contains("resolves to a restricted address"));
     }
 
     @Test

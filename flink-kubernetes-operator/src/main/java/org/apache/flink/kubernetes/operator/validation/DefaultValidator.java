@@ -310,9 +310,12 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     @VisibleForTesting
     static Optional<String> validateJarURI(
-            String jarURI, Collection<String> allowedSchemes, boolean disallowRestrictedHosts) {
+            String jarURI,
+            Collection<String> allowedSchemes,
+            boolean disallowRestrictedHosts,
+            Collection<String> allowedUriPrefixes) {
         return JarUriValidationUtils.validateJarURI(
-                jarURI, allowedSchemes, disallowRestrictedHosts);
+                jarURI, allowedSchemes, disallowRestrictedHosts, allowedUriPrefixes);
     }
 
     private Optional<String> validateSessionJobJarURI(FlinkSessionJob sessionJob) {
@@ -324,7 +327,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         return validateJarURI(
                 jobSpec.getJarURI(),
                 operatorConfiguration.getJarUriAllowedSchemes(),
-                operatorConfiguration.isJarUriDisallowRestrictedHosts());
+                operatorConfiguration.isJarUriDisallowRestrictedHosts(),
+                operatorConfiguration.getJarUriAllowedUriPrefixes());
     }
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
