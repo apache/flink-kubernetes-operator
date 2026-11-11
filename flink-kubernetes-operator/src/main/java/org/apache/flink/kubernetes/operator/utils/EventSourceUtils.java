@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
@@ -62,7 +63,7 @@ public class EventSourceUtils {
     public static <T extends AbstractFlinkResource<?, ?>>
             InformerEventSource<FlinkStateSnapshot, T>
                     getStateSnapshotForFlinkResourceInformerEventSource(
-                            EventSourceContext<T> context) {
+                            EventSourceContext<T> context, JobKind jobKind) {
         var labelFilters =
                 Stream.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE)
                         .map(Enum::name)
@@ -74,20 +75,20 @@ public class EventSourceUtils {
                                 FlinkStateSnapshot.class, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withSecondaryToPrimaryMapper(
-                                snapshot -> {
-                                    var jobRef = snapshot.getSpec().getJobReference();
-                                    if (jobRef == null || jobRef.getName() == null) {
-                                        return Collections.emptySet();
-                                    }
-                                    return Set.of(
-                                            new ResourceID(
-                                                    snapshot.getSpec().getJobReference().getName(),
-                                                    snapshot.getMetadata().getNamespace()));
-                                })
+                                snapshot -> getSnapshotJobResourceIds(snapshot, jobKind))
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
         return new InformerEventSource<>(configuration, context);
+    }
+
+    @VisibleForTesting
+    static Set<ResourceID> getSnapshotJobResourceIds(FlinkStateSnapshot snapshot, JobKind jobKind) {
+        var jobRef = snapshot.getSpec().getJobReference();
+        if (jobRef == null || jobRef.getName() == null || jobRef.getKind() != jobKind) {
+            return Collections.emptySet();
+        }
+        return Set.of(new ResourceID(jobRef.getName(), snapshot.getMetadata().getNamespace()));
     }
 
     public static <T extends HasMetadata>

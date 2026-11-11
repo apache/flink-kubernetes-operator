@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
@@ -195,7 +196,8 @@ public class FlinkDeploymentController
         }
         if (flinkConfigManager.isSnapshotCrdInstalled()) {
             eventSources.add(
-                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(
+                            context, JobKind.FLINK_DEPLOYMENT));
         } else {
             LOG.warn(
                     "Could not initialize informer for snapshots as the CRD has not been installed!");
