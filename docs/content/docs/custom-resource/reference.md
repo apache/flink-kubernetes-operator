@@ -222,6 +222,7 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | ----- | ---- |
 | FlinkDeployment | FlinkDeployment CR kind. |
 | FlinkSessionJob | FlinkSessionJob CR kind. |
+| FlinkMiniCluster | FlinkMiniCluster CR kind. |
 
 ### JobManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec
@@ -238,11 +239,11 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 ### JobReference
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobReference
 
-**Description**: Flink resource reference that can be a FlinkDeployment or FlinkSessionJob.
+**Description**: Flink resource reference that can be a FlinkDeployment, FlinkSessionJob, or FlinkMiniCluster.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| kind | org.apache.flink.kubernetes.operator.api.spec.JobKind | Kind of the Flink resource, FlinkDeployment or FlinkSessionJob. |
+| kind | org.apache.flink.kubernetes.operator.api.spec.JobKind | Kind of the Flink resource, FlinkDeployment, FlinkSessionJob, or FlinkMiniCluster. |
 | name | java.lang.String | Name of the Flink resource. |
 
 ### JobSpec

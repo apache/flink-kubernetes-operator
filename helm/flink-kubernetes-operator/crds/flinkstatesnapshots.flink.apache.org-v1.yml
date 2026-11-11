@@ -41,6 +41,7 @@ spec:
                   kind:
                     enum:
                     - "FlinkDeployment"
+                    - "FlinkMiniCluster"
                     - "FlinkSessionJob"
                     type: "string"
                   name:
