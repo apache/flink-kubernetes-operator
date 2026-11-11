@@ -34,7 +34,7 @@ The webhook is its own process, built from the `flink-kubernetes-webhook` module
 
 Although it is a separate process, it is wired from the same building blocks as the operator: `FlinkConfigManager` loads the same operator configuration, including the watched namespaces with dynamic namespace changes propagated at runtime, and the validator and mutator sets are discovered through the same SPI mechanism the operator uses, so admission and the reconcile loop always enforce identical rules. Custom implementations plug in as described under [Plugins → Custom Flink Resource Validators]({{< ref "docs/deployment/plugins#custom-flink-resource-validators" >}}) and [Plugins → Custom Flink Resource Mutators]({{< ref "docs/deployment/plugins#custom-flink-resource-mutators" >}}).
 
-Because admission decisions can depend on other resources, the webhook maintains its own informers through `InformerManager`: `FlinkDeployment` and `FlinkSessionJob` informers, one per watched namespace or a single cluster-wide one when all namespaces are watched, give the handlers a live, cache-backed view without querying the API server on every request.
+Because admission decisions can depend on other resources, the webhook maintains its own informers through `InformerManager`: `FlinkDeployment`, `FlinkSessionJob`, and `FlinkMiniCluster` informers, one per watched namespace or a single cluster-wide one when all namespaces are watched, give the handlers a live, cache-backed view without querying the API server on every request.
 
 ## TLS
 

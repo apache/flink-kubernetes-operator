@@ -212,14 +212,14 @@ Every controller pairs a primary informer with a set of secondaries:
 - The primary informer watches the controller's own resource kind. It feeds the reconcile triggers, and its cache is what resource reads are served from.
 - Secondary informers watch related resources, and each carries a secondary-to-primary mapping. Every add, update, and delete on a secondary triggers a reconciliation of each primary it maps to, so the owning resource reacts to its dependents without polling them.
 
-| Controller                           | Secondary                                             | Mapped Back By                                                                            |
-|--------------------------------------|-------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| `FlinkDeployment`                    | The JobManager Deployment and the Ingress             | Their labels, carrying the owning resource's name                                         |
-| `FlinkDeployment`                    | `FlinkSessionJob` resources                           | An index on `spec.deploymentName`, a job change re-reconciles its session cluster         |
-| `FlinkSessionJob`                    | The parent `FlinkDeployment`                          | The reverse of the same index, a cluster change re-reconciles every job running on it     |
-| `FlinkDeployment`, `FlinkSessionJob` | `FlinkStateSnapshot` resources                        | `spec.jobReference`, a snapshot change re-reconciles the job it captures                  |
-| `FlinkStateSnapshot`                 | The referenced `FlinkDeployment` or `FlinkSessionJob` | An index on `spec.jobReference`, a job change re-reconciles every snapshot referencing it |
-| `FlinkBlueGreenDeployment`           | The child deployments and the active Ingress          | Kubernetes owner references                                                               |
+| Controller                           | Secondary                                                                  | Mapped Back By                                                                            |
+|--------------------------------------|----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `FlinkDeployment`                    | The JobManager Deployment and the Ingress                                  | Their labels, carrying the owning resource's name                                         |
+| `FlinkDeployment`                    | `FlinkSessionJob` resources                                                | An index on `spec.deploymentName`, a job change re-reconciles its session cluster         |
+| `FlinkSessionJob`                    | The parent `FlinkDeployment`                                               | The reverse of the same index, a cluster change re-reconciles every job running on it     |
+| `FlinkDeployment`, `FlinkSessionJob` | `FlinkStateSnapshot` resources                                             | `spec.jobReference`, a snapshot change re-reconciles the job it captures                  |
+| `FlinkStateSnapshot`                 | The referenced `FlinkDeployment`, `FlinkSessionJob`, or `FlinkMiniCluster` | An index on `spec.jobReference`, a job change re-reconciles every snapshot referencing it |
+| `FlinkBlueGreenDeployment`           | The child deployments and the active Ingress                               | Kubernetes owner references                                                               |
 
 ### Threads and Timing
 
@@ -255,7 +255,8 @@ An event travels one path from the API server to a reconciliation, and every con
 │  I/O threads │                                                                   ├─►│   reconciliation pool   │
 │              ├─► FlinkStateSnapshot Informer ──────┐                             │  │(one thread per resource)│
 │              ├─► FlinkDeployment Informer ─────────┼─► FlinkStateSnapshot ───────┤  │                         │
-│              ├─► FlinkSessionJob Informer ─────────┘   event processor           │  └─────────────────────────┘
+│              ├─► FlinkSessionJob Informer ─────────┤   event processor           │  └─────────────────────────┘
+│              ├─► FlinkMiniCluster Informer ────────┘                             │
 │              │                                                                   │
 │              ├─► FlinkBlueGreenDeployment Informer ┐                             │
 │              ├─► FlinkDeployment Informer ─────────┼─► FlinkBlueGreenDeployment ─┘
