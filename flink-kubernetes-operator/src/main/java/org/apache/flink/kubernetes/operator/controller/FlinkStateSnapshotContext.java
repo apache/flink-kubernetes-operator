@@ -54,7 +54,7 @@ public class FlinkStateSnapshotContext {
     private final Configuration referencedJobObserveConfig = referencedJobObserveConfig();
 
     @Getter(lazy = true)
-    private final FlinkDeployment referencedJobFlinkDeployment = referencedJobFlinkDeployment();
+    private final AbstractFlinkResource<?, ?> referencedJobCluster = referencedJobCluster();
 
     /**
      * @return Operator configuration for this resource.
@@ -65,7 +65,8 @@ public class FlinkStateSnapshotContext {
     }
 
     private Configuration referencedJobObserveConfig() {
-        var flinkDeployment = getReferencedJobFlinkDeployment();
+        var cluster = getReferencedJobCluster();
+        var flinkDeployment = (FlinkDeployment) cluster;
         return getSecondaryResource()
                 .filter(FlinkSessionJob.class::isInstance)
                 .map(FlinkSessionJob.class::cast)
@@ -79,18 +80,18 @@ public class FlinkStateSnapshotContext {
                 .orElseGet(() -> getConfigManager().getObserveConfig(flinkDeployment));
     }
 
-    private FlinkDeployment referencedJobFlinkDeployment() {
+    private AbstractFlinkResource<?, ?> referencedJobCluster() {
+        var jobReference = getResource().getSpec().getJobReference();
+        Class<? extends AbstractFlinkResource<?, ?>> clusterClass = FlinkDeployment.class;
         return getJosdkContext()
-                .getSecondaryResource(FlinkDeployment.class)
+                .getSecondaryResource(clusterClass)
                 .orElseThrow(
                         () ->
                                 new RuntimeException(
                                         String.format(
-                                                "Failed to find FlinkDeployment from job reference: %s",
-                                                getResource()
-                                                        .getSpec()
-                                                        .getJobReference()
-                                                        .getName())));
+                                                "Failed to find %s from job reference: %s",
+                                                clusterClass.getSimpleName(),
+                                                jobReference.getName())));
     }
 
     public Optional<AbstractFlinkResource<?, ?>> getSecondaryResource() {

@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.snapshot;
 
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -73,23 +73,22 @@ public class StateSnapshotObserver {
         }
 
         var jobId = ctx.getSecondaryResource().orElseThrow().getStatus().getJobStatus().getJobId();
-        var ctxFlinkDeployment =
-                ctxFactory.getResourceContext(
-                        ctx.getReferencedJobFlinkDeployment(), ctx.getJosdkContext());
+        var ctxCluster =
+                ctxFactory.getResourceContext(ctx.getReferencedJobCluster(), ctx.getJosdkContext());
         var observeConfig = ctx.getReferencedJobObserveConfig();
 
         if (resource.getSpec().isSavepoint()) {
             var savepointInfo =
-                    ctxFlinkDeployment
+                    ctxCluster
                             .getFlinkService()
                             .fetchSavepointInfo(triggerId, jobId, observeConfig);
             handleSavepoint(ctx, savepointInfo);
         } else {
             var checkpointInfo =
-                    ctxFlinkDeployment
+                    ctxCluster
                             .getFlinkService()
                             .fetchCheckpointInfo(triggerId, jobId, observeConfig);
-            handleCheckpoint(ctx, checkpointInfo, ctxFlinkDeployment, jobId);
+            handleCheckpoint(ctx, checkpointInfo, ctxCluster, jobId);
         }
     }
 
@@ -115,7 +114,7 @@ public class StateSnapshotObserver {
     private void handleCheckpoint(
             FlinkStateSnapshotContext ctx,
             CheckpointFetchResult checkpointInfo,
-            FlinkResourceContext<FlinkDeployment> ctxFlinkDeployment,
+            FlinkResourceContext<? extends AbstractFlinkResource<?, ?>> ctxCluster,
             String jobId) {
         var resource = ctx.getResource();
         var resourceName = resource.getMetadata().getName();
@@ -134,7 +133,7 @@ public class StateSnapshotObserver {
 
         LOG.debug("Checkpoint {} was successful, querying final checkpoint path...", resourceName);
         var checkpointStatsResult =
-                ctxFlinkDeployment
+                ctxCluster
                         .getFlinkService()
                         .fetchCheckpointStats(
                                 jobId,
