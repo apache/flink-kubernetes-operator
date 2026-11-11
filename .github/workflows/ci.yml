@@ -153,6 +153,11 @@ jobs:
           cd flink-kubernetes-webhook
           mvn -B verify -Dit.skip=false
           cd ..
+      - name: Tests in flink-autoscaler
+        run: |
+          cd flink-autoscaler
+          mvn -B verify -Dit.skip=false
+          cd ..
       - name: Tests in flink-autoscaler-plugin-jdbc
         run: |
           cd flink-autoscaler-plugin-jdbc
