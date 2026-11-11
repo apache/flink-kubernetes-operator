@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
+import org.apache.flink.kubernetes.operator.api.utils.ConditionsUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -58,6 +59,23 @@ public class FlinkMiniClusterStatus extends CommonStatus<FlinkMiniClusterSpec> {
 
     /** Condition of the CR. */
     private List<Condition> conditions = new ArrayList<>();
+
+    /** Sets the Running condition from the job state, once a spec has been reconciled. */
+    public List<Condition> setRunningConditionIfRequired() {
+        Condition conditionToAdd = null;
+        if (reconciliationStatus != null
+                && reconciliationStatus.deserializeLastReconciledSpec() != null) {
+            conditionToAdd =
+                    ConditionsUtils.createApplicationModeCondition(getJobStatus().getState());
+            ConditionsUtils.updateLastTransitionTime(conditions, conditionToAdd);
+        }
+        List<Condition> newConditions = new ArrayList<>();
+        if (conditionToAdd != null) {
+            newConditions.add(conditionToAdd);
+        }
+        setConditions(newConditions);
+        return newConditions;
+    }
 
     @JsonIgnore
     @Override

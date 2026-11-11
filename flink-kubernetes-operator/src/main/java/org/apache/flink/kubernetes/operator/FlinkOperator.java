@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
@@ -33,6 +34,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.controller.FlinkMiniClusterController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotController;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -44,8 +46,10 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorJosdkMetrics;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
+import org.apache.flink.kubernetes.operator.observer.minicluster.MiniClusterObserver;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.MiniClusterReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
@@ -87,7 +91,7 @@ public class FlinkOperator {
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     @VisibleForTesting final Set<RegisteredController<?>> registeredControllers = new HashSet<>();
-    private final Set<CanaryResourceManager<?>> canaryResourceManagers = new HashSet<>();
+    @VisibleForTesting final Set<CanaryResourceManager<?>> canaryResourceManagers = new HashSet<>();
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
     private final OperatorHealthService operatorHealthService;
@@ -245,6 +249,30 @@ public class FlinkOperator {
     }
 
     @VisibleForTesting
+    void registerMiniClusterController() {
+        var metricManager =
+                MetricManager.createFlinkMiniClusterMetricManager(baseConfig, metricGroup);
+        var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
+        var reconciler = new MiniClusterReconciler(eventRecorder, statusRecorder);
+        var observer = new MiniClusterObserver(eventRecorder);
+        var canaryResourceManager = new CanaryResourceManager<FlinkMiniCluster>(configManager);
+        canaryResourceManagers.add(canaryResourceManager);
+        HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
+
+        var controller =
+                new FlinkMiniClusterController(
+                        validators,
+                        ctxFactory,
+                        reconciler,
+                        observer,
+                        statusRecorder,
+                        eventRecorder,
+                        canaryResourceManager,
+                        configManager);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
+    }
+
+    @VisibleForTesting
     void registerSnapshotController() {
         if (!configManager.getOperatorConfiguration().isSnapshotResourcesEnabled()) {
             LOG.warn(
@@ -299,6 +327,7 @@ public class FlinkOperator {
     public void run() {
         registerDeploymentController();
         registerSessionJobController();
+        registerMiniClusterController();
         registerSnapshotController();
         registerBlueGreenController();
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));

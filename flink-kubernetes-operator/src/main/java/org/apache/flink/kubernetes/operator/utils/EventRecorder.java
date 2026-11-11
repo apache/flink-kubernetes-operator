@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
@@ -265,7 +266,7 @@ public class EventRecorder {
                             listener -> {
                                 if (resource instanceof FlinkDeployment) {
                                     listener.onDeploymentEvent(ctx);
-                                } else {
+                                } else if (resource instanceof FlinkSessionJob) {
                                     listener.onSessionJobEvent(ctx);
                                 }
                             });
