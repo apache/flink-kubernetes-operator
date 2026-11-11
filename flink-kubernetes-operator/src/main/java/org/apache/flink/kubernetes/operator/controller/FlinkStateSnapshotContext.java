@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -66,6 +67,10 @@ public class FlinkStateSnapshotContext {
 
     private Configuration referencedJobObserveConfig() {
         var cluster = getReferencedJobCluster();
+        if (cluster instanceof FlinkMiniCluster) {
+            return getConfigManager().getObserveConfig((FlinkMiniCluster) cluster);
+        }
+
         var flinkDeployment = (FlinkDeployment) cluster;
         return getSecondaryResource()
                 .filter(FlinkSessionJob.class::isInstance)
@@ -82,7 +87,11 @@ public class FlinkStateSnapshotContext {
 
     private AbstractFlinkResource<?, ?> referencedJobCluster() {
         var jobReference = getResource().getSpec().getJobReference();
-        Class<? extends AbstractFlinkResource<?, ?>> clusterClass = FlinkDeployment.class;
+        Class<? extends AbstractFlinkResource<?, ?>> clusterClass =
+                switch (jobReference.getKind()) {
+                    case FLINK_DEPLOYMENT, FLINK_SESSION_JOB -> FlinkDeployment.class;
+                    case FLINK_MINI_CLUSTER -> FlinkMiniCluster.class;
+                };
         return getJosdkContext()
                 .getSecondaryResource(clusterClass)
                 .orElseThrow(
@@ -106,6 +115,10 @@ public class FlinkStateSnapshotContext {
 
         if (JobKind.FLINK_SESSION_JOB.equals(jobKind)) {
             return getJosdkContext().getSecondaryResource(FlinkSessionJob.class).map(r -> r);
+        }
+
+        if (JobKind.FLINK_MINI_CLUSTER.equals(jobKind)) {
+            return getJosdkContext().getSecondaryResource(FlinkMiniCluster.class).map(r -> r);
         }
 
         return Optional.empty();

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
@@ -68,6 +69,38 @@ public class FlinkStateSnapshotContextTest {
                 .isEqualTo(DEPLOYMENT_SAVEPOINT_DIR);
     }
 
+    @Test
+    public void testReferencedMiniCluster() {
+        var miniCluster = TestUtils.buildMiniCluster();
+        miniCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "minicluster-savepoint-dir");
+        ReconciliationUtils.updateStatusForDeployedSpec(miniCluster, new Configuration());
+
+        // A FlinkDeployment with the same name is not the referenced job
+        var deployment = deployedSessionCluster();
+        deployment.getMetadata().setName(miniCluster.getMetadata().getName());
+
+        var snapshot =
+                TestUtils.buildFlinkStateSnapshotSavepoint(
+                        false, JobReference.fromFlinkResource(miniCluster));
+        var ctx =
+                new FlinkStateSnapshotContext(
+                        snapshot,
+                        null,
+                        null,
+                        secondaryResourceContext(deployment, null, miniCluster),
+                        configManager);
+
+        assertThat(ctx.getSecondaryResource()).containsSame(miniCluster);
+        assertThat(ctx.getReferencedJobCluster()).isSameAs(miniCluster);
+        assertThat(
+                        ctx.getReferencedJobObserveConfig()
+                                .get(CheckpointingOptions.SAVEPOINT_DIRECTORY))
+                .isEqualTo("minicluster-savepoint-dir");
+    }
+
     private FlinkDeployment deployedSessionCluster() {
         var deployment = TestUtils.buildSessionCluster();
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
@@ -85,12 +118,12 @@ public class FlinkStateSnapshotContextTest {
                 snapshot,
                 null,
                 null,
-                secondaryResourceContext(deployment, sessionJob),
+                secondaryResourceContext(deployment, sessionJob, null),
                 configManager);
     }
 
     private Context<FlinkStateSnapshot> secondaryResourceContext(
-            FlinkDeployment deployment, FlinkSessionJob sessionJob) {
+            FlinkDeployment deployment, FlinkSessionJob sessionJob, FlinkMiniCluster miniCluster) {
         return new TestUtils.TestingContext<>() {
             @Override
             public <T> Optional<T> getSecondaryResource(Class<T> expectedType, String eventName) {
@@ -99,6 +132,9 @@ public class FlinkStateSnapshotContextTest {
                 }
                 if (FlinkDeployment.class.equals(expectedType)) {
                     return Optional.ofNullable(deployment).map(expectedType::cast);
+                }
+                if (FlinkMiniCluster.class.equals(expectedType)) {
+                    return Optional.ofNullable(miniCluster).map(expectedType::cast);
                 }
                 return Optional.empty();
             }

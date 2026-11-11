@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -314,10 +315,8 @@ public class EventSourceUtils {
                                                                         .getMetadata()
                                                                         .getNamespace()));
                                             }
-                                            return Set.of(
-                                                    FlinkStateSnapshotUtils
-                                                            .getSnapshotJobReferenceResourceId(
-                                                                    snapshot));
+                                            return getSnapshotJobResourceIds(
+                                                    snapshot, JobKind.FLINK_DEPLOYMENT);
                                         })
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
@@ -325,7 +324,24 @@ public class EventSourceUtils {
         var flinkDeploymentEventSource =
                 new InformerEventSource<>(configurationFlinkDeployment, context);
 
-        return new EventSource[] {flinkSessionJobEventSource, flinkDeploymentEventSource};
+        var configurationFlinkMiniCluster =
+                InformerEventSourceConfiguration.from(
+                                FlinkMiniCluster.class, FlinkStateSnapshot.class)
+                        .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
+                        .withPrimaryToSecondaryMapper(
+                                (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
+                                        snapshot ->
+                                                getSnapshotJobResourceIds(
+                                                        snapshot, JobKind.FLINK_MINI_CLUSTER))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+        var flinkMiniClusterEventSource =
+                new InformerEventSource<>(configurationFlinkMiniCluster, context);
+
+        return new EventSource[] {
+            flinkSessionJobEventSource, flinkDeploymentEventSource, flinkMiniClusterEventSource
+        };
     }
 
     private static <T extends AbstractFlinkResource<?, ?>>

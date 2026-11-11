@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
@@ -193,6 +194,14 @@ public class FlinkMiniClusterController
                         context, MiniClusterPodFactory.LABEL_COMPONENT_MINICLUSTER));
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
+        }
+        if (flinkConfigManager.isSnapshotCrdInstalled()) {
+            eventSources.add(
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(
+                            context, JobKind.FLINK_MINI_CLUSTER));
+        } else {
+            LOG.warn(
+                    "Could not initialize informer for snapshots as the CRD has not been installed!");
         }
         return eventSources;
     }
