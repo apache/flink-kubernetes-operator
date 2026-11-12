@@ -51,11 +51,13 @@ In some cases it is desirable to keep the operator running even if some namespac
 
 ## Canary Resources
 
-The canary resource feature allows deploying special dummy resources (canaries) into selected namespaces. The operator health probe will then monitor that these resources are reconciled in a timely manner. This allows the probe to catch any slowdowns, and other general reconciliation issues not covered otherwise.
+The canary resource feature allows deploying a special dummy `FlinkDeployment` resource (canary). The operator health probe will then monitor that this resource is reconciled in a timely manner. This allows the probe to catch any slowdowns, and other general reconciliation issues not covered otherwise.
 
-Canary resources are identified by a special label: `"flink.apache.org/canary": "true"`. These resources do not need to define a spec, start no pods, consume no other cluster resources, and exist purely to assert the operator reconciliation functionality.
+{{< hint info >}}
+All resource kinds, in all watched namespaces, are reconciled by the same reconciliation thread pool. A single canary, in any watched namespace, therefore covers the reconciliation of the whole operator, and additional canaries only add load.
+{{< /hint >}}
 
-Canary FlinkDeployment:
+Canary resources are identified by a special label: `"flink.apache.org/canary": "true"`. These resources do not need to define a spec, start no pods, consume no other cluster resources, and exist purely to assert the operator reconciliation functionality:
 
 ```yaml
 apiVersion: flink.apache.org/v1beta1
@@ -66,9 +68,11 @@ metadata:
     "flink.apache.org/canary": "true"
 ```
 
-The default timeout for reconciling the canary resources is 1 minute and it is controlled by `kubernetes.operator.health.canary.resource.timeout`. If the operator cannot reconcile the canaries within this time limit the operator is marked unhealthy and will be automatically restarted.
+The default timeout for reconciling the canary resource is 1 minute, and it is controlled by `kubernetes.operator.health.canary.resource.timeout`. If the operator cannot reconcile the canary within this time limit the operator is marked unhealthy and will be automatically restarted.
 
-Canaries can be deployed into multiple namespaces, and a `FlinkSessionJob` canary works the same way: the same label, no spec required.
+{{< hint warning >}}
+Canaries are only supported on `FlinkDeployment` resources. `FlinkSessionJob` canaries are deprecated and will not be supported in a future release.
+{{< /hint >}}
 
 ## Monitoring with Prometheus
 

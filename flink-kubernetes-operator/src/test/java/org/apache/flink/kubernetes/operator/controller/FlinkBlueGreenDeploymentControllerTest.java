@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
@@ -52,6 +53,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -112,6 +114,26 @@ public class FlinkBlueGreenDeploymentControllerTest {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController = new TestingFlinkBlueGreenDeploymentController(configManager, flinkService);
+    }
+
+    @Test
+    public void verifyCanaryIsNotReconciled() throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        FlinkVersion.v1_20,
+                        null,
+                        UpgradeMode.STATELESS);
+        blueGreenDeployment
+                .getMetadata()
+                .setLabels(Map.of(CanaryResourceManager.CANARY_LABEL, "true"));
+        kubernetesClient.resource(blueGreenDeployment).create();
+
+        var rs = reconcile(blueGreenDeployment);
+        assertTrue(rs.updateControl.isNoUpdate());
+        assertNull(rs.reconciledStatus);
+        assertTrue(getFlinkDeployments().isEmpty());
     }
 
     @ParameterizedTest
