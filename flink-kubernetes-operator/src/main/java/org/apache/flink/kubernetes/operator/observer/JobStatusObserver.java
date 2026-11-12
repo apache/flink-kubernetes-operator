@@ -44,7 +44,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeoutException;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
@@ -104,9 +103,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             // Error while accessing the rest api, will try again later...
             LOG.warn("Exception while getting job status", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            if (e instanceof TimeoutException) {
-                onTimeout(ctx);
-            }
         }
         return false;
     }
@@ -318,13 +314,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             jobStatus.setState(JobStatus.RECONCILING);
         }
     }
-
-    /**
-     * Callback when list jobs timeout.
-     *
-     * @param ctx Resource context.
-     */
-    protected void onTimeout(FlinkResourceContext<R> ctx) {}
 
     /**
      * Update the status in CR according to the cluster job status.

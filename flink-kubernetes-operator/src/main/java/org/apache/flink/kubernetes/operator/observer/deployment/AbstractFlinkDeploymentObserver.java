@@ -30,9 +30,11 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.util.TimeUtils;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -45,9 +47,31 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
-/** Base observer for session and application clusters. */
+/**
+ * Base observer for session and application clusters.
+ *
+ * <p>The observation is layered by source, Kubernetes, the Flink cluster and the job, and each
+ * layer owns one status transition:
+ *
+ * <ul>
+ *   <li>{@link #observeJmDeployment}: the Kubernetes view, the JobManager Deployment and its pods.
+ *       It can conclude {@code MISSING}, {@code ERROR}, {@code DEPLOYING} or, once the REST port
+ *       accepts connections, {@code DEPLOYED_NOT_READY}. It never sets {@code READY}.
+ *   <li>{@link #observeFlinkCluster}: the JobManager process behind its REST API. A successful call
+ *       is the only way to {@code READY} and stores the cluster info. A failed call hands back to
+ *       {@link #observeJmDeployment} to find out what happened to the JobManager pod.
+ *   <li>{@link #observeJob}: what the cluster runs, implemented per mode and consulted only while
+ *       {@code READY}.
+ * </ul>
+ *
+ * <p>NOTE: The Kubernetes step and the REST step never run in the same loop. The loop that reaches
+ * {@code DEPLOYED_NOT_READY} returns and the next one probes. This keeps the time to {@code READY}
+ * at the port check plus one reschedule, and keeps the job step away from a JobManager that has not
+ * finished starting.
+ */
 public abstract class AbstractFlinkDeploymentObserver
         extends AbstractFlinkResourceObserver<FlinkDeployment> {
 
@@ -60,42 +84,72 @@ public abstract class AbstractFlinkDeploymentObserver
     @Override
     public void observeInternal(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkDep = ctx.getResource();
-        if (!isJmDeploymentReady(flinkDep)) {
-            // Only observe the JM if we think it's in bad state
+        if (!isJmDeployed(flinkDep)) {
             observeJmDeployment(ctx);
-        }
-
-        if (isJmDeploymentReady(flinkDep)) {
-            // Only observe session/application if JM is ready
+        } else {
             observeFlinkCluster(ctx);
         }
 
-        if (isJmDeploymentReady(flinkDep)) {
-            observeClusterInfo(ctx);
+        if (isJmReady(flinkDep)) {
+            observeJob(ctx);
         }
 
         clearErrorsIfDeploymentIsHealthy(flinkDep);
     }
 
-    private void observeClusterInfo(FlinkResourceContext<FlinkDeployment> ctx) {
+    protected void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkApp = ctx.getResource();
+        var status = flinkApp.getStatus();
         try {
-            var clusterInfo =
-                    ctx.getFlinkService()
-                            .getClusterInfo(
-                                    ctx.getObserveConfig(),
-                                    flinkApp.getStatus().getJobStatus().getJobId());
-            flinkApp.getStatus().getClusterInfo().putAll(clusterInfo.getInfo());
-            logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
+            var clusterInfo = ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig());
+            status.getClusterInfo().putAll(clusterInfo);
+        } catch (Exception e) {
+            if (isJmReady(flinkApp)) {
+                logger.warn("JobManager REST API stopped answering", e);
+                if (JobStatus.RUNNING == status.getJobStatus().getState()) {
+                    // The job was last observed RUNNING, its state is unknown until the REST API
+                    // answers again
+                    status.getJobStatus().setState(JobStatus.RECONCILING);
+                }
+            } else if (e instanceof TimeoutException) {
+                logger.info(
+                        "JobManager REST API is not ready yet, no answer within {}",
+                        TimeUtils.formatWithHighestUnit(
+                                ctx.getOperatorConfig().getFlinkClientTimeout()));
+            } else {
+                logger.info("JobManager REST API is not ready yet: {}", e.toString());
+            }
+            // Either way, find out what happened to the JobManager pod
+            observeJmDeployment(ctx);
+            return;
+        }
+
+        if (!isJmReady(flinkApp)) {
+            logger.info("JobManager REST API is ready");
+            status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        }
+        observeTaskManagers(ctx);
+    }
+
+    private void observeTaskManagers(FlinkResourceContext<FlinkDeployment> ctx) {
+        var flinkApp = ctx.getResource();
+        var conf = ctx.getObserveConfig();
+        try {
+            int replicas = ctx.getFlinkService().getTaskManagerReplicas(conf);
+            var clusterInfo = flinkApp.getStatus().getClusterInfo();
+            clusterInfo.put(
+                    AbstractFlinkService.FIELD_NAME_TOTAL_CPU,
+                    String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, replicas)));
+            clusterInfo.put(
+                    AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
+                    String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, replicas)));
+            logger.debug("ClusterInfo: {}", clusterInfo);
 
             var labelSelector =
                     FlinkUtils.getTaskManagerLabelSelector(flinkApp.getMetadata().getName());
-            flinkApp.getStatus()
-                    .setTaskManager(
-                            new TaskManagerInfo(
-                                    labelSelector, clusterInfo.getTaskManagerReplicas()));
+            flinkApp.getStatus().setTaskManager(new TaskManagerInfo(labelSelector, replicas));
         } catch (Exception e) {
-            logger.warn("Exception while fetching cluster info", e);
+            logger.warn("Exception while fetching TaskManager info", e);
         }
     }
 
@@ -112,12 +166,6 @@ public abstract class AbstractFlinkDeploymentObserver
 
         logger.info(
                 "Observing JobManager deployment. Previous status: {}", previousJmStatus.name());
-
-        if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
-            logger.info("JobManager deployment is ready");
-            deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-            return;
-        }
 
         Optional<Deployment> deployment =
                 ctx.getJosdkContext().getSecondaryResource(Deployment.class);
@@ -200,7 +248,13 @@ public abstract class AbstractFlinkDeploymentObserver
         }
     }
 
-    protected boolean isJmDeploymentReady(FlinkDeployment dep) {
+    protected boolean isJmDeployed(FlinkDeployment dep) {
+        var jmStatus = dep.getStatus().getJobManagerDeploymentStatus();
+        return jmStatus == JobManagerDeploymentStatus.DEPLOYED_NOT_READY
+                || jmStatus == JobManagerDeploymentStatus.READY;
+    }
+
+    protected boolean isJmReady(FlinkDeployment dep) {
         return dep.getStatus().getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.READY;
     }
 
@@ -295,11 +349,6 @@ public abstract class AbstractFlinkDeploymentObserver
         }
     }
 
-    /**
-     * Observe the flinkApp status when the cluster is ready. It will be implemented by child class
-     * to reflect the changed status on the flinkApp resource.
-     *
-     * @param ctx the context with which the operation is executed
-     */
-    protected abstract void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx);
+    /** Observe what the cluster runs, called only while the JobManager is {@code READY}. */
+    protected abstract void observeJob(FlinkResourceContext<FlinkDeployment> ctx);
 }
