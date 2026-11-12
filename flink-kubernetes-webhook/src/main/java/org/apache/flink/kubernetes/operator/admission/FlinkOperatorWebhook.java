@@ -77,6 +77,9 @@ public class FlinkOperatorWebhook {
             @Nullable InformerManager informerManager, @Nullable FlinkConfigManager configManager) {
         if (informerManager == null) {
             var kubernetesClient = new KubernetesClientBuilder().build();
+            LOG.info(
+                    "Kubernetes client created with HTTP client implementation {}",
+                    kubernetesClient.getHttpClient().getClass().getName());
             ownedResources.push(kubernetesClient);
             informerManager = new InformerManager(kubernetesClient);
             ownedResources.push(informerManager);
