@@ -22,6 +22,8 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -1031,6 +1033,68 @@ public class DefaultValidatorTest {
                                                                 "cpu",
                                                                 new Quantity("2")))
                                                 .build()));
+    }
+
+    @Test
+    public void testStandaloneJobParallelismWithinTaskManagerSlotsPasses() {
+        testSuccess(
+                createJobOnTwoTaskManagersWithTwoSlots(KubernetesDeploymentMode.STANDALONE, 4)
+                        .andThen(disableJobParallelismDerivedFromReplicas()));
+    }
+
+    @Test
+    public void testStandaloneJobParallelismExceedingTaskManagerSlotsIsRejected() {
+        testError(
+                createJobOnTwoTaskManagersWithTwoSlots(KubernetesDeploymentMode.STANDALONE, 5)
+                        .andThen(disableJobParallelismDerivedFromReplicas()),
+                "Job parallelism 5 is larger than the 4 task slots of the TaskManager replicas");
+    }
+
+    @Test
+    public void testStandaloneParallelismOverrideExceedingTaskManagerSlotsIsRejected() {
+        testError(
+                createJobOnTwoTaskManagersWithTwoSlots(KubernetesDeploymentMode.STANDALONE, 4)
+                        .andThen(disableJobParallelismDerivedFromReplicas())
+                        .andThen(
+                                dep ->
+                                        dep.getSpec()
+                                                .getFlinkConfiguration()
+                                                .put(
+                                                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                                        "vertex1:2,vertex2:6")),
+                "Job parallelism 6 is larger than the 4 task slots of the TaskManager replicas");
+    }
+
+    @Test
+    public void testJobParallelismExceedingTaskManagerSlotsIgnoredWhenDerivedFromReplicas() {
+        testSuccess(createJobOnTwoTaskManagersWithTwoSlots(KubernetesDeploymentMode.STANDALONE, 5));
+    }
+
+    @Test
+    public void testJobParallelismExceedingTaskManagerSlotsIgnoredInNativeMode() {
+        testSuccess(
+                createJobOnTwoTaskManagersWithTwoSlots(KubernetesDeploymentMode.NATIVE, 5)
+                        .andThen(disableJobParallelismDerivedFromReplicas()));
+    }
+
+    private static Consumer<FlinkDeployment> createJobOnTwoTaskManagersWithTwoSlots(
+            KubernetesDeploymentMode mode, int jobParallelism) {
+        return dep -> {
+            dep.getSpec().setMode(mode);
+            dep.getSpec().getTaskManager().setReplicas(2);
+            dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+            dep.getSpec().getJob().setParallelism(jobParallelism);
+        };
+    }
+
+    private static Consumer<FlinkDeployment> disableJobParallelismDerivedFromReplicas() {
+        return dep ->
+                dep.getSpec()
+                        .getFlinkConfiguration()
+                        .put(
+                                KubernetesOperatorConfigOptions.JOB_PARALLELISM_DERIVE_FROM_REPLICAS
+                                        .key(),
+                                "false");
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
