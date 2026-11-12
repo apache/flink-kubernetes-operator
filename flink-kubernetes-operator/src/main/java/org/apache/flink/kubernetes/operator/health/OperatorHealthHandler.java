@@ -17,8 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
-import org.apache.flink.util.ExceptionUtils;
-
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandler;
@@ -30,41 +28,53 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpObject;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.charset.StandardCharsets;
 
 /**
- * Simple code which returns HTTP 200 messages if the service is live, and HTTP 500 messages if the
- * service is down. The response is based on the {@link HealthProbe#isHealthy()} result.
+ * Answers every HTTP request with the current probe result. A healthy operator yields HTTP 200 with
+ * the body {@code OK}, an unhealthy one HTTP 500 with the body {@code ERROR}. When the probe itself
+ * fails, the failure is logged and the caller receives the same {@code ERROR} response.
  */
 @ChannelHandler.Sharable
-public class OperatorHealthHandler extends SimpleChannelInboundHandler<HttpObject> {
+class OperatorHealthHandler extends SimpleChannelInboundHandler<HttpObject> {
 
-    private final HealthProbe probe = HealthProbe.INSTANCE;
+    private static final Logger LOG = LoggerFactory.getLogger(OperatorHealthHandler.class);
+
+    private final OperatorHealthProbe probe;
+
+    OperatorHealthHandler(OperatorHealthProbe probe) {
+        this.probe = probe;
+    }
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
+        boolean healthy;
         try {
-            if (probe.isHealthy()) {
-                ctx.writeAndFlush(createResponse("OK", HttpResponseStatus.OK));
-            } else {
-                ctx.writeAndFlush(
-                        createResponse("ERROR", HttpResponseStatus.INTERNAL_SERVER_ERROR));
-            }
+            healthy = probe.isHealthy();
         } catch (Throwable t) {
-            if (ctx.channel().isActive()) {
-                ctx.writeAndFlush(
-                        createResponse(
-                                ExceptionUtils.stringifyException(t),
-                                HttpResponseStatus.INTERNAL_SERVER_ERROR));
-            }
+            LOG.error("Health probe failed", t);
+            healthy = false;
         }
+        ctx.writeAndFlush(
+                healthy
+                        ? createResponse("OK", HttpResponseStatus.OK)
+                        : createResponse("ERROR", HttpResponseStatus.INTERNAL_SERVER_ERROR));
     }
 
-    private DefaultFullHttpResponse createResponse(String content, HttpResponseStatus status) {
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        LOG.warn("Health probe request failed: {}", cause.toString());
+        ctx.close();
+    }
+
+    private static DefaultFullHttpResponse createResponse(
+            String content, HttpResponseStatus status) {
         ByteBuf buff = Unpooled.copiedBuffer(content, StandardCharsets.UTF_8);
         DefaultFullHttpResponse response =
                 new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, buff);
-
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain;charset=UTF-8");
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, buff.readableBytes());
         return response;
