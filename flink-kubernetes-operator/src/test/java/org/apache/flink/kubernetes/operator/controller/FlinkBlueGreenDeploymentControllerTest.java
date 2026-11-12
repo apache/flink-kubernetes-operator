@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.bluegreen.BlueGreenDeploymentType;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -41,6 +42,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentS
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
@@ -126,6 +128,42 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         initialSavepointPath,
                         UpgradeMode.STATELESS);
         executeBasicDeployment(flinkVersion, blueGreenDeployment, true, initialSavepointPath);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void verifyChildInheritsParentLabelsWithoutTheCanaryMarker(FlinkVersion flinkVersion)
+            throws Exception {
+        var blueGreenDeployment =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        flinkVersion,
+                        null,
+                        UpgradeMode.STATELESS);
+        blueGreenDeployment
+                .getMetadata()
+                .setLabels(
+                        Map.of(
+                                "team",
+                                "a",
+                                "environment",
+                                "test",
+                                CanaryResourceManager.CANARY_LABEL,
+                                "true"));
+
+        executeBasicDeployment(flinkVersion, blueGreenDeployment, false, null);
+
+        var childLabels = getFlinkDeployments().get(0).getMetadata().getLabels();
+        assertEquals("a", childLabels.get("team"));
+        assertEquals("test", childLabels.get("environment"));
+        assertEquals(
+                BlueGreenDeploymentType.BLUE.toString(),
+                childLabels.get(BlueGreenDeploymentType.LABEL_KEY));
+        assertFalse(
+                childLabels.containsKey(CanaryResourceManager.CANARY_LABEL),
+                "The canary marker must not be inherited: it makes the FlinkDeployment controller"
+                        + " skip the child entirely");
     }
 
     @ParameterizedTest
