@@ -197,16 +197,16 @@ public class HealthProbeTest {
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         // No reconciliation before health check
-        canaryManager.checkHealth(canaryId, client);
+        canaryManager.checkHealth(canaryId, canaryManager.canaryResources.get(canaryId), client);
         assertFalse(HealthProbe.INSTANCE.isHealthy());
 
         // Healthy again
         canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
-        canaryManager.checkHealth(canaryId, client);
+        canaryManager.checkHealth(canaryId, canaryManager.canaryResources.get(canaryId), client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
-        canaryManager.checkHealth(canaryId, client);
+        canaryManager.checkHealth(canaryId, canaryManager.canaryResources.get(canaryId), client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
     }
 

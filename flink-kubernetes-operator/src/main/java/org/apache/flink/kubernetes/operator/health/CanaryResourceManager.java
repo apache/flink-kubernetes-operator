@@ -31,12 +31,15 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tracks the canary resources of one kind, labeled with {@link #CANARY_LABEL}, to verify that the
@@ -55,7 +58,8 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
     @VisibleForTesting static final int MAX_FAILED_UPDATES = 3;
 
-    private final ConcurrentHashMap<ResourceID, CanaryResourceState> canaryResources =
+    @VisibleForTesting
+    final ConcurrentHashMap<ResourceID, CanaryResourceState> canaryResources =
             new ConcurrentHashMap<>();
 
     @VisibleForTesting
@@ -70,7 +74,9 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
     public boolean handleCanaryResourceReconciliation(CR resource, KubernetesClient client) {
         var resourceId = ResourceID.fromResource(resource);
         if (!isCanaryResource(resource)) {
-            if (canaryResources.remove(resourceId) != null) {
+            var removed = canaryResources.remove(resourceId);
+            if (removed != null) {
+                removed.cancelCheck();
                 LOG.info(
                         "Reconciled {} without the canary label. Stopping health checks",
                         resourceId);
@@ -81,10 +87,19 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
         LOG.info("Reconciling canary resource");
 
         var firstReconcile = new AtomicBoolean(false);
+        var replacedState = new AtomicReference<CanaryResourceState>();
         var state =
                 canaryResources.compute(
                         resourceId,
                         (id, previousState) -> {
+                            // Recreated without the deletion cleanup
+                            if (previousState != null
+                                    && !Objects.equals(
+                                            previousState.resource.getMetadata().getUid(),
+                                            resource.getMetadata().getUid())) {
+                                replacedState.set(previousState);
+                                previousState = null;
+                            }
                             if (previousState == null) {
                                 firstReconcile.set(true);
                                 previousState = new CanaryResourceState();
@@ -94,6 +109,11 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
                             previousState.onReconcile(resource);
                             return previousState;
                         });
+
+        if (replacedState.get() != null) {
+            replacedState.get().cancelCheck();
+            LOG.info("Canary resource {} was recreated. Restarting health checks", resourceId);
+        }
 
         if (firstReconcile.get()) {
             updateSpecAndScheduleHealthCheck(resourceId, state, client);
@@ -109,7 +129,10 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
         var resourceId = ResourceID.fromResource(resource);
         LOG.info("Deleting canary resource");
-        canaryResources.remove(resourceId);
+        var removed = canaryResources.remove(resourceId);
+        if (removed != null) {
+            removed.cancelCheck();
+        }
         return true;
     }
 
@@ -121,7 +144,9 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
         for (var resourceId : canaryResources.keySet()) {
             var watched = resourceId.getNamespace().map(namespaces::contains).orElse(true);
-            if (!watched && canaryResources.remove(resourceId) != null) {
+            var removed = watched ? null : canaryResources.remove(resourceId);
+            if (removed != null) {
+                removed.cancelCheck();
                 LOG.info(
                         "Namespace of canary resource {} is no longer watched. Stopping health checks",
                         resourceId);
@@ -190,17 +215,25 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
         LOG.info("Scheduling canary check for {} in {}s", resourceID, canaryTimeout.toSeconds());
 
-        executorService.schedule(
-                () -> checkHealth(resourceID, client),
-                canaryTimeout.toMillis(),
-                TimeUnit.MILLISECONDS);
+        crs.nextCheck =
+                executorService.schedule(
+                        () -> checkHealth(resourceID, crs, client),
+                        canaryTimeout.toMillis(),
+                        TimeUnit.MILLISECONDS);
     }
 
     @VisibleForTesting
-    protected void checkHealth(ResourceID resourceID, KubernetesClient client) {
-        CanaryResourceState crs = canaryResources.get(resourceID);
-        if (crs == null) {
+    void checkHealth(ResourceID resourceID, CanaryResourceState crs, KubernetesClient client) {
+        var trackedState = canaryResources.get(resourceID);
+        if (trackedState == null) {
             LOG.info("Canary resource {} not found. Stopping health checks", resourceID);
+            return;
+        }
+
+        if (trackedState != crs) {
+            LOG.info(
+                    "Canary resource {} was recreated. Stopping the outdated health check",
+                    resourceID);
             return;
         }
 
@@ -251,14 +284,22 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
         executorService.shutdownNow();
     }
 
-    private class CanaryResourceState {
+    @VisibleForTesting
+    class CanaryResourceState {
         CR resource;
         long bumpedGeneration;
         int failedBumps;
         boolean isHealthy = true;
+        ScheduledFuture<?> nextCheck;
 
         void onReconcile(CR cr) {
             resource = cr;
+        }
+
+        void cancelCheck() {
+            if (nextCheck != null) {
+                nextCheck.cancel(false);
+            }
         }
 
         boolean canaryReconciledSinceUpdate() {
