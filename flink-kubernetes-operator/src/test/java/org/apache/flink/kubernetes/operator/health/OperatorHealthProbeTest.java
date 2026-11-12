@@ -25,6 +25,12 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.util.NetUtils;
 
+import org.apache.flink.shaded.netty4.io.netty.channel.embedded.EmbeddedChannel;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpRequest;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.FullHttpResponse;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
+
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -40,22 +46,23 @@ import org.junit.jupiter.api.Test;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Collections;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * @link Health probe unit tests
- */
+/** Operator health probe tests. */
 @EnableKubernetesMockClient(crud = true)
-public class HealthProbeTest {
+public class OperatorHealthProbeTest {
+
     KubernetesClient client;
 
     @BeforeAll
@@ -68,7 +75,6 @@ public class HealthProbeTest {
         try (var port = NetUtils.getAvailablePort()) {
             var conf = new Configuration();
             conf.set(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT, port.getPort());
-
             FlinkOperator operator =
                     new FlinkOperator(conf) {
                         @Override
@@ -80,7 +86,6 @@ public class HealthProbeTest {
             try {
                 operator.run();
                 assertTrue(callHealthEndpoint(conf));
-                assertNotNull(HealthProbe.INSTANCE.getRuntimeInfo());
             } finally {
                 operator.stop();
                 assertThrows(ConnectException.class, () -> callHealthEndpoint(conf));
@@ -89,35 +94,22 @@ public class HealthProbeTest {
     }
 
     @Test
-    public void testHealthProbeInfomers() {
+    public void testHealthProbeInformers() {
         var isRunning = new AtomicBoolean(false);
         var unhealthyEventSources =
                 new HashMap<String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
-        var runtimeInfo =
-                new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
-                    @Override
-                    public boolean isStarted() {
-                        return isRunning.get();
-                    }
-
-                    @Override
-                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                            unhealthyInformerWrappingEventSourceHealthIndicator() {
-                        return unhealthyEventSources;
-                    }
-                };
+        var runtimeInfo = runtimeInfo(isRunning, unhealthyEventSources);
 
         // Test if a new event source becomes unhealthy
-        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
-
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        var probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        assertFalse(probe.isHealthy());
         isRunning.set(true);
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
         unhealthyEventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        assertFalse(probe.isHealthy());
         unhealthyEventSources.clear();
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
 
         // Test if we detect when there is an unhealthy at start
         unhealthyEventSources.put(
@@ -126,8 +118,8 @@ public class HealthProbeTest {
                         "e1",
                         informerHealthIndicator(
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY))));
-        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        assertTrue(probe.isHealthy());
         unhealthyEventSources.put(
                 "c1",
                 Map.of(
@@ -136,8 +128,8 @@ public class HealthProbeTest {
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY)),
                         "e2",
                         informerHealthIndicator(Map.of("i3", Status.UNHEALTHY))));
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        assertFalse(probe.isHealthy());
+        assertFalse(probe.isHealthy());
         unhealthyEventSources.put(
                 "c1",
                 Map.of(
@@ -146,68 +138,101 @@ public class HealthProbeTest {
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY)),
                         "e2",
                         informerHealthIndicator(Map.of("i3", Status.HEALTHY))));
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
         unhealthyEventSources.put(
                 "c1",
                 Map.of(
                         "e1",
                         informerHealthIndicator(
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.UNHEALTHY))));
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        assertFalse(probe.isHealthy());
         unhealthyEventSources.clear();
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
 
         // All informers unhealthy at start:
         unhealthyEventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
-        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        assertFalse(probe.isHealthy());
     }
 
     @Test
     public void testHealthProbeCanary() {
-        var runtimeInfo =
-                new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
-                    @Override
-                    public boolean isStarted() {
-                        return true;
-                    }
-
-                    @Override
-                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                            unhealthyInformerWrappingEventSourceHealthIndicator() {
-                        return Collections.emptyMap();
-                    }
-                };
-        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
-
         var canaryManager =
                 new CanaryResourceManager<FlinkDeployment>(
                         new FlinkConfigManager(new Configuration()));
-        HealthProbe.INSTANCE.registerCanaryResourceManager(canaryManager);
+        var probe =
+                new OperatorHealthProbe(
+                        runtimeInfo(new AtomicBoolean(true), Map.of()), List.of(canaryManager));
 
         // No canary resources
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
 
         var canary = client.resource(TestUtils.createCanaryDeployment()).create();
         var canaryId = ResourceID.fromResource(canary);
         canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
 
         // Canary resource healthy before health check
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
 
         // No reconciliation before health check
         canaryManager.checkHealth(canaryId, client);
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        assertFalse(probe.isHealthy());
 
         // Healthy again
         canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
         canaryManager.checkHealth(canaryId, client);
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
 
         canaryManager.handleCanaryResourceReconciliation(client.resource(canary).get(), client);
         canaryManager.checkHealth(canaryId, client);
-        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        assertTrue(probe.isHealthy());
+    }
+
+    @Test
+    public void testHealthHandlerResponses() {
+        var runtimeInfo = runtimeInfo(new AtomicBoolean(true), Map.of());
+        assertEquals("OK", handle(new OperatorHealthProbe(runtimeInfo, List.of()), OK.code()));
+
+        var failingProbe =
+                new OperatorHealthProbe(runtimeInfo, List.of()) {
+                    @Override
+                    boolean isHealthy() {
+                        throw new IllegalStateException("probe failure");
+                    }
+                };
+        assertEquals("ERROR", handle(failingProbe, INTERNAL_SERVER_ERROR.code()));
+    }
+
+    private static String handle(OperatorHealthProbe probe, int expectedStatus) {
+        var channel = new EmbeddedChannel(new OperatorHealthHandler(probe));
+        channel.writeInbound(new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/"));
+        FullHttpResponse response = channel.readOutbound();
+        try {
+            assertEquals(expectedStatus, response.status().code());
+            return response.content().toString(StandardCharsets.UTF_8);
+        } finally {
+            response.release();
+            channel.finishAndReleaseAll();
+        }
+    }
+
+    private RuntimeInfo runtimeInfo(
+            AtomicBoolean started,
+            Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
+                    unhealthyEventSources) {
+        return new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
+            @Override
+            public boolean isStarted() {
+                return started.get();
+            }
+
+            @Override
+            public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
+                    unhealthyInformerWrappingEventSourceHealthIndicator() {
+                return unhealthyEventSources;
+            }
+        };
     }
 
     private boolean callHealthEndpoint(Configuration conf) throws Exception {
