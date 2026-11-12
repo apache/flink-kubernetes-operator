@@ -189,6 +189,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
+        if (conf.get(AutoScalerOptions.SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED)
+                && conf.get(
+                        AutoScalerOptions
+                                .SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_TASKMANAGER_REPLICAS_CHANGE_REQUIRED)
+                && !SlotSharingGroupScalingPolicy.scalingChangesTaskManagerCount(
+                        conf, evaluatedMetrics, jobTopology, scalingSummaries)) {
+            return false;
+        }
+
         var configOverrides =
                 MemoryTuning.tuneTaskManagerMemory(
                         context,
@@ -271,46 +280,92 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
 
-        var excludeVertexIdList =
-                context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
-        AtomicBoolean anyVertexOutsideBound = new AtomicBoolean(false);
-        evaluatedMetrics
-                .getVertexMetrics()
-                .forEach(
-                        (v, metrics) -> {
-                            if (excludeVertexIdList.contains(v.toHexString())) {
-                                LOG.debug(
-                                        "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
-                                        v);
-                            } else {
-                                var currentParallelism =
-                                        (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+        var conf = context.getConfiguration();
+        var excludeVertexIdList = conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+        var vertexMetrics = evaluatedMetrics.getVertexMetrics();
+        var maxScaleFactorPerSlotSharingGroupEnabled =
+                conf.get(AutoScalerOptions.SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED);
+        Map<JobVertexID, Double> individualScaleFactors;
+        Map<JobVertexID, Double> groupScaleFactors;
+        if (maxScaleFactorPerSlotSharingGroupEnabled) {
+            var computedIndividualScaleFactors = new HashMap<JobVertexID, Double>();
+            vertexMetrics.forEach(
+                    (vertex, metrics) -> {
+                        if (!excludeVertexIdList.contains(vertex.toHexString())) {
+                            computedIndividualScaleFactors.put(
+                                    vertex,
+                                    jobVertexScaler.computeScaleFactor(
+                                            context,
+                                            vertex,
+                                            metrics,
+                                            scalingHistory.getOrDefault(
+                                                    vertex, Collections.emptySortedMap()),
+                                            restartTime));
+                        }
+                    });
+            individualScaleFactors = computedIndividualScaleFactors;
+            groupScaleFactors =
+                    SlotSharingGroupScalingPolicy.computeMaxScaleFactorsPerSlotSharingGroup(
+                            individualScaleFactors, jobTopology, excludeVertexIdList);
+        } else {
+            individualScaleFactors = Map.of();
+            groupScaleFactors = Map.of();
+        }
 
-                                var parallelismChange =
-                                        jobVertexScaler.computeScaleTargetParallelism(
-                                                context,
-                                                v,
-                                                jobTopology.get(v).getInputs().values(),
-                                                jobTopology,
-                                                metrics,
-                                                scalingHistory.getOrDefault(
-                                                        v, Collections.emptySortedMap()),
-                                                restartTime,
-                                                delayedScaleDown);
-                                if (parallelismChange.isNoChange()) {
-                                    return;
-                                }
-                                if (parallelismChange.isOutsideUtilizationBound()) {
-                                    anyVertexOutsideBound.set(true);
-                                }
-                                out.put(
-                                        v,
-                                        new ScalingSummary(
-                                                currentParallelism,
-                                                parallelismChange.getNewParallelism(),
-                                                metrics));
-                            }
-                        });
+        AtomicBoolean anyVertexOutsideBound = new AtomicBoolean(false);
+        vertexMetrics.forEach(
+                (v, metrics) -> {
+                    if (excludeVertexIdList.contains(v.toHexString())) {
+                        LOG.debug(
+                                "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
+                                v);
+                    } else {
+                        var currentParallelism =
+                                (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+
+                        JobVertexScaler.ParallelismChange parallelismChange;
+                        if (maxScaleFactorPerSlotSharingGroupEnabled) {
+                            parallelismChange =
+                                    jobVertexScaler.computeScaleTargetParallelism(
+                                            context,
+                                            v,
+                                            jobTopology.get(v).getInputs().values(),
+                                            jobTopology,
+                                            metrics,
+                                            scalingHistory.getOrDefault(
+                                                    v, Collections.emptySortedMap()),
+                                            delayedScaleDown,
+                                            groupScaleFactors.getOrDefault(
+                                                    v,
+                                                    individualScaleFactors.getOrDefault(
+                                                            v, Double.NaN)));
+                        } else {
+                            parallelismChange =
+                                    jobVertexScaler.computeScaleTargetParallelism(
+                                            context,
+                                            v,
+                                            jobTopology.get(v).getInputs().values(),
+                                            jobTopology,
+                                            metrics,
+                                            scalingHistory.getOrDefault(
+                                                    v, Collections.emptySortedMap()),
+                                            restartTime,
+                                            delayedScaleDown);
+                        }
+                        if (parallelismChange.isNoChange()) {
+                            return;
+                        }
+                        if (parallelismChange.isOutsideUtilizationBound()) {
+                            anyVertexOutsideBound.set(true);
+                        }
+                        out.put(
+                                v,
+                                new ScalingSummary(
+                                        currentParallelism,
+                                        parallelismChange.getNewParallelism(),
+                                        metrics));
+                    }
+                });
 
         // If the Utilization of all tasks is within range, we can skip scaling.
         if (!anyVertexOutsideBound.get()) {
