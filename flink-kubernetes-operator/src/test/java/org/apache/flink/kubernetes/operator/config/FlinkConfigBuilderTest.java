@@ -49,6 +49,7 @@ import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -63,6 +64,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -638,6 +640,345 @@ public class FlinkConfigBuilderTest {
         assertEquals(
                 Double.valueOf(2.0),
                 configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR));
+    }
+
+    @Test
+    public void testActiveProcessorCountPinnedFromCpuLimitFactorInResourceRequirements() {
+        Map<String, Quantity> jmRequests = new HashMap<>();
+        jmRequests.put("cpu", new Quantity("2500m"));
+        Map<String, Quantity> jmLimits = new HashMap<>();
+        jmLimits.put("cpu", new Quantity("10"));
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        flinkDeployment
+                .getSpec()
+                .getJobManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(jmRequests)
+                                .withLimits(jmLimits)
+                                .build());
+
+        Map<String, Quantity> tmRequests = new HashMap<>();
+        tmRequests.put("cpu", new Quantity("500m"));
+        Map<String, Quantity> tmLimits = new HashMap<>();
+        tmLimits.put("cpu", new Quantity("2"));
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        flinkDeployment
+                .getSpec()
+                .getTaskManager()
+                .setResources(
+                        new ResourceRequirementsBuilder()
+                                .withRequests(tmRequests)
+                                .withLimits(tmLimits)
+                                .build());
+
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        // Pinned to the CPU request rounded up: ceil(2.5) and ceil(0.5)
+        assertEquals(
+                "-XX:ActiveProcessorCount=3", configuration.get(CoreOptions.FLINK_JM_JVM_OPTIONS));
+        assertEquals(
+                "-XX:ActiveProcessorCount=1", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testActiveProcessorCountNotPinnedWithoutEffectiveCpuLimitFactor() {
+        // default (unset), the factor==1 boundary, a factor below 1 and a malformed value must
+        // all leave the JVM opts untouched
+        for (String factor : Arrays.asList(null, "1.0", "0.9", "NaN")) {
+            if (factor != null) {
+                flinkDeployment
+                        .getSpec()
+                        .getFlinkConfiguration()
+                        .put(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(), factor);
+            }
+            Configuration configuration =
+                    new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                            .applyFlinkConfiguration()
+                            .applyJobManagerSpec()
+                            .applyTaskManagerSpec()
+                            .applyActiveProcessorCountForCpuLimitFactor()
+                            .build();
+            assertFalse(
+                    configuration.contains(CoreOptions.FLINK_JM_JVM_OPTIONS), "factor: " + factor);
+            assertFalse(
+                    configuration.contains(CoreOptions.FLINK_TM_JVM_OPTIONS), "factor: " + factor);
+        }
+    }
+
+    @Test
+    public void testUserSetActiveProcessorCountWinsOverCpuLimitFactor() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "1.5",
+                                CoreOptions.FLINK_JM_JVM_OPTIONS.key(),
+                                "-XX:ActiveProcessorCount=3",
+                                CoreOptions.FLINK_TM_JVM_OPTIONS.key(),
+                                "-XX:+UseG1GC"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertEquals(
+                "-XX:ActiveProcessorCount=3", configuration.get(CoreOptions.FLINK_JM_JVM_OPTIONS));
+        // Appended after the user's options; also covers a fractional limit factor and the
+        // deprecated resource path cpu (1.0)
+        assertEquals(
+                "-XX:+UseG1GC -XX:ActiveProcessorCount=1",
+                configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testUserSetEnvJavaOptsActiveProcessorCountSkipsInjection() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(), "4");
+        // an explicit -XX:ActiveProcessorCount in any env.java.opts*/env.java.default-opts* key
+        // that feeds the TaskManager JVM must suppress the injection
+        for (String key :
+                List.of(
+                        "env.java.opts",
+                        CoreOptions.FLINK_JVM_OPTIONS.key(),
+                        CoreOptions.FLINK_DEFAULT_JVM_OPTIONS.key(),
+                        CoreOptions.FLINK_DEFAULT_TM_JVM_OPTIONS.key(),
+                        CoreOptions.FLINK_TM_JVM_OPTIONS.key())) {
+            flinkDeployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(key, "-XX:ActiveProcessorCount=2");
+            Configuration configuration =
+                    new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                            .applyFlinkConfiguration()
+                            .applyJobManagerSpec()
+                            .applyTaskManagerSpec()
+                            .applyActiveProcessorCountForCpuLimitFactor()
+                            .build();
+            if (key.equals(CoreOptions.FLINK_TM_JVM_OPTIONS.key())) {
+                // the user's own value must be preserved untouched
+                assertEquals(
+                        "-XX:ActiveProcessorCount=2",
+                        configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+            } else {
+                assertFalse(
+                        configuration.contains(CoreOptions.FLINK_TM_JVM_OPTIONS), "key: " + key);
+            }
+            flinkDeployment.getSpec().getFlinkConfiguration().remove(key);
+        }
+    }
+
+    @Test
+    public void testTaskManagerActiveProcessorCountDoesNotSuppressJobManagerInjection() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                CoreOptions.FLINK_TM_JVM_OPTIONS.key(),
+                                "-XX:ActiveProcessorCount=7"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobManagerSpec()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertEquals(
+                "-XX:ActiveProcessorCount=1", configuration.get(CoreOptions.FLINK_JM_JVM_OPTIONS));
+        assertEquals(
+                "-XX:ActiveProcessorCount=7", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testActiveProcessorCountInjectionIsIdempotent() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(), "4");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        new FlinkConfigBuilder(flinkDeployment, configuration)
+                .applyActiveProcessorCountForCpuLimitFactor();
+        assertEquals(
+                "-XX:ActiveProcessorCount=1", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testWhitespaceOnlyEnvJavaOptsReplacedByActiveProcessorCount() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                CoreOptions.FLINK_TM_JVM_OPTIONS.key(),
+                                "   "));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertEquals(
+                "-XX:ActiveProcessorCount=1", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testActiveProcessorCountFallsBackToTaskSlotsWhenTmCpuUnset() {
+        // kubernetes.taskmanager.cpu defaults to -1; Flink then requests one core per slot, so
+        // the pin must follow the slot count rather than the sentinel value
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                TaskManagerOptions.NUM_TASK_SLOTS.key(),
+                                "8"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertEquals(
+                "-XX:ActiveProcessorCount=8", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testActiveProcessorCountPrefersTaskManagerCpuCores() {
+        // taskmanager.cpu-cores wins over kubernetes.taskmanager.cpu, mirroring
+        // TaskExecutorProcessUtils.getCpuCoresWithFallback
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                TaskManagerOptions.CPU_CORES.key(),
+                                "3"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertEquals(
+                "-XX:ActiveProcessorCount=3", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testInvalidCpuRequestSkipsActiveProcessorCount() {
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                KubernetesConfigOptions.JOB_MANAGER_CPU.key(),
+                                "-1"));
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobManagerSpec()
+                        .applyActiveProcessorCountForCpuLimitFactor()
+                        .build();
+        assertFalse(configuration.contains(CoreOptions.FLINK_JM_JVM_OPTIONS));
+    }
+
+    @Test
+    public void testPodTemplateJvmOptsEnvVarsSuppressInjection() {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(), "4");
+        // config.sh prefers these pod env vars over the config-map values, so an explicit
+        // -XX:ActiveProcessorCount set through them must suppress the injection
+        for (boolean shared : List.of(false, true)) {
+            for (String envVarName :
+                    List.of("FLINK_ENV_JAVA_OPTS", "FLINK_ENV_JAVA_OPTS_TM", "JVM_ARGS")) {
+                var envVar = new EnvVar();
+                envVar.setName(envVarName);
+                envVar.setValue("-XX:ActiveProcessorCount=5");
+                var main = new Container();
+                main.setName(Constants.MAIN_CONTAINER_NAME);
+                main.setEnv(List.of(envVar));
+                var podTemplate = TestUtils.getTestPodTemplate("", List.of(main));
+                if (shared) {
+                    flinkDeployment.getSpec().setPodTemplate(podTemplate);
+                } else {
+                    flinkDeployment.getSpec().getTaskManager().setPodTemplate(podTemplate);
+                }
+                Configuration configuration =
+                        new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                                .applyFlinkConfiguration()
+                                .applyTaskManagerSpec()
+                                .applyActiveProcessorCountForCpuLimitFactor()
+                                .build();
+                assertFalse(
+                        configuration.contains(CoreOptions.FLINK_TM_JVM_OPTIONS),
+                        "shared: " + shared + ", env var: " + envVarName);
+                flinkDeployment.getSpec().setPodTemplate(null);
+                flinkDeployment.getSpec().getTaskManager().setPodTemplate(null);
+            }
+        }
+    }
+
+    @Test
+    public void testBuildFromPinsActiveProcessorCountWithRawCpuLimitFactor() throws Exception {
+        flinkDeployment.getSpec().getJobManager().setResource(null);
+        flinkDeployment.getSpec().getTaskManager().setResource(null);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .putAllFrom(
+                        Map.of(
+                                KubernetesConfigOptions.JOB_MANAGER_CPU.key(),
+                                "10",
+                                KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4",
+                                KubernetesConfigOptions.TASK_MANAGER_CPU.key(),
+                                "10",
+                                KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR.key(),
+                                "4"));
+        Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
+        assertEquals(
+                "-XX:ActiveProcessorCount=10", configuration.get(CoreOptions.FLINK_JM_JVM_OPTIONS));
+        assertEquals(
+                "-XX:ActiveProcessorCount=10", configuration.get(CoreOptions.FLINK_TM_JVM_OPTIONS));
     }
 
     @Test
