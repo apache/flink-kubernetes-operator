@@ -609,6 +609,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription("The port the health probe will use to expose the status.");
 
     @Documentation.Section(SECTION_ADVANCED_STARTUP)
+    public static final ConfigOption<Duration> OPERATOR_HEALTH_PROBE_INFORMER_STALE_TIMEOUT =
+            operatorConfig("health.probe.informer.stale-timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(15))
+                    .withDescription(
+                            "How long an informer may go without receiving any watch event or bookmark before the health probe reports it stale and fails. A healthy watch receives a bookmark from the API server about once a minute when the API server serves it from its watch cache, which is the default. Without the watch cache bookmarks only follow the etcd progress notifications, 10 minutes apart by default, so keep the timeout above that. Set to 0 to disable the check.");
+
+    @Documentation.Section(SECTION_ADVANCED_STARTUP)
     public static final ConfigOption<Boolean> OPERATOR_STOP_ON_INFORMER_ERROR =
             operatorConfig("startup.stop-on-informer-error")
                     .booleanType()
