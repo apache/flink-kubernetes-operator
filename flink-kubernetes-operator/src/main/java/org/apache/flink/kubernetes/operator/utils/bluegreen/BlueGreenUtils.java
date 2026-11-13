@@ -94,6 +94,11 @@ public class BlueGreenUtils {
         deploymentStatus.setLastReconciledTimestamp(Instant.now().toString());
     }
 
+    public static void markReconciledSpecAsStable(BlueGreenContext context) {
+        FlinkBlueGreenDeploymentStatus deploymentStatus = context.getDeploymentStatus();
+        deploymentStatus.setLastStableSpec(deploymentStatus.getLastReconciledSpec());
+    }
+
     public static void revertToLastSpec(BlueGreenContext context) {
         context.getBgDeployment()
                 .setSpec(

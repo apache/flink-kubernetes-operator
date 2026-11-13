@@ -11604,6 +11604,8 @@ spec:
                 type: "string"
               lastReconciledTimestamp:
                 type: "string"
+              lastStableSpec:
+                type: "string"
               savepointTriggerId:
                 type: "string"
             type: "object"

@@ -57,6 +57,7 @@ import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtil
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.hasSpecChanged;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.isSavepointRequired;
+import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.markReconciledSpecAsStable;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.millisToInstantStr;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.prepareFlinkDeployment;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.setLastReconciledSpec;
@@ -122,6 +123,7 @@ public class BlueGreenDeploymentService {
 
             if (specDiff == BlueGreenDiffType.SUSPEND && currentFlinkDeployment != null) {
                 setLastReconciledSpec(context);
+                markReconciledSpecAsStable(context);
                 LOG.info(
                         "In-place suspension for '{}'",
                         currentFlinkDeployment.getMetadata().getName());
@@ -130,6 +132,7 @@ public class BlueGreenDeploymentService {
 
             if (specDiff == BlueGreenDiffType.RESUME && currentFlinkDeployment != null) {
                 setLastReconciledSpec(context);
+                markReconciledSpecAsStable(context);
                 LOG.info(
                         "In-place resume for '{}'", currentFlinkDeployment.getMetadata().getName());
                 return patchFlinkDeployment(context, currentBlueGreenDeploymentType);
@@ -138,6 +141,7 @@ public class BlueGreenDeploymentService {
             // Check if child is currently suspended - if so, just patch specs without restart
             if (isChildSuspended(currentFlinkDeployment)) {
                 setLastReconciledSpec(context);
+                markReconciledSpecAsStable(context);
                 LOG.info(
                         "Spec change while suspended for '{}'",
                         currentFlinkDeployment.getMetadata().getName());
@@ -193,6 +197,7 @@ public class BlueGreenDeploymentService {
                     }
                 } else {
                     setLastReconciledSpec(context);
+                    markReconciledSpecAsStable(context);
                     LOG.info(
                             "Patching FlinkDeployment '{}' during checkAndInitiateDeployment",
                             currentFlinkDeployment.getMetadata().getName());
@@ -508,6 +513,7 @@ public class BlueGreenDeploymentService {
                 nextState);
 
         resetTransitionMarkers(context.getDeploymentStatus());
+        markReconciledSpecAsStable(context);
 
         return patchStatusUpdateControl(context, nextState, JobStatus.SUSPENDED, null)
                 .rescheduleAfter(0);
@@ -734,6 +740,7 @@ public class BlueGreenDeploymentService {
         LOG.info("Finalizing deployment '{}' to {} state", context.getDeploymentName(), nextState);
 
         resetTransitionMarkers(context.getDeploymentStatus());
+        markReconciledSpecAsStable(context);
 
         updateBlueGreenIngress(context, nextState);
 

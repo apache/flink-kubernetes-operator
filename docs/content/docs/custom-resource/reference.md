@@ -367,6 +367,7 @@ This serves as a full reference for the FlinkDeployment, FlinkSessionJob, FlinkS
 | blueGreenState | org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentState | The state of the blue/green transition. |
 | lastReconciledSpec | java.lang.String | Last reconciled (serialized) deployment spec. |
 | lastReconciledTimestamp | java.lang.String | Timestamp of last reconciliation. |
+| lastStableSpec | java.lang.String | Last (serialized) deployment spec that was successfully applied. After an aborted transition this still names the spec the active deployment is running, while lastReconciledSpec keeps the spec that was attempted. |
 | abortTimestamp | java.lang.String | Computed from abortGracePeriodMs, timestamp after which the deployment should be aborted. |
 | deploymentReadyTimestamp | java.lang.String | Timestamp when the deployment became READY/STABLE. Used to determine when to delete it. |
 | savepointTriggerId | java.lang.String | Persisted triggerId to track transition with savepoint. Only used with UpgradeMode.SAVEPOINT |
