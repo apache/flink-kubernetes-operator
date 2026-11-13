@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkBlueGreenDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -467,6 +468,7 @@ public class FlinkBlueGreenDeploymentMetricsTest {
                 new FlinkBlueGreenDeploymentSpec(
                         new HashMap<>(),
                         null,
+                        TransitionMode.BASIC,
                         FlinkDeploymentTemplateSpec.builder().spec(flinkDeploymentSpec).build());
 
         deployment.setSpec(bgDeploymentSpec);

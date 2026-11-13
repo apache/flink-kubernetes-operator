@@ -37,16 +37,17 @@ spec:
         rest.port: "8081"
         taskmanager.numberOfTaskSlots: "1"
       serviceAccount: flink
+      # Blue and Green run side by side during a transition, and both fit a 4 CPU CI runner
       jobManager:
         resources:
           requests:
-            memory: "1G"
-            cpu: "1"
+            memory: "1024m"
+            cpu: "0.5"
       taskManager:
         resources:
           requests:
-            memory: "2G"
-            cpu: "1"
+            memory: "1Gi"
+            cpu: "0.5"
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
         parallelism: 1
