@@ -35,6 +35,7 @@ import io.javaoperatorsdk.operator.RuntimeInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collection;
 
 /**
@@ -50,6 +51,7 @@ public class OperatorHealthService implements AutoCloseable {
 
     private final boolean enabled;
     private final int port;
+    private final Duration staleTimeout;
 
     private EventLoopGroup eventLoopGroup;
     private Channel serverChannel;
@@ -57,6 +59,10 @@ public class OperatorHealthService implements AutoCloseable {
     public OperatorHealthService(Configuration config) {
         this.enabled = config.get(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED);
         this.port = config.get(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT);
+        this.staleTimeout =
+                config.get(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_HEALTH_PROBE_INFORMER_STALE_TIMEOUT);
     }
 
     public void start(
@@ -69,7 +75,7 @@ public class OperatorHealthService implements AutoCloseable {
         LOG.info("Health probe HTTP endpoint starting...");
         var handler =
                 new OperatorHealthHandler(
-                        new OperatorHealthProbe(runtimeInfo, canaryResourceManagers));
+                        new OperatorHealthProbe(runtimeInfo, canaryResourceManagers, staleTimeout));
         eventLoopGroup =
                 new NioEventLoopGroup(1, new ExecutorThreadFactory("flink-operator-health-probe"));
         var bootstrap =

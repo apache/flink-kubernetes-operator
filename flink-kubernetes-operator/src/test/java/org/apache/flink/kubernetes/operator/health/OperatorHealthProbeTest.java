@@ -35,7 +35,13 @@ import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
+import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.RuntimeInfo;
+import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
+import io.javaoperatorsdk.operator.api.config.dependent.DependentResourceSpec;
+import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
+import io.javaoperatorsdk.operator.health.ControllerHealthInfo;
 import io.javaoperatorsdk.operator.health.InformerHealthIndicator;
 import io.javaoperatorsdk.operator.health.InformerWrappingEventSourceHealthIndicator;
 import io.javaoperatorsdk.operator.health.Status;
@@ -47,10 +53,16 @@ import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
@@ -60,6 +72,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Operator health probe tests. */
+@SuppressWarnings("rawtypes")
 @EnableKubernetesMockClient(crud = true)
 public class OperatorHealthProbeTest {
 
@@ -75,17 +88,33 @@ public class OperatorHealthProbeTest {
         try (var port = NetUtils.getAvailablePort()) {
             var conf = new Configuration();
             conf.set(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT, port.getPort());
+            var josdkOperator = new AtomicReference<Operator>();
             FlinkOperator operator =
                     new FlinkOperator(conf) {
                         @Override
                         protected Operator createOperator() {
-                            return new Operator(
-                                    overrider -> overrider.withKubernetesClient(client));
+                            josdkOperator.set(
+                                    new Operator(
+                                            overrider -> overrider.withKubernetesClient(client)));
+                            return josdkOperator.get();
                         }
                     };
             try {
                 operator.run();
                 assertTrue(callHealthEndpoint(conf));
+
+                // The resource versions of the real informers are readable and do not move on the
+                // mock server, so a probe over the same runtime goes stale once the timeout passes
+                var clock = new TestClock(Instant.now());
+                var probe =
+                        new OperatorHealthProbe(
+                                josdkOperator.get().getRuntimeInfo(),
+                                List.of(),
+                                Duration.ofMinutes(1),
+                                clock);
+                assertTrue(probe.isHealthy());
+                clock.advance(Duration.ofMinutes(2));
+                assertFalse(probe.isHealthy());
             } finally {
                 operator.stop();
                 assertThrows(ConnectException.class, () -> callHealthEndpoint(conf));
@@ -96,31 +125,31 @@ public class OperatorHealthProbeTest {
     @Test
     public void testHealthProbeInformers() {
         var isRunning = new AtomicBoolean(false);
-        var unhealthyEventSources =
+        var eventSources =
                 new HashMap<String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
-        var runtimeInfo = runtimeInfo(isRunning, unhealthyEventSources);
+        var runtimeInfo = runtimeInfo(isRunning, eventSources);
 
         // Test if a new event source becomes unhealthy
-        var probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        var probe = probe(runtimeInfo, List.of());
         assertFalse(probe.isHealthy());
         isRunning.set(true);
         assertTrue(probe.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
         assertFalse(probe.isHealthy());
-        unhealthyEventSources.clear();
+        eventSources.clear();
         assertTrue(probe.isHealthy());
 
         // Test if we detect when there is an unhealthy at start
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
                         informerHealthIndicator(
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY))));
-        probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        probe = probe(runtimeInfo, List.of());
         assertTrue(probe.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
@@ -130,7 +159,7 @@ public class OperatorHealthProbeTest {
                         informerHealthIndicator(Map.of("i3", Status.UNHEALTHY))));
         assertFalse(probe.isHealthy());
         assertFalse(probe.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
@@ -139,21 +168,69 @@ public class OperatorHealthProbeTest {
                         "e2",
                         informerHealthIndicator(Map.of("i3", Status.HEALTHY))));
         assertTrue(probe.isHealthy());
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1",
                 Map.of(
                         "e1",
                         informerHealthIndicator(
                                 Map.of("i1", Status.UNHEALTHY, "i2", Status.UNHEALTHY))));
         assertFalse(probe.isHealthy());
-        unhealthyEventSources.clear();
+        eventSources.clear();
         assertTrue(probe.isHealthy());
 
         // All informers unhealthy at start:
-        unhealthyEventSources.put(
+        eventSources.put(
                 "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
-        probe = new OperatorHealthProbe(runtimeInfo, List.of());
+        probe = probe(runtimeInfo, List.of());
         assertFalse(probe.isHealthy());
+    }
+
+    @Test
+    public void testHealthProbeInformerStaleness() {
+        var eventSource = informerHealthIndicator(Map.of("i1", Status.HEALTHY));
+        var informer = eventSource.informerHealthIndicators().get("i1");
+        var eventSources = new HashMap<>(Map.of("c1", Map.of("e1", eventSource)));
+        var runtimeInfo = runtimeInfo(new AtomicBoolean(true), eventSources);
+        var resourceVersions = new HashMap<>(Map.of(informer, "1"));
+        var clock = new TestClock(Instant.ofEpochSecond(0));
+        var probe =
+                new OperatorHealthProbe(runtimeInfo, List.of(), Duration.ofMinutes(1), clock) {
+                    @Override
+                    String resourceVersion(InformerHealthIndicator informer) {
+                        return resourceVersions.get(informer);
+                    }
+                };
+        assertTrue(probe.isHealthy());
+
+        // Nothing arrives for longer than the timeout
+        clock.advance(Duration.ofSeconds(61));
+        assertFalse(probe.isHealthy());
+        assertFalse(probe.isHealthy());
+
+        // An event or bookmark moves the resource version
+        resourceVersions.put(informer, "2");
+        assertTrue(probe.isHealthy());
+        clock.advance(Duration.ofSeconds(61));
+        assertFalse(probe.isHealthy());
+
+        // An informer that goes away is forgotten and starts fresh when it comes back
+        eventSources.clear();
+        assertTrue(probe.isHealthy());
+        eventSources.put("c1", Map.of("e1", eventSource));
+        assertTrue(probe.isHealthy());
+        clock.advance(Duration.ofSeconds(61));
+        assertFalse(probe.isHealthy());
+
+        // A zero timeout disables the check
+        var disabledProbe =
+                new OperatorHealthProbe(runtimeInfo, List.of(), Duration.ZERO, clock) {
+                    @Override
+                    String resourceVersion(InformerHealthIndicator informer) {
+                        return resourceVersions.get(informer);
+                    }
+                };
+        clock.advance(Duration.ofDays(1));
+        assertTrue(disabledProbe.isHealthy());
     }
 
     @Test
@@ -161,9 +238,7 @@ public class OperatorHealthProbeTest {
         var canaryManager =
                 new CanaryResourceManager<FlinkDeployment>(
                         new FlinkConfigManager(new Configuration()));
-        var probe =
-                new OperatorHealthProbe(
-                        runtimeInfo(new AtomicBoolean(true), Map.of()), List.of(canaryManager));
+        var probe = probe(runtimeInfo(new AtomicBoolean(true), Map.of()), List.of(canaryManager));
 
         // No canary resources
         assertTrue(probe.isHealthy());
@@ -192,16 +267,22 @@ public class OperatorHealthProbeTest {
     @Test
     public void testHealthHandlerResponses() {
         var runtimeInfo = runtimeInfo(new AtomicBoolean(true), Map.of());
-        assertEquals("OK", handle(new OperatorHealthProbe(runtimeInfo, List.of()), OK.code()));
+        assertEquals("OK", handle(probe(runtimeInfo, List.of()), OK.code()));
 
         var failingProbe =
-                new OperatorHealthProbe(runtimeInfo, List.of()) {
+                new OperatorHealthProbe(runtimeInfo, List.of(), Duration.ZERO, Clock.systemUTC()) {
                     @Override
                     boolean isHealthy() {
                         throw new IllegalStateException("probe failure");
                     }
                 };
         assertEquals("ERROR", handle(failingProbe, INTERNAL_SERVER_ERROR.code()));
+    }
+
+    private static OperatorHealthProbe probe(
+            RuntimeInfo runtimeInfo, List<CanaryResourceManager<?>> canaryResourceManagers) {
+        return new OperatorHealthProbe(
+                runtimeInfo, canaryResourceManagers, Duration.ZERO, Clock.systemUTC());
     }
 
     private static String handle(OperatorHealthProbe probe, int expectedStatus) {
@@ -219,8 +300,7 @@ public class OperatorHealthProbeTest {
 
     private RuntimeInfo runtimeInfo(
             AtomicBoolean started,
-            Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                    unhealthyEventSources) {
+            Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>> eventSources) {
         return new RuntimeInfo(new Operator(overrider -> overrider.withKubernetesClient(client))) {
             @Override
             public boolean isStarted() {
@@ -228,9 +308,67 @@ public class OperatorHealthProbeTest {
             }
 
             @Override
-            public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
-                    unhealthyInformerWrappingEventSourceHealthIndicator() {
-                return unhealthyEventSources;
+            @SuppressWarnings("rawtypes")
+            public Set<RegisteredController> getRegisteredControllers() {
+                Set<RegisteredController> controllers = new HashSet<>();
+                eventSources.forEach(
+                        (name, controllerEventSources) ->
+                                controllers.add(
+                                        registeredController(name, controllerEventSources)));
+                return controllers;
+            }
+        };
+    }
+
+    private static RegisteredController<FlinkDeployment> registeredController(
+            String name, Map<String, InformerWrappingEventSourceHealthIndicator> eventSources) {
+        return new RegisteredController<>() {
+            @Override
+            public ControllerConfiguration<FlinkDeployment> getConfiguration() {
+                return controllerConfiguration(name);
+            }
+
+            @Override
+            public ControllerHealthInfo getControllerHealthInfo() {
+                return new ControllerHealthInfo(null) {
+                    @Override
+                    public Map<String, InformerWrappingEventSourceHealthIndicator>
+                            informerEventSourceHealthIndicators() {
+                        return eventSources;
+                    }
+                };
+            }
+
+            @Override
+            public void changeNamespaces(Set<String> namespaces) {}
+        };
+    }
+
+    private static ControllerConfiguration<FlinkDeployment> controllerConfiguration(String name) {
+        return new ControllerConfiguration<>() {
+            @Override
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public String getAssociatedReconcilerClassName() {
+                return null;
+            }
+
+            @Override
+            public ConfigurationService getConfigurationService() {
+                return null;
+            }
+
+            @Override
+            public <C> C getConfigurationFor(DependentResourceSpec<?, FlinkDeployment, C> spec) {
+                return null;
+            }
+
+            @Override
+            public InformerConfiguration<FlinkDeployment> getInformerConfig() {
+                return null;
             }
         };
     }
