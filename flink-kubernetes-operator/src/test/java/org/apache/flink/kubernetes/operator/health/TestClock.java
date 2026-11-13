@@ -17,13 +17,37 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
-import lombok.Value;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
-/** Operator informer identifier. */
-@Value
-public class InformerIdentifier {
+/** A clock the tests move by hand. */
+class TestClock extends Clock {
 
-    String controllerName;
-    String eventSourceName;
-    String informerName;
+    private Instant now;
+
+    TestClock(Instant start) {
+        this.now = start;
+    }
+
+    void advance(Duration duration) {
+        now = now.plus(duration);
+    }
+
+    @Override
+    public ZoneId getZone() {
+        return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+        return this;
+    }
+
+    @Override
+    public Instant instant() {
+        return now;
+    }
 }

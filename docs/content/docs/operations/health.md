@@ -49,6 +49,14 @@ The health endpoint catches startup and informer errors that are exposed by the 
 
 In some cases it is desirable to keep the operator running even if some namespaces are inaccessible. To allow the operator to start even if some namespaces cannot be watched, the `kubernetes.operator.startup.stop-on-informer-error` flag can be disabled.
 
+### Informer staleness
+
+The informer status that JOSDK exposes only says whether an informer is running and has completed its first list. It cannot see a watch that stays open but delivers nothing, for example when the API server replica the operator is connected to has a stale watch cache, and it cannot see a watch that fails after startup and keeps retrying. In both cases the operator keeps running, keeps reconciling the resources it already knows, and never sees a new resource or a spec change until it is restarted.
+
+The health probe therefore also checks that every informer still receives data. A healthy watch moves the informer's resource version all the time: every event carries one, and the API server sends a bookmark with the newest one about once a minute even when none of the watched objects changed. When the resource version of an informer has not moved for longer than `kubernetes.operator.health.probe.informer.stale-timeout` (15 minutes by default), the probe reports the operator unhealthy and logs which informer is stale. The liveness probe then restarts the operator, which lists everything again on fresh connections.
+
+The bookmarks arrive about once a minute only when the API server serves the watch from its watch cache, which is the default. Without the watch cache they only follow the etcd progress notifications, 10 minutes apart by default, so keep the timeout above that. Lower it where the bookmark cadence is known. Setting it to `0` disables the check.
+
 ## Canary Resources
 
 The canary resource feature allows deploying special dummy resources (canaries) into selected namespaces. The operator health probe will then monitor that these resources are reconciled in a timely manner. This allows the probe to catch any slowdowns, and other general reconciliation issues not covered otherwise.

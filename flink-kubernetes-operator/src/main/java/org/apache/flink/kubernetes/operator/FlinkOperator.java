@@ -36,7 +36,6 @@ import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotController;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
-import org.apache.flink.kubernetes.operator.health.HealthProbe;
 import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
@@ -129,7 +128,7 @@ public class FlinkOperator {
                 new FlinkResourceContextFactory(configManager, metricGroup, eventRecorder);
         LOG.info("Initializing file system factories from plugin directory.");
         FileSystem.initialize(baseConfig, pluginManager);
-        this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
+        this.operatorHealthService = new OperatorHealthService(baseConfig);
     }
 
     @VisibleForTesting
@@ -202,8 +201,6 @@ public class FlinkOperator {
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
         canaryResourceManagers.add(canaryResourceManager);
-        HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
-        canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
                 new FlinkDeploymentController(
@@ -227,8 +224,6 @@ public class FlinkOperator {
         var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder, autoscaler);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
-        canaryResourceManagers.add(canaryResourceManager);
-        HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
         canaryResourceManagers.add(canaryResourceManager);
 
         var controller =
@@ -303,10 +298,7 @@ public class FlinkOperator {
         registerBlueGreenController();
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
         operator.start();
-        if (operatorHealthService != null) {
-            HealthProbe.INSTANCE.setRuntimeInfo(operator.getRuntimeInfo());
-            operatorHealthService.start();
-        }
+        operatorHealthService.start(operator.getRuntimeInfo(), canaryResourceManagers);
     }
 
     public void stop() {
@@ -318,9 +310,7 @@ public class FlinkOperator {
         closeables.addAll(canaryResourceManagers);
         closeables.add(configManager);
         closeables.add(metricGroup);
-        if (operatorHealthService != null) {
-            closeables.add(operatorHealthService);
-        }
+        closeables.add(operatorHealthService);
         try {
             IOUtils.closeAll(closeables);
         } catch (Exception e) {

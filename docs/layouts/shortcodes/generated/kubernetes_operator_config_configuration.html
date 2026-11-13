@@ -183,6 +183,12 @@
             <td>Enables health probe for the kubernetes operator.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.health.probe.informer.stale-timeout</h5></td>
+            <td style="word-wrap: break-word;">15 min</td>
+            <td>Duration</td>
+            <td>How long an informer may go without receiving any watch event or bookmark before the health probe reports it stale and fails. A healthy watch receives a bookmark from the API server about once a minute when the API server serves it from its watch cache, which is the default. Without the watch cache bookmarks only follow the etcd progress notifications, 10 minutes apart by default, so keep the timeout above that. Set to 0 to disable the check.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.health.probe.port</h5></td>
             <td style="word-wrap: break-word;">8085</td>
             <td>Integer</td>
