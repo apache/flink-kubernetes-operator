@@ -28,6 +28,7 @@ import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.StatusDetails;
 
 import java.util.List;
+import java.util.Objects;
 
 /** Utility methods for handling Kubernetes operations in Blue/Green deployments. */
 public class BlueGreenKubernetesService {
@@ -68,6 +69,24 @@ public class BlueGreenKubernetesService {
     public static boolean isFlinkDeploymentReady(FlinkDeployment deployment) {
         return ResourceLifecycleState.STABLE == deployment.getStatus().getLifecycleState()
                 && ReconciliationUtils.isJobRunning(deployment.getStatus());
+    }
+
+    /**
+     * Checks if a transition candidate is ready to replace the source deployment. On top of {@link
+     * #isFlinkDeploymentReady}, the candidate's controller must have observed the current desired
+     * generation and the resource must not be terminating. A STABLE/RUNNING status that was
+     * reported for a previous revision of the candidate must not authorize retiring the source.
+     *
+     * @param candidate the candidate FlinkDeployment to check
+     * @return true if the candidate's current revision is observed and ready, false otherwise
+     */
+    public static boolean isCandidateReady(FlinkDeployment candidate) {
+        ObjectMeta metadata = candidate.getMetadata();
+        return metadata.getDeletionTimestamp() == null
+                && metadata.getGeneration() != null
+                && Objects.equals(
+                        metadata.getGeneration(), candidate.getStatus().getObservedGeneration())
+                && isFlinkDeploymentReady(candidate);
     }
 
     public static void suspendFlinkDeployment(
