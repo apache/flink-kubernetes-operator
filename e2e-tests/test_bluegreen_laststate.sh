@@ -37,10 +37,7 @@ BLUE_APPLICATION_IDENTIFIER="flinkdep/$BLUE_CLUSTER_ID"
 GREEN_APPLICATION_IDENTIFIER="flinkdep/$GREEN_CLUSTER_ID"
 TIMEOUT=300
 
-#echo "BG_CLUSTER_ID " $BG_CLUSTER_ID
-#echo "BLUE_CLUSTER_ID " $BLUE_CLUSTER_ID
-#echo "APPLICATION_IDENTIFIER " $APPLICATION_IDENTIFIER
-#echo "BLUE_APPLICATION_IDENTIFIER " $BLUE_APPLICATION_IDENTIFIER
+on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
@@ -50,28 +47,20 @@ wait_for_status $BLUE_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${T
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_BLUE ${TIMEOUT} || exit 1
 
-#blue_job_id=$(kubectl get -oyaml flinkdep/basic-bluegreen-example-blue | yq '.status.jobStatus.jobId')
-
-#kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"rest.port":"8082","state.checkpoints.num-retained":"6"}}}}}'
 kubectl patch flinkbgdep ${BG_CLUSTER_ID} --type merge --patch '{"spec":{"template":{"spec":{"flinkConfiguration":{"state.checkpoints.num-retained":"6"}}}}}'
 echo "Resource patched, giving a chance for the savepoint to be taken..."
 sleep 10
 
 jm_pod_name=$(get_jm_pod_name $BLUE_CLUSTER_ID)
 echo "Inspecting savepoint directory..."
-kubectl exec -it $jm_pod_name -- bash -c "ls -lt /opt/flink/volume/flink-sp/"
+kubectl exec $jm_pod_name -- bash -c "ls -lt /opt/flink/volume/flink-sp/"
 
 wait_for_status $GREEN_APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
-kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${BLUE_CLUSTER_ID}"
+wait_for_deleted $BLUE_APPLICATION_IDENTIFIER ${TIMEOUT}
 wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.blueGreenState' ACTIVE_GREEN ${TIMEOUT} || exit 1
 
 green_initialSavepointPath=$(kubectl get -oyaml $GREEN_APPLICATION_IDENTIFIER | yq '.spec.job.initialSavepointPath')
-
-echo "Deleting test B/G resources" $BG_CLUSTER_ID
-kubectl delete flinkbluegreendeployments/$BG_CLUSTER_ID &
-echo "Waiting for deployment to be deleted..."
-kubectl wait --for=delete flinkbluegreendeployments/$BG_CLUSTER_ID
 
 if [[ $green_initialSavepointPath == '/opt/flink/volume/flink-sp/savepoint-'* ]]; then
   echo 'Green deployment started from the expected initialSavepointPath:' $green_initialSavepointPath
