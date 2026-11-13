@@ -73,7 +73,7 @@ Beyond surviving a JobManager crash, several operator features depend on HA meta
 
 - **`last-state` upgrades** restore a job from the latest checkpoint recorded in the HA metadata, without taking a savepoint first. The operator confirms the HA metadata is available before it suspends the job, and a stateful upgrade fails if the JobManager is already gone and no HA metadata remains.
 - **Automatic rollback** requires HA. The operator rejects `kubernetes.operator.deployment.rollback.enabled: true` unless HA is active (`HA must be enabled for rollback support.`), because a rollback restores the previous job from its last state.
-- **JobManager recovery**. If the JobManager deployment is lost while a job should be running, the operator can redeploy it and let Flink recover from the HA metadata instead of treating the job as failed.
+- **JobManager recovery**. If the JobManager deployment is lost while a job should be running, the operator can redeploy it and let Flink recover from the HA metadata instead of treating the job as failed. This applies regardless of the configured `upgradeMode`: a `stateless` job also resumes from its latest checkpoint, and starts from empty state only when the metadata holds no checkpoint or is missing altogether.
 
 For how the upgrade modes use this, see [Job Management]({{< ref "docs/managing/job-management#upgrades" >}}).
 
@@ -103,7 +103,6 @@ From Flink 2.3 the operator applies the same two settings to the ApplicationResu
 
 The following are known limitations of the operator's Flink Job HA integration:
 
-- **A `stateless` job may recover state after becoming unhealthy.** When HA is enabled and the operator resubmits a job that entered an unhealthy state, the resubmission can fall back to last-state recovery regardless of the configured `upgradeMode`. A job set to `upgradeMode: stateless` may therefore restart from HA metadata instead of from empty state.
 - **HA metadata is retained for terminally finished jobs.** When a bounded job reaches a terminal `FINISHED` state and its JobManager deployment is removed, the operator keeps the HA metadata for a possible last-state restore even though it is no longer needed. The resource then stays in the reconcile loop and the leftover HA data has to be removed manually.
 - **Automatic recovery uses the latest checkpoint, not periodic savepoints.** The restore path recorded when a job is first submitted is not refreshed as periodic savepoints are taken. HA-driven recovery always resumes from the latest completed checkpoint in the HA metadata, so treat periodic savepoints as manual backup or fork points rather than automatic recovery points.
 - **REST mutual TLS with HA on Flink 1.18.** On Flink 1.18, enabling REST SSL mutual authentication (`security.ssl.rest.authentication-enabled: true`) together with Kubernetes HA breaks the operator's REST client with an `Empty server certificate chain` handshake error. Enable only one of the two on that version.
