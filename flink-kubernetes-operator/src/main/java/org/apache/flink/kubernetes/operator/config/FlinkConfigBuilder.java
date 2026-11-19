@@ -62,8 +62,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Arrays;
@@ -515,12 +517,39 @@ public class FlinkConfigBuilder {
                     spec.getJob() == null ? SESSION : APPLICATION);
 
             if (spec.getJob() != null && spec.getJob().getJarURI() != null) {
-                effectiveConfig.set(
-                        PipelineOptions.CLASSPATHS,
-                        Collections.singletonList(getStandaloneJarURI(spec.getJob())));
+                if (isFetchedByStandaloneEntrypoint(spec.getJob())) {
+                    effectiveConfig.set(
+                            StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI,
+                            new URI(spec.getJob().getJarURI()).toString());
+                } else {
+                    effectiveConfig.set(
+                            PipelineOptions.CLASSPATHS,
+                            Collections.singletonList(getStandaloneJarURI(spec.getJob())));
+                }
             }
         }
         return this;
+    }
+
+    /**
+     * JARs the JVM cannot open as a {@link URL}, like S3 ones, fail on {@code pipeline.classpaths},
+     * so they go to the standalone entrypoint's {@code --jars} option (Flink 1.19+). Other jars
+     * stay on the classpath, as {@code --jars} refuses raw http by default.
+     */
+    private boolean isFetchedByStandaloneEntrypoint(JobSpec jobSpec) throws URISyntaxException {
+        URI jarURI = new URI(jobSpec.getJarURI());
+        if (jarURI.getScheme() == null
+                || "local".equals(jarURI.getScheme())
+                || !spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_19)) {
+            return false;
+        }
+
+        try {
+            jarURI.toURL();
+            return false;
+        } catch (MalformedURLException ignored) {
+            return true;
+        }
     }
 
     private String getStandaloneJarURI(JobSpec jobSpec) throws URISyntaxException {

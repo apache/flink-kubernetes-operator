@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -103,5 +104,22 @@ public class StandaloneKubernetesJobManagerParametersTest extends ParametersTest
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         assertEquals(entryClass, kubernetesJobManagerParameters.getMainClass());
+    }
+
+    @Test
+    public void testGetApplicationJarURI() {
+        flinkConfig.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        assertThat(kubernetesJobManagerParameters.getApplicationJarURI()).isNull();
+
+        final String jarURI = "s3://bucket/job.jar";
+        flinkConfig.set(StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI, jarURI);
+        assertThat(kubernetesJobManagerParameters.getApplicationJarURI()).isEqualTo(jarURI);
+
+        flinkConfig.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
+        assertThat(kubernetesJobManagerParameters.getApplicationJarURI()).isNull();
     }
 }

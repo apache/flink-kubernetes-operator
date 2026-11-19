@@ -57,6 +57,8 @@ import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -75,6 +77,7 @@ import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPL
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SERVICE_ACCOUNT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1224,6 +1227,9 @@ public class FlinkConfigBuilderTest {
                 ConfigUtils.decodeListFromConfig(
                         configuration, PipelineOptions.CLASSPATHS, String::toString);
         assertThat(classpaths, containsInAnyOrder(correctedJarUri));
+        assertFalse(
+                configuration.contains(
+                        StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI));
 
         dep.getSpec().getTaskManager().setReplicas(null);
         dep.getSpec().getJob().setParallelism(10);
@@ -1252,6 +1258,76 @@ public class FlinkConfigBuilderTest {
                 10,
                 configuration.get(
                         StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "s3://bucket/job.jar",
+                "gs://bucket/job.jar",
+                "hdfs://namenode:8020/job.jar"
+            })
+    public void testApplyStandaloneApplicationSpecWithRemoteJarURI(String jarURI)
+            throws URISyntaxException, IOException {
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setFlinkVersion(FlinkVersion.v1_19);
+        dep.getSpec().getJob().setJarURI(jarURI);
+
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        assertThat(configuration.get(StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI))
+                .isEqualTo(jarURI);
+        assertThat(configuration.contains(PipelineOptions.CLASSPATHS)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {"http://host/job.jar", "https://host/job.jar", "file:///opt/flink/job.jar"})
+    public void testApplyStandaloneApplicationSpecWithURLJarURI(String jarURI)
+            throws URISyntaxException, IOException {
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setFlinkVersion(FlinkVersion.v1_19);
+        dep.getSpec().getJob().setJarURI(jarURI);
+
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        assertThat(
+                        configuration.contains(
+                                StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI))
+                .isFalse();
+        assertThat(configuration.get(PipelineOptions.CLASSPATHS)).containsExactly(jarURI);
+    }
+
+    @Test
+    public void testApplyStandaloneApplicationSpecWithRemoteJarURIBeforeFlink119()
+            throws URISyntaxException, IOException {
+        final String jarURI = "s3://bucket/job.jar";
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setFlinkVersion(FlinkVersion.v1_18);
+        dep.getSpec().getJob().setJarURI(jarURI);
+
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        assertThat(
+                        configuration.contains(
+                                StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI))
+                .isFalse();
+        assertThat(configuration.get(PipelineOptions.CLASSPATHS)).containsExactly(jarURI);
     }
 
     @Test

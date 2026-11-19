@@ -40,6 +40,16 @@ public class StandaloneKubernetesConfigOptionsInternal {
                     .defaultValue(ClusterMode.APPLICATION)
                     .withDescription("Specify what mode the cluster will be deployed in.");
 
+    public static final ConfigOption<String> APPLICATION_JAR_URI =
+            key("kubernetes.internal.application.jar-uri")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "URI of the job jar that the standalone application cluster "
+                                    + "entrypoint fetches on startup, passed as its --jars argument. "
+                                    + "Jars the JVM can open as a URL, like local or http(s) ones, "
+                                    + "are put on pipeline.classpaths instead.");
+
     /** The different modes that a Flink cluster can be deployed in. */
     public enum ClusterMode {
         APPLICATION,
