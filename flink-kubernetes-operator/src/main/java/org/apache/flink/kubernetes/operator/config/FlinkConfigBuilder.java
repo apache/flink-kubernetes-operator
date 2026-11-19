@@ -555,11 +555,9 @@ public class FlinkConfigBuilder {
     private String getStandaloneJarURI(JobSpec jobSpec) throws URISyntaxException {
         URI uri = new URI(jobSpec.getJarURI());
 
-        // Running an application job through standalone mode doesn't requires file uri scheme and
-        // doesn't accept
-        // local scheme which is used for native so convert here to improve compatibility at the
-        // operator layer
-        if (uri.getScheme().equals("local")) {
+        // Standalone mode takes file:// for a jar inside the image, while native mode takes
+        // local://, so convert local:// and a path without a scheme to file://
+        if (uri.getScheme() == null || "local".equals(uri.getScheme())) {
             uri =
                     new URI(
                             "file",
