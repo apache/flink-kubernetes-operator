@@ -45,13 +45,17 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
+import io.fabric8.kubernetes.api.model.StatusBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -74,6 +78,8 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_DEPLOYMENT_DELETION_DELAY;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.BLUEGREEN_RECONCILIATION_RESCHEDULING_INTERVAL;
 import static org.apache.flink.kubernetes.operator.utils.bluegreen.BlueGreenUtils.instantStrToMillis;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -106,6 +112,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
     private TestingFlinkBlueGreenDeploymentController testController;
 
     private KubernetesClient kubernetesClient;
+    private KubernetesMockServer mockServer;
 
     @BeforeEach
     public void setup() {
@@ -126,6 +133,254 @@ public class FlinkBlueGreenDeploymentControllerTest {
                         initialSavepointPath,
                         UpgradeMode.STATELESS);
         executeBasicDeployment(flinkVersion, blueGreenDeployment, true, initialSavepointPath);
+    }
+
+    @Test
+    public void unobservedCandidateRevisionCannotRetireSource() throws Exception {
+        // FLINK-41074 (stale readiness): the candidate's desired generation advanced, but its
+        // status still describes the previous, healthy revision when the delay expires.
+        var rs = startGreenDeletionDelay();
+        var green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        var previousStatus = SpecUtils.clone(green.getStatus());
+        green.getSpec().setImage("flink:updated");
+        green.getMetadata().setGeneration(green.getMetadata().getGeneration() + 1);
+        green.setStatus(previousStatus);
+        kubernetesClient.resource(green).update();
+        expireReadiness(rs.deployment);
+
+        rs = reconcile(rs.deployment);
+
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        assertThat(rs.reconciledStatus.getBlueGreenState())
+                .isEqualTo(FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN);
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+    }
+
+    @Test
+    public void candidateEditRestartsDeletionDelayAfterFreshObservation() throws Exception {
+        // FLINK-41074 (inherited delay): a parent edit during the delay patches the candidate;
+        // the new revision must receive a full deletion delay once it is observed ready.
+        var rs = startGreenDeletionDelay();
+        expireReadiness(rs.deployment);
+        simulateSpecChange(rs.deployment, "candidate-revision-two");
+        rs = reconcile(rs.deployment);
+
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        // Reconstruct the controller and recover the delay exclusively from persisted status.
+        testController = new TestingFlinkBlueGreenDeploymentController(configManager, flinkService);
+        rs = reconcile(kubernetesClient.resource(rs.deployment).get());
+
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        assertThat(rs.updateControl.getScheduleDelay().orElseThrow())
+                .isEqualTo(Duration.ofMinutes(10).toMillis());
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isGreaterThan(1);
+    }
+
+    @Test
+    public void candidateEditAtDeadlineCannotRetireSource() throws Exception {
+        // The parent edit lands in the same reconcile in which the expired delay would otherwise
+        // have authorized retirement.
+        var rs = startGreenDeletionDelay();
+        expireReadiness(rs.deployment);
+        var green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        var generation = green.getMetadata().getGeneration();
+        simulateSpecChange(rs.deployment, "candidate-revision-two");
+
+        rs = reconcile(rs.deployment);
+
+        assertThat(getFlinkDeployments()).hasSize(2);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+        assertThat(rs.reconciledStatus.getBlueGreenState())
+                .isEqualTo(FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN);
+        assertThat(getFlinkDeploymentByName(GREEN_CLUSTER_ID).getMetadata().getGeneration())
+                .isGreaterThan(generation);
+    }
+
+    @Test
+    public void terminatingCandidateCannotRetireSource() throws Exception {
+        var rs = startGreenDeletionDelay();
+        expireReadiness(rs.deployment);
+        var green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        // A finalizer keeps the terminating resource visible, as the operator's own would.
+        green.getMetadata().setFinalizers(List.of("test.flink.apache.org/keep"));
+        kubernetesClient.resource(green).update();
+        kubernetesClient.resource(green).delete();
+        assertThat(getFlinkDeploymentByName(GREEN_CLUSTER_ID).getMetadata().getDeletionTimestamp())
+                .isNotNull();
+
+        rs = reconcile(rs.deployment);
+
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        assertThat(rs.reconciledStatus.getBlueGreenState())
+                .isEqualTo(FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN);
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+    }
+
+    @Test
+    public void failedReadinessResetIsRetriedAfterControllerReconstruction() throws Exception {
+        var rs = startGreenDeletionDelay();
+        expireReadiness(rs.deployment);
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        // StatusRecorder retries a failed status write three times before propagating the error,
+        // so the readiness reset is lost until the next reconcile observes the failure again.
+        mockServer
+                .expect()
+                .put()
+                .withPath(
+                        "/apis/flink.apache.org/v1beta1/namespaces/"
+                                + TEST_NAMESPACE
+                                + "/flinkbluegreendeployments/"
+                                + TEST_DEPLOYMENT_NAME
+                                + "/status")
+                .andReturn(403, new StatusBuilder().withCode(403).build())
+                .times(3);
+        var parent = rs.deployment;
+        assertThatThrownBy(() -> reconcile(parent)).isInstanceOf(KubernetesClientException.class);
+        assertThat(
+                        instantStrToMillis(
+                                kubernetesClient
+                                        .resource(parent)
+                                        .get()
+                                        .getStatus()
+                                        .getDeploymentReadyTimestamp()))
+                .isEqualTo(1);
+
+        testController = new TestingFlinkBlueGreenDeploymentController(configManager, flinkService);
+        rs = reconcile(kubernetesClient.resource(parent).get());
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(rs.deployment);
+        assertThat(rs.updateControl.getScheduleDelay().orElseThrow())
+                .isEqualTo(Duration.ofMinutes(10).toMillis());
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+    }
+
+    @Test
+    public void unchangedCandidatePreservesDelayAcrossRestartAndCanRetireSource() throws Exception {
+        var rs = startGreenDeletionDelay();
+        var readyTimestamp = rs.reconciledStatus.getDeploymentReadyTimestamp();
+        testController = new TestingFlinkBlueGreenDeploymentController(configManager, flinkService);
+        rs = reconcile(kubernetesClient.resource(rs.deployment).get());
+        assertThat(rs.reconciledStatus.getDeploymentReadyTimestamp()).isEqualTo(readyTimestamp);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+
+        expireReadiness(rs.deployment);
+        rs = reconcile(rs.deployment);
+        assertThat(rs.reconciledStatus.getBlueGreenState())
+                .isEqualTo(FlinkBlueGreenDeploymentState.ACTIVE_GREEN);
+        assertThat(getFlinkDeployments()).hasSize(1);
+        assertThat(getFlinkDeployments().get(0).getMetadata().getName())
+                .isEqualTo(GREEN_CLUSTER_ID);
+    }
+
+    @Test
+    public void ordinaryChildObservationAndMetadataUpdatesPreserveDeletionDelay() throws Exception {
+        var rs = startGreenDeletionDelay();
+        var timestamp = rs.reconciledStatus.getDeploymentReadyTimestamp();
+        var green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        var generation = green.getMetadata().getGeneration();
+        var resourceVersion = green.getMetadata().getResourceVersion();
+        green.getMetadata().getAnnotations().put("test-observation", "updated");
+        green.getStatus().getJobStatus().setUpdateTime("123456789");
+        green.getStatus().getJobStatus().getSavepointInfo().setLastPeriodicSavepointTimestamp(123L);
+        kubernetesClient.resource(green).update();
+        green = getFlinkDeploymentByName(GREEN_CLUSTER_ID);
+        assertThat(green.getMetadata().getGeneration()).isEqualTo(generation);
+        assertThat(green.getMetadata().getResourceVersion()).isNotEqualTo(resourceVersion);
+
+        rs = reconcile(rs.deployment);
+
+        assertThat(rs.reconciledStatus.getDeploymentReadyTimestamp()).isEqualTo(timestamp);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+    }
+
+    @Test
+    public void observedCandidateFailureAndRecoveryRestartsDeletionDelay() throws Exception {
+        var rs = startGreenDeletionDelay();
+        expireReadiness(rs.deployment);
+        simulateJobFailure(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+
+        rs = reconcile(rs.deployment);
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isEqualTo(0);
+
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        rs = reconcile(rs.deployment);
+
+        assertThat(instantStrToMillis(rs.reconciledStatus.getDeploymentReadyTimestamp()))
+                .isGreaterThan(1);
+        assertThat(rs.updateControl.getScheduleDelay().orElseThrow())
+                .isEqualTo(Duration.ofMinutes(10).toMillis());
+        assertThat(getFlinkDeploymentByName(BLUE_CLUSTER_ID)).isNotNull();
+    }
+
+    @Test
+    public void unobservedSourceRevisionDoesNotBlockTransition() throws Exception {
+        // Only the candidate is held to the observed-generation requirement. A pending no-op
+        // revision on the active (source) child must not prevent a transition from starting.
+        var parent =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        FlinkVersion.v1_20,
+                        null,
+                        UpgradeMode.STATELESS);
+        var rs = executeBasicDeployment(FlinkVersion.v1_20, parent, false, null);
+        var blue = getFlinkDeploymentByName(BLUE_CLUSTER_ID);
+        blue.getSpec().getFlinkConfiguration().put("kubernetes.operator.test", "updated");
+        blue = kubernetesClient.resource(blue).update();
+        assertThat(blue.getStatus().getObservedGeneration())
+                .isNotEqualTo(blue.getMetadata().getGeneration());
+        simulateSpecChange(rs.deployment, "pending-application-update");
+
+        rs = reconcile(rs.deployment);
+
+        assertThat(getFlinkDeployments()).hasSize(2);
+        assertThat(rs.reconciledStatus.getBlueGreenState())
+                .isEqualTo(FlinkBlueGreenDeploymentState.TRANSITIONING_TO_GREEN);
+        assertThat(rs.reconciledStatus.getJobStatus().getState()).isEqualTo(JobStatus.RECONCILING);
+    }
+
+    private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
+            startGreenDeletionDelay() throws Exception {
+        var parent =
+                buildSessionCluster(
+                        TEST_DEPLOYMENT_NAME,
+                        TEST_NAMESPACE,
+                        FlinkVersion.v1_20,
+                        null,
+                        UpgradeMode.STATELESS);
+        // Keep the fixture stable across API serialization (the JobSpec builder defaults to null).
+        parent.getSpec().getTemplate().getSpec().getJob().setArgs(new String[0]);
+        parent.getSpec().getConfiguration().put(BLUEGREEN_ABORT_GRACE_PERIOD.key(), "3600000");
+        // A real reconcile always receives the API-assigned owner UID, including after restart.
+        parent = kubernetesClient.resource(parent).create();
+        var rs = executeBasicDeployment(FlinkVersion.v1_20, parent, false, null);
+        simulateChangeInSpec(
+                rs.deployment,
+                "candidate-revision-one",
+                (int) Duration.ofMinutes(10).toMillis(),
+                null);
+        rs = reconcile(rs.deployment);
+        simulateSuccessfulJobStart(getFlinkDeploymentByName(GREEN_CLUSTER_ID));
+        return reconcile(rs.deployment);
+    }
+
+    private void expireReadiness(FlinkBlueGreenDeployment parent) {
+        parent.getStatus().setDeploymentReadyTimestamp(Instant.ofEpochMilli(1).toString());
+        kubernetesClient.resource(parent).updateStatus();
     }
 
     @ParameterizedTest
