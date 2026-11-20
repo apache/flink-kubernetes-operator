@@ -34,6 +34,9 @@ import org.apache.flink.runtime.entrypoint.parser.CommandLineParser;
 import org.apache.flink.runtime.entrypoint.parser.ParserResultFactory;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Options;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -118,6 +121,60 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 .containsExactlyInAnyOrder(MOCK_ENTRYPATH);
         assertThat(decoratedPod.getMainContainer().getArgs())
                 .containsExactlyInAnyOrder(CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG);
+    }
+
+    @Test
+    public void testApplicationJarURIFetchedByFlinkEntrypoint() throws Exception {
+        final String jarURI = "s3://bucket/job.jar";
+        List<String> args = decorateApplicationWithAllArgs(jarURI);
+        assertThat(args)
+                .containsExactly(
+                        CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
+                        "--job-classname",
+                        "org.main.class",
+                        "--allowNonRestoredState",
+                        "--fromSavepoint",
+                        "/tmp/savepoint/path",
+                        CmdStandaloneJobManagerDecorator.DYNAMIC_PROPERTY_FLAG,
+                        CmdStandaloneJobManagerDecorator.JOBMANAGER_RPC_ADDRESS_ARG,
+                        "--jars=" + jarURI,
+                        "--input",
+                        "in");
+
+        // StandaloneApplicationClusterConfiguration is package-private, so the jars are checked on
+        // the command line parsed the same way as Flink's CommandLineParser does it.
+        CommandLine commandLine =
+                parseApplicationEntrypoint(
+                        new StandaloneApplicationClusterConfigurationParserFactory().getOptions(),
+                        args);
+        assertThat(commandLine.getOptionValues("jars")).containsExactly(jarURI);
+        assertThat(commandLine.getOptionValue("job-classname")).isEqualTo("org.main.class");
+        assertThat(commandLine.getOptionValue("fromSavepoint")).isEqualTo("/tmp/savepoint/path");
+        assertThat(commandLine.hasOption("allowNonRestoredState")).isTrue();
+        assertThat(commandLine.getOptionValues("D"))
+                .contains(
+                        JobManagerOptions.ADDRESS.key(),
+                        CmdStandaloneJobManagerDecorator.POD_IP_ARG);
+        assertThat(commandLine.getArgs()).containsExactly("--input", "in");
+    }
+
+    @Test
+    public void testEntrypointWithoutJarsOptionKeepsOtherArgs() throws Exception {
+        // Flink before 1.19 has no --jars, which happens with an image older than the flinkVersion
+        // set in the spec
+        Options optionsWithoutJars = new Options();
+        new StandaloneApplicationClusterConfigurationParserFactory()
+                .getOptions().getOptions().stream()
+                        .filter(option -> !"jars".equals(option.getOpt()))
+                        .forEach(optionsWithoutJars::addOption);
+
+        CommandLine commandLine =
+                parseApplicationEntrypoint(
+                        optionsWithoutJars, decorateApplicationWithAllArgs("s3://bucket/job.jar"));
+        assertThat(commandLine.getOptionValue("fromSavepoint")).isEqualTo("/tmp/savepoint/path");
+        assertThat(commandLine.hasOption("allowNonRestoredState")).isTrue();
+        assertThat(commandLine.getArgs())
+                .containsExactly("--jars=s3://bucket/job.jar", "--input", "in");
     }
 
     @Test
@@ -215,9 +272,40 @@ public class CmdStandaloneJobManagerDecoratorTest {
         assertThat(parsed.get(JobManagerOptions.ADDRESS)).isNull();
     }
 
+    private List<String> decorateApplicationWithAllArgs(String jarURI) {
+        configuration.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, "org.main.class");
+        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+        configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
+        configuration.set(HighAvailabilityOptions.HA_MODE, "KUBERNETES");
+        configuration.set(StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI, jarURI);
+        configuration.set(ApplicationConfiguration.APPLICATION_ARGS, List.of("--input", "in"));
+
+        return decorator
+                .decorateFlinkPod(new FlinkPod.Builder().build())
+                .getMainContainer()
+                .getArgs();
+    }
+
+    private static CommandLine parseApplicationEntrypoint(
+            Options options, List<String> containerArgs) throws Exception {
+
+        return new DefaultParser().parse(options, toEntrypointArgs(containerArgs), true);
+    }
+
     private static Configuration parseEntrypointConfig(
             ParserResultFactory<? extends ClusterConfiguration> factory, List<String> containerArgs)
             throws Exception {
+
+        ClusterConfiguration parsed =
+                new CommandLineParser<>(factory).parse(toEntrypointArgs(containerArgs));
+
+        return ConfigurationUtils.createConfiguration(parsed.getDynamicProperties());
+    }
+
+    private static String[] toEntrypointArgs(List<String> containerArgs) {
         // Dropping the leading entrypoint token (standalone-job / jobmanager); not seen by the JVM.
         List<String> entrypointArgs = containerArgs.subList(1, containerArgs.size());
 
@@ -226,9 +314,6 @@ public class CmdStandaloneJobManagerDecoratorTest {
         argsWithConfigDir.add("--configDir");
         argsWithConfigDir.add("unused");
         argsWithConfigDir.addAll(entrypointArgs);
-
-        ClusterConfiguration parsed =
-                new CommandLineParser<>(factory).parse(argsWithConfigDir.toArray(new String[0]));
-        return ConfigurationUtils.createConfiguration(parsed.getDynamicProperties());
+        return argsWithConfigDir.toArray(new String[0]);
     }
 }

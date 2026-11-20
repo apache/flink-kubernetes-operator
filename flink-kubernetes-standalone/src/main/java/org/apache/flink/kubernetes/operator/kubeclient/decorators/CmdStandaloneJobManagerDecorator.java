@@ -107,6 +107,15 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
             args.add(JOBMANAGER_RPC_ADDRESS_ARG);
         }
 
+        String jarURI = kubernetesJobManagerParameters.getApplicationJarURI();
+        if (jarURI != null) {
+            // The = form keeps the job arguments that follow from being taken as more jars, as
+            // --jars accepts multiple values. It comes last so that an image older than the
+            // flinkVersion in the spec, without --jars, stops parsing here without losing e.g.
+            // --fromSavepoint.
+            args.add("--jars=" + jarURI);
+        }
+
         List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
         if (jobSpecArgs != null) {
             args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());

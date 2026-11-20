@@ -83,6 +83,8 @@ In Standalone mode the operator creates every Kubernetes resource itself: the Jo
 
 The replica count is also exposed through the Kubernetes scale subresource: `kubectl scale flinkdeployment <name> --replicas=<n>` and a [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) targeting the resource both drive `spec.taskManager.replicas` directly, a natural pairing with Reactive Mode. In Native mode the field has no effect, there the TaskManager count follows the job's slot needs.
 
+How the job jar reaches the cluster depends on the scheme of `spec.job.jarURI`. A `local://` URI, or a path without a scheme, points to a jar inside the image, and `file://`, `http://` and `https://` URIs are loaded from where they point; the operator puts these on the classpath of every Flink process. A jar on a Flink file system, such as `s3://` or `hdfs://`, is fetched by the JobManager on startup and shipped to the TaskManagers from there. This needs Flink 1.19 or newer and the matching [filesystem plugin](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins/) enabled in the image.
+
 The main reason to choose Standalone is isolation. A Flink cluster with no Kubernetes API access cannot create or modify anything in the cluster, which adds a layer of protection when running unknown or external user code.
 
 ## Flink Deployment Modes

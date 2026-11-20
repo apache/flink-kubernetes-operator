@@ -84,6 +84,13 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
         return flinkConfig.getString(ApplicationConfiguration.APPLICATION_MAIN_CLASS);
     }
 
+    public String getApplicationJarURI() {
+        if (!isApplicationCluster()) {
+            return null;
+        }
+        return flinkConfig.get(StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI);
+    }
+
     public Boolean getAllowNonRestoredState() {
         if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE)) {
             return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE);
