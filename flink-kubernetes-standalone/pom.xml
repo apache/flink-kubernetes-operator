@@ -81,15 +81,12 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <!-- Not inherited: kubernetes-server-mock declares it optional, and this module
-             otherwise only has the client shaded into flink-kubernetes. -->
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Managed kubernetes-client excludes all httpclient impls; the mock server needs one. -->
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>

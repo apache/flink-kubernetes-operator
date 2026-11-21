@@ -58,7 +58,11 @@ public class KubernetesClientUtils {
                                     new KubernetesClientMetrics(metricGroup, operatorConfig)));
         }
 
-        return clientBuilder.build();
+        var client = clientBuilder.build();
+        LOG.info(
+                "Kubernetes client created with HTTP client implementation {}",
+                client.getHttpClient().getClass().getName());
+        return client;
     }
 
     /**
