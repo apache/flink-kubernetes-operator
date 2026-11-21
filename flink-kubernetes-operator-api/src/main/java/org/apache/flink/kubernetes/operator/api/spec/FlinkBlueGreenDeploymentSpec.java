@@ -18,9 +18,11 @@
 package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.api.bluegreen.TransitionMode;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.fabric8.generator.annotation.Default;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -41,6 +43,9 @@ public class FlinkBlueGreenDeploymentSpec {
     private Map<String, String> configuration;
 
     @Nullable private IngressSpec ingress;
+
+    @Default("BASIC")
+    private TransitionMode transitionMode = TransitionMode.BASIC;
 
     private FlinkDeploymentTemplateSpec template;
 }
