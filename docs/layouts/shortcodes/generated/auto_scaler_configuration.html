@@ -243,6 +243,18 @@
             <td>Time interval to resend the identical event</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.scaling.max-scale-factor-per-slot-sharing-group.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Use the highest calculated scale factor among non-excluded vertices in each slot sharing group. Each vertex's normal parallelism bounds and alignment are still applied. Disabled by default.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.scaling.max-scale-factor-per-slot-sharing-group.taskmanager-replicas-change-required</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>When per-slot-sharing-group scaling is enabled, require the estimated TaskManager replica count to change before executing a scaling action. Disable this option to allow parallelism changes that do not change the estimated TaskManager replica count.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.scaling.parallelism-alignment.mode</h5></td>
             <td style="word-wrap: break-word;">"BALANCED"</td>
             <td>String</td>
