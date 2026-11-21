@@ -50,6 +50,10 @@ One of the operator's Kubernetes custom resources in the `flink.apache.org` API 
 
 The effective Flink configuration the operator builds from the desired spec and uses when deploying or upgrading a job, as opposed to the [observed config](#observed-config) read back from a running deployment. See [Reconcilers]({{< ref "docs/internals/controllers#reconcilers" >}}).
 
+#### Gate
+
+The operator injected into both jobs of an `ADVANCED` blue/green transition, which decides record by record which of the two jobs writes each record, coordinating with the other job through the blue/green resource's ConfigMap. See [Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
+
 #### JobManager Deployment Status
 
 The observed state of a Flink JobManager's Kubernetes deployment, one of `READY`, `DEPLOYED_NOT_READY`, `DEPLOYING`, `MISSING`, or `ERROR`. See [Status and Lifecycle]({{< ref "docs/custom-resource/status-and-lifecycle" >}}).

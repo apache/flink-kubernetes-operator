@@ -1,0 +1,110 @@
+################################################################################
+#  Licensed to the Apache Software Foundation (ASF) under one
+#  or more contributor license agreements.  See the NOTICE file
+#  distributed with this work for additional information
+#  regarding copyright ownership.  The ASF licenses this file
+#  to you under the Apache License, Version 2.0 (the
+#  "License"); you may not use this file except in compliance
+#  with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkBlueGreenDeployment
+metadata:
+  name: bg-advanced-example
+spec:
+  transitionMode: ADVANCED
+  configuration:
+    # Added to the watermark to set the cutover point, so it is event time: 10s is 100 records of
+    # the job, which must be more than its 2s watermark bound.
+    kubernetes.operator.bluegreen.deployment-deletion.delay: "10s"
+    kubernetes.operator.bluegreen.gate.timeout: "5 min"
+  template:
+    spec:
+      # Built from examples/flink-bluegreen-advanced-example, see test_bluegreen_advanced.sh
+      image: flink-bluegreen-advanced-example:ci-latest
+      imagePullPolicy: IfNotPresent
+      flinkVersion: v1_20
+      flinkConfiguration:
+        taskmanager.numberOfTaskSlots: "2"
+        # No managed memory: the job's little state lives on the heap
+        taskmanager.memory.managed.size: "0"
+        execution.checkpointing.interval: "5s"
+        state.checkpoints.dir: file:///opt/flink/volume/flink-cp
+        state.savepoints.dir: file:///opt/flink/volume/flink-sp
+        bluegreen.gate.strategy: WATERMARK
+        bluegreen.gate.watermark.field-path: eventTime
+      serviceAccount: flink
+      podTemplate:
+        spec:
+          containers:
+            # Do not change the main container name
+            - name: flink-main-container
+              volumeMounts:
+                - mountPath: /opt/flink/volume
+                  name: flink-volume
+          volumes:
+            - name: flink-volume
+              persistentVolumeClaim:
+                claimName: flink-bg-advanced
+      jobManager:
+        resources:
+          requests:
+            memory: "1024m"
+            cpu: "0.5"
+      taskManager:
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "0.5"
+      job:
+        jarURI: local:///opt/flink/job/bluegreen-advanced-example.jar
+        entryClass: org.apache.flink.examples.bluegreen.BlueGreenAdvancedExample
+        args:
+          - "--output"
+          - "/opt/flink/volume/output"
+        parallelism: 2
+        upgradeMode: savepoint
+      mode: native
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-bg-advanced
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Reads the job's output, also once both deployments are gone
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bg-advanced-output-reader
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: reader
+      image: busybox:1.35.0
+      imagePullPolicy: IfNotPresent
+      command: [ "sleep", "3600" ]
+      volumeMounts:
+        - mountPath: /opt/flink/volume
+          name: flink-volume
+  volumes:
+    - name: flink-volume
+      persistentVolumeClaim:
+        claimName: flink-bg-advanced

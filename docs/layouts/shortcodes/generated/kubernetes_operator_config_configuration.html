@@ -21,6 +21,12 @@
             <td>Configurable delay before deleting a deployment after being marked done.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.bluegreen.gate.timeout</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Duration</td>
+            <td>ADVANCED transition mode only: the max time to wait, once the new deployment is ready, for the gate to hand over before aborting the transition: CLEAR_TO_TEARDOWN, and every gate subtask of the old deployment done. Defaults to the abort grace period. Must be longer than the deployment deletion delay, which the gate adds to the watermark it waits for.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.bluegreen.reconciliation.reschedule-interval</h5></td>
             <td style="word-wrap: break-word;">15 s</td>
             <td>Duration</td>

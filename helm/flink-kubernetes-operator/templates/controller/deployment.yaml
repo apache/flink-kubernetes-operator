@@ -112,6 +112,8 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: {{ include "flink-operator.name" . }}
+            - name: OPERATOR_IMAGE
+              value: {{ include "flink-operator.imagePath" . }}
             - name: FLINK_CONF_DIR
               value: /opt/flink/conf
             - name: FLINK_PLUGINS_DIR
