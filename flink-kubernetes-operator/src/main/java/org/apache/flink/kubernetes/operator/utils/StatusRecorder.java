@@ -22,6 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
@@ -29,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.exception.StatusConflictException;
@@ -121,6 +123,8 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
             statusClass = FlinkStateSnapshotStatus.class;
         } else if (resource instanceof FlinkBlueGreenDeployment) {
             statusClass = FlinkBlueGreenDeploymentStatus.class;
+        } else if (resource instanceof FlinkMiniCluster) {
+            statusClass = FlinkMiniClusterStatus.class;
         } else {
             throw new RuntimeException(
                     String.format("Resource is unknown class: %s", resource.getClass()));
@@ -305,7 +309,7 @@ public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
                             listener -> {
                                 if (resource instanceof FlinkDeployment) {
                                     listener.onDeploymentStatusUpdate(ctx);
-                                } else {
+                                } else if (resource instanceof FlinkSessionJob) {
                                     listener.onSessionJobStatusUpdate(ctx);
                                 }
                             });

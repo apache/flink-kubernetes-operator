@@ -17,10 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -62,7 +64,7 @@ public class EventSourceUtils {
     public static <T extends AbstractFlinkResource<?, ?>>
             InformerEventSource<FlinkStateSnapshot, T>
                     getStateSnapshotForFlinkResourceInformerEventSource(
-                            EventSourceContext<T> context) {
+                            EventSourceContext<T> context, JobKind jobKind) {
         var labelFilters =
                 Stream.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE)
                         .map(Enum::name)
@@ -74,33 +76,33 @@ public class EventSourceUtils {
                                 FlinkStateSnapshot.class, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withSecondaryToPrimaryMapper(
-                                snapshot -> {
-                                    var jobRef = snapshot.getSpec().getJobReference();
-                                    if (jobRef == null || jobRef.getName() == null) {
-                                        return Collections.emptySet();
-                                    }
-                                    return Set.of(
-                                            new ResourceID(
-                                                    snapshot.getSpec().getJobReference().getName(),
-                                                    snapshot.getMetadata().getNamespace()));
-                                })
+                                snapshot -> getSnapshotJobResourceIds(snapshot, jobKind))
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
         return new InformerEventSource<>(configuration, context);
     }
 
-    public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
-            EventSourceContext<FlinkDeployment> context) {
+    @VisibleForTesting
+    static Set<ResourceID> getSnapshotJobResourceIds(FlinkStateSnapshot snapshot, JobKind jobKind) {
+        var jobRef = snapshot.getSpec().getJobReference();
+        if (jobRef == null || jobRef.getName() == null || jobRef.getKind() != jobKind) {
+            return Collections.emptySet();
+        }
+        return Set.of(new ResourceID(jobRef.getName(), snapshot.getMetadata().getNamespace()));
+    }
+
+    public static <T extends HasMetadata>
+            InformerEventSource<Deployment, T> getDeploymentInformerEventSource(
+                    EventSourceContext<T> context, String component) {
         final String labelSelector =
-                Map.of(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER)
-                        .entrySet()
-                        .stream()
+                Map.of(Constants.LABEL_COMPONENT_KEY, component).entrySet().stream()
                         .map(Object::toString)
                         .collect(Collectors.joining(","));
 
         var configuration =
-                InformerEventSourceConfiguration.from(Deployment.class, FlinkDeployment.class)
+                InformerEventSourceConfiguration.from(
+                                Deployment.class, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
@@ -109,8 +111,8 @@ public class EventSourceUtils {
         return new InformerEventSource<>(configuration, context);
     }
 
-    public static InformerEventSource<?, FlinkDeployment> getIngressInformerEventSource(
-            EventSourceContext<FlinkDeployment> context) {
+    public static <T extends HasMetadata> InformerEventSource<?, T> getIngressInformerEventSource(
+            EventSourceContext<T> context) {
         final String labelSelector =
                 Map.of(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS).entrySet().stream()
                         .map(Object::toString)
@@ -122,7 +124,8 @@ public class EventSourceUtils {
                         : io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress.class;
 
         var configuration =
-                InformerEventSourceConfiguration.from(ingressClass, FlinkDeployment.class)
+                InformerEventSourceConfiguration.from(
+                                ingressClass, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
@@ -273,18 +276,9 @@ public class EventSourceUtils {
                         .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
                         .withPrimaryToSecondaryMapper(
                                 (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
-                                        snapshot -> {
-                                            if (!JobKind.FLINK_SESSION_JOB.equals(
-                                                    snapshot.getSpec()
-                                                            .getJobReference()
-                                                            .getKind())) {
-                                                return Set.of();
-                                            }
-                                            return Set.of(
-                                                    FlinkStateSnapshotUtils
-                                                            .getSnapshotJobReferenceResourceId(
-                                                                    snapshot));
-                                        })
+                                        snapshot ->
+                                                getSnapshotJobResourceIds(
+                                                        snapshot, JobKind.FLINK_SESSION_JOB))
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
@@ -321,10 +315,8 @@ public class EventSourceUtils {
                                                                         .getMetadata()
                                                                         .getNamespace()));
                                             }
-                                            return Set.of(
-                                                    FlinkStateSnapshotUtils
-                                                            .getSnapshotJobReferenceResourceId(
-                                                                    snapshot));
+                                            return getSnapshotJobResourceIds(
+                                                    snapshot, JobKind.FLINK_DEPLOYMENT);
                                         })
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
@@ -332,7 +324,24 @@ public class EventSourceUtils {
         var flinkDeploymentEventSource =
                 new InformerEventSource<>(configurationFlinkDeployment, context);
 
-        return new EventSource[] {flinkSessionJobEventSource, flinkDeploymentEventSource};
+        var configurationFlinkMiniCluster =
+                InformerEventSourceConfiguration.from(
+                                FlinkMiniCluster.class, FlinkStateSnapshot.class)
+                        .withSecondaryToPrimaryMapper(getSnapshotPrimaryMapper(context))
+                        .withPrimaryToSecondaryMapper(
+                                (PrimaryToSecondaryMapper<FlinkStateSnapshot>)
+                                        snapshot ->
+                                                getSnapshotJobResourceIds(
+                                                        snapshot, JobKind.FLINK_MINI_CLUSTER))
+                        .withNamespacesInheritedFromController()
+                        .withFollowControllerNamespacesChanges(true)
+                        .build();
+        var flinkMiniClusterEventSource =
+                new InformerEventSource<>(configurationFlinkMiniCluster, context);
+
+        return new EventSource[] {
+            flinkSessionJobEventSource, flinkDeploymentEventSource, flinkMiniClusterEventSource
+        };
     }
 
     private static <T extends AbstractFlinkResource<?, ?>>

@@ -25,8 +25,10 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
@@ -41,6 +43,8 @@ import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObser
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.snapshot.StateSnapshotReconciler;
+import org.apache.flink.kubernetes.operator.service.minicluster.MiniClusterFlinkService;
+import org.apache.flink.kubernetes.operator.service.minicluster.TestingMiniClusterFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
 import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
@@ -96,7 +100,6 @@ public class FlinkStateSnapshotControllerTest {
     private KubernetesClient client;
     private FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector;
     private EventRecorder eventRecorder;
-    private TestingFlinkResourceContextFactory ctxFactory;
     private TestingMetricListener listener;
     private MetricManager<FlinkStateSnapshot> metricManager;
     private StatusRecorder<FlinkStateSnapshot, FlinkStateSnapshotStatus> statusRecorder;
@@ -109,30 +112,33 @@ public class FlinkStateSnapshotControllerTest {
         eventRecorder =
                 new EventRecorder(
                         new FlinkResourceEventCollector(), flinkStateSnapshotEventCollector);
-        ctxFactory =
-                new TestingFlinkResourceContextFactory(
-                        configManager,
-                        TestUtils.createTestMetricGroup(new Configuration()),
-                        flinkService,
-                        eventRecorder);
-
         listener = new TestingMetricListener(new Configuration());
         metricManager =
                 MetricManager.createFlinkStateSnapshotMetricManager(
                         new Configuration(), listener.getMetricGroup());
         statusRecorder = new StatusRecorder<>(metricManager, statusUpdateCounter);
-        controller =
-                new FlinkStateSnapshotController(
-                        ValidatorUtils.discoverValidators(
-                                configManager,
-                                OperatorPluginUtils.createPluginManager(
-                                        configManager.getDefaultConfig())),
-                        ctxFactory,
-                        new StateSnapshotReconciler(ctxFactory, eventRecorder),
-                        new StateSnapshotObserver(ctxFactory, eventRecorder),
-                        eventRecorder,
-                        metricManager,
-                        statusRecorder);
+        controller = createController(null);
+    }
+
+    private FlinkStateSnapshotController createController(
+            @Nullable MiniClusterFlinkService miniClusterFlinkService) {
+        var ctxFactory =
+                new TestingFlinkResourceContextFactory(
+                        configManager,
+                        TestUtils.createTestMetricGroup(new Configuration()),
+                        flinkService,
+                        miniClusterFlinkService,
+                        eventRecorder);
+        return new FlinkStateSnapshotController(
+                ValidatorUtils.discoverValidators(
+                        configManager,
+                        OperatorPluginUtils.createPluginManager(configManager.getDefaultConfig())),
+                ctxFactory,
+                new StateSnapshotReconciler(ctxFactory, eventRecorder),
+                new StateSnapshotObserver(ctxFactory, eventRecorder),
+                eventRecorder,
+                metricManager,
+                statusRecorder);
     }
 
     @ParameterizedTest
@@ -334,6 +340,74 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(status.getPath()).isEqualTo("savepoint_0");
         assertThat(status.getError()).isNull();
         assertThat(statusUpdateCounter.getCount()).isEqualTo(2);
+    }
+
+    @Test
+    public void testReconcileNewSavepointForMiniCluster() {
+        controller = createController(new TestingMiniClusterFlinkService(client));
+        var miniCluster = createMiniCluster();
+        context = TestUtils.createSnapshotContext(client, miniCluster);
+        var snapshot = createSavepoint(miniCluster);
+        assertThat(snapshot.getSpec().getJobReference().getKind())
+                .isEqualTo(JobKind.FLINK_MINI_CLUSTER);
+
+        controller.reconcile(snapshot, context);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(IN_PROGRESS);
+        assertThat(snapshot.getStatus().getTriggerId()).isEqualTo("savepoint_trigger_0");
+
+        controller.reconcile(snapshot, context);
+        controller.reconcile(snapshot, context);
+
+        var status = snapshot.getStatus();
+        assertThat(status.getState()).isEqualTo(COMPLETED);
+        assertThat(status.getPath()).isEqualTo("savepoint_0");
+        assertThat(status.getError()).isNull();
+    }
+
+    @Test
+    public void testReconcileNewCheckpointForMiniCluster() {
+        controller = createController(new TestingMiniClusterFlinkService(client));
+        var miniCluster = createMiniCluster();
+        context = TestUtils.createSnapshotContext(client, miniCluster);
+        var snapshot = createCheckpoint(miniCluster, CheckpointType.FULL, 1);
+
+        controller.reconcile(snapshot, context);
+        assertThat(snapshot.getStatus().getTriggerId()).isEqualTo("checkpoint_trigger_0");
+
+        controller.reconcile(snapshot, context);
+        controller.reconcile(snapshot, context);
+
+        var status = snapshot.getStatus();
+        assertThat(status.getState()).isEqualTo(COMPLETED);
+        assertThat(status.getPath()).isEqualTo("checkpoint_1");
+    }
+
+    @Test
+    public void testReconcileSavepointCleanupForMiniCluster() {
+        var miniClusterFlinkService = new TestingMiniClusterFlinkService(client);
+        controller = createController(miniClusterFlinkService);
+        var miniCluster = createMiniCluster();
+        context = TestUtils.createSnapshotContext(client, miniCluster);
+        var snapshot = createSavepoint(miniCluster);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        snapshot.setStatus(new FlinkStateSnapshotStatus());
+        snapshot.getStatus().setPath(SAVEPOINT_PATH);
+        snapshot.getStatus().setState(COMPLETED);
+
+        // Failed dispose, job not running
+        miniCluster.getStatus().getJobStatus().setState(CANCELED);
+        assertDeleteControl(
+                controller.cleanup(snapshot, context),
+                false,
+                configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
+        assertThat(miniClusterFlinkService.getDelegate().getDisposedSavepoints()).isEmpty();
+        miniCluster.getStatus().getJobStatus().setState(RUNNING);
+
+        // Successful disposal, through the FlinkMiniCluster service
+        assertDeleteControl(controller.cleanup(snapshot, context), true, null);
+        assertThat(miniClusterFlinkService.getDelegate().getDisposedSavepoints())
+                .containsExactly(SAVEPOINT_PATH);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
     }
 
     @Test
@@ -743,7 +817,7 @@ public class FlinkStateSnapshotControllerTest {
         assertDeleteControl(controller.cleanup(checkpoint, context), true, null);
     }
 
-    private FlinkStateSnapshot createSavepoint(FlinkDeployment deployment) {
+    private FlinkStateSnapshot createSavepoint(AbstractFlinkResource<?, ?> deployment) {
         return createSavepoint(deployment, false, 7);
     }
 
@@ -752,7 +826,7 @@ public class FlinkStateSnapshotControllerTest {
     }
 
     private FlinkStateSnapshot createSavepoint(
-            FlinkDeployment deployment, boolean alreadyExists, int backoffLimit) {
+            AbstractFlinkResource<?, ?> deployment, boolean alreadyExists, int backoffLimit) {
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotSavepoint(
                         SAVEPOINT_NAME,
@@ -767,7 +841,9 @@ public class FlinkStateSnapshotControllerTest {
     }
 
     private FlinkStateSnapshot createCheckpoint(
-            FlinkDeployment deployment, CheckpointType checkpointType, int backoffLimit) {
+            AbstractFlinkResource<?, ?> deployment,
+            CheckpointType checkpointType,
+            int backoffLimit) {
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotCheckpoint(
                         CHECKPOINT_NAME,
@@ -781,6 +857,20 @@ public class FlinkStateSnapshotControllerTest {
 
     private FlinkDeployment createDeployment() {
         return createDeployment(FlinkVersion.v1_20);
+    }
+
+    private FlinkMiniCluster createMiniCluster() {
+        var miniCluster = TestUtils.buildMiniCluster();
+        miniCluster
+                .getStatus()
+                .setJobStatus(JobStatus.builder().state(RUNNING).jobId(JOB_ID).build());
+        miniCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
+        ReconciliationUtils.updateStatusForDeployedSpec(miniCluster, new Configuration());
+        client.resource(miniCluster).create();
+        return miniCluster;
     }
 
     private FlinkDeployment createDeployment(FlinkVersion flinkVersion) {

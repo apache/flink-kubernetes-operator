@@ -34,7 +34,7 @@ The webhook is its own process, built from the `flink-kubernetes-webhook` module
 
 Although it is a separate process, it is wired from the same building blocks as the operator: `FlinkConfigManager` loads the same operator configuration, including the watched namespaces with dynamic namespace changes propagated at runtime, and the validator and mutator sets are discovered through the same SPI mechanism the operator uses, so admission and the reconcile loop always enforce identical rules. Custom implementations plug in as described under [Plugins → Custom Flink Resource Validators]({{< ref "docs/deployment/plugins#custom-flink-resource-validators" >}}) and [Plugins → Custom Flink Resource Mutators]({{< ref "docs/deployment/plugins#custom-flink-resource-mutators" >}}).
 
-Because admission decisions can depend on other resources, the webhook maintains its own informers through `InformerManager`: `FlinkDeployment` and `FlinkSessionJob` informers, one per watched namespace or a single cluster-wide one when all namespaces are watched, give the handlers a live, cache-backed view without querying the API server on every request.
+Because admission decisions can depend on other resources, the webhook maintains its own informers through `InformerManager`: `FlinkDeployment`, `FlinkSessionJob`, and `FlinkMiniCluster` informers, one per watched namespace or a single cluster-wide one when all namespaces are watched, give the handlers a live, cache-backed view without querying the API server on every request.
 
 ## TLS
 
@@ -48,21 +48,21 @@ Certificate rotation needs no restart: the SSL context is a `ReloadableSslContex
 
 The chart registers one validating and one mutating configuration, enabled together by default and individually toggleable through the `webhook.validator.create` and `webhook.mutator.create` values. Both point at the `flink-operator-webhook-service` Service and fire on `CREATE` and `UPDATE`:
 
-| Configuration | Path        | Resources                                                     |
-|---------------|-------------|---------------------------------------------------------------|
-| Validating    | `/validate` | `flinkdeployments`, `flinksessionjobs`, `flinkstatesnapshots` |
-| Mutating      | `/mutate`   | `flinkdeployments`, `flinksessionjobs`                        |
+| Configuration | Path        | Resources                                                                          |
+|---------------|-------------|------------------------------------------------------------------------------------|
+| Validating    | `/validate` | `flinkdeployments`, `flinkminiclusters`, `flinksessionjobs`, `flinkstatesnapshots` |
+| Mutating      | `/mutate`   | `flinkdeployments`, `flinkminiclusters`, `flinksessionjobs`                        |
 
 Both configurations use `failurePolicy: Fail`: while the webhook is enabled but unreachable, creates and updates of these resources are rejected by the API server. When watched namespaces are configured, a namespace selector scopes both configurations, so resources outside the watched set skip admission entirely. `FlinkBlueGreenDeployment` appears in neither configuration: its nested spec is first validated when the blue/green controller creates the child `FlinkDeployment` resources, which pass through admission like any other client's writes.
 
 ## Validation Path
 
-`AdmissionHandler` decodes the `AdmissionReview` and hands it to the JOSDK admission framework, which calls `FlinkValidator`. Canary resources are exempt. The request is dispatched by kind: a deployment is validated on its own, a session job is validated together with its parent session cluster looked up from the informer cache, and a snapshot resolves its `jobReference` target the same way, so referential rules are enforced at admission time. The first failing validator rejects the request, and the API server surfaces the message directly to the caller.
+`AdmissionHandler` decodes the `AdmissionReview` and hands it to the JOSDK admission framework, which calls `FlinkValidator`. Canary resources are exempt. The request is dispatched by kind: a deployment or MiniCluster is validated on its own, a session job is validated together with its parent session cluster looked up from the informer cache, and a snapshot resolves its `jobReference` target the same way, so referential rules are enforced at admission time. The first failing validator rejects the request, and the API server surfaces the message directly to the caller.
 
 The same validators run again inside every reconcile pass: the webhook is optional, so the reconcile loop remains the authority, as described under [Controllers → Validation]({{< ref "docs/internals/controllers#validation" >}}).
 
 ## Mutation Path
 
-`FlinkMutator` dispatches by kind and runs every discovered mutator in sequence. The stock `DefaultFlinkMutator` changes almost nothing: deployments and snapshots pass through untouched, and a session job receives the `target.session` label derived from `spec.deploymentName`, making the session jobs of a cluster selectable through a plain label query. The SPI also offers a snapshot mutation hook, though the chart's mutating configuration does not route `FlinkStateSnapshot` resources to the webhook.
+`FlinkMutator` dispatches by kind and runs every discovered mutator in sequence. The stock `DefaultFlinkMutator` changes almost nothing: deployments, MiniClusters and snapshots pass through untouched, and a session job receives the `target.session` label derived from `spec.deploymentName`, making the session jobs of a cluster selectable through a plain label query. The SPI also offers a snapshot mutation hook, though the chart's mutating configuration does not route `FlinkStateSnapshot` resources to the webhook.
 
 One subtlety in the response handling: after the mutators run, the result is compared against the original object, and when nothing changed the original is returned as is. This keeps the serialization round-trip from producing a spurious patch for an unchanged resource.

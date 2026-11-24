@@ -157,9 +157,7 @@ public class KubernetesScalingRealizer
             // Cannot derive a ratio; fall back to the tuned value.
             return new Quantity(String.valueOf(tunedMemory.getBytes()));
         }
-        long limitBytes =
-                MemorySize.parse(ResourceConfigUtils.parseResourceMemoryString(limit.toString()))
-                        .getBytes();
+        long limitBytes = ResourceConfigUtils.parseMemoryQuantity(limit).getBytes();
         double ratio = (double) tunedMemory.getBytes() / currentMemory.getBytes();
         return new Quantity(String.valueOf(Math.round(limitBytes * ratio)));
     }
