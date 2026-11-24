@@ -44,6 +44,7 @@ import lombok.Getter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -471,6 +472,31 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .list()
                         .getItems();
         assertEquals(2, events.size());
+        assertThat(flinkService.getRequestedMaxExceptions()).isEqualTo(3);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"10, 11", "0, 1", "-5, 1", "2147483647, 2147483647"})
+    void testRequestedMaxExceptions(int limitPerReconciliation, int expectedMaxExceptions)
+            throws Exception {
+        var deployment = initDeployment();
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(
+                        deployment,
+                        Configuration.fromMap(
+                                Map.of(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_EVENT_EXCEPTION_LIMIT
+                                                .key(),
+                                        String.valueOf(limitPerReconciliation))));
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        observer.observe(ctx);
+
+        // One more than the limit, but at least one and without overflowing
+        assertThat(flinkService.getRequestedMaxExceptions()).isEqualTo(expectedMaxExceptions);
     }
 
     @Test

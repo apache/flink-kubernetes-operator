@@ -120,12 +120,13 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
         try {
             var jobId = JobID.fromHexString(jobStatus.getJobId());
-            // TODO: Ideally the best way to restrict the number of events is to use the query param
-            // `maxExceptions`
-            //  but the JobExceptionsMessageParameters does not expose the parameters and nor does
-            // it have setters.
+            int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
+            // One more entry than can be reported, so that a truncated history is still detected
+            int maxExceptions = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, maxEvents) + 1);
             var history =
-                    ctx.getFlinkService().getJobExceptions(resource, jobId, ctx.getObserveConfig());
+                    ctx.getFlinkService()
+                            .getJobExceptions(
+                                    resource, jobId, maxExceptions, ctx.getObserveConfig());
 
             if (history == null || history.getExceptionHistory() == null) {
                 return;
@@ -183,8 +184,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             if (exceptions.isEmpty()) {
                 return;
             }
-
-            int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
 
             int count = 0;
             for (var exception : exceptions) {

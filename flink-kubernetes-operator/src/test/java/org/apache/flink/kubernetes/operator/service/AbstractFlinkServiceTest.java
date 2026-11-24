@@ -70,6 +70,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessag
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
+import org.apache.flink.runtime.rest.messages.job.UpperLimitExceptionParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricCollectionResponseBody;
@@ -149,6 +150,7 @@ import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -1569,9 +1571,35 @@ public class AbstractFlinkServiceTest {
 
         var jobExceptions =
                 flinkService.getJobExceptions(
-                        TestUtils.buildApplicationCluster(), new JobID(), new Configuration());
+                        TestUtils.buildApplicationCluster(), new JobID(), 10, new Configuration());
         assertNotNull(jobExceptions);
         assertEquals(1, jobExceptions.getExceptionHistory().getEntries().size());
+    }
+
+    @Test
+    void getJobExceptionsRequestsAtMostMaxExceptions() throws Exception {
+        var requestedLimit = new AtomicReference<List<Integer>>();
+        var flinkService =
+                getTestingService(
+                        (messageHeaders, messageParameters, requestBody) -> {
+                            messageParameters.getQueryParameters().stream()
+                                    .filter(UpperLimitExceptionParameter.class::isInstance)
+                                    .forEach(
+                                            parameter ->
+                                                    requestedLimit.set(
+                                                            ((UpperLimitExceptionParameter)
+                                                                            parameter)
+                                                                    .getValue()));
+                            return CompletableFuture.completedFuture(
+                                    new JobExceptionsInfoWithHistory(
+                                            new JobExceptionsInfoWithHistory.JobExceptionHistory(
+                                                    List.of(), false)));
+                        });
+
+        flinkService.getJobExceptions(
+                TestUtils.buildApplicationCluster(), new JobID(), 7, new Configuration());
+
+        assertThat(requestedLimit.get()).containsExactly(7);
     }
 
     @SneakyThrows

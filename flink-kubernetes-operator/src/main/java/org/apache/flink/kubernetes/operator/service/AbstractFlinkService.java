@@ -83,6 +83,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerReque
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.UpperLimitExceptionParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -902,11 +903,19 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public JobExceptionsInfoWithHistory getJobExceptions(
-            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
+            AbstractFlinkResource resource,
+            JobID jobId,
+            int maxExceptions,
+            Configuration observeConfig)
             throws IOException {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
+        // The upper limit parameter field is private before Flink 2.4 (FLINK-39711)
+        params.getQueryParameters().stream()
+                .filter(UpperLimitExceptionParameter.class::isInstance)
+                .map(UpperLimitExceptionParameter.class::cast)
+                .forEach(parameter -> parameter.resolve(List.of(maxExceptions)));
 
         try (var clusterClient = getClusterClient(observeConfig)) {
             return clusterClient
