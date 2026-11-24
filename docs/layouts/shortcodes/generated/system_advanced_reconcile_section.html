@@ -18,7 +18,7 @@
             <td><h5>kubernetes.operator.events.exceptions.stacktrace.max.length</h5></td>
             <td style="word-wrap: break-word;">2048</td>
             <td>Integer</td>
-            <td>Maximum number of characters of stack trace text to include in exception-related Kubernetes event messages. The stack trace is truncated once it reaches this size, regardless of how many lines it spans, so a single pathological line with no line breaks cannot bypass the cap.</td>
+            <td>Maximum number of characters of exception text to include in Kubernetes event messages: the stack trace of JobException events and the message of the Error event for a failed job. The text is truncated by size, regardless of how many lines it spans. Negative values disable the limit.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.ingress.manage</h5></td>

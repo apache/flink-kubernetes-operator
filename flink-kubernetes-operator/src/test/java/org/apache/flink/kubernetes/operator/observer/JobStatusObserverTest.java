@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -496,9 +497,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
         ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
 
         long exceptionTime = 4000L;
-        String longTrace =
-                "line1\nline2\nline3\nline4"; // 23 characters total, ("line1\nline2\n") fit within
-        // the cap
+        // The 12 character cap keeps exactly "line1\nline2\n" of the 23 characters
+        String longTrace = "line1\nline2\nline3\nline4";
         flinkService.addExceptionHistory(jobId, "StackTraceCheck", longTrace, exceptionTime);
 
         // Ensure jobFailedErr is null before the observe call
@@ -521,19 +521,117 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
-    public void testStackTraceTruncationBySizeNotLineCount() throws Exception {
+    void testStackTraceTruncationBySizeNotLineCount() throws Exception {
+        String singleHugeLine = "x".repeat(5000);
+
+        String message =
+                observeJobExceptionEventMessage(
+                        Map.of(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                                        .key(),
+                                "100"),
+                        singleHugeLine);
+
+        assertThat(message).isEqualTo("x".repeat(100) + "... (4900 more characters)");
+    }
+
+    @Test
+    void testNegativeStackTraceMaxLengthDisablesLimit() throws Exception {
+        String singleHugeLine = "x".repeat(5000);
+
+        String message =
+                observeJobExceptionEventMessage(
+                        Map.of(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                                        .key(),
+                                "-1"),
+                        singleHugeLine);
+
+        assertThat(message).isEqualTo(singleHugeLine);
+    }
+
+    @Test
+    void testDefaultStackTraceTruncation() throws Exception {
+        // The deprecated line limit is off by default, so only the 2048 character default applies
+        String stackTrace = "line\n".repeat(600);
+
+        String message = observeJobExceptionEventMessage(Map.of(), stackTrace);
+
+        assertThat(message).isEqualTo(stackTrace.substring(0, 2048) + "... (952 more characters)");
+    }
+
+    @Test
+    void testDeprecatedStackTraceLinesStillApplied() throws Exception {
+        String message =
+                observeJobExceptionEventMessage(
+                        Map.of(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES
+                                        .key(),
+                                "2"),
+                        "line1\nline2\nline3\nline4");
+
+        assertThat(message).isEqualTo("line1\nline2\n... (11 more characters)");
+    }
+
+    @ParameterizedTest
+    @MethodSource("truncateExceptionTextArgs")
+    void testTruncateExceptionText(String text, int maxLength, int maxLines, String expected) {
+        assertThat(JobStatusObserver.truncateExceptionText(text, maxLength, maxLines))
+                .isEqualTo(expected);
+    }
+
+    private static Stream<Arguments> truncateExceptionTextArgs() {
+        return Stream.of(
+                Arguments.of("abc", 3, -1, "abc"),
+                Arguments.of("abcdef", 3, -1, "abc... (3 more characters)"),
+                Arguments.of("abcdef", 0, -1, "... (6 more characters)"),
+                Arguments.of("abcdef", -1, -1, "abcdef"),
+                Arguments.of("a😀b", 2, -1, "a... (3 more characters)"),
+                Arguments.of("l1\nl2\nl3", -1, 2, "l1\nl2\n... (2 more characters)"),
+                Arguments.of("l1\nl2\nl3", 4, 2, "l1\nl... (4 more characters)"),
+                Arguments.of("l1\nl2\n", 100, 2, "l1\nl2\n"),
+                Arguments.of("l1\nl2", 100, 0, "... (5 more characters)"),
+                Arguments.of("x".repeat(50), 10, 5, "x".repeat(10) + "... (40 more characters)"));
+    }
+
+    @Test
+    void testFailedJobErrorEventTruncated() throws Exception {
         var deployment = initDeployment();
-        var status = deployment.getStatus();
-        var jobStatus = status.getJobStatus();
-        jobStatus.setState(JobStatus.RUNNING);
-        Map<String, String> configuration = new HashMap<>();
-        configuration.put(
-                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
-                        .key(),
-                "100");
-        Configuration operatorConfig = Configuration.fromMap(configuration);
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
-                getResourceContext(deployment, operatorConfig);
+                getResourceContext(
+                        deployment,
+                        Configuration.fromMap(
+                                Map.of(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                                                .key(),
+                                        "10")));
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+        flinkService.setJobFailedErr(new Exception("x".repeat(100)));
+
+        observer.observe(ctx);
+
+        var jobErrorEvent = flinkResourceEventCollector.events.poll();
+        assertThat(jobErrorEvent.getReason()).isEqualTo(EventRecorder.Reason.Error.name());
+        assertThat(jobErrorEvent.getMessage())
+                .isEqualTo("x".repeat(10) + "... (90 more characters)");
+    }
+
+    /**
+     * Observes a running deployment whose job reported one new exception with the given stack
+     * trace, and returns the message of the resulting JobException event.
+     */
+    private String observeJobExceptionEventMessage(Map<String, String> config, String stackTrace)
+            throws Exception {
+        var deployment = initDeployment();
+        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(deployment, Configuration.fromMap(config));
 
         var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
         flinkService.submitApplicationCluster(
@@ -542,15 +640,14 @@ public class JobStatusObserverTest extends OperatorTestBase {
         ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
         ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
-
-        long exceptionTime = 4000L;
-        // A single unbroken line of 5000 characters, assess that it gets truncated
-        String singleHugeLine = "x".repeat(5000);
-        flinkService.addExceptionHistory(jobId, "HugeSingleLine", singleHugeLine, exceptionTime);
-
+        flinkService.addExceptionHistory(jobId, "Exception", stackTrace, 4000L);
         flinkService.setJobFailedErr(null);
+
         observer.observe(ctx);
 
+        // A failure to build the event would leave the timestamp behind and retry every cycle
+        assertThat(ctx.getExceptionCacheEntry().getLastTimestamp())
+                .isEqualTo(Instant.ofEpochMilli(4000L));
         var events =
                 kubernetesClient
                         .v1()
@@ -558,10 +655,8 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .inNamespace(deployment.getMetadata().getNamespace())
                         .list()
                         .getItems();
-        assertEquals(1, events.size());
-        String msg = events.get(0).getMessage();
-        assertTrue(msg.length() < singleHugeLine.length());
-        assertTrue(msg.contains("... (4900 more characters)"));
+        assertThat(events).hasSize(1);
+        return events.get(0).getMessage();
     }
 
     @Test
