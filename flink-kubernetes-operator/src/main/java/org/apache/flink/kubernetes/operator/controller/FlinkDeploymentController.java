@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -186,7 +187,9 @@ public class FlinkDeploymentController
             EventSourceContext<FlinkDeployment> context) {
         List<EventSource<?, FlinkDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
-        eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
+        eventSources.add(
+                EventSourceUtils.getDeploymentInformerEventSource(
+                        context, Constants.LABEL_COMPONENT_JOB_MANAGER));
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
         }

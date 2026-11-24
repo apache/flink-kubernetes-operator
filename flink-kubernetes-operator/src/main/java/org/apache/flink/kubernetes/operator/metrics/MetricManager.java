@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.metrics.lifecycle.BlueGreenLifecycleMetrics;
@@ -60,6 +61,13 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
             Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
         MetricManager<FlinkSessionJob> metricManager = new MetricManager<>();
         registerFlinkSessionJobMetrics(conf, metricGroup, metricManager);
+        registerLifecycleMetrics(conf, metricGroup, metricManager);
+        return metricManager;
+    }
+
+    public static MetricManager<FlinkMiniCluster> createFlinkMiniClusterMetricManager(
+            Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkMiniCluster> metricManager = new MetricManager<>();
         registerLifecycleMetrics(conf, metricGroup, metricManager);
         return metricManager;
     }

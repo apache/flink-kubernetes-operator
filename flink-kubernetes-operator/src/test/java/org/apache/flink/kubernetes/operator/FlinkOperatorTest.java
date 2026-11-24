@@ -67,6 +67,7 @@ class FlinkOperatorTest {
         var testOperator = new FlinkOperator(operatorConfig, kubernetesClient);
         testOperator.registerDeploymentController();
         testOperator.registerSessionJobController();
+        testOperator.registerMiniClusterController();
 
         var configService = testOperator.getOperator().getConfigurationService();
 
@@ -84,6 +85,10 @@ class FlinkOperatorTest {
                         .map(c -> c.getInformerConfig().getLabelSelector());
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
+
+        Assertions.assertEquals(
+                testOperator.registeredControllers.size(),
+                testOperator.canaryResourceManagers.size());
         Assertions.assertFalse(configService.stopOnInformerErrorDuringStartup());
 
         testOperator.registeredControllers.stream()

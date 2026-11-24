@@ -20,10 +20,12 @@ package org.apache.flink.kubernetes.operator.admission.mutator;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.mutator.FlinkResourceMutator;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -38,6 +40,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -149,16 +152,61 @@ class FlinkMutatorTest {
     @ParameterizedTest
     @EnumSource(
             value = Operation.class,
+            names = {"CREATE", "UPDATE"})
+    void miniClusterNoMutationReturnsSameInstance(Operation operation) {
+        var miniCluster = createMiniCluster();
+
+        var result = mutator.mutate(miniCluster, operation);
+
+        assertSame(
+                miniCluster,
+                result,
+                "Should return the original resource when no mutation is applied");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE"})
+    void miniClusterMutationIsApplied(Operation operation) {
+        var labellingMutator =
+                new FlinkMutator(
+                        Set.of(
+                                new DefaultFlinkMutator() {
+                                    @Override
+                                    public FlinkMiniCluster mutateMiniCluster(
+                                            FlinkMiniCluster miniCluster) {
+                                        miniCluster
+                                                .getMetadata()
+                                                .setLabels(Map.of("mutated", "true"));
+                                        return miniCluster;
+                                    }
+                                }),
+                        informerManager);
+        var miniCluster = createMiniCluster();
+
+        var result = labellingMutator.mutate(miniCluster, operation);
+
+        assertInstanceOf(FlinkMiniCluster.class, result);
+        assertNotSame(miniCluster, result);
+        assertEquals("true", result.getMetadata().getLabels().get("mutated"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
             names = {"CREATE", "UPDATE"},
             mode = EnumSource.Mode.EXCLUDE)
     void nonMutatingOperationsReturnOriginalResource(Operation operation) {
         var deployment = createDeployment();
         var sessionJob = createSessionJob();
         var snapshot = createStateSnapshot();
+        var miniCluster = createMiniCluster();
 
         assertSame(deployment, mutator.mutate(deployment, operation));
         assertSame(sessionJob, mutator.mutate(sessionJob, operation));
         assertSame(snapshot, mutator.mutate(snapshot, operation));
+        assertSame(miniCluster, mutator.mutate(miniCluster, operation));
     }
 
     @ParameterizedTest
@@ -371,6 +419,16 @@ class FlinkMutatorTest {
                         .deploymentName("test-deployment")
                         .build());
         return sessionJob;
+    }
+
+    private FlinkMiniCluster createMiniCluster() {
+        var miniCluster = new FlinkMiniCluster();
+        var meta = new ObjectMeta();
+        meta.setName("test-minicluster");
+        meta.setNamespace("default");
+        miniCluster.setMetadata(meta);
+        miniCluster.setSpec(new FlinkMiniClusterSpec());
+        return miniCluster;
     }
 
     private FlinkStateSnapshot createStateSnapshot() {

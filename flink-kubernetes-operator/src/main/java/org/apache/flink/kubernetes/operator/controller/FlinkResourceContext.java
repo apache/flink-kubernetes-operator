@@ -50,7 +50,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     @Getter private final Context<?> josdkContext;
     @Getter private final KubernetesResourceMetricGroup resourceMetricGroup;
     protected final FlinkConfigManager configManager;
-    private final Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory;
+    private final Function<FlinkResourceContext<?>, ? extends FlinkService> flinkServiceFactory;
 
     @Getter private final FlinkResourceContextFactory.ExceptionCacheEntry exceptionCacheEntry;
 

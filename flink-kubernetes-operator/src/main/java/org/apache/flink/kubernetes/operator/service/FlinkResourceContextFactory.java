@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
@@ -29,6 +30,7 @@ import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkMiniClusterContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
@@ -36,6 +38,7 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContex
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
+import org.apache.flink.kubernetes.operator.service.minicluster.MiniClusterFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
@@ -66,7 +69,7 @@ public class FlinkResourceContextFactory implements AutoCloseable {
     }
 
     @VisibleForTesting
-    final Map<ResourceID, ExceptionCacheEntry> lastRecordedExceptionCache =
+    final Map<Tuple2<Class<?>, ResourceID>, ExceptionCacheEntry> lastRecordedExceptionCache =
             new ConcurrentHashMap<>();
 
     private final FlinkConfigManager configManager;
@@ -116,14 +119,14 @@ public class FlinkResourceContextFactory implements AutoCloseable {
     @SuppressWarnings("unchecked")
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
             CR resource, Context<?> josdkContext) {
+        final Tuple2<Class<?>, ResourceID> resourceKey = resourceKey(resource);
         var resMg =
                 resourceMetricGroups.computeIfAbsent(
-                        Tuple2.of(resource.getClass(), ResourceID.fromResource(resource)),
+                        resourceKey,
                         r ->
                                 OperatorMetricUtils.createResourceMetricGroup(
                                         operatorMetricGroup, configManager, resource));
         if (resource instanceof FlinkDeployment flinkDeployment) {
-            var resourceId = ResourceID.fromResource(flinkDeployment);
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
                             flinkDeployment,
@@ -132,9 +135,8 @@ public class FlinkResourceContextFactory implements AutoCloseable {
                             configManager,
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
-                                    resourceId, id -> new ExceptionCacheEntry()));
+                                    resourceKey, id -> new ExceptionCacheEntry()));
         } else if (resource instanceof FlinkSessionJob flinkSessionJob) {
-            var resourceId = ResourceID.fromResource(resource);
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
                             flinkSessionJob,
@@ -143,7 +145,17 @@ public class FlinkResourceContextFactory implements AutoCloseable {
                             configManager,
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
-                                    resourceId, id -> new ExceptionCacheEntry()));
+                                    resourceKey, id -> new ExceptionCacheEntry()));
+        } else if (resource instanceof FlinkMiniCluster miniCluster) {
+            return (FlinkResourceContext<CR>)
+                    new FlinkMiniClusterContext(
+                            miniCluster,
+                            josdkContext,
+                            resMg,
+                            configManager,
+                            this::getMiniClusterFlinkService,
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceKey, id -> new ExceptionCacheEntry()));
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());
@@ -168,18 +180,31 @@ public class FlinkResourceContextFactory implements AutoCloseable {
         };
     }
 
+    @VisibleForTesting
+    protected MiniClusterFlinkService getMiniClusterFlinkService(FlinkResourceContext<?> ctx) {
+        return new MiniClusterFlinkService(
+                ctx.getKubernetesClient(),
+                artifactManager,
+                clientExecutorService,
+                ctx.getOperatorConfig());
+    }
+
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
-        ResourceID resourceId = ResourceID.fromResource(flinkApp);
-        var resourceMetricGroup =
-                resourceMetricGroups.remove(Tuple2.of(flinkApp.getClass(), resourceId));
+        final Tuple2<Class<?>, ResourceID> resourceKey = resourceKey(flinkApp);
+        var resourceMetricGroup = resourceMetricGroups.remove(resourceKey);
         if (resourceMetricGroup != null) {
             resourceMetricGroup.close();
         } else {
             LOG.warn("Unknown resource metric group for {}", flinkApp);
         }
         // remove the resource from the cache
-        lastRecordedExceptionCache.remove(resourceId);
-        LOG.debug("Removed resource {} from last recorded exception cache", resourceId);
+        lastRecordedExceptionCache.remove(resourceKey);
+        LOG.debug("Removed resource {} from last recorded exception cache", resourceKey);
+    }
+
+    // Resources of different kinds may share a name and namespace, so the kind is part of the key.
+    private static Tuple2<Class<?>, ResourceID> resourceKey(AbstractFlinkResource<?, ?> resource) {
+        return Tuple2.of(resource.getClass(), ResourceID.fromResource(resource));
     }
 
     /** Stops the executor used by the Flink REST cluster clients. */

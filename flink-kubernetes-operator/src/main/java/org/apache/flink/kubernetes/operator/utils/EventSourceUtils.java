@@ -90,17 +90,17 @@ public class EventSourceUtils {
         return new InformerEventSource<>(configuration, context);
     }
 
-    public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
-            EventSourceContext<FlinkDeployment> context) {
+    public static <T extends HasMetadata>
+            InformerEventSource<Deployment, T> getDeploymentInformerEventSource(
+                    EventSourceContext<T> context, String component) {
         final String labelSelector =
-                Map.of(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER)
-                        .entrySet()
-                        .stream()
+                Map.of(Constants.LABEL_COMPONENT_KEY, component).entrySet().stream()
                         .map(Object::toString)
                         .collect(Collectors.joining(","));
 
         var configuration =
-                InformerEventSourceConfiguration.from(Deployment.class, FlinkDeployment.class)
+                InformerEventSourceConfiguration.from(
+                                Deployment.class, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
@@ -109,8 +109,8 @@ public class EventSourceUtils {
         return new InformerEventSource<>(configuration, context);
     }
 
-    public static InformerEventSource<?, FlinkDeployment> getIngressInformerEventSource(
-            EventSourceContext<FlinkDeployment> context) {
+    public static <T extends HasMetadata> InformerEventSource<?, T> getIngressInformerEventSource(
+            EventSourceContext<T> context) {
         final String labelSelector =
                 Map.of(Constants.LABEL_COMPONENT_KEY, LABEL_COMPONENT_INGRESS).entrySet().stream()
                         .map(Object::toString)
@@ -122,7 +122,8 @@ public class EventSourceUtils {
                         : io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress.class;
 
         var configuration =
-                InformerEventSourceConfiguration.from(ingressClass, FlinkDeployment.class)
+                InformerEventSourceConfiguration.from(
+                                ingressClass, context.getPrimaryResourceClass())
                         .withLabelSelector(labelSelector)
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
