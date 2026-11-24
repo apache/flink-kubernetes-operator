@@ -28,6 +28,9 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectReference;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodCondition;
+import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.slf4j.Logger;
@@ -47,6 +50,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The util to generate an event for the target resource. It is copied from
@@ -315,6 +319,40 @@ public class EventUtils {
         ref.setNamespace(resource.getMetadata().getNamespace());
         ref.setUid(resource.getMetadata().getUid());
         return ref;
+    }
+
+    /** Throws a {@link DeploymentFailedException} if the Deployment could not create its pods. */
+    public static void checkFailedCreate(DeploymentStatus status) {
+        List<DeploymentCondition> conditions = status.getConditions();
+        for (DeploymentCondition dc : conditions) {
+            if ("FailedCreate".equals(dc.getReason()) && "ReplicaFailure".equals(dc.getType())) {
+                throw new DeploymentFailedException(dc);
+            }
+        }
+    }
+
+    /**
+     * Throws a {@link DeploymentFailedException} if any container of the given pods is waiting for
+     * a reason that it cannot recover from.
+     */
+    public static void checkContainerErrors(KubernetesClient client, PodList pods) {
+        for (Pod pod : pods.getItems()) {
+            var podStatus = pod.getStatus();
+            // Covers the kubelet back-off and the other waiting errors
+            var failure =
+                    Stream.concat(
+                                    podStatus.getContainerStatuses().stream(),
+                                    podStatus.getInitContainerStatuses().stream())
+                            .map(DeploymentFailedException::fromContainerStatus)
+                            .flatMap(Optional::stream)
+                            .findFirst();
+            if (failure.isPresent()) {
+                throw failure.get();
+            }
+
+            // No obvious errors were found, check for volume mount issues
+            checkForVolumeMountErrors(client, pod);
+        }
     }
 
     /**

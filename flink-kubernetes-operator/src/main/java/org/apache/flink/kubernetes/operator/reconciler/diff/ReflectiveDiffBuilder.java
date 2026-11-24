@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
 import io.fabric8.kubernetes.api.model.PodTemplateSpec;
@@ -208,6 +209,8 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
             if (spec.getTaskManager() != null) {
                 clearPodTemplateAdditionalProps(spec.getTaskManager().getPodTemplate());
             }
+        } else if (o instanceof FlinkMiniClusterSpec) {
+            clearPodTemplateAdditionalProps(((FlinkMiniClusterSpec) o).getPodTemplate());
         }
     }
 

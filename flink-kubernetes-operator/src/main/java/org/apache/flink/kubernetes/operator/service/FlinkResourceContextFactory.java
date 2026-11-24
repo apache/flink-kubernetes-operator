@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.FlinkBlueGreenDeploymentStatus;
@@ -29,6 +30,7 @@ import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkBlueGreenDeployments;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkMiniClusterContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
@@ -36,6 +38,7 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContex
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
+import org.apache.flink.kubernetes.operator.service.minicluster.MiniClusterFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
@@ -144,6 +147,17 @@ public class FlinkResourceContextFactory implements AutoCloseable {
                             this::getFlinkService,
                             lastRecordedExceptionCache.computeIfAbsent(
                                     resourceId, id -> new ExceptionCacheEntry()));
+        } else if (resource instanceof FlinkMiniCluster miniCluster) {
+            var resourceId = ResourceID.fromResource(resource);
+            return (FlinkResourceContext<CR>)
+                    new FlinkMiniClusterContext(
+                            miniCluster,
+                            josdkContext,
+                            resMg,
+                            configManager,
+                            this::getMiniClusterFlinkService,
+                            lastRecordedExceptionCache.computeIfAbsent(
+                                    resourceId, id -> new ExceptionCacheEntry()));
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());
@@ -166,6 +180,15 @@ public class FlinkResourceContextFactory implements AutoCloseable {
                     clientExecutorService,
                     ctx.getOperatorConfig());
         };
+    }
+
+    @VisibleForTesting
+    protected MiniClusterFlinkService getMiniClusterFlinkService(FlinkResourceContext<?> ctx) {
+        return new MiniClusterFlinkService(
+                ctx.getKubernetesClient(),
+                artifactManager,
+                clientExecutorService,
+                ctx.getOperatorConfig());
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
