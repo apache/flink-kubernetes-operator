@@ -24,9 +24,11 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -362,6 +364,38 @@ public class FlinkConfigManager implements AutoCloseable {
         return conf;
     }
 
+    /**
+     * Get the configuration that a {@link FlinkMiniCluster} is deployed with, written to the config
+     * file used by the minicluster launcher.
+     *
+     * @param objectMeta Resource meta
+     * @param spec Resource spec
+     * @return Deployment config
+     */
+    public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkMiniClusterSpec spec) {
+        var conf = getConfig(objectMeta, spec);
+        FlinkUtils.setGenerationAnnotation(conf, objectMeta.getGeneration());
+        return conf;
+    }
+
+    /**
+     * Get the observe configuration that can be used to interact with {@link FlinkMiniCluster}
+     * through the Flink rest clients.
+     *
+     * @param miniCluster MiniCluster resource
+     * @return Observe config
+     */
+    public Configuration getObserveConfig(FlinkMiniCluster miniCluster) {
+        var deployedSpec = ReconciliationUtils.getDeployedSpec(miniCluster);
+        if (deployedSpec == null) {
+            throw new RuntimeException(
+                    "Cannot create observe config before first deployment, this indicates a bug.");
+        }
+        var conf = getConfig(miniCluster.getMetadata(), deployedSpec);
+        applyConfigsFromCurrentSpec(miniCluster.getSpec(), conf, SAVEPOINT_DIRECTORY);
+        return conf;
+    }
+
     private void addOperatorConfigsFromSpec(AbstractFlinkSpec spec, Configuration conf) {
         // Observe config should include the latest operator related settings
         if (spec.getFlinkConfiguration() != null) {
@@ -412,12 +446,13 @@ public class FlinkConfigManager implements AutoCloseable {
     }
 
     @SneakyThrows
-    private Configuration getConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
+    private Configuration getConfig(ObjectMeta objectMeta, AbstractFlinkSpec spec) {
         var key =
                 Key.builder()
                         .configVersion(defaultConfigVersion.get())
                         .name(objectMeta.getName())
                         .namespace(objectMeta.getNamespace())
+                        .specClass(spec.getClass())
                         .spec(objectMapper.convertValue(spec, ObjectNode.class))
                         .build();
 
@@ -428,6 +463,17 @@ public class FlinkConfigManager implements AutoCloseable {
     private Configuration generateConfig(Key key) {
         try {
             LOG.debug("Generating new config");
+            if (key.specClass == FlinkMiniClusterSpec.class) {
+                var spec = objectMapper.convertValue(key.spec, FlinkMiniClusterSpec.class);
+                return FlinkConfigBuilder.buildFrom(
+                        key.namespace,
+                        key.name,
+                        spec,
+                        getDefaultConfig(key.namespace, spec.getFlinkVersion()));
+            }
+            if (key.specClass != FlinkDeploymentSpec.class) {
+                throw new IllegalArgumentException("Unsupported spec type " + key.specClass);
+            }
             var spec = objectMapper.convertValue(key.spec, FlinkDeploymentSpec.class);
             return FlinkConfigBuilder.buildFrom(
                     key.namespace,
@@ -497,6 +543,7 @@ public class FlinkConfigManager implements AutoCloseable {
         long configVersion;
         String namespace;
         String name;
+        Class<? extends AbstractFlinkSpec> specClass;
         ObjectNode spec;
     }
 }

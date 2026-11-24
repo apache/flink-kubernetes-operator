@@ -1,0 +1,511 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
+
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.JobAutoScaler;
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.exception.UpgradeFailureException;
+import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthResult;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService.CancelResult;
+import org.apache.flink.kubernetes.operator.service.SuspendMode;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.util.Preconditions;
+
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import lombok.SneakyThrows;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_HA_METADATA_NOT_AVAILABLE;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED;
+import static org.apache.flink.kubernetes.operator.api.status.CommonStatus.MSG_MANUAL_RESTORE_REQUIRED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+
+/**
+ * Reconciler for a resource whose job runs in a Flink cluster that the resource deploys and owns,
+ * such as an application {@code FlinkDeployment}. A session job runs in a cluster owned by another
+ * resource, so is reconciled by {@link AbstractJobReconciler} directly.
+ */
+public abstract class AbstractClusterJobReconciler<
+                CR extends AbstractFlinkResource<SPEC, STATUS>,
+                SPEC extends AbstractFlinkSpec,
+                STATUS extends CommonStatus<SPEC>>
+        extends AbstractJobReconciler<CR, SPEC, STATUS> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractClusterJobReconciler.class);
+    static final String MSG_RECOVERY = "Recovering lost deployment";
+    static final String MSG_RESTART_UNHEALTHY = "Restarting unhealthy job";
+
+    /**
+     * Mirrors {@code ApplicationResultStoreOptions#STORAGE_PATH}, introduced in Flink 2.3. The
+     * option is unknown and ignored in earlier versions.
+     */
+    static final ConfigOption<String> APPLICATION_RESULT_STORE_STORAGE_PATH =
+            ConfigOptions.key("application-result-store.storage-path")
+                    .stringType()
+                    .noDefaultValue();
+
+    /**
+     * Mirrors {@code ApplicationResultStoreOptions#DELETE_ON_COMMIT}, introduced in Flink 2.3. The
+     * option is unknown and ignored in earlier versions.
+     */
+    static final ConfigOption<Boolean> APPLICATION_RESULT_STORE_DELETE_ON_COMMIT =
+            ConfigOptions.key("application-result-store.delete-on-commit")
+                    .booleanType()
+                    .defaultValue(true);
+
+    public AbstractClusterJobReconciler(
+            EventRecorder eventRecorder,
+            StatusRecorder<CR, STATUS> statusRecorder,
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
+        super(eventRecorder, statusRecorder, autoscaler);
+    }
+
+    /**
+     * Deploys the cluster, and submits the job to run in it.
+     *
+     * @param ctx Reconciliation context.
+     * @param spec Spec to deploy.
+     * @param deployConfig Deployment configuration.
+     * @param requireHaMetadata Whether the job must be restored from HA metadata.
+     * @throws Exception Error deploying the cluster.
+     */
+    protected abstract void submitCluster(
+            FlinkResourceContext<CR> ctx,
+            SPEC spec,
+            Configuration deployConfig,
+            boolean requireHaMetadata)
+            throws Exception;
+
+    /**
+     * Deletes the cluster, recording in the status that it has been deleted.
+     *
+     * @param ctx Reconciliation context.
+     * @param conf Configuration of the cluster.
+     * @param deleteHaData Whether to delete the HA metadata of the cluster.
+     */
+    protected abstract void deleteCluster(
+            FlinkResourceContext<CR> ctx, Configuration conf, boolean deleteHaData);
+
+    /**
+     * Stops the job running in the cluster, deleting the cluster where the suspend mode requires
+     * it.
+     *
+     * @param ctx Reconciliation context.
+     * @param suspendMode How to stop the job.
+     * @return Result of the cancellation, with the savepoint taken if any.
+     * @throws Exception Error stopping the job.
+     */
+    protected abstract CancelResult cancelClusterJob(
+            FlinkResourceContext<CR> ctx, SuspendMode suspendMode) throws Exception;
+
+    /**
+     * Cluster info from the status, which holds the last recorded cluster health.
+     *
+     * @param status Status of the resource.
+     * @return The cluster info.
+     */
+    protected abstract Map<String, String> getClusterInfo(STATUS status);
+
+    /**
+     * Ingress to create for the cluster.
+     *
+     * @param spec Spec of the resource.
+     * @return The Ingress spec, or {@code null} if no Ingress is wanted.
+     */
+    @Nullable
+    protected abstract IngressSpec getIngress(SPEC spec);
+
+    @Override
+    protected JobUpgrade getJobUpgrade(FlinkResourceContext<CR> ctx, Configuration deployConfig)
+            throws Exception {
+
+        var status = ctx.getResource().getStatus();
+        var availableUpgradeMode = super.getJobUpgrade(ctx, deployConfig);
+
+        if (availableUpgradeMode.isAvailable()) {
+            return availableUpgradeMode;
+        }
+        var flinkService = ctx.getFlinkService();
+
+        if (availableUpgradeMode.isAllowFallback()
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
+                && flinkService.isHaMetadataAvailable(deployConfig)) {
+            LOG.info(
+                    "Job is not running but HA metadata is available for last state restore, ready for upgrade");
+            return JobUpgrade.lastStateUsingHaMeta();
+        }
+
+        var jmDeployStatus = status.getKubernetesDeploymentStatus();
+        if (jmDeployStatus != JobManagerDeploymentStatus.MISSING
+                && status.getReconciliationStatus()
+                                .deserializeLastReconciledSpec()
+                                .getJob()
+                                .getUpgradeMode()
+                        != UpgradeMode.LAST_STATE
+                && FlinkUtils.jmPodNeverStarted(ctx.getJosdkContext())) {
+            deleteClusterThatNeverStarted(ctx, deployConfig);
+            return getJobUpgrade(ctx, deployConfig);
+        }
+
+        if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
+                        || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
+                && !flinkService.isHaMetadataAvailable(deployConfig)) {
+            throw new UpgradeFailureException(
+                    "JobManager deployment is missing and "
+                            + MSG_HA_METADATA_NOT_AVAILABLE
+                            + " to make stateful upgrades. "
+                            + MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED
+                            + MSG_MANUAL_RESTORE_REQUIRED,
+                    "UpgradeFailed");
+        }
+
+        return availableUpgradeMode;
+    }
+
+    private void deleteClusterThatNeverStarted(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig) {
+        ctx.getResource().getStatus().getJobStatus().setState(JobStatus.FAILED);
+        deleteCluster(ctx, deployConfig, false);
+        LOG.info("Deleted cluster that never started.");
+    }
+
+    @Override
+    public void deploy(
+            FlinkResourceContext<CR> ctx,
+            SPEC spec,
+            Configuration deployConfig,
+            Optional<String> savepoint,
+            boolean requireHaMetadata)
+            throws Exception {
+
+        var relatedResource = ctx.getResource();
+        var status = relatedResource.getStatus();
+        var flinkService = ctx.getFlinkService();
+
+        ClusterHealthEvaluator.removeLastValidClusterHealthInfo(getClusterInfo(status));
+
+        if (savepoint.isPresent()) {
+            // Savepoint deployment
+            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
+        } else if (requireHaMetadata && flinkService.atLeastOneCheckpoint(deployConfig)) {
+            // Last state deployment, explicitly set a dummy savepoint path to avoid accidental
+            // incorrect state restore in case the HA metadata is deleted by the user
+            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, LAST_STATE_DUMMY_SP_PATH);
+            status.getJobStatus().setUpgradeSavepointPath(LAST_STATE_DUMMY_SP_PATH);
+        } else {
+            // Stateless deployment, remove any user configured savepoint path
+            deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
+        }
+
+        setOwnerReference(relatedResource, deployConfig);
+        setRandomJobResultStorePath(deployConfig);
+        setRandomApplicationResultStorePath(deployConfig);
+
+        if (status.getKubernetesDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
+            Preconditions.checkState(
+                    ReconciliationUtils.isJobInTerminalState(status),
+                    "Refusing to replace the JobManager of %s, its job is %s and not terminal",
+                    relatedResource.getMetadata().getName(),
+                    status.getJobStatus().getState());
+            LOG.info("Deleting cluster with terminated application before new deployment");
+            deleteCluster(ctx, deployConfig, !requireHaMetadata);
+            statusRecorder.patchAndCacheStatus(relatedResource, ctx.getKubernetesClient());
+        }
+
+        setJobIdIfNecessary(
+                relatedResource, deployConfig, ctx.getKubernetesClient(), requireHaMetadata);
+
+        eventRecorder.triggerEvent(
+                relatedResource,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.Submit,
+                EventRecorder.Component.JobManagerDeployment,
+                MSG_SUBMIT,
+                ctx.getKubernetesClient());
+        submitCluster(ctx, spec, deployConfig, requireHaMetadata);
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING);
+        status.setKubernetesDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+
+        IngressUtils.reconcileIngress(
+                ctx, getIngress(spec), deployConfig, ctx.getKubernetesClient(), eventRecorder);
+    }
+
+    private void setJobIdIfNecessary(
+            CR resource,
+            Configuration deployConfig,
+            KubernetesClient client,
+            boolean lastStateDeploy) {
+        // The jobId assigned by Flink would be constant,
+        // overwrite to avoid checkpoint path conflicts.
+        // https://issues.apache.org/jira/browse/FLINK-19358
+        // https://issues.apache.org/jira/browse/FLINK-29109
+
+        var status = resource.getStatus();
+        var userJobId = deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID);
+        if (userJobId != null) {
+            LOG.info("Using job ID {} from the spec", userJobId);
+            status.getJobStatus().setJobId(userJobId);
+            statusRecorder.patchAndCacheStatus(resource, client);
+            return;
+        }
+
+        // Rotate job id when not last-state deployment
+        if (status.getJobStatus().getJobId() == null || !lastStateDeploy) {
+            String jobId = JobID.generate().toHexString();
+            // record before first deployment to ensure we use it on any retry
+            status.getJobStatus().setJobId(jobId);
+            LOG.info("Generated job ID {}", jobId);
+            statusRecorder.patchAndCacheStatus(resource, client);
+        }
+
+        String jobId = status.getJobStatus().getJobId();
+        LOG.info("Deploying with job ID {}", jobId);
+        deployConfig.set(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
+    }
+
+    @Override
+    protected boolean cancelJob(FlinkResourceContext<CR> ctx, SuspendMode suspendMode)
+            throws Exception {
+        var cancelTs = Instant.now();
+        var result = cancelClusterJob(ctx, suspendMode);
+        result.getSavepointPath()
+                .ifPresent(location -> setUpgradeSavepointPath(ctx, location, cancelTs));
+        return result.isPending();
+    }
+
+    @Override
+    protected void cleanupAfterFailedJob(FlinkResourceContext<CR> ctx) {
+        // The job has already stopped. Delete the deployment and we are ready.
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        deleteCluster(ctx, conf, false);
+    }
+
+    // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
+    private static void setRandomJobResultStorePath(Configuration effectiveConfig) {
+        if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
+
+            if (!effectiveConfig.contains(JobResultStoreOptions.DELETE_ON_COMMIT)) {
+                effectiveConfig.set(JobResultStoreOptions.DELETE_ON_COMMIT, false);
+            }
+
+            effectiveConfig.set(
+                    JobResultStoreOptions.STORAGE_PATH,
+                    effectiveConfig.getString(HighAvailabilityOptions.HA_STORAGE_PATH)
+                            + "/job-result-store/"
+                            + effectiveConfig.getString(KubernetesConfigOptions.CLUSTER_ID)
+                            + "/"
+                            + UUID.randomUUID());
+        }
+    }
+
+    private static void setRandomApplicationResultStorePath(Configuration effectiveConfig) {
+        if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
+
+            // With shutdown-on-application-finish disabled, a JobManager that restarts
+            // after an application has terminated would find no result and run the
+            // application's main() again. Retaining the entry avoids that.
+            if (!effectiveConfig.contains(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT)) {
+                effectiveConfig.set(APPLICATION_RESULT_STORE_DELETE_ON_COMMIT, false);
+            }
+
+            // The application result store shares the HA storage path, which outlives
+            // the HA metadata deleted on upgrade. Dirty entries are recovered unkeyed,
+            // so a terminal entry left behind by a previous deployment makes the
+            // replacement cluster skip submitting the new job.
+            // Giving each deployment a unique path makes sure that nothing stale is
+            // recovered, including entries retained above.
+            effectiveConfig.set(
+                    APPLICATION_RESULT_STORE_STORAGE_PATH,
+                    effectiveConfig.getString(HighAvailabilityOptions.HA_STORAGE_PATH)
+                            + "/application-result-store/"
+                            + effectiveConfig.getString(KubernetesConfigOptions.CLUSTER_ID)
+                            + "/"
+                            + UUID.randomUUID());
+        }
+    }
+
+    @Override
+    public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception {
+        if (super.reconcileOtherChanges(ctx)) {
+            return true;
+        }
+
+        var resource = ctx.getResource();
+        var observeConfig = ctx.getObserveConfig();
+        var clusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(
+                        getClusterInfo(resource.getStatus()));
+        boolean shouldRestartJobBecauseUnhealthy =
+                shouldRestartJobBecauseUnhealthy(ctx, observeConfig);
+        boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, resource);
+        if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
+            if (shouldRecoverDeployment) {
+                eventRecorder.triggerEvent(
+                        resource,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.RecoverDeployment,
+                        EventRecorder.Component.Job,
+                        MSG_RECOVERY,
+                        ctx.getKubernetesClient());
+            }
+
+            if (shouldRestartJobBecauseUnhealthy) {
+                eventRecorder.triggerEvent(
+                        resource,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.RestartUnhealthyJob,
+                        EventRecorder.Component.Job,
+                        Optional.ofNullable(clusterHealthInfo)
+                                .map(ClusterHealthInfo::getHealthResult)
+                                .map(ClusterHealthResult::getError)
+                                .orElse(MSG_RESTART_UNHEALTHY),
+                        ctx.getKubernetesClient());
+                cleanupAfterFailedJob(ctx);
+            }
+
+            resubmitJob(
+                    ctx,
+                    HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig()));
+            return true;
+        }
+
+        return cleanupTerminalJmAfterTtl(ctx, observeConfig);
+    }
+
+    private boolean shouldRestartJobBecauseUnhealthy(
+            FlinkResourceContext<CR> ctx, Configuration observeConfig) {
+        var resource = ctx.getResource();
+        // Terminal jobs (FAILED, FINISHED, CANCELED) must not be restarted via the cluster health
+        // check. Restarting a FAILED job is controlled exclusively by OPERATOR_JOB_RESTART_FAILED;
+        // a terminal job also has no HA metadata, so a health-based restart would always fail.
+        if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
+            return false;
+        }
+
+        boolean restartNeeded = false;
+
+        if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+            var clusterInfo = getClusterInfo(resource.getStatus());
+            ClusterHealthInfo clusterHealthInfo =
+                    ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+            if (clusterHealthInfo != null) {
+                LOG.debug("Cluster info contains job health info");
+                if (!clusterHealthInfo.getHealthResult().isHealthy()) {
+                    if (resource.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+                        LOG.info("Restarting the unhealthy job, it is stateless");
+                        restartNeeded = true;
+                    } else if (ctx.getFlinkService().isHaMetadataAvailable(observeConfig)) {
+                        LOG.info("Restarting the unhealthy job, HA metadata is available");
+                        restartNeeded = true;
+                    } else {
+                        LOG.warn("Cannot restart the unhealthy job, HA metadata is not available");
+                    }
+
+                    if (restartNeeded) {
+                        ClusterHealthEvaluator.removeLastValidClusterHealthInfo(clusterInfo);
+                    }
+                }
+            } else {
+                LOG.debug(
+                        "Cluster info does not contain job health info, skipping the health check");
+            }
+        }
+
+        return restartNeeded;
+    }
+
+    private boolean cleanupTerminalJmAfterTtl(
+            FlinkResourceContext<CR> ctx, Configuration observeConfig) {
+        var status = ctx.getResource().getStatus();
+        boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
+        boolean jmStillRunning =
+                status.getKubernetesDeploymentStatus() != JobManagerDeploymentStatus.MISSING;
+
+        if (terminal && jmStillRunning) {
+            var ttl = observeConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL);
+            boolean ttlPassed =
+                    clock.instant()
+                            .isAfter(
+                                    Instant.ofEpochMilli(
+                                                    Long.parseLong(
+                                                            status.getJobStatus().getUpdateTime()))
+                                            .plus(ttl));
+            if (ttlPassed) {
+                LOG.info("Removing cluster of terminal job.");
+                deleteCluster(ctx, observeConfig, false);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    @SneakyThrows
+    protected DeleteControl cleanupInternal(FlinkResourceContext<CR> ctx) {
+        var status = ctx.getResource().getStatus();
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()
+                || ReconciliationUtils.isJobInTerminalState(status)) {
+            deleteCluster(ctx, conf, true);
+        } else {
+            var observeConfig = ctx.getObserveConfig();
+            var suspendMode =
+                    observeConfig.getBoolean(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
+                            ? SuspendMode.SAVEPOINT
+                            : SuspendMode.STATELESS;
+            cancelJob(ctx, suspendMode);
+        }
+        return DeleteControl.defaultDelete();
+    }
+}
