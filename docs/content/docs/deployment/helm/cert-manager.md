@@ -40,9 +40,21 @@ The commands on this page always install and remove the newest cert-manager rele
 
 ## Webhook Certificate
 
-With the webhooks enabled, the chart creates two cert-manager resources alongside the operator: a self-signed `Issuer` and a `Certificate` covering the webhook service names, issued into the `webhook-server-cert` secret that the operator deployment mounts. The certificate also carries a PKCS12 keystore for the webhook's Java runtime, protected by the default webhook password secret or by a custom one set through `webhook.keystore.passwordSecretRef`. For FIPS-compliant environments, the keystore encryption profile is selected with `webhook.keystore.pkcs12Profile`, listed with the other parameters on the Helm [Installation]({{< ref "docs/deployment/helm/installation" >}}) page.
+With the webhooks enabled, the chart creates two cert-manager resources alongside the operator: a self-signed `Issuer` and a `Certificate` covering the webhook service names, issued into the `flink-operator-webhook-server-cert` secret that the operator deployment mounts. The certificate also carries a PKCS12 keystore for the webhook's Java runtime, protected by the default webhook password secret or by a custom one set through `webhook.keystore.passwordSecretRef`. For FIPS-compliant environments, the keystore encryption profile is selected with `webhook.keystore.pkcs12Profile`, listed with the other parameters on the Helm [Installation]({{< ref "docs/deployment/helm/installation" >}}) page.
 
 Cert-manager also closes the trust chain from the other side: its CA injector patches the certificate's CA bundle into the Mutating and Validating webhook configurations, through the `cert-manager.io/inject-ca-from` annotation, so the Kubernetes API server trusts the webhook it calls.
+
+## Upgrading from the Previous Secret Name
+
+{{< hint warning >}}
+When upgrading an installation that uses `webhook-server-cert`, the chart changes the webhook certificate Secret name to `flink-operator-webhook-server-cert`. Cert-manager must be running and able to issue certificates during this upgrade. The new operator pod cannot start until cert-manager creates the new Secret. With the default `Recreate` strategy, the operator is unavailable during this time, and the fail-closed webhooks reject `FlinkDeployment` and `FlinkSessionJob` create and update requests.
+{{< /hint >}}
+
+The old `webhook-server-cert` Secret remains after the upgrade. Once the new Secret exists and the operator and webhooks are ready, update any external references to the old name.
+
+{{< hint warning >}}
+Other Kubernetes operators also use the `webhook-server-cert` Secret name. Before deleting the old Secret, check whether other operators or workloads in the same namespace still depend on it. Removing a Secret that they still use can disrupt their services. Delete it only after you confirm that no other operator or workload needs it.
+{{< /hint >}}
 
 ## Disabling the Webhooks
 
