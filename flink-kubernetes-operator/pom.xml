@@ -36,8 +36,6 @@ under the License.
         <surefire.module.config>
             <!-- required by FlinkConfigManagerTest -->
             --add-opens=java.base/java.util=ALL-UNNAMED
-            <!-- required by KubernetesClientUtilsTest -->
-            -Dfabric8.httpclient.impl=${fabric8.httpclient.impl}
         </surefire.module.config>
     </properties>
 

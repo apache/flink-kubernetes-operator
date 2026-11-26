@@ -244,6 +244,10 @@ under the License.
                 <configuration>
                     <!-- This is picked up by IntelliJ -->
                     <argLine>${flink-kubernetes-operator.surefire.baseArgLine}</argLine>
+                    <systemPropertyVariables>
+                        <!-- required by KubernetesClientUtilsTest -->
+                        <fabric8.httpclient.impl>${fabric8.httpclient.impl}</fabric8.httpclient.impl>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
