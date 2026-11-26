@@ -22,8 +22,6 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
-import java.util.concurrent.TimeoutException;
-
 /** The observer of the {@link org.apache.flink.kubernetes.operator.api.Mode#SESSION} cluster. */
 public class SessionObserver extends AbstractFlinkDeploymentObserver {
 
@@ -32,21 +30,11 @@ public class SessionObserver extends AbstractFlinkDeploymentObserver {
     }
 
     @Override
-    public void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx) {
-        // Check if session cluster can serve rest calls following our practice in JobObserver
-        try {
-            logger.debug("Observing session cluster");
-            ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig(), null);
-            var rs = ctx.getResource().getStatus().getReconciliationStatus();
-            if (rs.getState() == ReconciliationState.DEPLOYED) {
-                rs.markReconciledSpecAsStable();
-            }
-        } catch (Exception e) {
-            logger.error("REST service in session cluster timed out", e);
-            if (e instanceof TimeoutException) {
-                // check for problems with the underlying deployment
-                observeJmDeployment(ctx);
-            }
+    protected void observeJob(FlinkResourceContext<FlinkDeployment> ctx) {
+        // A session cluster has no job of its own
+        var rs = ctx.getResource().getStatus().getReconciliationStatus();
+        if (rs.getState() == ReconciliationState.DEPLOYED) {
+            rs.markReconciledSpecAsStable();
         }
     }
 }

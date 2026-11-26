@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.FlinkResourceException;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
@@ -92,6 +93,85 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 .getFlinkConfiguration()
                 .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
         deployment.getStatus().getJobStatus().setJobId(jobId);
+    }
+
+    @Test
+    public void observeRestApiNotAnswering() throws Exception {
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        // The port accepts connections but the REST API never answers
+        flinkService.setRestApiAvailable(false);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        for (int i = 0; i < 3; i++) {
+            observer.observe(deployment, readyContext);
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                    deployment.getStatus().getJobManagerDeploymentStatus());
+            assertNull(deployment.getStatus().getError());
+            assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
+            assertTrue(deployment.getStatus().getClusterInfo().isEmpty());
+        }
+        assertTrue(
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .isEmpty());
+
+        // The pod dies while we wait for the REST API: the Kubernetes side is re-observed
+        flinkService.setPortReady(false);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        flinkService.setPortReady(true);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        // The REST API answers: READY and the job observed in the same loop
+        flinkService.setRestApiAvailable(true);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                deployment.getStatus().getReconciliationStatus().getLastReconciledSpec(),
+                deployment.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertThat(deployment.getStatus().getClusterInfo())
+                .containsAllEntriesOf(TestingFlinkService.CLUSTER_INFO);
+
+        // The REST API stops answering while the pod stays up
+        flinkService.setRestApiAvailable(false);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RECONCILING,
+                deployment.getStatus().getJobStatus().getState());
+
+        flinkService.setRestApiAvailable(true);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                deployment.getStatus().getJobStatus().getState());
     }
 
     @Test
@@ -163,8 +243,13 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertTrue(deployment.getStatus().getClusterInfo().isEmpty());
 
         // Stable ready
+        flinkService.setStateSize(123L);
         observer.observe(deployment, readyContext);
-        assertEquals(TestingFlinkService.CLUSTER_INFO, deployment.getStatus().getClusterInfo());
+        assertThat(deployment.getStatus().getClusterInfo())
+                .containsAllEntriesOf(TestingFlinkService.CLUSTER_INFO)
+                .containsKeys(
+                        AbstractFlinkService.FIELD_NAME_TOTAL_CPU,
+                        AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
@@ -182,6 +267,9 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
                 deployment.getStatus().getJobStatus().getState());
+
+        assertThat(deployment.getStatus().getClusterInfo())
+                .containsEntry(AbstractFlinkService.FIELD_NAME_STATE_SIZE, "123");
 
         assertEquals(
                 deployment.getMetadata().getName(),
