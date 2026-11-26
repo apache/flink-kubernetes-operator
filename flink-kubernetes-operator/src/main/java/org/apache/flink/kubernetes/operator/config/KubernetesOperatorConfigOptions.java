@@ -843,6 +843,14 @@ public class KubernetesOperatorConfigOptions {
                                     + "Changing this requires an operator restart.");
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
+    public static final ConfigOption<MemorySize> OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE =
+            operatorConfig("events.exceptions.max-response-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(10))
+                    .withDescription(
+                            "Maximum size of the exception history that the operator fetches from the JobManager to emit JobException events. A smaller rest.client.max-content-length still applies. A larger response is not read, and a JobExceptionHistoryTooLarge event reports that instead.");
+
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
             operatorConfig("ingress.manage")
                     .booleanType()

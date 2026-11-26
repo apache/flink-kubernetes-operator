@@ -123,6 +123,12 @@
             <td>Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.events.exceptions.max-response-size</h5></td>
+            <td style="word-wrap: break-word;">10 mb</td>
+            <td>MemorySize</td>
+            <td>Maximum size of the exception history that the operator fetches from the JobManager to emit JobException events. A smaller rest.client.max-content-length still applies. A larger response is not read, and a JobExceptionHistoryTooLarge event reports that instead.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.events.exceptions.stacktrace.max.length</h5></td>
             <td style="word-wrap: break-word;">2048</td>
             <td>Integer</td>

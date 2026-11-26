@@ -26,6 +26,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -155,6 +156,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean throwCheckpointingDisabledError = false;
     @Setter private Throwable jobFailedErr;
     @Getter private int requestedMaxExceptions;
+    @Getter private MemorySize requestedMaxResponseSize;
+    @Setter private Exception jobExceptionsFailure;
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -340,8 +343,14 @@ public class TestingFlinkService extends AbstractFlinkService {
             AbstractFlinkResource resource,
             JobID jobId,
             int maxExceptions,
-            Configuration observeConfig) {
+            MemorySize maxResponseSize,
+            Configuration observeConfig)
+            throws Exception {
         requestedMaxExceptions = maxExceptions;
+        requestedMaxResponseSize = maxResponseSize;
+        if (jobExceptionsFailure != null) {
+            throw jobExceptionsFailure;
+        }
         return jobExceptionsMap.getOrDefault(jobId, null);
     }
 

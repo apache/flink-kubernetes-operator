@@ -20,11 +20,14 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -33,6 +36,8 @@ import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.K8sAnnotationsSanitizer;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
+
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +52,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+import static org.apache.flink.util.ExceptionUtils.findThrowable;
 
 /** An observer to observe the job status. */
 public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
@@ -123,10 +129,30 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
             // One more entry than can be reported, so that a truncated history is still detected
             int maxExceptions = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, maxEvents) + 1);
-            var history =
-                    ctx.getFlinkService()
-                            .getJobExceptions(
-                                    resource, jobId, maxExceptions, ctx.getObserveConfig());
+            // A smaller REST client limit in the Flink configuration still applies
+            var maxResponseSize = operatorConfig.getReportedExceptionEventsMaxResponseSize();
+            int clientMaxContentLength =
+                    ctx.getObserveConfig().get(RestOptions.CLIENT_MAX_CONTENT_LENGTH);
+            if (clientMaxContentLength < maxResponseSize.getBytes()) {
+                maxResponseSize = new MemorySize(clientMaxContentLength);
+            }
+            JobExceptionsInfoWithHistory history;
+            try {
+                history =
+                        ctx.getFlinkService()
+                                .getJobExceptions(
+                                        resource,
+                                        jobId,
+                                        maxExceptions,
+                                        maxResponseSize,
+                                        ctx.getObserveConfig());
+            } catch (Exception e) {
+                if (findThrowable(e, TooLongFrameException.class).isEmpty()) {
+                    throw e;
+                }
+                reportExceptionHistoryTooLarge(ctx, maxResponseSize);
+                return;
+            }
 
             if (history == null || history.getExceptionHistory() == null) {
                 return;
@@ -204,6 +230,25 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         } catch (Exception e) {
             LOG.warn("Failed to fetch JobManager exception info.", e);
         }
+    }
+
+    private void reportExceptionHistoryTooLarge(
+            FlinkResourceContext<R> ctx, MemorySize maxResponseSize) {
+        // A JobException event would mark the exceptions up to its time as reported after an
+        // operator restart
+        eventRecorder.triggerEventOnce(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.JobExceptionHistoryTooLarge,
+                String.format(
+                        "The exception history of the job is larger than %s, the smaller of %s and %s, so its exceptions are not reported.",
+                        maxResponseSize,
+                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE
+                                .key(),
+                        RestOptions.CLIENT_MAX_CONTENT_LENGTH.key()),
+                EventRecorder.Component.Job,
+                EventRecorder.Reason.JobExceptionHistoryTooLarge.name(),
+                ctx.getKubernetesClient());
     }
 
     private void emitJobManagerExceptionEvent(

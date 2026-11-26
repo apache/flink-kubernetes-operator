@@ -82,6 +82,7 @@ public class FlinkOperatorConfiguration {
     int reportedExceptionEventsMaxCount;
     int reportedExceptionEventsMaxStackTraceLength;
     int reportedExceptionEventsMaxStackTraceLines;
+    MemorySize reportedExceptionEventsMaxResponseSize;
     boolean manageIngress;
     Duration jobSubmissionTimeout;
     List<String> jarUriAllowedSchemes;
@@ -216,6 +217,9 @@ public class FlinkOperatorConfiguration {
         int reportedExceptionEventsMaxStackTraceLines =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES);
+        MemorySize reportedExceptionEventsMaxResponseSize =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE);
 
         boolean manageIngress =
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_MANAGE_INGRESS);
@@ -272,6 +276,7 @@ public class FlinkOperatorConfiguration {
                 reportedExceptionEventsMaxCount,
                 reportedExceptionEventsMaxStackTraceLength,
                 reportedExceptionEventsMaxStackTraceLines,
+                reportedExceptionEventsMaxResponseSize,
                 manageIngress,
                 jobSubmissionTimeout,
                 jarUriAllowedSchemes,

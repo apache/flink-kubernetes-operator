@@ -26,6 +26,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -52,6 +53,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.checkpoint.CheckpointStatsStatus;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.RestClient;
@@ -97,8 +99,10 @@ import org.apache.flink.util.concurrent.Executors;
 import org.apache.flink.util.function.TriFunction;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameException;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
+import com.sun.net.httpserver.HttpServer;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -127,6 +131,7 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -150,7 +155,9 @@ import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
+import static org.apache.flink.util.ExceptionUtils.findThrowable;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -1571,7 +1578,11 @@ public class AbstractFlinkServiceTest {
 
         var jobExceptions =
                 flinkService.getJobExceptions(
-                        TestUtils.buildApplicationCluster(), new JobID(), 10, new Configuration());
+                        TestUtils.buildApplicationCluster(),
+                        new JobID(),
+                        10,
+                        MemorySize.ofMebiBytes(10),
+                        new Configuration());
         assertNotNull(jobExceptions);
         assertEquals(1, jobExceptions.getExceptionHistory().getEntries().size());
     }
@@ -1597,9 +1608,83 @@ public class AbstractFlinkServiceTest {
                         });
 
         flinkService.getJobExceptions(
-                TestUtils.buildApplicationCluster(), new JobID(), 7, new Configuration());
+                TestUtils.buildApplicationCluster(),
+                new JobID(),
+                7,
+                MemorySize.ofMebiBytes(10),
+                new Configuration());
 
         assertThat(requestedLimit.get()).containsExactly(7);
+    }
+
+    @Test
+    void getJobExceptionsRejectsResponseLargerThanMaxResponseSize() throws Exception {
+        var history =
+                new JobExceptionsInfoWithHistory(
+                        new JobExceptionsInfoWithHistory.JobExceptionHistory(
+                                List.of(
+                                        new JobExceptionsInfoWithHistory.RootExceptionInfo(
+                                                "java.lang.RuntimeException",
+                                                "x".repeat(4096),
+                                                1L,
+                                                Map.of(),
+                                                List.of())),
+                                false));
+        byte[] response = RestMapperUtils.getStrictObjectMapper().writeValueAsBytes(history);
+        var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext(
+                "/",
+                exchange -> {
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, response.length);
+                    try (var body = exchange.getResponseBody()) {
+                        body.write(response);
+                    }
+                });
+        server.start();
+        try {
+            String address = "http://localhost:" + server.getAddress().getPort();
+            var flinkService =
+                    new TestingService(null) {
+                        @Override
+                        public RestClusterClient<String> getClusterClient(Configuration config)
+                                throws Exception {
+                            return new RestClusterClient<>(
+                                    config,
+                                    "test-cluster",
+                                    (c, e) -> new StandaloneClientHAServices(address));
+                        }
+                    };
+            var resource = TestUtils.buildApplicationCluster();
+
+            for (var maxResponseSize : List.of(MemorySize.ZERO, MemorySize.parse("1kb"))) {
+                assertThatThrownBy(
+                                () ->
+                                        flinkService.getJobExceptions(
+                                                resource,
+                                                new JobID(),
+                                                10,
+                                                maxResponseSize,
+                                                new Configuration()))
+                        .satisfies(
+                                e ->
+                                        assertThat(findThrowable(e, TooLongFrameException.class))
+                                                .isPresent());
+            }
+            assertThat(
+                            flinkService
+                                    .getJobExceptions(
+                                            resource,
+                                            new JobID(),
+                                            10,
+                                            MemorySize.parse("64kb"),
+                                            new Configuration())
+                                    .getExceptionHistory()
+                                    .getEntries())
+                    .hasSize(1);
+        } finally {
+            server.stop(0);
+        }
     }
 
     @SneakyThrows
@@ -1636,7 +1721,7 @@ public class AbstractFlinkServiceTest {
         }
 
         @Override
-        public RestClusterClient<String> getClusterClient(Configuration config) {
+        public RestClusterClient<String> getClusterClient(Configuration config) throws Exception {
             return clusterClient;
         }
 
