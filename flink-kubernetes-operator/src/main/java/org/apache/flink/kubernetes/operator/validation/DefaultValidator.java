@@ -25,12 +25,15 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
@@ -77,6 +80,12 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultValidator.class);
 
+    /**
+     * Earliest Flink version that ships the {@code bin/minicluster.sh} launcher that {@link
+     * FlinkMiniCluster} resources are run with. Earlier images cannot run a MiniCluster.
+     */
+    @VisibleForTesting static final FlinkVersion MINICLUSTER_MIN_VERSION = FlinkVersion.v2_4;
+
     private static final Pattern DEPLOYMENT_NAME_PATTERN =
             Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
@@ -101,13 +110,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         Map<String, String> effectiveConfig =
-                configManager
-                        .getDefaultConfig(
-                                deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
-                        .toMap();
-        if (spec.getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(spec.getFlinkConfiguration().asFlatMap());
-        }
+                getEffectiveConfig(
+                        deployment.getMetadata().getNamespace(),
+                        spec.getFlinkVersion(),
+                        spec.getFlinkConfiguration());
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
                 validateFlinkVersion(deployment),
@@ -125,6 +131,18 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
 
+    private Map<String, String> getEffectiveConfig(
+            String namespace,
+            FlinkVersion flinkVersion,
+            @Nullable ConfigObjectNode flinkConfiguration) {
+        Map<String, String> effectiveConfig =
+                configManager.getDefaultConfig(namespace, flinkVersion).toMap();
+        if (flinkConfiguration != null) {
+            effectiveConfig.putAll(flinkConfiguration.asFlatMap());
+        }
+        return effectiveConfig;
+    }
+
     @SafeVarargs
     private static Optional<String> firstPresent(Optional<String>... errOpts) {
         for (Optional<String> opt : errOpts) {
@@ -136,19 +154,36 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateDeploymentName(String name) {
+        return validateResourceName(CrdConstants.KIND_FLINK_DEPLOYMENT, name);
+    }
+
+    private Optional<String> validateResourceName(String kind, String name) {
         Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
         if (!matcher.matches()) {
             return Optional.of(
                     String.format(
-                            "The FlinkDeployment name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
-                            name));
+                            "The %s name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
+                            kind, name));
         }
         return Optional.empty();
     }
 
     private Optional<String> validateFlinkVersion(FlinkDeployment deployment) {
         var spec = deployment.getSpec();
-        var version = spec.getFlinkVersion();
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        return validateFlinkVersion(
+                spec.getFlinkVersion(),
+                spec.getJob(),
+                lastReconciledSpec == null ? null : lastReconciledSpec.getFlinkVersion(),
+                lastReconciledSpec == null ? null : lastReconciledSpec.getJob());
+    }
+
+    private Optional<String> validateFlinkVersion(
+            @Nullable FlinkVersion version,
+            @Nullable JobSpec job,
+            @Nullable FlinkVersion lastReconciledVersion,
+            @Nullable JobSpec lastReconciledJob) {
         if (version == null) {
             return Optional.of("Flink Version must be defined.");
         }
@@ -158,17 +193,12 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "Flink version " + version + " is not supported by this operator version");
         }
 
-        var lastReconciledSpec =
-                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
-
-        if (lastReconciledSpec != null
-                && lastReconciledSpec.getJob() != null
-                && spec.getJob() != null
-                && spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
-            var lastJob = lastReconciledSpec.getJob();
-            if (lastJob.getState() == JobState.SUSPENDED
-                    && lastJob.getUpgradeMode() == UpgradeMode.LAST_STATE
-                    && lastReconciledSpec.getFlinkVersion() != spec.getFlinkVersion()) {
+        if (lastReconciledJob != null
+                && job != null
+                && job.getUpgradeMode() != UpgradeMode.STATELESS) {
+            if (lastReconciledJob.getState() == JobState.SUSPENDED
+                    && lastReconciledJob.getUpgradeMode() == UpgradeMode.LAST_STATE
+                    && lastReconciledVersion != version) {
                 return Optional.of(
                         "Changing flinkVersion after last-state suspend is not allowed. Restore your cluster with the current flinkVersion and perform the version upgrade afterwards.");
             }
@@ -597,8 +627,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "Cannot switch from standalone kubernetes to native kubernetes cluster");
         }
 
-        JobSpec oldJob = oldSpec.getJob();
-        JobSpec newJob = newSpec.getJob();
+        return validateSavepointRedeployNonce(oldSpec.getJob(), newSpec.getJob());
+    }
+
+    private static Optional<String> validateSavepointRedeployNonce(
+            @Nullable JobSpec oldJob, @Nullable JobSpec newJob) {
         if (oldJob != null && newJob != null) {
             if (newJob.getSavepointRedeployNonce() != null
                     && !newJob.getSavepointRedeployNonce()
@@ -611,6 +644,133 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
 
         return Optional.empty();
+    }
+
+    // validate MiniCluster
+
+    @Override
+    public Optional<String> validateMiniCluster(FlinkMiniCluster miniCluster) {
+        var spec = miniCluster.getSpec();
+        var name = miniCluster.getMetadata().getName();
+        var namespace = miniCluster.getMetadata().getNamespace();
+        Map<String, String> effectiveConfig =
+                getEffectiveConfig(namespace, spec.getFlinkVersion(), spec.getFlinkConfiguration());
+        return firstPresent(
+                validateResourceName(CrdConstants.KIND_FLINK_MINI_CLUSTER, name),
+                validateFlinkVersion(miniCluster),
+                validateJobNotEmpty(spec.getJob()),
+                validateMiniClusterResources(spec.getResources()),
+                validateFlinkDeploymentConfig(effectiveConfig),
+                validateIngress(spec.getIngress(), name, namespace),
+                validateLogConfig(spec.getLogConfiguration()),
+                validateJobSpec(spec.getJob(), null, effectiveConfig),
+                validateMiniClusterParallelism(spec.getJob(), effectiveConfig),
+                validateMiniClusterAutoscaler(spec.getFlinkConfiguration()),
+                validateSpecChange(miniCluster),
+                validateServiceAccount(spec.getServiceAccount()));
+    }
+
+    private Optional<String> validateFlinkVersion(FlinkMiniCluster miniCluster) {
+        var spec = miniCluster.getSpec();
+        var lastReconciledSpec =
+                miniCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        var error =
+                validateFlinkVersion(
+                        spec.getFlinkVersion(),
+                        spec.getJob(),
+                        lastReconciledSpec == null ? null : lastReconciledSpec.getFlinkVersion(),
+                        lastReconciledSpec == null ? null : lastReconciledSpec.getJob());
+        if (error.isPresent()) {
+            return error;
+        }
+        if (!spec.getFlinkVersion().isEqualOrNewer(MINICLUSTER_MIN_VERSION)) {
+            return Optional.of(
+                    String.format(
+                            "%s requires Flink version %s or newer, but %s was requested",
+                            CrdConstants.KIND_FLINK_MINI_CLUSTER,
+                            MINICLUSTER_MIN_VERSION,
+                            spec.getFlinkVersion()));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> validateMiniClusterParallelism(
+            @Nullable JobSpec job, Map<String, String> effectiveConfig) {
+        if (job == null) {
+            return Optional.empty();
+        }
+        // A MiniCluster runs a single TaskManager, so unlike a FlinkDeployment there is no
+        // way to add TaskManagers to provide the slots that the job parallelism needs. When the
+        // slot count is not configured, the operator sizes it from the job parallelism, so only
+        // an explicitly configured slot count can conflict with it.
+        final var conf = Configuration.fromMap(effectiveConfig);
+        if (!conf.contains(TaskManagerOptions.NUM_TASK_SLOTS)) {
+            return Optional.empty();
+        }
+        final int slots;
+        try {
+            slots = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
+        } catch (IllegalArgumentException iae) {
+            return Optional.of(
+                    String.format(
+                            "Invalid value for %s: %s",
+                            TaskManagerOptions.NUM_TASK_SLOTS.key(), iae.getMessage()));
+        }
+        if (job.getParallelism() > slots) {
+            return Optional.of(
+                    String.format(
+                            "Job parallelism (%d) must not exceed the MiniCluster task slots (%s=%d)",
+                            job.getParallelism(), TaskManagerOptions.NUM_TASK_SLOTS.key(), slots));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> validateMiniClusterAutoscaler(
+            @Nullable ConfigObjectNode flinkConfiguration) {
+        if (flinkConfiguration == null) {
+            return Optional.empty();
+        }
+        // The autoscaler does not run for MiniClusters, so other autoscaler options are not
+        // validated. Only the resource's own configuration is checked, so that an operator-wide
+        // default enabling the autoscaler for FlinkDeployments does not reject every MiniCluster.
+        final boolean autoscalerEnabled;
+        try {
+            autoscalerEnabled =
+                    flinkConfiguration.asConfiguration().get(AutoScalerOptions.AUTOSCALER_ENABLED);
+        } catch (IllegalArgumentException iae) {
+            return Optional.of(
+                    String.format(
+                            "Invalid value for %s: %s",
+                            AutoScalerOptions.AUTOSCALER_ENABLED.key(), iae.getMessage()));
+        }
+        if (autoscalerEnabled) {
+            return Optional.of(
+                    String.format(
+                            "The autoscaler is not supported for %s resources, %s must not be enabled",
+                            CrdConstants.KIND_FLINK_MINI_CLUSTER,
+                            AutoScalerOptions.AUTOSCALER_ENABLED.key()));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateMiniClusterResources(
+            @Nullable ResourceRequirements resources) {
+        // The MiniCluster memory configuration is derived from the container memory.
+        // Without it there is nothing to size the JVM against.
+        if (!isMemoryDefined(resources)) {
+            return Optional.of(
+                    "MiniCluster memory must be defined using spec.resources.requests.memory or spec.resources.limits.memory");
+        }
+        return validateResourceRequirements("MiniCluster", resources);
+    }
+
+    private Optional<String> validateSpecChange(FlinkMiniCluster miniCluster) {
+        var reconciliationStatus = miniCluster.getStatus().getReconciliationStatus();
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
+            return Optional.empty();
+        }
+        var oldSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        return validateSavepointRedeployNonce(oldSpec.getJob(), miniCluster.getSpec().getJob());
     }
 
     // validate session job
@@ -667,7 +827,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateSessionJobOnly(FlinkSessionJob sessionJob) {
         return firstPresent(
                 validateDeploymentName(sessionJob.getSpec().getDeploymentName()),
-                validateJobNotEmpty(sessionJob),
+                validateJobNotEmpty(sessionJob.getSpec().getJob()),
                 validateSpecChange(sessionJob),
                 validateSessionJobJarURI(sessionJob));
     }
@@ -675,15 +835,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateSessionJobWithCluster(
             FlinkSessionJob sessionJob, FlinkDeployment sessionCluster) {
         Map<String, String> effectiveConfig =
-                configManager
-                        .getDefaultConfig(
-                                sessionJob.getMetadata().getNamespace(),
-                                sessionCluster.getSpec().getFlinkVersion())
-                        .toMap();
-        if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
-            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration().asFlatMap());
-        }
-
+                getEffectiveConfig(
+                        sessionJob.getMetadata().getNamespace(),
+                        sessionCluster.getSpec().getFlinkVersion(),
+                        sessionCluster.getSpec().getFlinkConfiguration());
         if (sessionJob.getSpec().getFlinkConfiguration() != null) {
             effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration().asFlatMap());
         }
@@ -695,8 +850,8 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
 
-    private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
-        if (sessionJob.getSpec().getJob() == null) {
+    private static Optional<String> validateJobNotEmpty(@Nullable JobSpec job) {
+        if (job == null) {
             return Optional.of("The job spec should not be empty");
         }
         return Optional.empty();
