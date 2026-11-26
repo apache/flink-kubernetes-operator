@@ -24,11 +24,13 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.ConfigObjectNode;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkMiniClusterSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -66,6 +68,7 @@ public class BaseTestUtils {
     public static final String TEST_NAMESPACE = "flink-operator-test";
     public static final String TEST_DEPLOYMENT_NAME = "test-cluster";
     public static final String TEST_SESSION_JOB_NAME = "test-session-job";
+    public static final String TEST_MINI_CLUSTER_NAME = "test-minicluster";
     public static final String SERVICE_ACCOUNT = "flink-operator";
     public static final String FLINK_VERSION = "latest";
     public static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
@@ -175,6 +178,64 @@ public class BaseTestUtils {
 
     public static FlinkSessionJob buildSessionJob(JobState state) {
         return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE, state);
+    }
+
+    public static FlinkMiniCluster buildMiniCluster() {
+        return buildMiniCluster(FlinkVersion.v2_4, JobState.RUNNING);
+    }
+
+    public static FlinkMiniCluster buildMiniCluster(FlinkVersion version, JobState state) {
+        return buildMiniCluster(TEST_MINI_CLUSTER_NAME, TEST_NAMESPACE, version, state);
+    }
+
+    public static FlinkMiniCluster buildMiniCluster(
+            String name, String namespace, FlinkVersion version, JobState state) {
+        FlinkMiniCluster miniCluster = new FlinkMiniCluster();
+        miniCluster.setMetadata(
+                new ObjectMetaBuilder()
+                        .withName(name)
+                        .withNamespace(namespace)
+                        .withCreationTimestamp(Instant.now().toString())
+                        .withUid(UUID.randomUUID().toString())
+                        .withGeneration(1L)
+                        .withResourceVersion("1")
+                        .build());
+        miniCluster.setSpec(getTestFlinkMiniClusterSpec(version, state));
+        miniCluster.setStatus(miniCluster.initStatus());
+        return miniCluster;
+    }
+
+    public static FlinkMiniClusterSpec getTestFlinkMiniClusterSpec(
+            FlinkVersion version, JobState state) {
+        ConfigObjectNode conf = new ConfigObjectNode();
+        conf.put(
+                HighAvailabilityOptions.HA_MODE.key(),
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
+        conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
+        conf.put(
+                CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
+                "file:///test/test-checkpoint-dir");
+
+        return FlinkMiniClusterSpec.builder()
+                .image(IMAGE)
+                .imagePullPolicy(IMAGE_POLICY)
+                .serviceAccount(SERVICE_ACCOUNT)
+                .flinkVersion(version)
+                .flinkConfiguration(conf)
+                .resources(
+                        new ResourceRequirementsBuilder()
+                                .addToRequests(CrdConstants.CPU, new Quantity("1"))
+                                .addToRequests(CrdConstants.MEMORY, new Quantity("2Gi"))
+                                .build())
+                .job(
+                        JobSpec.builder()
+                                .jarURI(SAMPLE_JAR)
+                                .parallelism(1)
+                                .upgradeMode(UpgradeMode.STATELESS)
+                                .state(state)
+                                .build())
+                .build();
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
