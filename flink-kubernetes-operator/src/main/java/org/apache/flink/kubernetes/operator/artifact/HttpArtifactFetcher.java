@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -27,32 +28,62 @@ import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocketFactory;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Authenticator;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.NoRouteToHostException;
+import java.net.PasswordAuthentication;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketException;
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Download the jar from the http resource. The scheme allowlist, restricted-host policy, fetch
  * timeouts and size cap come from the trusted operator configuration passed to {@link #fetch}, not
  * the (possibly tenant-influenced) {@code flinkConfiguration}, which only supplies the HTTP
- * headers.
+ * headers. When the restricted-host policy is enabled and the connection is direct, each hop
+ * connects to the address that passed the policy, not to whatever the host resolves to when the
+ * connection is opened.
  */
 public class HttpArtifactFetcher {
 
     public static final Logger LOG = LoggerFactory.getLogger(HttpArtifactFetcher.class);
-    public static final HttpArtifactFetcher INSTANCE = new HttpArtifactFetcher();
+    public static final HttpArtifactFetcher INSTANCE =
+            new HttpArtifactFetcher(HttpArtifactFetcher::validateHop);
 
     // Maximum number of redirects to follow before giving up.
     private static final int MAX_REDIRECTS = 5;
 
     // Chunk size used when streaming the response body to disk.
     private static final int COPY_BUFFER_SIZE = 8 * 1024;
+
+    private static final String UNSUPPORTED_SOCKET = "Only the pinned socket path is supported";
+
+    private final UriValidator uriValidator;
+
+    @VisibleForTesting
+    HttpArtifactFetcher(UriValidator uriValidator) {
+        this.uriValidator = uriValidator;
+    }
 
     public File fetch(
             String uri,
@@ -83,6 +114,7 @@ public class HttpArtifactFetcher {
         URL originalUrl = null;
         URL currentUrl;
         HttpURLConnection conn;
+        Proxy selectedProxy;
         int redirects = 0;
         while (true) {
             if (System.currentTimeMillis() > deadline) {
@@ -93,22 +125,29 @@ public class HttpArtifactFetcher {
                                 + uri
                                 + "'");
             }
-            var validationError =
-                    JarUriValidationUtils.validateJarURI(
-                            currentUri, allowedSchemes, disallowRestrictedHosts);
-            if (validationError.isPresent()) {
-                throw new IOException(
-                        "Refusing to fetch artifact from '"
-                                + currentUri
-                                + "': "
-                                + validationError.get());
-            }
+            var pinnedAddress =
+                    uriValidator.validate(currentUri, allowedSchemes, disallowRestrictedHosts);
 
             currentUrl = new URL(currentUri);
             if (originalUrl == null) {
                 originalUrl = currentUrl;
             }
-            conn = (HttpURLConnection) currentUrl.openConnection();
+            selectedProxy = null;
+            if (pinnedAddress.isEmpty()) {
+                conn = (HttpURLConnection) currentUrl.openConnection();
+            } else {
+                // Only direct connections are pinned. An HTTP proxy resolves the host itself; with
+                // a SOCKS proxy the JDK resolves it locally and the connection is not pinned. Only
+                // the selector's first choice is used: the JDK would move on to the next one if a
+                // proxy fails, and a direct fallback would connect by hostname.
+                var proxy = selectProxy(currentUri);
+                if (proxy.type() == Proxy.Type.DIRECT) {
+                    conn = openPinnedConnection(currentUrl, pinnedAddress.get());
+                } else {
+                    selectedProxy = proxy;
+                    conn = (HttpURLConnection) currentUrl.openConnection(proxy);
+                }
+            }
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(socketTimeoutMillis);
             conn.setReadTimeout(socketTimeoutMillis);
@@ -123,6 +162,9 @@ public class HttpArtifactFetcher {
             // is streamed below. This covers getResponseCode() and the redirect handling throwing.
             boolean keepConnection = false;
             try {
+                if (selectedProxy != null) {
+                    connectThroughProxy(conn, currentUri, selectedProxy);
+                }
                 int status = conn.getResponseCode();
                 if (!isRedirect(status)) {
                     keepConnection = true;
@@ -263,5 +305,168 @@ public class HttpArtifactFetcher {
                 || status == HttpURLConnection.HTTP_SEE_OTHER
                 || status == 307 // Temporary Redirect
                 || status == 308; // Permanent Redirect
+    }
+
+    @VisibleForTesting
+    static Optional<InetAddress> validateHop(
+            String uri, Collection<String> allowedSchemes, boolean disallowRestrictedHosts)
+            throws IOException {
+        var validation =
+                JarUriValidationUtils.validateAndResolve(
+                        uri, allowedSchemes, disallowRestrictedHosts);
+        if (validation.getError().isPresent()) {
+            throw new IOException(
+                    "Refusing to fetch artifact from '"
+                            + uri
+                            + "': "
+                            + validation.getError().get());
+        }
+        return validation.getCheckedAddress();
+    }
+
+    private static Proxy selectProxy(String uri) {
+        var selector = ProxySelector.getDefault();
+        var proxies = selector == null ? List.<Proxy>of() : selector.select(URI.create(uri));
+        return proxies.isEmpty() ? Proxy.NO_PROXY : proxies.get(0);
+    }
+
+    // The JDK does not report a proxy passed to openConnection(Proxy) to the selector when it
+    // fails. Only failures to reach the proxy are reported, not those of the tunnel behind it.
+    private static void connectThroughProxy(HttpURLConnection conn, String uri, Proxy proxy)
+            throws IOException {
+        try {
+            conn.connect();
+        } catch (ConnectException | NoRouteToHostException e) {
+            var selector = ProxySelector.getDefault();
+            if (selector != null) {
+                selector.connectFailed(URI.create(uri), proxy.address(), e);
+            }
+            throw e;
+        }
+    }
+
+    private static HttpURLConnection openPinnedConnection(URL url, InetAddress checkedAddress)
+            throws IOException {
+        // An address from getAllByName() keeps the hostname, which the JDK would resolve again
+        // wherever it connects by host string, so connect by the raw IP only.
+        var address = InetAddress.getByAddress(checkedAddress.getAddress());
+        if ("https".equalsIgnoreCase(url.getProtocol())) {
+            // The URL keeps the hostname, so Host, SNI and the certificate check still use it; only
+            // the TCP socket goes to the checked address.
+            var conn = (HttpsURLConnection) url.openConnection(Proxy.NO_PROXY);
+            conn.setSSLSocketFactory(
+                    new PinnedSSLSocketFactory(conn.getSSLSocketFactory(), address));
+            return conn;
+        }
+        // Plain HTTP has no socket hook, so the request goes to the address as if it were a proxy:
+        // in absolute form, which servers must accept (RFC 9112, section 3.2.2), with Host still
+        // taken from the URL. The absolute form would carry any userinfo, so it is dropped. The
+        // connection gets its own authenticator, and with it its own credential cache, so a 407
+        // from
+        // the origin cannot obtain proxy credentials.
+        var port = url.getPort() == -1 ? url.getDefaultPort() : url.getPort();
+        var withoutUserInfo =
+                new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile());
+        var conn =
+                (HttpURLConnection)
+                        withoutUserInfo.openConnection(
+                                new Proxy(Proxy.Type.HTTP, new InetSocketAddress(address, port)));
+        conn.setAuthenticator(OriginOnlyAuthenticator.INSTANCE);
+        return conn;
+    }
+
+    private static final class OriginOnlyAuthenticator extends Authenticator {
+        private static final OriginOnlyAuthenticator INSTANCE = new OriginOnlyAuthenticator();
+
+        @Override
+        protected PasswordAuthentication getPasswordAuthentication() {
+            if (getRequestorType() != RequestorType.SERVER) {
+                return null;
+            }
+            return Authenticator.requestPasswordAuthentication(
+                    Authenticator.getDefault(),
+                    getRequestingHost(),
+                    getRequestingSite(),
+                    getRequestingPort(),
+                    getRequestingProtocol(),
+                    getRequestingPrompt(),
+                    getRequestingScheme(),
+                    getRequestingURL(),
+                    RequestorType.SERVER);
+        }
+    }
+
+    /**
+     * Validates one hop of a fetch, throwing if it is rejected, and returns the address to connect
+     * to, or empty if the hop is not pinned.
+     */
+    @FunctionalInterface
+    interface UriValidator {
+        Optional<InetAddress> validate(
+                String uri, Collection<String> allowedSchemes, boolean disallowRestrictedHosts)
+                throws IOException;
+    }
+
+    // HttpsClient creates the socket with the no-arg createSocket() and layers TLS on it with
+    // createSocket(Socket, ...). If layering fails it falls back to createSocket(host, port), which
+    // would bypass the checked address, so that and the other overloads throw.
+    private static final class PinnedSSLSocketFactory extends SSLSocketFactory {
+        private final SSLSocketFactory delegate;
+        private final InetAddress address;
+
+        PinnedSSLSocketFactory(SSLSocketFactory delegate, InetAddress address) {
+            this.delegate = delegate;
+            this.address = address;
+        }
+
+        @Override
+        public Socket createSocket() {
+            return new Socket(Proxy.NO_PROXY) {
+                @Override
+                public void connect(SocketAddress endpoint, int timeout) throws IOException {
+                    var port = ((InetSocketAddress) endpoint).getPort();
+                    super.connect(new InetSocketAddress(address, port), timeout);
+                }
+            };
+        }
+
+        @Override
+        public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+                throws IOException {
+            return delegate.createSocket(s, host, port, autoClose);
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public Socket createSocket(String host, int port) throws IOException {
+            throw new SocketException(UNSUPPORTED_SOCKET);
+        }
+
+        @Override
+        public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+                throws IOException {
+            throw new SocketException(UNSUPPORTED_SOCKET);
+        }
+
+        @Override
+        public Socket createSocket(InetAddress host, int port) throws IOException {
+            throw new SocketException(UNSUPPORTED_SOCKET);
+        }
+
+        @Override
+        public Socket createSocket(
+                InetAddress host, int port, InetAddress localAddress, int localPort)
+                throws IOException {
+            throw new SocketException(UNSUPPORTED_SOCKET);
+        }
     }
 }
