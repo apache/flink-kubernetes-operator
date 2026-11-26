@@ -284,7 +284,7 @@ public class EventRecorder {
      * operator config would otherwise fail the creation of every event.
      */
     @VisibleForTesting
-    static Map<String, String> validateLabels(Map<String, String> labels) {
+    static Map<String, String> dropInvalidLabels(Map<String, String> labels) {
         var valid = new HashMap<String, String>();
         labels.forEach(
                 (key, value) -> {
@@ -321,7 +321,7 @@ public class EventRecorder {
             Configuration operatorConfig) {
 
         var commonLabels =
-                validateLabels(
+                dropInvalidLabels(
                         operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EVENT_LABELS));
         if (!commonLabels.isEmpty()) {
             LOG.info("Adding labels {} to all operator generated events", commonLabels);
