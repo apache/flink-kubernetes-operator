@@ -215,7 +215,13 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
+        deployApplicationCluster(
+                jobSpec, prepareApplicationClusterDeployment(conf, requireHaMetadata));
+    }
 
+    /** Prepares the HA metadata and configuration for deploying an application cluster. */
+    protected Configuration prepareApplicationClusterDeployment(
+            Configuration conf, boolean requireHaMetadata) throws Exception {
         // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
         // the newly changed job config (e.g. parallelism) could take effect
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
@@ -230,7 +236,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             validateHaMetadataExists(conf);
         }
 
-        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+        return removeOperatorConfigs(conf);
     }
 
     @Override
@@ -328,13 +334,24 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    /**
+     * Stops the job of a resource that owns the cluster it runs in, deleting the cluster where the
+     * suspend mode requires it.
+     *
+     * @param resource Resource that owns the cluster
+     * @param suspendMode How to stop the job
+     * @param conf Observe configuration of the resource
+     * @param deleteCluster Whether to delete the cluster, whatever the suspend mode
+     * @return Result of the cancellation, with the savepoint taken if any
+     * @throws Exception If the job could not be stopped
+     */
     protected CancelResult cancelJob(
-            FlinkDeployment deployment,
+            AbstractFlinkResource<?, ? extends CommonStatus<?>> resource,
             SuspendMode suspendMode,
             Configuration conf,
             boolean deleteCluster)
             throws Exception {
-        var status = deployment.getStatus();
+        var status = resource.getStatus();
         String savepointPath = null;
         try (var clusterClient = getClusterClient(conf)) {
             switch (suspendMode) {
@@ -359,8 +376,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         if (suspendMode.deleteCluster() || deleteCluster) {
-            deleteClusterDeployment(
-                    deployment.getMetadata(), status, conf, suspendMode.deleteHaMeta());
+            deleteCluster(resource.getMetadata(), status, conf, suspendMode.deleteHaMeta());
         }
 
         status.getJobStatus().setState(JobStatus.FINISHED);
@@ -823,7 +839,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         return new ClusterInfo(clusterInfo, taskManagerReplicas);
     }
 
-    private void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
+    protected void populateFlinkVersion(Configuration conf, Map<String, String> clusterInfo)
             throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
 
@@ -846,7 +862,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private void populateStateSize(
+    protected void populateStateSize(
             Configuration conf, @Nullable String jobId, Map<String, String> clusterInfo)
             throws Exception {
         if (jobId != null) {
@@ -1155,7 +1171,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
+    protected TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(
@@ -1172,7 +1188,19 @@ public abstract class AbstractFlinkService implements FlinkService {
             FlinkDeploymentStatus status,
             Configuration conf,
             boolean deleteHaData) {
+        deleteCluster(meta, status, conf, deleteHaData);
+    }
 
+    /**
+     * Deletes the cluster of a resource that owns the cluster its job runs in.
+     *
+     * @param meta Metadata of the resource
+     * @param status Status of the resource, updated to show the cluster is missing
+     * @param conf Configuration of the cluster
+     * @param deleteHaData Whether to delete the HA metadata too
+     */
+    protected void deleteCluster(
+            ObjectMeta meta, CommonStatus<?> status, Configuration conf, boolean deleteHaData) {
         var namespace = meta.getNamespace();
         var clusterId = meta.getName();
 
@@ -1211,8 +1239,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    protected void updateStatusAfterClusterDeletion(FlinkDeploymentStatus status) {
-        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+    protected void updateStatusAfterClusterDeletion(CommonStatus<?> status) {
+        status.setKubernetesDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         var currentJobState = status.getJobStatus().getState();
         if (currentJobState == null || !currentJobState.isGloballyTerminalState()) {
             status.getJobStatus().setState(JobStatus.FINISHED);

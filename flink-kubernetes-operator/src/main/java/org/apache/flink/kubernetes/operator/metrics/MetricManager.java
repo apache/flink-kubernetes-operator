@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkBlueGreenDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.metrics.lifecycle.BlueGreenLifecycleMetrics;
@@ -64,6 +65,14 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
         return metricManager;
     }
 
+    public static MetricManager<FlinkMiniCluster> createFlinkMiniClusterMetricManager(
+            Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkMiniCluster> metricManager = new MetricManager<>();
+        registerFlinkMiniClusterMetrics(conf, metricGroup, metricManager);
+        registerLifecycleMetrics(conf, metricGroup, metricManager);
+        return metricManager;
+    }
+
     public static MetricManager<FlinkStateSnapshot> createFlinkStateSnapshotMetricManager(
             Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
         MetricManager<FlinkStateSnapshot> metricManager = new MetricManager<>();
@@ -86,6 +95,15 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
             MetricManager<FlinkDeployment> metricManager) {
         if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
             metricManager.register(new FlinkDeploymentMetrics(metricGroup, conf));
+        }
+    }
+
+    private static void registerFlinkMiniClusterMetrics(
+            Configuration conf,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkMiniCluster> metricManager) {
+        if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(new FlinkMiniClusterMetrics(metricGroup, conf));
         }
     }
 

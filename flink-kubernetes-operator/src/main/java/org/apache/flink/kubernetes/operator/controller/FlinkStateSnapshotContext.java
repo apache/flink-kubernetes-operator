@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
@@ -54,7 +55,7 @@ public class FlinkStateSnapshotContext {
     private final Configuration referencedJobObserveConfig = referencedJobObserveConfig();
 
     @Getter(lazy = true)
-    private final FlinkDeployment referencedJobFlinkDeployment = referencedJobFlinkDeployment();
+    private final AbstractFlinkResource<?, ?> referencedJobCluster = referencedJobCluster();
 
     /**
      * @return Operator configuration for this resource.
@@ -65,7 +66,12 @@ public class FlinkStateSnapshotContext {
     }
 
     private Configuration referencedJobObserveConfig() {
-        var flinkDeployment = getReferencedJobFlinkDeployment();
+        var cluster = getReferencedJobCluster();
+        if (cluster instanceof FlinkMiniCluster) {
+            return getConfigManager().getObserveConfig((FlinkMiniCluster) cluster);
+        }
+
+        var flinkDeployment = (FlinkDeployment) cluster;
         return getSecondaryResource()
                 .filter(FlinkSessionJob.class::isInstance)
                 .map(FlinkSessionJob.class::cast)
@@ -79,18 +85,22 @@ public class FlinkStateSnapshotContext {
                 .orElseGet(() -> getConfigManager().getObserveConfig(flinkDeployment));
     }
 
-    private FlinkDeployment referencedJobFlinkDeployment() {
+    private AbstractFlinkResource<?, ?> referencedJobCluster() {
+        var jobReference = getResource().getSpec().getJobReference();
+        Class<? extends AbstractFlinkResource<?, ?>> clusterClass =
+                switch (jobReference.getKind()) {
+                    case FLINK_DEPLOYMENT, FLINK_SESSION_JOB -> FlinkDeployment.class;
+                    case FLINK_MINI_CLUSTER -> FlinkMiniCluster.class;
+                };
         return getJosdkContext()
-                .getSecondaryResource(FlinkDeployment.class)
+                .getSecondaryResource(clusterClass)
                 .orElseThrow(
                         () ->
                                 new RuntimeException(
                                         String.format(
-                                                "Failed to find FlinkDeployment from job reference: %s",
-                                                getResource()
-                                                        .getSpec()
-                                                        .getJobReference()
-                                                        .getName())));
+                                                "Failed to find %s from job reference: %s",
+                                                clusterClass.getSimpleName(),
+                                                jobReference.getName())));
     }
 
     public Optional<AbstractFlinkResource<?, ?>> getSecondaryResource() {
@@ -105,6 +115,10 @@ public class FlinkStateSnapshotContext {
 
         if (JobKind.FLINK_SESSION_JOB.equals(jobKind)) {
             return getJosdkContext().getSecondaryResource(FlinkSessionJob.class).map(r -> r);
+        }
+
+        if (JobKind.FLINK_MINI_CLUSTER.equals(jobKind)) {
+            return getJosdkContext().getSecondaryResource(FlinkMiniCluster.class).map(r -> r);
         }
 
         return Optional.empty();

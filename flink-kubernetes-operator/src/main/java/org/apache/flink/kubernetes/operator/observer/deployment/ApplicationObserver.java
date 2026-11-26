@@ -53,7 +53,7 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
             savepointObserver.observeCheckpointStatus(ctx);
             if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)
                     && !ReconciliationUtils.isJobInTerminalState(ctx.getResource().getStatus())) {
-                clusterHealthObserver.observe(ctx);
+                clusterHealthObserver.observe(ctx, ctx.getResource().getStatus().getClusterInfo());
             }
         }
     }

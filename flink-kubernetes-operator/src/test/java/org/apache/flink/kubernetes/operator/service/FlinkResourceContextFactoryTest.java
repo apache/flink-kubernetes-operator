@@ -19,11 +19,14 @@ package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,6 +71,33 @@ public class FlinkResourceContextFactoryTest {
 
             contextFactory.close();
             assertTrue(contextFactory.clientExecutorService.isShutdown());
+        }
+    }
+
+    @Test
+    public void testExceptionCacheIsSeparateForResourcesOfDifferentKindsWithTheSameName() {
+        try (var configManager = new FlinkConfigManager(new Configuration());
+                var metricGroup = TestUtils.createTestMetricGroup(new Configuration())) {
+            final var contextFactory =
+                    new FlinkResourceContextFactory(configManager, metricGroup, null);
+            final var deployment =
+                    TestUtils.buildApplicationCluster("same-name", TestUtils.TEST_NAMESPACE);
+            final var miniCluster =
+                    TestUtils.buildMiniCluster(
+                            "same-name",
+                            TestUtils.TEST_NAMESPACE,
+                            FlinkVersion.v2_4,
+                            JobState.RUNNING);
+
+            final var deploymentEntry =
+                    contextFactory.getResourceContext(deployment, null).getExceptionCacheEntry();
+            final var miniClusterEntry =
+                    contextFactory.getResourceContext(miniCluster, null).getExceptionCacheEntry();
+            assertThat(miniClusterEntry).isNotSameAs(deploymentEntry);
+
+            contextFactory.cleanup(miniCluster);
+            assertThat(contextFactory.getResourceContext(deployment, null).getExceptionCacheEntry())
+                    .isSameAs(deploymentEntry);
         }
     }
 }

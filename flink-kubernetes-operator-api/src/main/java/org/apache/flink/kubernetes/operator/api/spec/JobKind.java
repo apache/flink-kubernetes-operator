@@ -29,5 +29,9 @@ public enum JobKind {
 
     /** FlinkSessionJob CR kind. */
     @JsonProperty(CrdConstants.KIND_SESSION_JOB)
-    FLINK_SESSION_JOB
+    FLINK_SESSION_JOB,
+
+    /** FlinkMiniCluster CR kind. */
+    @JsonProperty(CrdConstants.KIND_FLINK_MINI_CLUSTER)
+    FLINK_MINI_CLUSTER
 }

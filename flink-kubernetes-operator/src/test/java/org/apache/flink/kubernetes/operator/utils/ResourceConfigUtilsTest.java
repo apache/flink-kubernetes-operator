@@ -24,10 +24,14 @@ import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.Map;
 import java.util.OptionalDouble;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -50,6 +54,35 @@ public class ResourceConfigUtilsTest {
         assertEquals(
                 String.valueOf(2L * 1024 * 1024 * 1024),
                 ResourceConfigUtils.parseResourceMemoryString("2Gi"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // Flink syntax first, so m, M, k, g and G are binary units, unlike in Kubernetes
+        "512m, 512m",
+        "512M, 512m",
+        "512k, 512k",
+        "1g, 1g",
+        "1G, 1g",
+        // Kubernetes syntax otherwise
+        "512Mi, 512m",
+        "512Ki, 512k",
+        "1Gi, 1g",
+        "5e8, 500000000b",
+        // Bytes in both
+        "536870912, 512m"
+    })
+    void testParseMemoryQuantity(String quantity, String expected) {
+        // The memory a FlinkDeployment and a FlinkMiniCluster are both sized from
+        assertThat(ResourceConfigUtils.parseMemoryQuantity(new Quantity(quantity)))
+                .isEqualTo(MemorySize.parse(expected));
+    }
+
+    @Test
+    void testParseFractionalMemoryQuantity() {
+        // Kubernetes parses it to a fractional number of bytes, which Flink can't parse
+        assertThatThrownBy(() -> ResourceConfigUtils.parseMemoryQuantity(new Quantity("0.5Gi")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -29,7 +30,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Flink resource reference that can be a FlinkDeployment or FlinkSessionJob. */
+/** Flink resource reference that can be a FlinkDeployment, FlinkSessionJob, or FlinkMiniCluster. */
 @Experimental
 @Data
 @NoArgsConstructor
@@ -38,7 +39,7 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class JobReference {
 
-    /** Kind of the Flink resource, FlinkDeployment or FlinkSessionJob. */
+    /** Kind of the Flink resource, FlinkDeployment, FlinkSessionJob, or FlinkMiniCluster. */
     private JobKind kind;
 
     /** Name of the Flink resource. */
@@ -52,6 +53,8 @@ public class JobReference {
             result.setKind(JobKind.FLINK_DEPLOYMENT);
         } else if (flinkResource instanceof FlinkSessionJob) {
             result.setKind(JobKind.FLINK_SESSION_JOB);
+        } else if (flinkResource instanceof FlinkMiniCluster) {
+            result.setKind(JobKind.FLINK_MINI_CLUSTER);
         }
 
         return result;
@@ -63,6 +66,8 @@ public class JobReference {
             kindString = CrdConstants.KIND_FLINK_DEPLOYMENT;
         } else if (kind == JobKind.FLINK_SESSION_JOB) {
             kindString = CrdConstants.KIND_SESSION_JOB;
+        } else if (kind == JobKind.FLINK_MINI_CLUSTER) {
+            kindString = CrdConstants.KIND_FLINK_MINI_CLUSTER;
         }
         return String.format("%s (%s)", name, kindString);
     }

@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.snapshot;
 
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.core.execution.CheckpointType;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
@@ -120,8 +120,8 @@ public class StateSnapshotReconciler {
                 return DeleteControl.noFinalizerRemoval()
                         .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
             case COMPLETED:
-                var flinkDeployment = getFlinkDeployment(ctx);
-                return handleSnapshotCleanup(resource, flinkDeployment, ctx);
+                var cluster = getReferencedJobCluster(ctx);
+                return handleSnapshotCleanup(resource, cluster, ctx);
             case FAILED:
             case TRIGGER_PENDING:
             case ABANDONED:
@@ -136,7 +136,7 @@ public class StateSnapshotReconciler {
         }
     }
 
-    private FlinkDeployment getFlinkDeployment(FlinkStateSnapshotContext ctx) {
+    private AbstractFlinkResource<?, ?> getReferencedJobCluster(FlinkStateSnapshotContext ctx) {
         var secondaryResourceOpt = ctx.getSecondaryResource();
         if (secondaryResourceOpt.isEmpty()) {
             throw new IllegalArgumentException(
@@ -146,12 +146,12 @@ public class StateSnapshotReconciler {
                     "Cannot dispose of snapshot because referenced Flink job is not running!");
         }
 
-        return ctx.getReferencedJobFlinkDeployment();
+        return ctx.getReferencedJobCluster();
     }
 
     private DeleteControl handleSnapshotCleanup(
             FlinkStateSnapshot flinkStateSnapshot,
-            FlinkDeployment flinkDeployment,
+            AbstractFlinkResource<?, ?> cluster,
             FlinkStateSnapshotContext ctx) {
         var resourceName = flinkStateSnapshot.getMetadata().getName();
         String path = flinkStateSnapshot.getStatus().getPath();
@@ -163,18 +163,17 @@ public class StateSnapshotReconciler {
 
         LOG.info("Disposing of savepoint of {} before deleting the resource...", resourceName);
         var observeConfig = ctx.getReferencedJobObserveConfig();
-        var ctxFlinkDeployment =
-                ctxFactory.getResourceContext(flinkDeployment, ctx.getJosdkContext());
-        var flinkService = ctxFlinkDeployment.getFlinkService();
+        var ctxCluster = ctxFactory.getResourceContext(cluster, ctx.getJosdkContext());
+        var flinkService = ctxCluster.getFlinkService();
 
         try {
             flinkService.disposeSavepoint(path, observeConfig);
             return DeleteControl.defaultDelete();
         } catch (Exception e) {
             LOG.error(
-                    "Failed to dispose savepoint {} from deployment {}",
+                    "Failed to dispose savepoint {} from cluster {}",
                     path,
-                    ctxFlinkDeployment.getResource().getMetadata().getName(),
+                    ctxCluster.getResource().getMetadata().getName(),
                     e);
             return DeleteControl.noFinalizerRemoval()
                     .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
@@ -184,10 +183,9 @@ public class StateSnapshotReconciler {
     private Optional<String> triggerCheckpointOrSavepoint(
             FlinkStateSnapshotSpec spec, FlinkStateSnapshotContext ctx, String jobId)
             throws Exception {
-        var flinkDeploymentContext =
-                ctxFactory.getResourceContext(
-                        ctx.getReferencedJobFlinkDeployment(), ctx.getJosdkContext());
-        var flinkService = flinkDeploymentContext.getFlinkService();
+        var clusterContext =
+                ctxFactory.getResourceContext(ctx.getReferencedJobCluster(), ctx.getJosdkContext());
+        var flinkService = clusterContext.getFlinkService();
         var conf =
                 Preconditions.checkNotNull(
                         ctx.getReferencedJobObserveConfig(),

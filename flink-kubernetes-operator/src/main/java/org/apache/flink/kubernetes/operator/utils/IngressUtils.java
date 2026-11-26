@@ -49,6 +49,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.lang.module.ModuleDescriptor;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -86,8 +88,26 @@ public class IngressUtils {
             Configuration effectiveConfig,
             KubernetesClient client,
             EventRecorder eventRecorder) {
+        reconcileIngress(ctx, spec.getIngress(), effectiveConfig, client, eventRecorder);
+    }
+
+    /**
+     * Creates or updates the Ingress of a Flink resource. Deletes it if no Ingress is specified.
+     *
+     * @param ctx context of the resource that owns the Ingress
+     * @param ingressSpec Ingress spec of the resource (null if it has none)
+     * @param effectiveConfig effective Flink config of the resource
+     * @param client Kubernetes client
+     * @param eventRecorder event recorder
+     */
+    public static void reconcileIngress(
+            FlinkResourceContext<?> ctx,
+            @Nullable IngressSpec ingressSpec,
+            Configuration effectiveConfig,
+            KubernetesClient client,
+            EventRecorder eventRecorder) {
         if (!ctx.getOperatorConfig().isManageIngress()) {
-            if (spec.getIngress() != null) {
+            if (ingressSpec != null) {
                 eventRecorder.triggerEvent(
                         ctx.getResource(),
                         EventRecorder.Type.Warning,
@@ -100,9 +120,8 @@ public class IngressUtils {
             return;
         }
         var objectMeta = ctx.getResource().getMetadata();
-        if (spec.getIngress() != null) {
-            HasMetadata ingress =
-                    getIngress(objectMeta, spec.getIngress(), effectiveConfig, client);
+        if (ingressSpec != null) {
+            HasMetadata ingress = getIngress(objectMeta, ingressSpec, effectiveConfig, client);
             setOwnerReference(ctx.getResource(), Collections.singletonList(ingress));
             LOG.info("Updating ingress rules {}", ingress);
             client.resource(ingress)

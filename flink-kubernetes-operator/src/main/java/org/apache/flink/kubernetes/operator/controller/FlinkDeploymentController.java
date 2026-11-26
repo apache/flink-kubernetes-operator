@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.validation.FlinkResourceValidator;
@@ -37,6 +38,7 @@ import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -186,13 +188,16 @@ public class FlinkDeploymentController
             EventSourceContext<FlinkDeployment> context) {
         List<EventSource<?, FlinkDeployment>> eventSources = new ArrayList<>();
         eventSources.add(EventSourceUtils.getSessionJobInformerEventSource(context));
-        eventSources.add(EventSourceUtils.getDeploymentInformerEventSource(context));
+        eventSources.add(
+                EventSourceUtils.getDeploymentInformerEventSource(
+                        context, Constants.LABEL_COMPONENT_JOB_MANAGER));
         if (flinkConfigManager.getOperatorConfiguration().isManageIngress()) {
             eventSources.add(EventSourceUtils.getIngressInformerEventSource(context));
         }
         if (flinkConfigManager.isSnapshotCrdInstalled()) {
             eventSources.add(
-                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
+                    EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(
+                            context, JobKind.FLINK_DEPLOYMENT));
         } else {
             LOG.warn(
                     "Could not initialize informer for snapshots as the CRD has not been installed!");

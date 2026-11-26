@@ -78,12 +78,34 @@ public class InformerManagerTest {
         informerManager.setNamespaces(Set.of("ns1"));
         var depInformer = informerManager.getFlinkDepInformer("ns1");
         var sessionJobInformer = informerManager.getFlinkSessionJobInformer("ns1");
+        var miniClusterInformer = informerManager.getFlinkMiniClusterInformer("ns1");
         Assertions.assertTrue(depInformer.isRunning());
         Assertions.assertTrue(sessionJobInformer.isRunning());
+        Assertions.assertTrue(miniClusterInformer.isRunning());
 
         informerManager.close();
         Assertions.assertFalse(depInformer.isRunning());
         Assertions.assertFalse(sessionJobInformer.isRunning());
+        Assertions.assertFalse(miniClusterInformer.isRunning());
+    }
+
+    @Test
+    public void testMiniClusterNamespacedInformerCreated() {
+        var informerManager = new InformerManager(kubernetesClient);
+        informerManager.setNamespaces(DEFAULT_NAMESPACES_SET);
+        Assertions.assertNotNull(informerManager.getFlinkMiniClusterInformer("ns1"));
+
+        // Changing namespaces stops the informers and creates new ones
+        informerManager.setNamespaces(Set.of("ns1", "ns2"));
+        Assertions.assertNotNull(informerManager.getFlinkMiniClusterInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkMiniClusterInformer("ns2"));
+
+        var ns1Informer = informerManager.getFlinkMiniClusterInformer("ns1");
+        informerManager.setNamespaces(Set.of("ns2"));
+        Assertions.assertFalse(ns1Informer.isRunning());
+        Assertions.assertThrows(
+                NullPointerException.class,
+                () -> informerManager.getFlinkMiniClusterInformer("ns1"));
     }
 
     @Test

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.admission.informer;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.util.Preconditions;
 
@@ -43,6 +44,7 @@ public class InformerManager implements AutoCloseable {
     private final KubernetesClient kubernetesClient;
     private volatile Map<String, SharedIndexInformer<FlinkDeployment>> flinkDepInformers;
     private volatile Map<String, SharedIndexInformer<FlinkSessionJob>> flinkSessionJobInformers;
+    private volatile Map<String, SharedIndexInformer<FlinkMiniCluster>> flinkMiniClusterInformers;
 
     public InformerManager(KubernetesClient kubernetesClient) {
         this.kubernetesClient = kubernetesClient;
@@ -111,6 +113,38 @@ public class InformerManager implements AutoCloseable {
         }
     }
 
+    public SharedIndexInformer<FlinkMiniCluster> getFlinkMiniClusterInformer(String namespace) {
+        initFlinkMiniClusterInformers();
+        var effectiveNamespace =
+                DEFAULT_NAMESPACES_SET.equals(watchedNamespaces)
+                        ? Constants.WATCH_ALL_NAMESPACES
+                        : namespace;
+        var informer = flinkMiniClusterInformers.get(effectiveNamespace);
+        Preconditions.checkNotNull(
+                informer, String.format("The informer for %s should not be null", namespace));
+        return informer;
+    }
+
+    private void initFlinkMiniClusterInformers() {
+        if (flinkMiniClusterInformers == null) {
+            synchronized (this) {
+                if (flinkMiniClusterInformers == null) {
+                    var runnableInformers =
+                            createRunnableInformers(
+                                    FlinkMiniCluster.class, watchedNamespaces, kubernetesClient);
+                    for (Map.Entry<String, SharedIndexInformer<FlinkMiniCluster>> runnableInformer :
+                            runnableInformers.entrySet()) {
+                        runnableInformer.getValue().run();
+                    }
+                    this.flinkMiniClusterInformers = runnableInformers;
+                    LOG.info(
+                            "Created FlinkMiniCluster informers for {}",
+                            flinkMiniClusterInformers.keySet());
+                }
+            }
+        }
+    }
+
     private static <CR extends HasMetadata>
             Map<String, SharedIndexInformer<CR>> createRunnableInformers(
                     Class<CR> resourceClass,
@@ -169,6 +203,18 @@ public class InformerManager implements AutoCloseable {
                             });
                 }
                 flinkSessionJobInformers = null;
+            }
+        }
+        if (flinkMiniClusterInformers != null) {
+            synchronized (this) {
+                if (flinkMiniClusterInformers != null) {
+                    flinkMiniClusterInformers.forEach(
+                            (key, value) -> {
+                                LOG.info("Stopping FlinkMiniCluster informer in {})", key);
+                                value.stop();
+                            });
+                }
+                flinkMiniClusterInformers = null;
             }
         }
     }

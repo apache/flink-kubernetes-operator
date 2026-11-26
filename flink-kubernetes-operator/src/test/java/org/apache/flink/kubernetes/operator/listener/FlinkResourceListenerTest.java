@@ -19,8 +19,10 @@ package org.apache.flink.kubernetes.operator.listener;
 
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkMiniCluster;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkMiniClusterStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -129,5 +131,30 @@ public class FlinkResourceListenerTest {
                     listener1.flinkResourceEvents.get(i).getTimestamp(),
                     listener2.flinkResourceEvents.get(i).getTimestamp());
         }
+    }
+
+    @Test
+    public void testListenersNotNotifiedForMiniClusters() {
+        var listener = new TestingListener();
+        var listeners = List.<FlinkResourceListener>of(listener);
+        StatusRecorder<FlinkMiniCluster, FlinkMiniClusterStatus> statusRecorder =
+                StatusRecorder.create(kubernetesClient, new MetricManager<>(), listeners);
+        var eventRecorder = EventRecorder.create(kubernetesClient, listeners);
+        var miniCluster = TestUtils.buildMiniCluster();
+        kubernetesClient.resource(miniCluster).createOrReplace();
+
+        statusRecorder.updateStatusFromCache(miniCluster);
+        miniCluster.getStatus().setPodDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+        statusRecorder.patchAndCacheStatus(miniCluster, kubernetesClient);
+        eventRecorder.triggerEvent(
+                miniCluster,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.SavepointError,
+                EventRecorder.Component.Operator,
+                "err",
+                kubernetesClient);
+
+        assertTrue(listener.flinkResourceUpdates.isEmpty());
+        assertTrue(listener.flinkResourceEvents.isEmpty());
     }
 }

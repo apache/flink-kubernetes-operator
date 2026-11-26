@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -534,7 +535,7 @@ public class NativeFlinkServiceTest {
                         client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
                     protected CancelResult cancelJob(
-                            FlinkDeployment deployment,
+                            AbstractFlinkResource<?, ? extends CommonStatus<?>> resource,
                             SuspendMode upgradeMode,
                             Configuration conf,
                             boolean deleteCluster) {
