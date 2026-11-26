@@ -111,6 +111,23 @@ public class K8sAnnotationsSanitizer {
     }
 
     /**
+     * Validates a label value according to Kubernetes rules: it must be empty or at most 63
+     * characters, beginning and ending with an alphanumeric character, with dashes, underscores and
+     * dots in between. See <a
+     * href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set">Kubernetes
+     * Labels Syntax and Character Set</a>
+     *
+     * <p>Label keys follow the same syntax as annotation keys, use {@link #isValidAnnotationKey}
+     * for those.
+     */
+    public static boolean isValidLabelValue(String value) {
+        if (value == null) {
+            return false;
+        }
+        return value.isEmpty() || isValidName(value);
+    }
+
+    /**
      * Sanitizes the annotation value by trimming and removing control characters, replacing
      * newlines and tabs with spaces. No length limit.
      */
