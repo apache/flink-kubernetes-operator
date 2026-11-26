@@ -284,8 +284,9 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                 operatorConfig.getReportedExceptionEventsMaxStackTraceLength(),
                                 operatorConfig.getReportedExceptionEventsMaxStackTraceLines());
 
+        // The full stack trace tells apart exceptions that only differ in the truncated text
         String identityKey =
-                "jobmanager-exception-" + Integer.toHexString(Objects.hash(eventMessage));
+                "jobmanager-exception-" + Integer.toHexString(Objects.hash(stacktrace));
         eventRecorder.triggerEventWithAnnotations(
                 ctx.getResource(),
                 EventRecorder.Type.Warning,
@@ -485,16 +486,21 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                     updateFlinkResourceException(
                                             t, ctx.getResource(), ctx.getOperatorConfig());
 
+                                    String message = ExceptionUtils.getExceptionMessage(t);
                                     eventRecorder.triggerEvent(
                                             ctx.getResource(),
                                             EventRecorder.Type.Warning,
                                             EventRecorder.Reason.Error,
-                                            EventRecorder.Component.Job,
                                             truncateExceptionText(
-                                                    ExceptionUtils.getExceptionMessage(t),
+                                                    message,
                                                     ctx.getOperatorConfig()
                                                             .getReportedExceptionEventsMaxStackTraceLength(),
                                                     -1),
+                                            EventRecorder.Component.Job,
+                                            // A hash of the full message tells apart errors that
+                                            // only differ in the truncated text
+                                            "job-error-"
+                                                    + Integer.toHexString(Objects.hash(message)),
                                             ctx.getKubernetesClient());
                                 });
             } catch (Exception e) {

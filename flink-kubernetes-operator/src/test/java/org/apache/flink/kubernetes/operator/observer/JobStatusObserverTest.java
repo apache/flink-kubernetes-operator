@@ -611,6 +611,28 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertThat(message).isEqualTo("line1\nline2\n... (11 more characters)");
     }
 
+    @Test
+    void testExceptionsThatDifferOnlyInTruncatedTextAreSeparateEvents() throws Exception {
+        var events =
+                observeJobExceptionEvents(
+                        Map.of(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                                        .key(),
+                                "5"),
+                        "trace, cause A",
+                        "trace, cause B");
+
+        assertThat(events)
+                .hasSize(2)
+                .allSatisfy(
+                        event -> {
+                            assertThat(event.getMessage())
+                                    .isEqualTo("trace... (9 more characters)");
+                            assertThat(event.getCount()).isOne();
+                        });
+    }
+
     @ParameterizedTest
     @MethodSource("truncateExceptionTextArgs")
     void testTruncateExceptionText(String text, int maxLength, int maxLines, String expected) {
@@ -655,6 +677,40 @@ public class JobStatusObserverTest extends OperatorTestBase {
         assertThat(jobErrorEvent.getReason()).isEqualTo(EventRecorder.Reason.Error.name());
         assertThat(jobErrorEvent.getMessage())
                 .isEqualTo("x".repeat(10) + "... (90 more characters)");
+    }
+
+    @Test
+    void testFailedJobErrorsThatDifferOnlyInTruncatedTextAreSeparateEvents() throws Exception {
+        var deployment = initDeployment();
+        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
+                getResourceContext(
+                        deployment,
+                        Configuration.fromMap(
+                                Map.of(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
+                                                .key(),
+                                        "5")));
+        flinkService.submitApplicationCluster(
+                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
+
+        // The repeated error must count on its existing event
+        for (var error : List.of("error, cause A", "error, cause B", "error, cause A")) {
+            deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
+            flinkService.setJobFailedErr(new Exception(error));
+            observer.observe(ctx);
+        }
+
+        assertThat(
+                        kubernetesClient
+                                .v1()
+                                .events()
+                                .inNamespace(deployment.getMetadata().getNamespace())
+                                .list()
+                                .getItems())
+                .filteredOn(event -> EventRecorder.Reason.Error.name().equals(event.getReason()))
+                .extracting(Event::getCount)
+                .containsExactlyInAnyOrder(2, 1);
     }
 
     @Test
@@ -806,6 +862,17 @@ public class JobStatusObserverTest extends OperatorTestBase {
      */
     private String observeJobExceptionEventMessage(Map<String, String> config, String stackTrace)
             throws Exception {
+        var events = observeJobExceptionEvents(config, stackTrace);
+        assertThat(events).hasSize(1);
+        return events.get(0).getMessage();
+    }
+
+    /**
+     * Observes a running deployment whose job reported new exceptions with the given stack traces,
+     * and returns the resulting events.
+     */
+    private List<Event> observeJobExceptionEvents(Map<String, String> config, String... stackTraces)
+            throws Exception {
         var deployment = initDeployment();
         deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
@@ -818,23 +885,24 @@ public class JobStatusObserverTest extends OperatorTestBase {
         ctx.getExceptionCacheEntry().setInitialized(true);
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
         ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
-        flinkService.addExceptionHistory(jobId, "Exception", stackTrace, 4000L);
+        long timestamp = 3000L;
+        for (var stackTrace : stackTraces) {
+            timestamp += 1000L;
+            flinkService.addExceptionHistory(jobId, "Exception", stackTrace, timestamp);
+        }
         flinkService.setJobFailedErr(null);
 
         observer.observe(ctx);
 
-        // A failure to build the event would leave the timestamp behind and retry every cycle
+        // A failure to build an event would leave the timestamp behind and retry every cycle
         assertThat(ctx.getExceptionCacheEntry().getLastTimestamp())
-                .isEqualTo(Instant.ofEpochMilli(4000L));
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertThat(events).hasSize(1);
-        return events.get(0).getMessage();
+                .isEqualTo(Instant.ofEpochMilli(timestamp));
+        return kubernetesClient
+                .v1()
+                .events()
+                .inNamespace(deployment.getMetadata().getNamespace())
+                .list()
+                .getItems();
     }
 
     @Test
