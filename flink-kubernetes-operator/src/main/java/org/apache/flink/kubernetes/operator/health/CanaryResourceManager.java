@@ -21,20 +21,19 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,9 +42,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * operator still picks up and reconciles spec changes. Each canary spec is periodically updated by
  * bumping its restart nonce, and the canary is reported unhealthy when the update is not reconciled
  * within the canary resource timeout, or when the update itself keeps failing. Canaries are never
- * deployed, their reconciliation stops at this class.
+ * deployed, their reconciliation stops at this class. Canaries are only tracked when the health
+ * probe is enabled, as nothing else reads their health.
  */
-@RequiredArgsConstructor
 public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
         implements AutoCloseable {
 
@@ -58,10 +57,21 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
     private final ConcurrentHashMap<ResourceID, CanaryResourceState> canaryResources =
             new ConcurrentHashMap<>();
 
-    @VisibleForTesting
-    final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
-
     private final FlinkConfigManager configManager;
+
+    private final boolean healthProbeEnabled;
+
+    @VisibleForTesting ScheduledThreadPoolExecutor executorService;
+
+    private boolean closed;
+
+    public CanaryResourceManager(FlinkConfigManager configManager) {
+        this.configManager = configManager;
+        this.healthProbeEnabled =
+                configManager
+                        .getDefaultConfig()
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED);
+    }
 
     public boolean allCanariesHealthy() {
         return canaryResources.values().stream().allMatch(cr -> cr.isHealthy);
@@ -76,6 +86,10 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
                         resourceId);
             }
             return false;
+        }
+
+        if (!healthProbeEnabled) {
+            return true;
         }
 
         LOG.info("Reconciling canary resource");
@@ -190,10 +204,22 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
         LOG.info("Scheduling canary check for {} in {}s", resourceID, canaryTimeout.toSeconds());
 
-        executorService.schedule(
+        schedule(
+                crs.resource.getKind(),
                 () -> checkHealth(resourceID, client),
-                canaryTimeout.toMillis(),
-                TimeUnit.MILLISECONDS);
+                canaryTimeout.toMillis());
+    }
+
+    private synchronized void schedule(String kind, Runnable check, long delayMillis) {
+        if (closed) {
+            return;
+        }
+        if (executorService == null) {
+            executorService =
+                    new ScheduledThreadPoolExecutor(
+                            1, new ExecutorThreadFactory(kind + "-canary-health-check"));
+        }
+        executorService.schedule(check, delayMillis, TimeUnit.MILLISECONDS);
     }
 
     @VisibleForTesting
@@ -247,8 +273,11 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>>
 
     /** Stops the scheduled canary health checks. */
     @Override
-    public void close() {
-        executorService.shutdownNow();
+    public synchronized void close() {
+        closed = true;
+        if (executorService != null) {
+            executorService.shutdownNow();
+        }
     }
 
     private class CanaryResourceState {

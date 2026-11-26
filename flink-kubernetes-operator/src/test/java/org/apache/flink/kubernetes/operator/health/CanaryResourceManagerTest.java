@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceBuilder;
 import io.fabric8.kubernetes.client.Config;
@@ -42,6 +43,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link CanaryResourceManager}. */
@@ -251,6 +254,37 @@ public class CanaryResourceManagerTest {
 
         canaryManager.checkHealth(canaryId, client);
         assertEquals(0, canaryManager.getNumberOfActiveCanaries());
+    }
+
+    @Test
+    public void testHealthProbeDisabled() {
+        var conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED, false);
+        canaryManager = new CanaryResourceManager<>(new FlinkConfigManager(conf));
+        var nonce = latest().getSpec().getRestartNonce();
+
+        reconcileLatest();
+        assertEquals(0, canaryManager.getNumberOfActiveCanaries());
+        assertEquals(nonce, latest().getSpec().getRestartNonce());
+        assertNull(canaryManager.executorService);
+    }
+
+    @Test
+    public void testHealthCheckExecutor() {
+        assertNull(canaryManager.executorService);
+
+        reconcileLatest();
+        var executor = canaryManager.executorService;
+        assertEquals(1, executor.getCorePoolSize());
+        var thread = executor.getThreadFactory().newThread(() -> {});
+        assertTrue(thread.getName().startsWith("FlinkDeployment-canary-health-check-thread-"));
+        assertTrue(thread.isDaemon());
+
+        canaryManager.close();
+        assertTrue(executor.isShutdown());
+
+        canaryManager.checkHealth(canaryId, client);
+        assertSame(executor, canaryManager.executorService);
     }
 
     private void reconcileLatest() {
