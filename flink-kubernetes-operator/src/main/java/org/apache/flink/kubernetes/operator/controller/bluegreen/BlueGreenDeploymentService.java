@@ -39,10 +39,11 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -410,7 +411,7 @@ public class BlueGreenDeploymentService {
         //        return getLastCheckpoint(ctx);
     }
 
-    @NotNull
+    @Nonnull
     private static Savepoint getSavepointObject(
             FlinkResourceContext<FlinkDeployment> ctx, String savepointLocation) {
         org.apache.flink.core.execution.SavepointFormatType coreSavepointFormatType =
@@ -696,7 +697,7 @@ public class BlueGreenDeploymentService {
         return markDeploymentFailing(context, error);
     }
 
-    @NotNull
+    @Nonnull
     private static UpdateControl<FlinkBlueGreenDeployment> markDeploymentFailing(
             BlueGreenContext context, String error) {
         LOG.error(error);

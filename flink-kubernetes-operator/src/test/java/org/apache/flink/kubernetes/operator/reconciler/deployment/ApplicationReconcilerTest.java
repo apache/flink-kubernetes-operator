@@ -86,7 +86,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.ThrowingConsumer;
@@ -96,6 +95,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.platform.commons.util.StringUtils;
+
+import javax.annotation.Nonnull;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -410,7 +411,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 status.getJobId().toHexString());
     }
 
-    @NotNull
+    @Nonnull
     private static Savepoint savepointFromSavepointInfo(
             SavepointInfo savepointInfo, Long savepointTriggerNonce) {
         return new Savepoint(
@@ -677,7 +678,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "0");
     }
 
-    @NotNull
+    @Nonnull
     private static Checkpoint checkpointFromCheckpointInfo(
             CheckpointInfo checkpointInfo, Long checkpointTriggerNonce) {
         return new Checkpoint(

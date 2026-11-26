@@ -55,12 +55,12 @@ import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.util.Collections;
@@ -860,7 +860,7 @@ public class DefaultValidatorTest {
                 createFlinkVersionChange(UpgradeMode.STATELESS, toUpgradeMode, JobState.SUSPENDED));
     }
 
-    @NotNull
+    @Nonnull
     private Consumer<FlinkDeployment> createFlinkVersionChange(
             UpgradeMode fromUpgrade, UpgradeMode toUpgrade, JobState fromState) {
         return dep -> {

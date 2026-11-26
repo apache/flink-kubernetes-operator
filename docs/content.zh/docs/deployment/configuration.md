@@ -267,14 +267,6 @@ These environment variables are set only on the webhook container when `webhook.
 | WEBHOOK_KEYSTORE_TYPE      | Keystore type, defaults to `pkcs12`.                                   |
 | WEBHOOK_SERVER_PORT        | Port the webhook listens on, defaults to `9443`.                       |
 
-### IPv6 Configuration
-
-In IPv6 environments, a host name verification error is triggered by a known bug in the OkHttp client. As a workaround until the OkHttp 5.0.0 release, the environment variable below needs to be set for both the operator and the Flink deployment configuration.
-
-```
-KUBERNETES_DISABLE_HOSTNAME_VERIFICATION=true
-```
-
 ## Java Options for Java 17 Based Flink Images
 
 From Java 17 onwards, Flink requires certain Java options to be supplied in order to function. These are set by default in the Helm chart's default configuration.

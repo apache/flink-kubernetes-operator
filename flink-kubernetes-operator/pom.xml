@@ -47,7 +47,7 @@ under the License.
             <exclusions>
                 <exclusion>
                     <groupId>io.fabric8</groupId>
-                    <artifactId>kubernetes-httpclient-okhttp</artifactId>
+                    <artifactId>kubernetes-httpclient-jdk</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -69,12 +69,6 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-httpclient-${fabric8.httpclient.impl}</artifactId>
             <version>${fabric8.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp3</groupId>
-                    <artifactId>okhttp</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- Flink -->

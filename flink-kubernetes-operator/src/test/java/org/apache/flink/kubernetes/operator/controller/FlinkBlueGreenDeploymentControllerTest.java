@@ -51,12 +51,13 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+
+import javax.annotation.Nonnull;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -179,7 +180,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         testTransitionToGreen(rs, customValue, expectedSavepointPath);
     }
 
-    @NotNull
+    @Nonnull
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult handleSavepoint(
             TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult rs)
             throws Exception {
@@ -1568,7 +1569,7 @@ public class FlinkBlueGreenDeploymentControllerTest {
         return rs;
     }
 
-    @NotNull
+    @Nonnull
     private TestingFlinkBlueGreenDeploymentController.BlueGreenReconciliationResult
             initialPhaseBasicDeployment(
                     FlinkBlueGreenDeployment blueGreenDeployment, boolean execAssertions)
