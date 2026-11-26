@@ -53,6 +53,18 @@ public final class ResourceConfigUtils {
         }
     }
 
+    /**
+     * Parses a memory quantity from resource requirements as {@link #parseResourceMemoryString}
+     * does, so that every kind of resource reads memory the same way. Flink {@link MemorySize}
+     * syntax comes first, so e.g. {@code 512m} is 512 mebibytes rather than Kubernetes' 512
+     * millibytes, and {@code 1G} is a gibibyte.
+     *
+     * @throws IllegalArgumentException if the quantity can't be parsed
+     */
+    public static MemorySize parseMemoryQuantity(Quantity quantity) {
+        return MemorySize.parse(parseResourceMemoryString(quantity.toString()));
+    }
+
     private static String formatMemoryStringForK8sSpec(String memory) {
         var memoryQuantity = memory.trim().replaceAll("\\s", "").toUpperCase();
         if (memoryQuantity.endsWith("B")) {

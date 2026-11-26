@@ -297,7 +297,7 @@ Two details round out deletion: the JobManager and TaskManager Deployments are d
 
 ## Resource Model
 
-All four custom resources are defined in the `flink-kubernetes-operator-api` module, layered on the Fabric8 Kubernetes client API. `FlinkDeployment` and `FlinkSessionJob` share a common base, which is why their `spec` and `status` structures look so alike: `AbstractFlinkSpec` on the spec side, and `CommonStatus` with the shared observed fields (`jobStatus`, `error`, `observedGeneration`, `lifecycleState`) on the status side. The shared specs are what the [spec diff](#spec-diff-and-upgrade-decisions) walks. `FlinkStateSnapshot` and `FlinkBlueGreenDeployment` stand on their own, one tracks a single snapshot operation, the other orchestrates two child deployments.
+All the custom resources are defined in the `flink-kubernetes-operator-api` module, layered on the Fabric8 Kubernetes client API. `FlinkDeployment` and `FlinkSessionJob` share a common base, which is why their `spec` and `status` structures look so alike: `AbstractFlinkSpec` on the spec side, and `CommonStatus` with the shared observed fields (`jobStatus`, `error`, `observedGeneration`, `lifecycleState`) on the status side. The shared specs are what the [spec diff](#spec-diff-and-upgrade-decisions) walks. `FlinkStateSnapshot` and `FlinkBlueGreenDeployment` stand on their own, one tracks a single snapshot operation, the other orchestrates two child deployments.
 
 The spec side in detail, with the fields each level contributes:
 

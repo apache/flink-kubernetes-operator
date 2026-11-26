@@ -46,13 +46,13 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public static final String MSG_HA_METADATA_NOT_AVAILABLE = "HA metadata is not available";
     public static final String MSG_MANUAL_RESTORE_REQUIRED = "Manual restore required.";
 
-    /** Last observed status of the Flink job on Application/Session cluster. */
+    /** Last observed status of the Flink job. */
     private JobStatus jobStatus = new JobStatus();
 
-    /** Error information about the FlinkDeployment/FlinkSessionJob. */
+    /** Error information about the resource. */
     private String error;
 
-    /** Last observed generation of the FlinkDeployment/FlinkSessionJob. */
+    /** Last observed generation of the resource. */
     private Long observedGeneration;
 
     /** Lifecycle state of the Flink resource (including being rolled back, failed etc.). */
@@ -100,14 +100,12 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         }
 
         // Check for unrecoverable deployments that should be marked as FAILED if the error contains
-        // the following substrings
-        if (this instanceof FlinkDeploymentStatus) {
-            FlinkDeploymentStatus deploymentStatus = (FlinkDeploymentStatus) this;
-            var jmDeployStatus = deploymentStatus.getJobManagerDeploymentStatus();
-
+        // the following substrings. Applies to resources that own a Deployment of their own
+        var deploymentStatus = getKubernetesDeploymentStatus();
+        if (deploymentStatus != null) {
             // ERROR/MISSING deployments are in terminal error state and should always be FAILED
-            if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
-                            || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
+            if ((deploymentStatus == JobManagerDeploymentStatus.MISSING
+                            || deploymentStatus == JobManagerDeploymentStatus.ERROR)
                     && error != null
                     && (error.contains(MSG_MANUAL_RESTORE_REQUIRED)
                             || error.contains(MSG_JOB_FINISHED_OR_CONFIGMAPS_DELETED)
@@ -131,9 +129,30 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         if (jobState == null) {
             return false;
         }
-        return RECONCILING != jobState && !jobState.isGloballyTerminalState();
+        return RECONCILING != jobState && !jobState.isGloballyTerminalState() && isJmAccessible();
     }
 
+    /**
+     * Whether the REST API of the JobManager running the job can be reached.
+     *
+     * @return whether the Deployment this resource owns has its REST API available, or {@code true}
+     *     for resources that don't own a Deployment, so there is no Deployment status
+     */
     @JsonIgnore
-    public abstract boolean isJmAccessible();
+    public boolean isJmAccessible() {
+        var deploymentStatus = getKubernetesDeploymentStatus();
+        return deploymentStatus == null || deploymentStatus.isRestApiAvailable();
+    }
+
+    /**
+     * Status of the Kubernetes Deployment this resource owns, such as the JobManager Deployment of
+     * a {@link FlinkDeploymentStatus}.
+     *
+     * @return the Deployment status, or {@code null} for resources that don't own a Deployment
+     *     (such as {@link FlinkSessionJobStatus}).
+     */
+    @JsonIgnore
+    public JobManagerDeploymentStatus getKubernetesDeploymentStatus() {
+        return null;
+    }
 }
