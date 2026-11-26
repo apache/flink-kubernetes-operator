@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.TestingMetricListener;
 import org.apache.flink.kubernetes.operator.observer.snapshot.StateSnapshotObserver;
@@ -260,6 +261,18 @@ public class FlinkStateSnapshotControllerTest {
             UpdateControl<FlinkStateSnapshot> actual, boolean updateResource, boolean patchStatus) {
         assertThat(actual.isPatchResource()).isEqualTo(updateResource);
         assertThat(actual.isPatchStatus()).isEqualTo(patchStatus);
+    }
+
+    @Test
+    public void testCanarySnapshotIsNotReconciled() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.getMetadata().setLabels(Map.of(CanaryResourceManager.CANARY_LABEL, "true"));
+
+        assertUpdateControl(controller.reconcile(snapshot, context), false, false);
+        assertThat(snapshot.getStatus()).isNull();
+        assertThat(flinkStateSnapshotEventCollector.events).isEmpty();
     }
 
     @Test

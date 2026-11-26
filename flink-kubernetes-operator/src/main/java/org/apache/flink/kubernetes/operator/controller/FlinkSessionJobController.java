@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Controller that runs the main reconcile loop for {@link FlinkSessionJob}. */
 @ControllerConfiguration()
@@ -68,6 +69,8 @@ public class FlinkSessionJobController
     private final EventRecorder eventRecorder;
     private final CanaryResourceManager<FlinkSessionJob> canaryResourceManager;
     private final FlinkConfigManager flinkConfigManager;
+
+    private final AtomicBoolean canaryDeprecationLogged = new AtomicBoolean();
 
     public FlinkSessionJobController(
             Set<FlinkResourceValidator> validators,
@@ -94,6 +97,10 @@ public class FlinkSessionJobController
 
         if (canaryResourceManager.handleCanaryResourceReconciliation(
                 flinkSessionJob, josdkContext.getClient())) {
+            if (canaryDeprecationLogged.compareAndSet(false, true)) {
+                LOG.warn(
+                        "FlinkSessionJob canary resources are deprecated and will not be supported in a future release, use a FlinkDeployment canary instead");
+            }
             return UpdateControl.noUpdate();
         }
 

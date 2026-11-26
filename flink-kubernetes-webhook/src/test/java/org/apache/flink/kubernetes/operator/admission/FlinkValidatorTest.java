@@ -70,11 +70,58 @@ class FlinkValidatorTest {
     void canaryResourceSkipsValidation(Operation operation) {
         var validator = createValidator(failingValidator("should not be called"));
         var deployment = createDeployment();
-        var labels = new HashMap<String, String>();
-        labels.put("flink.apache.org/canary", "true");
-        deployment.getMetadata().setLabels(labels);
+        deployment.getMetadata().setLabels(canaryLabels());
 
         assertDoesNotThrow(() -> validator.validate(deployment, null, operation));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE", "DELETE", "CONNECT"})
+    void canarySessionJobSkipsValidation(Operation operation) {
+        var validator = createValidator(failingValidator("should not be called"));
+        var sessionJob = createSessionJob();
+        sessionJob.getMetadata().setLabels(canaryLabels());
+
+        assertDoesNotThrow(() -> validator.validate(sessionJob, null, operation));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE", "DELETE", "CONNECT"})
+    void canaryStateSnapshotIsRejected(Operation operation) {
+        var validator = createValidator(passingValidator());
+        var snapshot = createStateSnapshot();
+        snapshot.getMetadata().setLabels(canaryLabels());
+
+        var exception =
+                assertThrows(
+                        NotAllowedException.class,
+                        () -> validator.validate(snapshot, null, operation));
+        assertEquals(
+                "Canary resources are only supported on FlinkDeployment resources",
+                exception.getMessage());
+
+        var oldSnapshot = createStateSnapshot();
+        assertThrows(
+                NotAllowedException.class,
+                () -> validator.validate(snapshot, oldSnapshot, operation));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = Operation.class,
+            names = {"CREATE", "UPDATE", "DELETE", "CONNECT"})
+    void existingCanaryStateSnapshotCanBeUpdated(Operation operation) {
+        var validator = createValidator(failingValidator("should not be called"));
+        var snapshot = createStateSnapshot();
+        snapshot.getMetadata().setLabels(canaryLabels());
+        var oldSnapshot = createStateSnapshot();
+        oldSnapshot.getMetadata().setLabels(canaryLabels());
+
+        assertDoesNotThrow(() -> validator.validate(snapshot, oldSnapshot, operation));
     }
 
     @ParameterizedTest
@@ -245,6 +292,12 @@ class FlinkValidatorTest {
                         IllegalArgumentException.class,
                         () -> validator.validate(snapshot, null, operation));
         assertEquals("Cannot determine namespace for snapshot", exception.getMessage());
+    }
+
+    private static HashMap<String, String> canaryLabels() {
+        var labels = new HashMap<String, String>();
+        labels.put("flink.apache.org/canary", "true");
+        return labels;
     }
 
     private FlinkValidator createValidator(FlinkResourceValidator resourceValidator) {

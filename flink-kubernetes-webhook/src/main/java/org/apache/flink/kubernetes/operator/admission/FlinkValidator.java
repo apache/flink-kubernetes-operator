@@ -60,6 +60,14 @@ public class FlinkValidator implements Validator<HasMetadata> {
         LOG.debug("Validating resource {}", resource);
 
         if (CanaryResourceManager.isCanaryResource(resource)) {
+            // Only rejected when the label is added, so existing canary snapshots can still be
+            // updated
+            if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())
+                    && (oldResource == null
+                            || !CanaryResourceManager.isCanaryResource(oldResource))) {
+                throw new NotAllowedException(
+                        "Canary resources are only supported on FlinkDeployment resources");
+            }
             return;
         }
 

@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenContex
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenDeploymentService;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.BlueGreenStateHandlerRegistry;
 import org.apache.flink.kubernetes.operator.controller.bluegreen.handlers.BlueGreenStateHandler;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -108,6 +109,11 @@ public class FlinkBlueGreenDeploymentController implements Reconciler<FlinkBlueG
     public UpdateControl<FlinkBlueGreenDeployment> reconcile(
             FlinkBlueGreenDeployment bgDeployment, Context<FlinkBlueGreenDeployment> josdkContext)
             throws Exception {
+        if (CanaryResourceManager.isCanaryResource(bgDeployment)) {
+            LOG.warn(
+                    "Canary resources must be FlinkDeployment resources, skipping the canary FlinkBlueGreenDeployment");
+            return UpdateControl.noUpdate();
+        }
 
         FlinkBlueGreenDeploymentStatus deploymentStatus = bgDeployment.getStatus();
 
