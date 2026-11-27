@@ -123,10 +123,16 @@
             <td>Maximum number of exception-related Kubernetes events emitted per reconciliation cycle.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.events.exceptions.stacktrace-lines</h5></td>
-            <td style="word-wrap: break-word;">5</td>
+            <td><h5>kubernetes.operator.events.exceptions.max-response-size</h5></td>
+            <td style="word-wrap: break-word;">10 mb</td>
+            <td>MemorySize</td>
+            <td>Maximum size of the exception history that the operator fetches from the JobManager to emit JobException events. A smaller rest.client.max-content-length still applies. A larger response is not read, and a JobExceptionHistoryTooLarge event reports that instead.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.events.exceptions.stacktrace.max.length</h5></td>
+            <td style="word-wrap: break-word;">2048</td>
             <td>Integer</td>
-            <td>Maximum number of stack trace lines to include in exception-related Kubernetes event messages.</td>
+            <td>Maximum number of characters of exception text to include in Kubernetes events: the stack trace, task name and failure labels of JobException events, and the message of the Error event for a failed job. The text is truncated by size, regardless of how many lines it spans. Negative values disable the limit.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.events.labels</h5></td>

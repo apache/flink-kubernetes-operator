@@ -182,6 +182,10 @@ Key separations:
   HTML comment for Markdown files.
 - **Logging:** Use parameterized SLF4J log statements (`{}` placeholders), never string
   concatenation. Include caught exceptions in warn/error logs.
+- **Kubernetes events:** Pass a `messageKey` to `EventRecorder` for every event: a constant,
+  or one derived from what identifies the event, such as a hash of the exception. Without a
+  key, the message names the event, so a changed message creates a new event instead of
+  updating the existing one.
 - **Use `final`** for variables and fields where applicable.
 - **Comments:** Do not restate what the code does; explain "the why" where relevant.
 - **Reuse existing code.** Search for existing utilities/abstractions before adding new ones.

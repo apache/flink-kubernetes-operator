@@ -177,6 +177,33 @@ public class EventUtilsApiServerTest {
                 EventUtils.findLastJobExceptionTsFromK8s(client, pod));
     }
 
+    @Test
+    public void testExceptionHistoryTooLargeEventDoesNotMarkExceptionsAsReported() {
+        var pod =
+                new PodBuilder()
+                        .withNewMetadata()
+                        .withName("test3")
+                        .withNamespace("default")
+                        .endMetadata()
+                        .withNewStatus()
+                        .endStatus()
+                        .build();
+        var reported = Instant.now().minus(Duration.ofMinutes(5));
+        createExceptionEvent(pod, "test3-ex1", reported);
+
+        EventUtils.createIfNotExists(
+                client,
+                pod,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.JobExceptionHistoryTooLarge.name(),
+                "The exception history of the job is too large",
+                EventRecorder.Component.Job,
+                e -> {},
+                null);
+
+        assertEquals(Optional.of(reported), EventUtils.findLastJobExceptionTsFromK8s(client, pod));
+    }
+
     private static void createExceptionEvent(HasMetadata resource, String name, Instant now) {
         var event =
                 new EventBuilder()

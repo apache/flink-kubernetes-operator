@@ -17,13 +17,17 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -32,6 +36,8 @@ import org.apache.flink.kubernetes.operator.utils.ExceptionUtils;
 import org.apache.flink.kubernetes.operator.utils.K8sAnnotationsSanitizer;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
+
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +52,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+import static org.apache.flink.util.ExceptionUtils.findThrowable;
 
 /** An observer to observe the job status. */
 public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
@@ -119,12 +126,33 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
         try {
             var jobId = JobID.fromHexString(jobStatus.getJobId());
-            // TODO: Ideally the best way to restrict the number of events is to use the query param
-            // `maxExceptions`
-            //  but the JobExceptionsMessageParameters does not expose the parameters and nor does
-            // it have setters.
-            var history =
-                    ctx.getFlinkService().getJobExceptions(resource, jobId, ctx.getObserveConfig());
+            int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
+            // One more entry than can be reported, so that a truncated history is still detected
+            int maxExceptions = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, maxEvents) + 1);
+            // A smaller REST client limit in the Flink configuration still applies
+            var maxResponseSize = operatorConfig.getReportedExceptionEventsMaxResponseSize();
+            int clientMaxContentLength =
+                    ctx.getObserveConfig().get(RestOptions.CLIENT_MAX_CONTENT_LENGTH);
+            if (clientMaxContentLength < maxResponseSize.getBytes()) {
+                maxResponseSize = new MemorySize(clientMaxContentLength);
+            }
+            JobExceptionsInfoWithHistory history;
+            try {
+                history =
+                        ctx.getFlinkService()
+                                .getJobExceptions(
+                                        resource,
+                                        jobId,
+                                        maxExceptions,
+                                        maxResponseSize,
+                                        ctx.getObserveConfig());
+            } catch (Exception e) {
+                if (findThrowable(e, TooLongFrameException.class).isEmpty()) {
+                    throw e;
+                }
+                reportExceptionHistoryTooLarge(ctx, maxResponseSize);
+                return;
+            }
 
             if (history == null || history.getExceptionHistory() == null) {
                 return;
@@ -183,9 +211,6 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 return;
             }
 
-            int maxEvents = operatorConfig.getReportedExceptionEventsMaxCount();
-            int maxStackTraceLines = operatorConfig.getReportedExceptionEventsMaxStackTraceLength();
-
             int count = 0;
             for (var exception : exceptions) {
                 var exceptionTime = Instant.ofEpochMilli(exception.getTimestamp());
@@ -193,7 +218,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                 if (!exceptionTime.isAfter(lastRecorded) || count++ >= maxEvents) {
                     break;
                 }
-                emitJobManagerExceptionEvent(ctx, exception, exceptionTime, maxStackTraceLines);
+                emitJobManagerExceptionEvent(ctx, exception, exceptionTime);
             }
 
             if (count > maxEvents) {
@@ -207,17 +232,38 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         }
     }
 
+    private void reportExceptionHistoryTooLarge(
+            FlinkResourceContext<R> ctx, MemorySize maxResponseSize) {
+        // A JobException event would mark the exceptions up to its time as reported after an
+        // operator restart
+        eventRecorder.triggerEventOnce(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.JobExceptionHistoryTooLarge,
+                String.format(
+                        "The exception history of the job is larger than %s, the smaller of %s and %s, so its exceptions are not reported.",
+                        maxResponseSize,
+                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE
+                                .key(),
+                        RestOptions.CLIENT_MAX_CONTENT_LENGTH.key()),
+                EventRecorder.Component.Job,
+                EventRecorder.Reason.JobExceptionHistoryTooLarge.name(),
+                ctx.getKubernetesClient());
+    }
+
     private void emitJobManagerExceptionEvent(
             FlinkResourceContext<R> ctx,
             JobExceptionsInfoWithHistory.RootExceptionInfo exception,
-            Instant exceptionTime,
-            int maxStackTraceLines) {
+            Instant exceptionTime) {
+        int maxLength = ctx.getOperatorConfig().getReportedExceptionEventsMaxStackTraceLength();
         Map<String, String> annotations = new HashMap<>();
         if (exceptionTime != null) {
             annotations.put(EXCEPTION_TIMESTAMP, exceptionTime.toString());
         }
+        // The task name and failure labels come from the job, so they can be as large as the
+        // stack trace
         if (exception.getTaskName() != null) {
-            annotations.put("task-name", exception.getTaskName());
+            annotations.put("task-name", truncateExceptionText(exception.getTaskName(), maxLength));
         }
         if (exception.getEndpoint() != null) {
             annotations.put("endpoint", exception.getEndpoint());
@@ -228,36 +274,56 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         if (exception.getFailureLabels() != null) {
             exception
                     .getFailureLabels()
-                    .forEach((k, v) -> annotations.put("failure-label-" + k, v));
+                    .forEach(
+                            (k, v) -> {
+                                // The REST response can hold a label without a value
+                                if (v != null) {
+                                    annotations.put(
+                                            "failure-label-" + k,
+                                            truncateExceptionText(v, maxLength));
+                                }
+                            });
         }
 
-        StringBuilder eventMessage = new StringBuilder();
         String stacktrace = exception.getStacktrace();
-        if (stacktrace != null && !stacktrace.isBlank()) {
-            String[] lines = stacktrace.split("\n");
-            for (int i = 0; i < Math.min(maxStackTraceLines, lines.length); i++) {
-                eventMessage.append(lines[i]).append("\n");
-            }
-            if (lines.length > maxStackTraceLines) {
-                eventMessage
-                        .append("... (")
-                        .append(lines.length - maxStackTraceLines)
-                        .append(" more lines)");
-            }
-        }
+        String eventMessage =
+                stacktrace == null || stacktrace.isBlank()
+                        ? ""
+                        : truncateExceptionText(stacktrace, maxLength);
 
+        // The full stack trace tells apart exceptions that only differ in the truncated text
         String identityKey =
-                "jobmanager-exception-"
-                        + Integer.toHexString(Objects.hash(eventMessage.toString()));
+                "jobmanager-exception-" + Integer.toHexString(Objects.hash(stacktrace));
         eventRecorder.triggerEventWithAnnotations(
                 ctx.getResource(),
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.JobException,
-                eventMessage.toString().trim(),
+                eventMessage.trim(),
                 EventRecorder.Component.Job,
                 identityKey,
                 ctx.getKubernetesClient(),
                 K8sAnnotationsSanitizer.sanitizeAnnotations(annotations));
+    }
+
+    /**
+     * Truncates exception text for an event to {@code maxLength} characters, and appends the number
+     * of characters left out.
+     *
+     * @param text the exception text to truncate
+     * @param maxLength the maximum number of characters to keep, negative values disable the limit
+     * @return the text, truncated if it is longer than {@code maxLength}
+     */
+    @VisibleForTesting
+    static String truncateExceptionText(String text, int maxLength) {
+        if (maxLength < 0 || text.length() <= maxLength) {
+            return text;
+        }
+        int end = maxLength;
+        // Cutting between a surrogate pair would leave half a character in the event message.
+        if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--;
+        }
+        return text.substring(0, end) + "... (" + (text.length() - end) + " more characters)";
     }
 
     /**
@@ -408,12 +474,20 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                     updateFlinkResourceException(
                                             t, ctx.getResource(), ctx.getOperatorConfig());
 
+                                    String message = ExceptionUtils.getExceptionMessage(t);
                                     eventRecorder.triggerEvent(
                                             ctx.getResource(),
                                             EventRecorder.Type.Warning,
                                             EventRecorder.Reason.Error,
+                                            truncateExceptionText(
+                                                    message,
+                                                    ctx.getOperatorConfig()
+                                                            .getReportedExceptionEventsMaxStackTraceLength()),
                                             EventRecorder.Component.Job,
-                                            ExceptionUtils.getExceptionMessage(t),
+                                            // A hash of the full message tells apart errors that
+                                            // only differ in the truncated text
+                                            "job-error-"
+                                                    + Integer.toHexString(Objects.hash(message)),
                                             ctx.getKubernetesClient());
                                 });
             } catch (Exception e) {

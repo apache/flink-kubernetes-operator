@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.core.execution.RestoreMode;
@@ -83,6 +84,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerReque
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobExceptionsMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.UpperLimitExceptionParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -109,6 +111,7 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameException;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import com.google.common.collect.Iterables;
@@ -902,17 +905,36 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public JobExceptionsInfoWithHistory getJobExceptions(
-            AbstractFlinkResource resource, JobID jobId, Configuration observeConfig)
-            throws IOException {
+            AbstractFlinkResource resource,
+            JobID jobId,
+            int maxExceptions,
+            MemorySize maxResponseSize,
+            Configuration observeConfig)
+            throws Exception {
         JobExceptionsHeaders jobExceptionsHeaders = JobExceptionsHeaders.getInstance();
         JobExceptionsMessageParameters params = new JobExceptionsMessageParameters();
         params.jobPathParameter.resolve(jobId);
+        // The upper limit parameter field is private before Flink 2.4 (FLINK-39711)
+        params.getQueryParameters().stream()
+                .filter(UpperLimitExceptionParameter.class::isInstance)
+                .map(UpperLimitExceptionParameter.class::cast)
+                .forEach(parameter -> parameter.resolve(List.of(maxExceptions)));
 
-        try (var clusterClient = getClusterClient(observeConfig)) {
+        // The REST client rejects a larger response before reading its body, and needs a limit of
+        // at least one byte
+        var conf = new Configuration(observeConfig);
+        conf.set(
+                RestOptions.CLIENT_MAX_CONTENT_LENGTH,
+                (int) Math.min(Integer.MAX_VALUE, Math.max(1L, maxResponseSize.getBytes())));
+        try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(jobExceptionsHeaders, params, EmptyRequestBody.getInstance())
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
+            // The observer reports an oversized history as an event
+            if (findThrowable(e, TooLongFrameException.class).isPresent()) {
+                throw e;
+            }
             LOG.warn(
                     String.format(
                             "Failed to fetch job exceptions from REST API for jobId %s", jobId),

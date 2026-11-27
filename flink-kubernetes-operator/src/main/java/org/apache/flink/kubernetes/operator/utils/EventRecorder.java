@@ -423,6 +423,7 @@ public class EventRecorder {
         SnapshotError,
         SnapshotAbandoned,
         JobException,
+        JobExceptionHistoryTooLarge,
         Error
     }
 }

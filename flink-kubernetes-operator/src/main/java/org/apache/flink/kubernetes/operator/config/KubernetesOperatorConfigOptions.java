@@ -825,12 +825,28 @@ public class KubernetesOperatorConfigOptions {
                             "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
+    public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH =
+            operatorConfig("events.exceptions.stacktrace.max.length")
+                    .intType()
+                    .defaultValue(2048)
+                    .withDescription(
+                            "Maximum number of characters of exception text to include in Kubernetes events: the stack trace, task name and failure labels of JobException events, and the message of the Error event for a failed job. The text is truncated by size, regardless of how many lines it spans. Negative values disable the limit.");
+
+    /**
+     * @deprecated Use {@link #OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH}; a line limit does
+     *     not bound a single line of any size.
+     */
+    @Deprecated
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
             operatorConfig("events.exceptions.stacktrace-lines")
                     .intType()
-                    .defaultValue(5)
+                    .noDefaultValue()
                     .withDescription(
-                            "Maximum number of stack trace lines to include in exception-related Kubernetes event messages.");
+                            String.format(
+                                    "Deprecated, use %s instead. If only this option is set, it is read as a limit of %d characters per line.",
+                                    OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH.key(),
+                                    FlinkOperatorConfiguration.DEPRECATED_STACKTRACE_LINE_LENGTH));
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =
@@ -850,6 +866,14 @@ public class KubernetesOperatorConfigOptions {
                                     + "Keys and values must be valid Kubernetes label keys/values, otherwise event creation will fail. "
                                     + "Expected format: labelKey1:labelValue1,labelKey2:labelValue2. "
                                     + "Changing this requires an operator restart.");
+
+    @Documentation.Section(SECTION_ADVANCED_RECONCILE)
+    public static final ConfigOption<MemorySize> OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE =
+            operatorConfig("events.exceptions.max-response-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(10))
+                    .withDescription(
+                            "Maximum size of the exception history that the operator fetches from the JobManager to emit JobException events. A smaller rest.client.max-content-length still applies. A larger response is not read, and a JobExceptionHistoryTooLarge event reports that instead.");
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Boolean> OPERATOR_MANAGE_INGRESS =
