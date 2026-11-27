@@ -519,6 +519,10 @@ The Flink operator also forwards metrics created by the [Java Operator SDK](http
 
 The full list of emitted metrics (reconciliation counts and timings, event-source / controller-level gauges, etc.) is not repeated here as it is owned by the JOSDK project and may evolve across versions. Refer to the upstream [JOSDK metrics documentation](https://javaoperatorsdk.io/docs/documentation/operations/metrics/) for the authoritative description of the available metrics and their semantics.
 
+{{< hint warning >}}
+The operator skips per-resource JOSDK event and reconciliation counters for `FlinkStateSnapshot` because periodic savepoints create many short-lived resources. Snapshot state gauges remain available per namespace.
+{{< /hint >}}
+
 ## Metric Reporters
 
 The well-known [Metric Reporters](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters) are shipped in the operator image and are ready to use. The following reporters are bundled by default: SLF4J, Prometheus, JMX, Graphite, InfluxDB, Datadog, StatsD, Dropwizard and OpenTelemetry.

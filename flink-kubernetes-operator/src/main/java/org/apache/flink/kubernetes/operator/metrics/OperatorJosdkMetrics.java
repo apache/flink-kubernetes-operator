@@ -90,7 +90,7 @@ public class OperatorJosdkMetrics implements Metrics {
 
     @Override
     public void eventReceived(Event event, Map<String, Object> metadata) {
-        if (event instanceof ResourceEvent) {
+        if (event instanceof ResourceEvent && !isStateSnapshot(metadata)) {
             var action = ((ResourceEvent) event).getAction();
             counter(getResourceMg(event.getRelatedCustomResourceID(), metadata), RESOURCE, EVENT)
                     .inc();
@@ -105,12 +105,18 @@ public class OperatorJosdkMetrics implements Metrics {
 
     @Override
     public void cleanupDone(ResourceID resourceID, Map<String, Object> metadata) {
+        if (isStateSnapshot(metadata)) {
+            return;
+        }
         counter(getResourceMg(resourceID, metadata), RECONCILIATION, "cleanup").inc();
     }
 
     @Override
     public void reconciliationSubmitted(
             HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
+        if (isStateSnapshot(metadata)) {
+            return;
+        }
         var resourceID = ResourceID.fromResource(resource);
         counter(getResourceMg(resourceID, metadata), RECONCILIATION).inc();
 
@@ -122,6 +128,9 @@ public class OperatorJosdkMetrics implements Metrics {
     @Override
     public void reconciliationFinished(
             HasMetadata resource, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
+        if (isStateSnapshot(metadata)) {
+            return;
+        }
         counter(
                         getResourceMg(ResourceID.fromResource(resource), metadata),
                         RECONCILIATION,
@@ -135,11 +144,18 @@ public class OperatorJosdkMetrics implements Metrics {
             RetryInfo retryInfoNullable,
             Exception exception,
             Map<String, Object> metadata) {
+        if (isStateSnapshot(metadata)) {
+            return;
+        }
         counter(
                         getResourceMg(ResourceID.fromResource(resource), metadata),
                         RECONCILIATION,
                         "failed")
                 .inc();
+    }
+
+    private boolean isStateSnapshot(Map<String, Object> metadata) {
+        return getResourceClass(metadata).orElse(null) == FlinkStateSnapshot.class;
     }
 
     private Histogram histogram(ControllerExecution<?> execution, String name) {
