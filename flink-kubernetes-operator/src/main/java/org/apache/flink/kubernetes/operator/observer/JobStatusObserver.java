@@ -89,6 +89,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
             if (newJobStatusOpt.isPresent()) {
                 var newJobStatus = newJobStatusOpt.get();
+                clearJobNotFoundError(resource);
                 updateJobStatus(ctx, newJobStatus);
                 ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
                 // see if the JM server is up, try to get the exceptions
@@ -297,6 +298,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         if (!alreadyTerminal) {
             jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING);
             resource.getStatus().setError(JOB_NOT_FOUND_ERR);
+        }
+    }
+
+    private static void clearJobNotFoundError(AbstractFlinkResource<?, ?> resource) {
+        var status = resource.getStatus();
+        if (JOB_NOT_FOUND_ERR.equals(status.getError())) {
+            LOG.info("Previously missing job was found again, clearing the job not found error");
+            status.setError(null);
         }
     }
 
