@@ -808,15 +808,19 @@ public class TestingFlinkService extends AbstractFlinkService {
      */
     public void addExceptionHistory(
             JobID jobId, String exceptionName, String stackTrace, long timestamp) {
-        JobExceptionsInfoWithHistory.RootExceptionInfo exception =
+        addExceptionHistory(
+                jobId,
                 new JobExceptionsInfoWithHistory.RootExceptionInfo(
                         exceptionName,
                         stackTrace,
                         timestamp,
                         Map.of("label-key", "label-value"),
                         List.of() // concurrentExceptions
-                        );
+                        ));
+    }
 
+    public void addExceptionHistory(
+            JobID jobId, JobExceptionsInfoWithHistory.RootExceptionInfo exception) {
         JobExceptionsInfoWithHistory existing = jobExceptionsMap.get(jobId);
         List<JobExceptionsInfoWithHistory.RootExceptionInfo> entries =
                 existing != null && existing.getExceptionHistory() != null

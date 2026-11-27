@@ -255,12 +255,15 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             FlinkResourceContext<R> ctx,
             JobExceptionsInfoWithHistory.RootExceptionInfo exception,
             Instant exceptionTime) {
+        int maxLength = ctx.getOperatorConfig().getReportedExceptionEventsMaxStackTraceLength();
         Map<String, String> annotations = new HashMap<>();
         if (exceptionTime != null) {
             annotations.put(EXCEPTION_TIMESTAMP, exceptionTime.toString());
         }
+        // The task name and failure labels come from the job, so they can be as large as the
+        // stack trace
         if (exception.getTaskName() != null) {
-            annotations.put("task-name", exception.getTaskName());
+            annotations.put("task-name", truncateExceptionText(exception.getTaskName(), maxLength));
         }
         if (exception.getEndpoint() != null) {
             annotations.put("endpoint", exception.getEndpoint());
@@ -271,17 +274,22 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         if (exception.getFailureLabels() != null) {
             exception
                     .getFailureLabels()
-                    .forEach((k, v) -> annotations.put("failure-label-" + k, v));
+                    .forEach(
+                            (k, v) -> {
+                                // The REST response can hold a label without a value
+                                if (v != null) {
+                                    annotations.put(
+                                            "failure-label-" + k,
+                                            truncateExceptionText(v, maxLength));
+                                }
+                            });
         }
 
         String stacktrace = exception.getStacktrace();
         String eventMessage =
                 stacktrace == null || stacktrace.isBlank()
                         ? ""
-                        : truncateExceptionText(
-                                stacktrace,
-                                ctx.getOperatorConfig()
-                                        .getReportedExceptionEventsMaxStackTraceLength());
+                        : truncateExceptionText(stacktrace, maxLength);
 
         // The full stack trace tells apart exceptions that only differ in the truncated text
         String identityKey =
@@ -298,8 +306,8 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     }
 
     /**
-     * Truncates exception text for an event message to {@code maxLength} characters, and appends
-     * the number of characters left out.
+     * Truncates exception text for an event to {@code maxLength} characters, and appends the number
+     * of characters left out.
      *
      * @param text the exception text to truncate
      * @param maxLength the maximum number of characters to keep, negative values disable the limit

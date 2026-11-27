@@ -806,7 +806,7 @@ public class KubernetesOperatorConfigOptions {
                     .intType()
                     .defaultValue(2048)
                     .withDescription(
-                            "Maximum number of characters of exception text to include in Kubernetes event messages: the stack trace of JobException events and the message of the Error event for a failed job. The text is truncated by size, regardless of how many lines it spans. Negative values disable the limit.");
+                            "Maximum number of characters of exception text to include in Kubernetes events: the stack trace, task name and failure labels of JobException events, and the message of the Error event for a failed job. The text is truncated by size, regardless of how many lines it spans. Negative values disable the limit.");
 
     /**
      * @deprecated Use {@link #OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH}; a line limit does

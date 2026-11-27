@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.rest.messages.JobExceptionsInfoWithHistory;
 import org.apache.flink.util.SerializedThrowable;
 
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameException;
@@ -533,18 +534,48 @@ public class JobStatusObserverTest extends OperatorTestBase {
         // traces only differ after the cut and must still be separate events
         flinkService.addExceptionHistory(
                 jobId, "StackTraceCheck", "line1\nline2\nline3\nline4", 4000L);
+        var failureLabels = new HashMap<String, String>();
+        failureLabels.put("label", "x".repeat(20));
+        failureLabels.put("no-value", null);
         flinkService.addExceptionHistory(
-                jobId, "StackTraceCheck", "line1\nline2\nline5\nline6", 5000L);
+                jobId,
+                new JobExceptionsInfoWithHistory.RootExceptionInfo(
+                        "StackTraceCheck",
+                        "line1\nline2\nline5\nline6",
+                        5000L,
+                        failureLabels,
+                        "y".repeat(20),
+                        null,
+                        null,
+                        List.of()));
 
         // Ensure jobFailedErr is null before the observe call
         flinkService.setJobFailedErr(null);
         observer.observe(ctx);
 
-        assertThat(getEvents(deployment))
+        var events = getEvents(deployment);
+        assertThat(events)
                 .extracting(Event::getMessage)
                 .containsExactly(
                         "line1\nline2\n... (11 more characters)",
                         "line1\nline2\n... (11 more characters)");
+        // The cap applies to the task name and failure labels from the job too, and a label
+        // without a value is left out
+        assertThat(events)
+                .extracting(event -> event.getMetadata().getAnnotations())
+                .anySatisfy(
+                        annotations ->
+                                assertThat(annotations)
+                                        .containsEntry(
+                                                JobStatusObserver.EXCEPTION_TIMESTAMP,
+                                                Instant.ofEpochMilli(5000L).toString())
+                                        .containsEntry(
+                                                "task-name",
+                                                "y".repeat(12) + "... (8 more characters)")
+                                        .containsEntry(
+                                                "failure-label-label",
+                                                "x".repeat(12) + "... (8 more characters)")
+                                        .doesNotContainKey("failure-label-no-value"));
     }
 
     @ParameterizedTest
