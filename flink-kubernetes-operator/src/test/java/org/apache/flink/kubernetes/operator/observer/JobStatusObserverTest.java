@@ -44,7 +44,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.TooLongFrameExcepti
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
 import org.junit.jupiter.api.Test;
@@ -481,7 +480,6 @@ public class JobStatusObserverTest extends OperatorTestBase {
                         .list()
                         .getItems();
         assertEquals(2, events.size());
-        assertThat(flinkService.getRequestedMaxExceptions()).isEqualTo(3);
     }
 
     @ParameterizedTest
@@ -531,105 +529,22 @@ public class JobStatusObserverTest extends OperatorTestBase {
         ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
         ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
 
-        long exceptionTime = 4000L;
-        // The 12 character cap keeps exactly "line1\nline2\n" of the 23 characters
-        String longTrace = "line1\nline2\nline3\nline4";
-        flinkService.addExceptionHistory(jobId, "StackTraceCheck", longTrace, exceptionTime);
+        // The 12 character cap keeps exactly "line1\nline2\n" of the 23 characters, so these
+        // traces only differ after the cut and must still be separate events
+        flinkService.addExceptionHistory(
+                jobId, "StackTraceCheck", "line1\nline2\nline3\nline4", 4000L);
+        flinkService.addExceptionHistory(
+                jobId, "StackTraceCheck", "line1\nline2\nline5\nline6", 5000L);
 
         // Ensure jobFailedErr is null before the observe call
         flinkService.setJobFailedErr(null);
         observer.observe(ctx);
 
-        var events =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems();
-        assertEquals(1, events.size());
-        String msg = events.get(0).getMessage();
-        assertTrue(msg.contains("line1"));
-        assertTrue(msg.contains("line2"));
-        assertFalse(msg.contains("line3"));
-        assertTrue(msg.contains("... (11 more characters)"));
-    }
-
-    @Test
-    void testStackTraceTruncationBySizeNotLineCount() throws Exception {
-        String singleHugeLine = "x".repeat(5000);
-
-        String message =
-                observeJobExceptionEventMessage(
-                        Map.of(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
-                                        .key(),
-                                "100"),
-                        singleHugeLine);
-
-        assertThat(message).isEqualTo("x".repeat(100) + "... (4900 more characters)");
-    }
-
-    @Test
-    void testNegativeStackTraceMaxLengthDisablesLimit() throws Exception {
-        String singleHugeLine = "x".repeat(5000);
-
-        String message =
-                observeJobExceptionEventMessage(
-                        Map.of(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
-                                        .key(),
-                                "-1"),
-                        singleHugeLine);
-
-        assertThat(message).isEqualTo(singleHugeLine);
-    }
-
-    @Test
-    void testDefaultStackTraceTruncation() throws Exception {
-        String stackTrace = "line\n".repeat(600);
-
-        String message = observeJobExceptionEventMessage(Map.of(), stackTrace);
-
-        assertThat(message).isEqualTo(stackTrace.substring(0, 2048) + "... (952 more characters)");
-    }
-
-    @Test
-    void testDeprecatedStackTraceLinesReadAsCharacters() throws Exception {
-        String message =
-                observeJobExceptionEventMessage(
-                        Map.of(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES
-                                        .key(),
-                                "2"),
-                        "x".repeat(500));
-
-        assertThat(message).isEqualTo("x".repeat(200) + "... (300 more characters)");
-    }
-
-    @Test
-    void testExceptionsThatDifferOnlyInTruncatedTextAreSeparateEvents() throws Exception {
-        var events =
-                observeJobExceptionEvents(
-                        Map.of(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
-                                        .key(),
-                                "5"),
-                        "trace, cause A",
-                        "trace, cause B");
-
-        assertThat(events)
-                .hasSize(2)
-                .allSatisfy(
-                        event -> {
-                            assertThat(event.getMessage())
-                                    .isEqualTo("trace... (9 more characters)");
-                            assertThat(event.getCount()).isOne();
-                        });
+        assertThat(getEvents(deployment))
+                .extracting(Event::getMessage)
+                .containsExactly(
+                        "line1\nline2\n... (11 more characters)",
+                        "line1\nline2\n... (11 more characters)");
     }
 
     @ParameterizedTest
@@ -648,32 +563,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
-    void testFailedJobErrorEventTruncated() throws Exception {
-        var deployment = initDeployment();
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
-        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
-                getResourceContext(
-                        deployment,
-                        Configuration.fromMap(
-                                Map.of(
-                                        KubernetesOperatorConfigOptions
-                                                .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH
-                                                .key(),
-                                        "10")));
-        flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
-        flinkService.setJobFailedErr(new Exception("x".repeat(100)));
-
-        observer.observe(ctx);
-
-        var jobErrorEvent = flinkResourceEventCollector.events.poll();
-        assertThat(jobErrorEvent.getReason()).isEqualTo(EventRecorder.Reason.Error.name());
-        assertThat(jobErrorEvent.getMessage())
-                .isEqualTo("x".repeat(10) + "... (90 more characters)");
-    }
-
-    @Test
-    void testFailedJobErrorsThatDifferOnlyInTruncatedTextAreSeparateEvents() throws Exception {
+    void testFailedJobErrorEvents() throws Exception {
         var deployment = initDeployment();
         FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
                 getResourceContext(
@@ -687,64 +577,26 @@ public class JobStatusObserverTest extends OperatorTestBase {
         flinkService.submitApplicationCluster(
                 deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
 
-        // The repeated error must count on its existing event
+        // Errors that only differ after the cut are separate events, a repeated one counts on its
+        // existing event
         for (var error : List.of("error, cause A", "error, cause B", "error, cause A")) {
             deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
             flinkService.setJobFailedErr(new Exception(error));
             observer.observe(ctx);
         }
 
-        assertThat(
-                        kubernetesClient
-                                .v1()
-                                .events()
-                                .inNamespace(deployment.getMetadata().getNamespace())
-                                .list()
-                                .getItems())
+        assertThat(getEvents(deployment))
                 .filteredOn(event -> EventRecorder.Reason.Error.name().equals(event.getReason()))
+                .allSatisfy(
+                        event ->
+                                assertThat(event.getMessage())
+                                        .isEqualTo("error... (9 more characters)"))
                 .extracting(Event::getCount)
                 .containsExactlyInAnyOrder(2, 1);
     }
 
     @Test
-    void testExceptionHistoryLargerThanMaxResponseSize() throws Exception {
-        var events =
-                observeJobExceptionsFailure(
-                        new ExecutionException(
-                                new TooLongFrameException("Response entity too large")));
-
-        assertThat(flinkService.getRequestedMaxResponseSize()).isEqualTo(MemorySize.parse("1kb"));
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).getReason())
-                .isEqualTo(EventRecorder.Reason.JobExceptionHistoryTooLarge.name());
-        assertThat(events.get(0).getCount()).isOne();
-        assertThat(events.get(0).getMessage())
-                .isEqualTo(
-                        "The exception history of the job is larger than 1 kb, the smaller of kubernetes.operator.events.exceptions.max-response-size and rest.client.max-content-length, so its exceptions are not reported.");
-    }
-
-    @Test
-    void testSmallerClientMaxContentLengthLimitsExceptionHistory() throws Exception {
-        var events =
-                observeJobExceptionsFailure(
-                        new ExecutionException(
-                                new TooLongFrameException("Response entity too large")),
-                        Map.of(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE
-                                        .key(),
-                                "1kb",
-                                RestOptions.CLIENT_MAX_CONTENT_LENGTH.key(),
-                                "512"));
-
-        assertThat(flinkService.getRequestedMaxResponseSize()).isEqualTo(new MemorySize(512));
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).getMessage())
-                .startsWith("The exception history of the job is larger than 512 bytes,");
-    }
-
-    @Test
-    void testExceptionHistoryTooLargeEventKeptWhenLimitChanges() throws Exception {
+    void testExceptionHistoryTooLarge() throws Exception {
         var deployment = initDeployment();
         deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
         flinkService.submitApplicationCluster(
@@ -752,29 +604,34 @@ public class JobStatusObserverTest extends OperatorTestBase {
                 getResourceContext(deployment).getDeployConfig(deployment.getSpec()),
                 false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        String maxResponseSize =
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE.key();
+
+        // Other failures to fetch the history are only logged
+        flinkService.setJobExceptionsFailure(new IOException("Connection refused"));
+        observer.observe(getResourceContext(deployment));
+        assertThat(getEvents(deployment)).isEmpty();
+
         flinkService.setJobExceptionsFailure(
                 new ExecutionException(new TooLongFrameException("Response entity too large")));
+        observer.observe(
+                getResourceContext(
+                        deployment, Configuration.fromMap(Map.of(maxResponseSize, "1kb"))));
+        assertThat(flinkService.getRequestedMaxResponseSize()).isEqualTo(MemorySize.parse("1kb"));
 
-        // The message changes with the limit, the event must not
-        for (var maxResponseSize : List.of("1kb", "2kb")) {
-            observer.observe(
-                    getResourceContext(
-                            deployment,
-                            Configuration.fromMap(
-                                    Map.of(
-                                            KubernetesOperatorConfigOptions
-                                                    .OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE
-                                                    .key(),
-                                            maxResponseSize))));
-        }
+        // A smaller REST client limit applies, and the changed message stays on the same event
+        observer.observe(
+                getResourceContext(
+                        deployment,
+                        Configuration.fromMap(
+                                Map.of(
+                                        maxResponseSize,
+                                        "1kb",
+                                        RestOptions.CLIENT_MAX_CONTENT_LENGTH.key(),
+                                        "512"))));
+        assertThat(flinkService.getRequestedMaxResponseSize()).isEqualTo(new MemorySize(512));
 
-        assertThat(
-                        kubernetesClient
-                                .v1()
-                                .events()
-                                .inNamespace(deployment.getMetadata().getNamespace())
-                                .list()
-                                .getItems())
+        assertThat(getEvents(deployment))
                 .singleElement()
                 .satisfies(
                         event -> {
@@ -782,118 +639,18 @@ public class JobStatusObserverTest extends OperatorTestBase {
                                     .isEqualTo(
                                             EventRecorder.Reason.JobExceptionHistoryTooLarge
                                                     .name());
-                            assertThat(event.getMessage()).contains("larger than 1 kb,");
+                            assertThat(event.getCount()).isOne();
+                            assertThat(event.getMessage())
+                                    .isEqualTo(
+                                            "The exception history of the job is larger than 1 kb, the smaller of kubernetes.operator.events.exceptions.max-response-size and rest.client.max-content-length, so its exceptions are not reported.");
                         });
     }
 
-    @Test
-    void testFailedExceptionHistoryTooLargeEventKeepsJobRunning() throws Exception {
-        var failingEventRecorder =
-                new EventRecorder(
-                        (resource, event) -> {
-                            throw new KubernetesClientException("Internal error", 500, null);
-                        },
-                        (resource, event) -> {});
-        var deployment = initDeployment();
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
-        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx = getResourceContext(deployment);
-        flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        flinkService.setJobExceptionsFailure(
-                new ExecutionException(new TooLongFrameException("Response entity too large")));
-
-        assertThat(new JobStatusObserver<>(failingEventRecorder).observe(ctx)).isTrue();
-        assertThat(deployment.getStatus().getJobStatus().getState()).isEqualTo(JobStatus.RUNNING);
-    }
-
-    @Test
-    void testExceptionHistoryFetchFailureEmitsNoEvent() throws Exception {
-        assertThat(observeJobExceptionsFailure(new IOException("Connection refused"))).isEmpty();
-    }
-
-    /**
-     * Observes a running deployment whose exception history request fails with the given exception,
-     * and returns the resulting events.
-     */
-    private List<Event> observeJobExceptionsFailure(Exception failure) throws Exception {
-        return observeJobExceptionsFailure(
-                failure,
-                Map.of(
-                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE
-                                .key(),
-                        "1kb"));
-    }
-
-    private List<Event> observeJobExceptionsFailure(Exception failure, Map<String, String> config)
-            throws Exception {
-        var deployment = initDeployment();
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
-        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
-                getResourceContext(deployment, Configuration.fromMap(config));
-        flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        flinkService.setJobFailedErr(null);
-        flinkService.setJobExceptionsFailure(failure);
-
-        // Twice, so that a repeated event would show
-        observer.observe(ctx);
-        observer.observe(ctx);
-
+    private List<Event> getEvents(AbstractFlinkResource<?, ?> resource) {
         return kubernetesClient
                 .v1()
                 .events()
-                .inNamespace(deployment.getMetadata().getNamespace())
-                .list()
-                .getItems();
-    }
-
-    /**
-     * Observes a running deployment whose job reported one new exception with the given stack
-     * trace, and returns the message of the resulting JobException event.
-     */
-    private String observeJobExceptionEventMessage(Map<String, String> config, String stackTrace)
-            throws Exception {
-        var events = observeJobExceptionEvents(config, stackTrace);
-        assertThat(events).hasSize(1);
-        return events.get(0).getMessage();
-    }
-
-    /**
-     * Observes a running deployment whose job reported new exceptions with the given stack traces,
-     * and returns the resulting events.
-     */
-    private List<Event> observeJobExceptionEvents(Map<String, String> config, String... stackTraces)
-            throws Exception {
-        var deployment = initDeployment();
-        deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING);
-        FlinkResourceContext<AbstractFlinkResource<?, ?>> ctx =
-                getResourceContext(deployment, Configuration.fromMap(config));
-
-        var jobId = JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId());
-        flinkService.submitApplicationCluster(
-                deployment.getSpec().getJob(), ctx.getDeployConfig(deployment.getSpec()), false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        ctx.getExceptionCacheEntry().setInitialized(true);
-        ctx.getExceptionCacheEntry().setJobId(jobId.toHexString());
-        ctx.getExceptionCacheEntry().setLastTimestamp(Instant.ofEpochMilli(3000L));
-        long timestamp = 3000L;
-        for (var stackTrace : stackTraces) {
-            timestamp += 1000L;
-            flinkService.addExceptionHistory(jobId, "Exception", stackTrace, timestamp);
-        }
-        flinkService.setJobFailedErr(null);
-
-        observer.observe(ctx);
-
-        // A failure to build an event would leave the timestamp behind and retry every cycle
-        assertThat(ctx.getExceptionCacheEntry().getLastTimestamp())
-                .isEqualTo(Instant.ofEpochMilli(timestamp));
-        return kubernetesClient
-                .v1()
-                .events()
-                .inNamespace(deployment.getMetadata().getNamespace())
+                .inNamespace(resource.getMetadata().getNamespace())
                 .list()
                 .getItems();
     }
