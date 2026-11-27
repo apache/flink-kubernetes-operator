@@ -181,14 +181,37 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime,
             DelayedScaleDown delayedScaleDown) {
+        var scaleFactor =
+                computeScaleFactor(context, vertex, evaluatedMetrics, history, restartTime);
+        return computeScaleTargetParallelism(
+                context,
+                vertex,
+                inputShipStrategies,
+                jobTopology,
+                evaluatedMetrics,
+                history,
+                delayedScaleDown,
+                scaleFactor);
+    }
+
+    /**
+     * Computes the scale factor for a vertex before applying its parallelism limits and alignment.
+     *
+     * @return The scale factor, or {@link Double#NaN} if the metrics are not available.
+     */
+    double computeScaleFactor(
+            Context context,
+            JobVertexID vertex,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            SortedMap<Instant, ScalingSummary> history,
+            Duration restartTime) {
         var conf = context.getConfiguration();
-        var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
         if (Double.isNaN(averageTrueProcessingRate)) {
             LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange(currentParallelism);
+            return Double.NaN;
         }
 
         double targetCapacity =
@@ -198,7 +221,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return ParallelismChange.noChange(currentParallelism);
+            return Double.NaN;
         }
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
@@ -227,6 +250,30 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                     maxScaleFactor);
             scaleFactor = maxScaleFactor;
         }
+
+        return scaleFactor;
+    }
+
+    /**
+     * Computes a vertex target using a previously computed scale factor. The factor is shared by
+     * vertices in the same eligible slot sharing group, while all vertex-specific bounds and
+     * alignment are applied here as in the default scaling path.
+     */
+    ParallelismChange computeScaleTargetParallelism(
+            Context context,
+            JobVertexID vertex,
+            Collection<ShipStrategy> inputShipStrategies,
+            JobTopology jobTopology,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            SortedMap<Instant, ScalingSummary> history,
+            DelayedScaleDown delayedScaleDown,
+            double scaleFactor) {
+        var conf = context.getConfiguration();
+        var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
+        if (Double.isNaN(scaleFactor)) {
+            return ParallelismChange.noChange(currentParallelism);
+        }
+        double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
 
         int newParallelism =
                 scale(

@@ -73,6 +73,22 @@ public class AutoScalerOptionsTest {
         assertThat(merged.getString("shared", null)).isEqualTo("override-value");
     }
 
+    @Test
+    void testPerSlotSharingGroupScalingDefaults() {
+        var configuration = new Configuration();
+
+        assertThat(
+                        configuration.get(
+                                AutoScalerOptions
+                                        .SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_ENABLED))
+                .isFalse();
+        assertThat(
+                        configuration.get(
+                                AutoScalerOptions
+                                        .SCALING_MAX_SCALE_FACTOR_PER_SLOT_SHARING_GROUP_TASKMANAGER_REPLICAS_CHANGE_REQUIRED))
+                .isTrue();
+    }
+
     private static List<ConfigOption<?>> retrieveAutoscalerConfigOptions() {
         List<ConfigOption<?>> configOptions = new ArrayList<>();
 
