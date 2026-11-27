@@ -517,9 +517,11 @@ The operator gathers metrics about the JVM process and exposes them similarly to
 
 The Flink operator also forwards metrics created by the [Java Operator SDK](https://javaoperatorsdk.io/) (JOSDK) framework itself under the `JOSDK` metric name prefix. Some of these metrics are on system, namespace and resource level.
 
-The operator skips per-resource JOSDK event and reconciliation counters for `FlinkStateSnapshot` because periodic savepoints create many short-lived resources. Snapshot state gauges remain available per namespace.
-
 The full list of emitted metrics (reconciliation counts and timings, event-source / controller-level gauges, etc.) is not repeated here as it is owned by the JOSDK project and may evolve across versions. Refer to the upstream [JOSDK metrics documentation](https://javaoperatorsdk.io/docs/documentation/operations/metrics/) for the authoritative description of the available metrics and their semantics.
+
+{{< hint warning >}}
+The operator skips per-resource JOSDK event and reconciliation counters for `FlinkStateSnapshot` because periodic savepoints create many short-lived resources. Snapshot state gauges remain available per namespace.
+{{< /hint >}}
 
 ## Metric Reporters
 
