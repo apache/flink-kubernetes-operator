@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
@@ -436,6 +437,61 @@ public class FlinkDeploymentControllerTest {
         testController.cleanup(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(0, jobs.size());
+    }
+
+    @Test
+    public void testFailedJobRestoredFromLatestSavepointAfterUpgrade() throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_20);
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        appCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                        "file:///flink-data/savepoints");
+        appCluster.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        // Savepoint upgrade, the new job is started from the upgrade savepoint
+        appCluster.getSpec().getJob().setParallelism(100);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals("savepoint_0", flinkService.listJobs().get(0).f0);
+
+        // The running job takes a newer savepoint
+        appCluster.getSpec().getJob().setSavepointTriggerNonce(1L);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                "savepoint_1",
+                appCluster
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+
+        // A JobManager failover lost the HA checkpoints and the job failed while restoring. The
+        // new JobManager has no checkpoint information to observe for the failed job.
+        flinkService.markApplicationJobFailedWithError(
+                flinkService.listJobs().get(0).f1.getJobId(), "FileNotFoundException");
+        flinkService.setHaDataAvailable(false);
+        flinkService.setCheckpointInfo(Tuple2.of(Optional.empty(), Optional.empty()));
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FAILED,
+                appCluster.getStatus().getJobStatus().getState());
+
+        // Upgrading the failed job must not roll it back to the older upgrade savepoint
+        appCluster.getSpec().getJob().setParallelism(50);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        var jobs = flinkService.listJobs();
+        assertEquals(1, jobs.size());
+        assertEquals("savepoint_1", jobs.get(0).f0);
     }
 
     @ParameterizedTest
