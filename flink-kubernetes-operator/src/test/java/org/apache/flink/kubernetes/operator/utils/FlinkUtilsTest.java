@@ -26,6 +26,7 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -60,6 +61,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -440,5 +444,38 @@ public class FlinkUtilsTest {
                         .build();
 
         kubernetesClient.configMaps().resource(cm).createOrReplace();
+    }
+
+    @Test
+    public void testStateRecoveryOptionsWrittenUnderTheKeyTheFlinkVersionReads() {
+        var legacyPathKey = "execution.savepoint.path";
+        var legacyIgnoreKey = "execution.savepoint.ignore-unclaimed-state";
+
+        // Flink versions before 1.20 only read the previous keys
+        var conf = new Configuration();
+        conf.set(FLINK_VERSION, FlinkVersion.v1_19);
+        FlinkUtils.setStateRecoveryOption(conf, SAVEPOINT_PATH, "s3://sp");
+        FlinkUtils.setStateRecoveryOption(conf, SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+        assertEquals("s3://sp", conf.toMap().get(legacyPathKey));
+        assertEquals("true", conf.toMap().get(legacyIgnoreKey));
+        assertFalse(conf.containsKey(SAVEPOINT_PATH.key()));
+        assertFalse(conf.containsKey(SAVEPOINT_IGNORE_UNCLAIMED_STATE.key()));
+        // The options still resolve through their deprecated keys
+        assertEquals("s3://sp", conf.get(SAVEPOINT_PATH));
+        assertTrue(conf.get(SAVEPOINT_IGNORE_UNCLAIMED_STATE));
+
+        // Flink 1.20 and later get the current keys, a user-set previous key is replaced
+        conf = new Configuration();
+        conf.set(FLINK_VERSION, FlinkVersion.v1_20);
+        conf.setString(legacyPathKey, "s3://user");
+        FlinkUtils.setStateRecoveryOption(conf, SAVEPOINT_PATH, "s3://sp");
+        assertEquals("s3://sp", conf.toMap().get(SAVEPOINT_PATH.key()));
+        assertFalse(conf.containsKey(legacyPathKey));
+
+        // Removal clears both keys
+        conf.setString(legacyPathKey, "s3://user");
+        FlinkUtils.removeStateRecoveryOption(conf, SAVEPOINT_PATH);
+        assertFalse(conf.containsKey(SAVEPOINT_PATH.key()));
+        assertFalse(conf.containsKey(legacyPathKey));
     }
 }

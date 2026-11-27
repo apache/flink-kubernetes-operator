@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.DeletionPropagation;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.apps.Deployment;
-import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 
 import java.util.concurrent.ScheduledExecutorService;
@@ -48,7 +48,7 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
 
     @Override
     public void createTaskManagerDeployment(Deployment tmDeployment) {
-        this.internalClient.apps().deployments().create(tmDeployment);
+        this.internalClient.apps().deployments().resource(tmDeployment).create();
     }
 
     @Override
@@ -68,10 +68,13 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
                 .delete();
     }
 
+    @SuppressWarnings("resource")
     public static Fabric8FlinkStandaloneKubeClient create(
             Configuration conf, ScheduledExecutorService executorService) {
         var client =
-                new DefaultKubernetesClient()
+                new KubernetesClientBuilder()
+                        .build()
+                        .adapt(NamespacedKubernetesClient.class)
                         .inNamespace(conf.get(KubernetesConfigOptions.NAMESPACE));
         return new Fabric8FlinkStandaloneKubeClient(conf, client, executorService);
     }

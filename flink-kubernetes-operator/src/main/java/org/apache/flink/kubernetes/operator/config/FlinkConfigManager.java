@@ -141,7 +141,7 @@ public class FlinkConfigManager implements AutoCloseable {
                 cacheTimeout.toMillis(),
                 TimeUnit.MILLISECONDS);
 
-        if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
+        if (defaultConfig.get(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
             scheduleConfigWatcher(executorService);
         }
     }

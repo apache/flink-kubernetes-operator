@@ -44,8 +44,8 @@ public class JobTopologyTest {
     @Test
     public void testTopologyFromJson() throws JsonProcessingException {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
-        var s1 = env.fromElements(1).name("s1");
-        var s2 = env.fromElements(1).name("s2");
+        var s1 = env.fromData(1).name("s1");
+        var s2 = env.fromData(1).name("s2");
 
         s1.union(s2)
                 .keyBy(v -> v)
@@ -57,7 +57,7 @@ public class JobTopologyTest {
                 .name("sink1")
                 .setParallelism(2);
 
-        var s3 = env.fromElements(1).name("s3");
+        var s3 = env.fromData(1).name("s3");
         var map2 = s3.rescale().map(i -> i).name("map2").setParallelism(4).rebalance();
 
         map2.print().name("sink2").setParallelism(5);

@@ -75,7 +75,7 @@ wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIME
 
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 wait_for_logs $jm_pod_name "Restoring job .* from Savepoint" ${TIMEOUT} || exit 1
-wait_for_logs $jm_pod_name "execution.savepoint.path, ${location}" ${TIMEOUT} || exit 1
+wait_for_logs $jm_pod_name "execution.(state-recovery|savepoint).path, ${location}" ${TIMEOUT} || exit 1
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 
 
@@ -168,7 +168,7 @@ jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 
 # Check the new JobManager recovering from latest successful checkpoint
 wait_for_logs $jm_pod_name "Restoring job .* from Savepoint" ${TIMEOUT} || exit 1
-wait_for_logs $jm_pod_name "execution.savepoint.path, ${location}" ${TIMEOUT} || exit 1
+wait_for_logs $jm_pod_name "execution.(state-recovery|savepoint).path, ${location}" ${TIMEOUT} || exit 1
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 
 kubectl delete flinksnp/$snapshot

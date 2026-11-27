@@ -140,7 +140,7 @@ public class StandaloneKubernetesTaskManagerParametersTest extends ParametersTes
     @Test
     public void testGetPodTemplateFilePath() {
         String templateFilePath = "/tmp/tst.yml";
-        flinkConfig.setString(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE, templateFilePath);
+        flinkConfig.set(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE, templateFilePath);
         Optional<File> templateFile = kubernetesTaskManagerParameters.getPodTemplateFilePath();
         assertTrue(templateFile.isPresent());
         String filePath = templateFile.get().getAbsolutePath();

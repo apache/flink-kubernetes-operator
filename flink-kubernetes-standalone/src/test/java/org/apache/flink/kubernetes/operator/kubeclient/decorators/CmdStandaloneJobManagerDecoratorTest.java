@@ -23,6 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.StateRecoveryOptions;
 import org.apache.flink.container.entrypoint.StandaloneApplicationClusterConfigurationParserFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
@@ -32,7 +33,6 @@ import org.apache.flink.runtime.entrypoint.ClusterConfiguration;
 import org.apache.flink.runtime.entrypoint.EntrypointClusterConfigurationParserFactory;
 import org.apache.flink.runtime.entrypoint.parser.CommandLineParser;
 import org.apache.flink.runtime.entrypoint.parser.ParserResultFactory;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
@@ -43,6 +43,8 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -59,7 +61,7 @@ public class CmdStandaloneJobManagerDecoratorTest {
     @BeforeEach
     public void setup() {
         configuration = new Configuration();
-        configuration.setString(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
+        configuration.set(KubernetesConfigOptions.KUBERNETES_ENTRY_PATH, MOCK_ENTRYPATH);
         jmParameters =
                 new StandaloneKubernetesJobManagerParameters(
                         configuration,
@@ -90,8 +92,8 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, testMainClass);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
+        configuration.set(SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+        configuration.set(SAVEPOINT_PATH, "/tmp/savepoint/path");
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
         assertThat(decoratedPod.getMainContainer().getCommand())
@@ -272,13 +274,35 @@ public class CmdStandaloneJobManagerDecoratorTest {
         assertThat(parsed.get(JobManagerOptions.ADDRESS)).isNull();
     }
 
+    @Test
+    public void testApplicationSavepointArgsFromPreviousKeys() {
+        // The operator writes the previous execution.savepoint.* keys for Flink versions before
+        // 1.20, the entrypoint arguments must still be derived from them
+        configuration.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, "org.main.class");
+        configuration.setString("execution.savepoint.ignore-unclaimed-state", "true");
+        configuration.setString("execution.savepoint.path", "/tmp/savepoint/path");
+
+        List<String> args =
+                decorator
+                        .decorateFlinkPod(new FlinkPod.Builder().build())
+                        .getMainContainer()
+                        .getArgs();
+
+        assertThat(args)
+                .containsSequence(
+                        "--allowNonRestoredState", "--fromSavepoint", "/tmp/savepoint/path");
+    }
+
     private List<String> decorateApplicationWithAllArgs(String jarURI) {
         configuration.set(
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, "org.main.class");
-        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
+        configuration.set(StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+        configuration.set(StateRecoveryOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
         configuration.set(HighAvailabilityOptions.HA_MODE, "KUBERNETES");
         configuration.set(StandaloneKubernetesConfigOptionsInternal.APPLICATION_JAR_URI, jarURI);
         configuration.set(ApplicationConfiguration.APPLICATION_ARGS, List.of("--input", "in"));

@@ -120,6 +120,7 @@ import java.util.stream.Stream;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
+import static org.apache.flink.configuration.StateRecoveryOptions.SAVEPOINT_PATH;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobSpec;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
@@ -1380,6 +1381,27 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
         Assertions.assertEquals(
                 MSG_RECOVERY, flinkResourceEventCollector.events.remove().getMessage());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void testSavepointPathWrittenUnderTheKeyTheFlinkVersionReads(FlinkVersion flinkVersion)
+            throws Exception {
+        var deployment = TestUtils.buildApplicationCluster(flinkVersion);
+        deployment.getSpec().getJob().setInitialSavepointPath("sp-t1");
+        reconciler.reconcile(deployment, context);
+
+        var deployConf = flinkService.listJobs().get(0).f2;
+        Assertions.assertEquals("sp-t1", deployConf.get(SAVEPOINT_PATH));
+        var legacyKey = "execution.savepoint.path";
+        if (flinkVersion.isEqualOrNewer(FlinkVersion.v1_20)) {
+            Assertions.assertTrue(deployConf.containsKey(SAVEPOINT_PATH.key()));
+            Assertions.assertFalse(deployConf.containsKey(legacyKey));
+        } else {
+            // Flink versions before 1.20 only read the previous key
+            Assertions.assertTrue(deployConf.containsKey(legacyKey));
+            Assertions.assertFalse(deployConf.containsKey(SAVEPOINT_PATH.key()));
+        }
     }
 
     @Test
