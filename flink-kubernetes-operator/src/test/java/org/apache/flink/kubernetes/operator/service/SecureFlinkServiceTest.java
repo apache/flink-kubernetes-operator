@@ -282,9 +282,9 @@ public class SecureFlinkServiceTest {
     private Configuration createOperatorConfig() {
         Configuration deployConfig = new Configuration(configuration);
         deployConfig.setString(OPERATOR_HEALTH_PROBE_PORT.key(), "80");
-        deployConfig.setBoolean(SecurityOptions.SSL_REST_ENABLED, true);
-        deployConfig.setString(SecurityOptions.SSL_REST_KEYSTORE, "/etc/certs/keystore.jks");
-        deployConfig.setString(SecurityOptions.SSL_REST_TRUSTSTORE, "/etc/certs/truststore.jks");
+        deployConfig.set(SecurityOptions.SSL_REST_ENABLED, true);
+        deployConfig.set(SecurityOptions.SSL_REST_KEYSTORE, "/etc/certs/keystore.jks");
+        deployConfig.set(SecurityOptions.SSL_REST_TRUSTSTORE, "/etc/certs/truststore.jks");
         return deployConfig;
     }
 

@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
+import io.javaoperatorsdk.operator.api.config.LeaderElectionConfigurationBuilder;
 import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
 import io.javaoperatorsdk.operator.processing.event.rate.RateLimiter;
 import io.javaoperatorsdk.operator.processing.retry.GenericRetry;
@@ -94,8 +95,7 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL);
 
         int reconcilerMaxParallelism =
-                operatorConfig.getInteger(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM);
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM);
 
         Duration restApiReadyDelay =
                 operatorConfig.get(
@@ -195,7 +195,7 @@ public class FlinkOperatorConfiguration {
         RateLimiter rateLimiter = getRateLimiter(operatorConfig);
 
         String labelSelector =
-                operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
 
         DeletionPropagation deletionPropagation =
                 operatorConfig.get(KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION);
@@ -276,30 +276,28 @@ public class FlinkOperatorConfiguration {
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {
-        var genericRetry =
-                new GenericRetry()
-                        .setMaxAttempts(
-                                conf.getInteger(
+        var retry =
+                GenericRetry.builder()
+                        .withMaxAttempts(
+                                conf.get(
                                         KubernetesOperatorConfigOptions
                                                 .OPERATOR_RETRY_MAX_ATTEMPTS))
-                        .setInitialInterval(
+                        .withInitialInterval(
                                 conf.get(
-                                                KubernetesOperatorConfigOptions
-                                                        .OPERATOR_RETRY_INITIAL_INTERVAL)
-                                        .toMillis())
-                        .setIntervalMultiplier(
-                                conf.getDouble(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_RETRY_INITIAL_INTERVAL))
+                        .withIntervalMultiplier(
+                                conf.get(
                                         KubernetesOperatorConfigOptions
                                                 .OPERATOR_RETRY_INTERVAL_MULTIPLIER));
 
         if (conf.contains(KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL)) {
-            genericRetry.setMaxInterval(
-                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL)
-                            .toMillis());
+            retry.withMaxInterval(
+                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL));
         } else {
-            genericRetry.withoutMaxInterval();
+            retry.withoutMaxInterval();
         }
-        return genericRetry;
+        return retry.build();
     }
 
     private static RateLimiter<?> getRateLimiter(Configuration conf) {
@@ -313,20 +311,30 @@ public class FlinkOperatorConfiguration {
             return null;
         }
 
-        return new LeaderElectionConfiguration(
-                conf.getOptional(
-                                KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME)
-                        .orElseThrow(
-                                () ->
-                                        new IllegalConfigurationException(
-                                                KubernetesOperatorConfigOptions
-                                                                .OPERATOR_LEADER_ELECTION_LEASE_NAME
-                                                                .key()
-                                                        + " must be defined when operator leader election is enabled.")),
-                null,
-                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_DURATION),
-                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RENEW_DEADLINE),
-                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RETRY_PERIOD));
+        return LeaderElectionConfigurationBuilder.aLeaderElectionConfiguration(
+                        conf.getOptional(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_LEADER_ELECTION_LEASE_NAME)
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalConfigurationException(
+                                                        KubernetesOperatorConfigOptions
+                                                                        .OPERATOR_LEADER_ELECTION_LEASE_NAME
+                                                                        .key()
+                                                                + " must be defined when operator leader election is enabled.")))
+                .withLeaseDuration(
+                        conf.get(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_LEADER_ELECTION_LEASE_DURATION))
+                .withRenewDeadline(
+                        conf.get(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_LEADER_ELECTION_RENEW_DEADLINE))
+                .withRetryPeriod(
+                        conf.get(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_LEADER_ELECTION_RETRY_PERIOD))
+                .build();
     }
 
     private static Optional<String> getEnv(String key) {

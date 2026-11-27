@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.StatusDetails;
+import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 
 import java.util.List;
 
@@ -56,7 +57,10 @@ public class BlueGreenKubernetesService {
 
     public static void deployCluster(BlueGreenContext context, FlinkDeployment flinkDeployment) {
         // Deploy
-        context.getJosdkContext().getClient().resource(flinkDeployment).createOrReplace();
+        context.getJosdkContext()
+                .getClient()
+                .resource(flinkDeployment)
+                .createOr(NonDeletingOperation::update);
     }
 
     /**
@@ -92,7 +96,7 @@ public class BlueGreenKubernetesService {
                 .getClient()
                 .resource(context.getBgDeployment())
                 .inNamespace(namespace)
-                .replace();
+                .update();
     }
 
     /**

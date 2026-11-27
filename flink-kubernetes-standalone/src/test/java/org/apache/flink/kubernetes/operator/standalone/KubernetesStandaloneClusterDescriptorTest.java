@@ -32,7 +32,7 @@ import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.EnvVar
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.apps.Deployment;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.Config;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.ConfigBuilder;
-import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -78,9 +78,9 @@ public class KubernetesStandaloneClusterDescriptorTest {
     public void testDeploySessionCluster() throws Exception {
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
 
-        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(0));
-        flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
-        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
+        flinkConfig.set(BlobServerOptions.PORT, String.valueOf(0));
+        flinkConfig.set(TaskManagerOptions.RPC_PORT, String.valueOf(0));
+        flinkConfig.set(RestOptions.BIND_PORT, String.valueOf(0));
         flinkConfig.setString(
                 ResourceManagerOptions.CONTAINERIZED_MASTER_ENV_PREFIX + USER_ENV_VAR,
                 JM_ENV_VALUE);
@@ -149,9 +149,9 @@ public class KubernetesStandaloneClusterDescriptorTest {
     public void testDeployApplicationCluster() throws Exception {
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
 
-        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(0));
-        flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
-        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
+        flinkConfig.set(BlobServerOptions.PORT, String.valueOf(0));
+        flinkConfig.set(TaskManagerOptions.RPC_PORT, String.valueOf(0));
+        flinkConfig.set(RestOptions.BIND_PORT, String.valueOf(0));
 
         var clusterClientProvider =
                 clusterDescriptor.deployApplicationCluster(
@@ -238,6 +238,10 @@ public class KubernetesStandaloneClusterDescriptorTest {
                         .withMasterUrl(mockWebServer.url("/").toString())
                         .withHttp2Disable(true)
                         .build();
-        return new DefaultKubernetesClient(config).inNamespace(TEST_NAMESPACE);
+        return new KubernetesClientBuilder()
+                .withConfig(config)
+                .build()
+                .adapt(NamespacedKubernetesClient.class)
+                .inNamespace(TEST_NAMESPACE);
     }
 }

@@ -87,7 +87,7 @@ public class EventSourceUtils {
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
@@ -106,7 +106,7 @@ public class EventSourceUtils {
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<?, FlinkDeployment> getIngressInformerEventSource(
@@ -128,7 +128,7 @@ public class EventSourceUtils {
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<FlinkDeployment, FlinkBlueGreenDeployment>
@@ -142,7 +142,7 @@ public class EventSourceUtils {
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<?, FlinkBlueGreenDeployment>
@@ -165,7 +165,7 @@ public class EventSourceUtils {
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<FlinkSessionJob, FlinkDeployment>
@@ -202,7 +202,7 @@ public class EventSourceUtils {
                         .withFollowControllerNamespacesChanges(true)
                         .build();
 
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static InformerEventSource<FlinkDeployment, FlinkSessionJob>
@@ -248,7 +248,7 @@ public class EventSourceUtils {
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
-        return new InformerEventSource<>(configuration, context);
+        return new InformerEventSource<>(configuration);
     }
 
     public static EventSource[] getFlinkStateSnapshotInformerEventSources(
@@ -288,8 +288,7 @@ public class EventSourceUtils {
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
-        var flinkSessionJobEventSource =
-                new InformerEventSource<>(configurationFlinkSessionJob, context);
+        var flinkSessionJobEventSource = new InformerEventSource<>(configurationFlinkSessionJob);
 
         var configurationFlinkDeployment =
                 InformerEventSourceConfiguration.from(
@@ -329,8 +328,7 @@ public class EventSourceUtils {
                         .withNamespacesInheritedFromController()
                         .withFollowControllerNamespacesChanges(true)
                         .build();
-        var flinkDeploymentEventSource =
-                new InformerEventSource<>(configurationFlinkDeployment, context);
+        var flinkDeploymentEventSource = new InformerEventSource<>(configurationFlinkDeployment);
 
         return new EventSource[] {flinkSessionJobEventSource, flinkDeploymentEventSource};
     }

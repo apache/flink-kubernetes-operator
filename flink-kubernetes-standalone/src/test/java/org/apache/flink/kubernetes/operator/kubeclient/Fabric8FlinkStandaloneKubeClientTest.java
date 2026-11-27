@@ -29,7 +29,7 @@ import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.apps.Deployment;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.Config;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.ConfigBuilder;
-import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -109,6 +109,10 @@ public class Fabric8FlinkStandaloneKubeClientTest {
                         .withMasterUrl(mockWebServer.url("/").toString())
                         .withHttp2Disable(true)
                         .build();
-        return new DefaultKubernetesClient(config).inNamespace(TEST_NAMESPACE);
+        return new KubernetesClientBuilder()
+                .withConfig(config)
+                .build()
+                .adapt(NamespacedKubernetesClient.class)
+                .inNamespace(TEST_NAMESPACE);
     }
 }

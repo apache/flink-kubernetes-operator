@@ -17,14 +17,17 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.configuration.FallbackKey;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -59,9 +62,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
+
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -245,7 +251,7 @@ public class FlinkUtils {
                 FlinkUtils.getFlinkKubernetesHaConfigmaps(clusterId, namespace, kubernetesClient)
                         .list();
 
-        boolean shouldUpdate = false;
+        List<ConfigMap> modifiedConfigMaps = new ArrayList<>();
         for (ConfigMap configMap : configMaps.getItems()) {
             if (configMap.getData() == null || configMap.getData().isEmpty()) {
                 continue;
@@ -253,13 +259,12 @@ public class FlinkUtils {
             final boolean isDeleted =
                     configMap.getData().entrySet().removeIf(FlinkUtils::isJobGraphKey);
             if (isDeleted) {
-                shouldUpdate = true;
+                modifiedConfigMaps.add(configMap);
                 LOG.info("Job graph in ConfigMap {} is deleted", configMap.getMetadata().getName());
             }
         }
-        if (shouldUpdate) {
-            kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
-        }
+        modifiedConfigMaps.forEach(
+                cm -> kubernetesClient.resource(cm).inNamespace(namespace).update());
     }
 
     public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
@@ -367,13 +372,13 @@ public class FlinkUtils {
 
     public static Double calculateClusterCpuUsage(Configuration conf, int taskManagerReplicas) {
         var jmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU)
-                        * conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU)
+                        * conf.get(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
                         * conf.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS);
 
         var tmTotalCpu =
-                conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU, 1)
-                        * conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
+                conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU, 1.0)
+                        * conf.get(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
                         * taskManagerReplicas;
 
         return tmTotalCpu + jmTotalCpu;
@@ -394,8 +399,7 @@ public class FlinkUtils {
                 Math.round(
                         clusterSpec.getTaskManagerMemoryMB()
                                 * Math.pow(1024, 2)
-                                * conf.getDouble(
-                                        KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
+                                * conf.get(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
                                 * taskManagerReplicas);
 
         return tmTotalMemory + jmTotalMemory;
@@ -442,5 +446,40 @@ public class FlinkUtils {
 
         // If unsure, return false to be on the safe side
         return false;
+    }
+
+    /**
+     * Sets a {@link org.apache.flink.configuration.StateRecoveryOptions} option under the key the
+     * target Flink version reads: the current key for 1.20+, the deprecated {@code
+     * execution.savepoint.*} key for older versions, which do not know the current one. Any value
+     * under either key is replaced.
+     */
+    public static <T> void setStateRecoveryOption(
+            Configuration conf, ConfigOption<T> option, T value) {
+        removeStateRecoveryOption(conf, option);
+        if (readsStateRecoveryKeys(conf)) {
+            conf.set(option, value);
+        } else {
+            conf.setString(deprecatedKey(option), String.valueOf(value));
+        }
+    }
+
+    public static void removeStateRecoveryOption(Configuration conf, ConfigOption<?> option) {
+        conf.removeKey(option.key());
+        option.fallbackKeys().forEach(fallbackKey -> conf.removeKey(fallbackKey.getKey()));
+    }
+
+    private static boolean readsStateRecoveryKeys(Configuration conf) {
+        var flinkVersion = conf.get(FLINK_VERSION);
+        return flinkVersion == null || flinkVersion.isEqualOrNewer(FlinkVersion.v1_20);
+    }
+
+    private static String deprecatedKey(ConfigOption<?> option) {
+        for (FallbackKey fallbackKey : option.fallbackKeys()) {
+            if (fallbackKey.isDeprecated()) {
+                return fallbackKey.getKey();
+            }
+        }
+        throw new IllegalArgumentException(option.key() + " has no deprecated key");
     }
 }
