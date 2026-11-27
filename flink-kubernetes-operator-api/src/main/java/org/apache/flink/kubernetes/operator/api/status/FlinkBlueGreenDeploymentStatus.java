@@ -47,6 +47,13 @@ public class FlinkBlueGreenDeploymentStatus {
     /** Timestamp of last reconciliation. */
     private String lastReconciledTimestamp;
 
+    /**
+     * Last (serialized) deployment spec that was successfully applied. After an aborted transition
+     * this still names the spec the active deployment is running, while lastReconciledSpec keeps
+     * the spec that was attempted.
+     */
+    private String lastStableSpec;
+
     /** Computed from abortGracePeriodMs, timestamp after which the deployment should be aborted. */
     private String abortTimestamp;
 
