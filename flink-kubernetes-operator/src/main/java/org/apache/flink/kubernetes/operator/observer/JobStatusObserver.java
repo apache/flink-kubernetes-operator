@@ -274,15 +274,14 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     .forEach((k, v) -> annotations.put("failure-label-" + k, v));
         }
 
-        var operatorConfig = ctx.getOperatorConfig();
         String stacktrace = exception.getStacktrace();
         String eventMessage =
                 stacktrace == null || stacktrace.isBlank()
                         ? ""
                         : truncateExceptionText(
                                 stacktrace,
-                                operatorConfig.getReportedExceptionEventsMaxStackTraceLength(),
-                                operatorConfig.getReportedExceptionEventsMaxStackTraceLines());
+                                ctx.getOperatorConfig()
+                                        .getReportedExceptionEventsMaxStackTraceLength());
 
         // The full stack trace tells apart exceptions that only differ in the truncated text
         String identityKey =
@@ -299,43 +298,24 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     }
 
     /**
-     * Truncates exception text for an event message and appends the number of characters left out.
-     * The text is cut to {@code maxLength} characters, so that a single line of any length stays
-     * bounded, and to {@code maxLines} lines unless that is negative.
+     * Truncates exception text for an event message to {@code maxLength} characters, and appends
+     * the number of characters left out.
      *
      * @param text the exception text to truncate
      * @param maxLength the maximum number of characters to keep, negative values disable the limit
-     * @param maxLines the deprecated line limit, applied in addition to {@code maxLength}; negative
-     *     values disable the limit and 0 keeps no text
-     * @return the text, truncated if it exceeds either limit
+     * @return the text, truncated if it is longer than {@code maxLength}
      */
     @VisibleForTesting
-    static String truncateExceptionText(String text, int maxLength, int maxLines) {
-        int end = maxLines < 0 ? text.length() : endOfLines(text, maxLines);
-        if (maxLength >= 0) {
-            end = Math.min(end, maxLength);
-        }
-        if (end == text.length()) {
+    static String truncateExceptionText(String text, int maxLength) {
+        if (maxLength < 0 || text.length() <= maxLength) {
             return text;
         }
+        int end = maxLength;
         // Cutting between a surrogate pair would leave half a character in the event message.
         if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
             end--;
         }
         return text.substring(0, end) + "... (" + (text.length() - end) + " more characters)";
-    }
-
-    /** Returns the index right after the first {@code maxLines} lines of the text. */
-    private static int endOfLines(String text, int maxLines) {
-        int end = 0;
-        for (int i = 0; i < maxLines; i++) {
-            int newline = text.indexOf('\n', end);
-            if (newline < 0) {
-                return text.length();
-            }
-            end = newline + 1;
-        }
-        return end;
     }
 
     /**
@@ -494,8 +474,7 @@ public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                                             truncateExceptionText(
                                                     message,
                                                     ctx.getOperatorConfig()
-                                                            .getReportedExceptionEventsMaxStackTraceLength(),
-                                                    -1),
+                                                            .getReportedExceptionEventsMaxStackTraceLength()),
                                             EventRecorder.Component.Job,
                                             // A hash of the full message tells apart errors that
                                             // only differ in the truncated text

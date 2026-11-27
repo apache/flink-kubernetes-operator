@@ -589,7 +589,6 @@ public class JobStatusObserverTest extends OperatorTestBase {
 
     @Test
     void testDefaultStackTraceTruncation() throws Exception {
-        // The deprecated line limit is off by default, so only the 2048 character default applies
         String stackTrace = "line\n".repeat(600);
 
         String message = observeJobExceptionEventMessage(Map.of(), stackTrace);
@@ -598,7 +597,7 @@ public class JobStatusObserverTest extends OperatorTestBase {
     }
 
     @Test
-    void testDeprecatedStackTraceLinesStillApplied() throws Exception {
+    void testDeprecatedStackTraceLinesReadAsCharacters() throws Exception {
         String message =
                 observeJobExceptionEventMessage(
                         Map.of(
@@ -606,9 +605,9 @@ public class JobStatusObserverTest extends OperatorTestBase {
                                         .OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES
                                         .key(),
                                 "2"),
-                        "line1\nline2\nline3\nline4");
+                        "x".repeat(500));
 
-        assertThat(message).isEqualTo("line1\nline2\n... (11 more characters)");
+        assertThat(message).isEqualTo("x".repeat(200) + "... (300 more characters)");
     }
 
     @Test
@@ -635,23 +634,17 @@ public class JobStatusObserverTest extends OperatorTestBase {
 
     @ParameterizedTest
     @MethodSource("truncateExceptionTextArgs")
-    void testTruncateExceptionText(String text, int maxLength, int maxLines, String expected) {
-        assertThat(JobStatusObserver.truncateExceptionText(text, maxLength, maxLines))
-                .isEqualTo(expected);
+    void testTruncateExceptionText(String text, int maxLength, String expected) {
+        assertThat(JobStatusObserver.truncateExceptionText(text, maxLength)).isEqualTo(expected);
     }
 
     private static Stream<Arguments> truncateExceptionTextArgs() {
         return Stream.of(
-                Arguments.of("abc", 3, -1, "abc"),
-                Arguments.of("abcdef", 3, -1, "abc... (3 more characters)"),
-                Arguments.of("abcdef", 0, -1, "... (6 more characters)"),
-                Arguments.of("abcdef", -1, -1, "abcdef"),
-                Arguments.of("a😀b", 2, -1, "a... (3 more characters)"),
-                Arguments.of("l1\nl2\nl3", -1, 2, "l1\nl2\n... (2 more characters)"),
-                Arguments.of("l1\nl2\nl3", 4, 2, "l1\nl... (4 more characters)"),
-                Arguments.of("l1\nl2\n", 100, 2, "l1\nl2\n"),
-                Arguments.of("l1\nl2", 100, 0, "... (5 more characters)"),
-                Arguments.of("x".repeat(50), 10, 5, "x".repeat(10) + "... (40 more characters)"));
+                Arguments.of("abc", 3, "abc"),
+                Arguments.of("abcdef", 3, "abc... (3 more characters)"),
+                Arguments.of("abcdef", 0, "... (6 more characters)"),
+                Arguments.of("abcdef", -1, "abcdef"),
+                Arguments.of("a😀b", 2, "a... (3 more characters)"));
     }
 
     @Test

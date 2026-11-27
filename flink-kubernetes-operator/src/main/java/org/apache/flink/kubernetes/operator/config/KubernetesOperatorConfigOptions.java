@@ -817,11 +817,12 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES =
             operatorConfig("events.exceptions.stacktrace-lines")
                     .intType()
-                    .defaultValue(-1)
+                    .noDefaultValue()
                     .withDescription(
                             String.format(
-                                    "Deprecated, use %s instead. Maximum number of stack trace lines to include in JobException event messages, applied in addition to the character limit. Negative values disable the line limit.",
-                                    OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH.key()));
+                                    "Deprecated, use %s instead. If only this option is set, it is read as a limit of %d characters per line.",
+                                    OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH.key(),
+                                    FlinkOperatorConfiguration.DEPRECATED_STACKTRACE_LINE_LENGTH));
 
     @Documentation.Section(SECTION_ADVANCED_RECONCILE)
     public static final ConfigOption<Integer> OPERATOR_EVENT_EXCEPTION_LIMIT =

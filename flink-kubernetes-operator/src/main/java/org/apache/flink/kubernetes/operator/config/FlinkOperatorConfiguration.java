@@ -50,6 +50,12 @@ public class FlinkOperatorConfiguration {
     private static final String NAMESPACES_SPLITTER_KEY = "\\s*,\\s*";
     private static final String ENV_KUBERNETES_SERVICE_HOST = "KUBERNETES_SERVICE_HOST";
 
+    /**
+     * The number of characters that a line of the deprecated {@link
+     * KubernetesOperatorConfigOptions#OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES} stands for.
+     */
+    public static final int DEPRECATED_STACKTRACE_LINE_LENGTH = 100;
+
     Duration reconcileInterval;
     int reconcilerMaxParallelism;
     Duration progressCheckInterval;
@@ -81,7 +87,6 @@ public class FlinkOperatorConfiguration {
     Duration slowRequestThreshold;
     int reportedExceptionEventsMaxCount;
     int reportedExceptionEventsMaxStackTraceLength;
-    int reportedExceptionEventsMaxStackTraceLines;
     MemorySize reportedExceptionEventsMaxResponseSize;
     boolean manageIngress;
     Duration jobSubmissionTimeout;
@@ -211,12 +216,7 @@ public class FlinkOperatorConfiguration {
         int reportedExceptionEventsMaxCount =
                 operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_LIMIT);
         int reportedExceptionEventsMaxStackTraceLength =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH);
-        int reportedExceptionEventsMaxStackTraceLines =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES);
+                getEventStackTraceMaxLength(operatorConfig);
         MemorySize reportedExceptionEventsMaxResponseSize =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_MAX_RESPONSE_SIZE);
@@ -275,7 +275,6 @@ public class FlinkOperatorConfiguration {
                 slowRequestThreshold,
                 reportedExceptionEventsMaxCount,
                 reportedExceptionEventsMaxStackTraceLength,
-                reportedExceptionEventsMaxStackTraceLines,
                 reportedExceptionEventsMaxResponseSize,
                 manageIngress,
                 jobSubmissionTimeout,
@@ -317,6 +316,19 @@ public class FlinkOperatorConfiguration {
         return new LinearRateLimiter(
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_PERIOD),
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_LIMIT));
+    }
+
+    /** Reads the deprecated line limit as a character limit if only that one is set. */
+    private static int getEventStackTraceMaxLength(Configuration conf) {
+        var maxLength =
+                KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_MAX_LENGTH;
+        if (conf.contains(maxLength)) {
+            return conf.get(maxLength);
+        }
+        return conf.getOptional(
+                        KubernetesOperatorConfigOptions.OPERATOR_EVENT_EXCEPTION_STACKTRACE_LINES)
+                .map(lines -> lines * DEPRECATED_STACKTRACE_LINE_LENGTH)
+                .orElse(maxLength.defaultValue());
     }
 
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {
