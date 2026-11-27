@@ -77,6 +77,24 @@ function wait_for_status {
   exit 1
 }
 
+# Unlike `kubectl wait --for=delete`, does not depend on the resource still existing when called
+function wait_for_deleted {
+  local resource=$1
+  local timeout=$2
+
+  echo "Waiting for $resource to be deleted..."
+  for i in $(seq 1 ${timeout}); do
+    if [ -z "$(kubectl get $resource --ignore-not-found -o name)" ]; then
+      echo "Successfully verified that $resource is deleted."
+      return
+    fi
+
+    sleep 1
+  done
+  echo "$resource is not deleted within a timeout of ${timeout} sec"
+  exit 1
+}
+
 function wait_for_event {
   local kind=$1
   local resource=$2
@@ -231,10 +249,12 @@ function delete_operator_pod_with_leadership() {
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
+    kubectl get flinkbluegreendeployments
     kubectl get flinkdeployments
     kubectl get flinksessionjobs
     kubectl get all
     kubectl get configmaps
+    kubectl describe flinkbluegreendeployments
     kubectl describe flinkdeployments
     kubectl describe flinksessionjobs
     kubectl describe all

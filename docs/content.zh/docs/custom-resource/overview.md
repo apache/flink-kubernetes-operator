@@ -151,7 +151,7 @@ Exactly one of `savepoint` or `checkpoint` is set. An empty `savepoint: {}` uses
 `FlinkBlueGreenDeployment` is experimental.
 {{< /hint >}}
 
-`FlinkBlueGreenDeployment` is a zero-downtime, blue/green rollout wrapper for stateful Flink applications, the concept behind it is covered under [Zero-Downtime Upgrades]({{< ref "docs/concepts/zero-downtime-upgrades" >}}). It maintains two child `FlinkDeployment`s, Blue and Green, with one active at a time. When the spec changes it brings up the inactive color from a savepoint, switches over once it is healthy, and deletes the previous deployment after a configurable delay.
+`FlinkBlueGreenDeployment` is a zero-downtime, blue/green rollout wrapper for stateful Flink applications, the concept behind it is covered under [Zero-Downtime Upgrades]({{< ref "docs/concepts/zero-downtime-upgrades" >}}). It maintains two child `FlinkDeployment`s, Blue and Green, with one active at a time. When the spec changes it brings up the inactive color from a savepoint, switches over once it is healthy, and deletes the previous deployment after a configurable delay. `spec.transitionMode` selects how the two deployments hand over: `BASIC`, the default, switches at the deployment level, and `ADVANCED` coordinates the two jobs record by record, as described under [Blue/Green Deployments → Advanced Transition Mode]({{< ref "docs/managing/bluegreen-deployments#advanced-transition-mode" >}}).
 
 A minimal example of the `FlinkBlueGreenDeployment` kind, short name `flinkbgdep`:
 

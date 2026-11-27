@@ -36,12 +36,16 @@ spec:
         state.savepoints.dir: file:///opt/flink/volume/flink-sp
         state.checkpoints.num-retained: "5"
         taskmanager.numberOfTaskSlots: "1"
+        # The Flink 2.x StateMachineExample keeps its state through the async state API, which
+        # cannot take a savepoint in the canonical format
+        kubernetes.operator.savepoint.format.type: "NATIVE"
       serviceAccount: flink
+      # Blue and Green run side by side during a transition, and both fit a 4 CPU CI runner
       jobManager:
         resources:
           requests:
-            memory: "1G"
-            cpu: "1"
+            memory: "1024m"
+            cpu: "0.5"
         podTemplate:
           spec:
             containers:
@@ -61,8 +65,8 @@ spec:
       taskManager:
         resources:
           requests:
-            memory: "2G"
-            cpu: "1"
+            memory: "1Gi"
+            cpu: "0.5"
       job:
         jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
         parallelism: 1
