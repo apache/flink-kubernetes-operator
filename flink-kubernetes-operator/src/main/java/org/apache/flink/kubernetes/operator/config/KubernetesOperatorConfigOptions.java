@@ -464,6 +464,20 @@ public class KubernetesOperatorConfigOptions {
                                     + "legacy mode during runtime if the CRD is not found, "
                                     + "even if this value is true.");
 
+    @Documentation.Section(SECTION_SYSTEM_RECONCILE)
+    public static final ConfigOption<Duration> SNAPSHOT_CLEANUP_TIMEOUT =
+            operatorConfig("snapshot.cleanup.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofHours(1))
+                    .withDescription(
+                            "Maximum time the operator keeps trying to clean up a FlinkStateSnapshot "
+                                    + "after its deletion was requested, measured from the deletion "
+                                    + "timestamp. While the savepoint is still in progress or its "
+                                    + "disposal keeps failing, the cleanup is retried once per reconcile "
+                                    + "interval. Past the timeout the resource is released anyway and a "
+                                    + "CleanupTimeout warning event names the savepoint path that may be "
+                                    + "left behind. Zero disables the limit.");
+
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<String> PERIODIC_SAVEPOINT_INTERVAL =
             operatorConfig("periodic.savepoint.interval")

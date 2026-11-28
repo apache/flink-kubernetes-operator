@@ -97,6 +97,7 @@ These events are emitted by the core reconcile and observe loops that manage Fli
 | `UnsupportedFlinkVersion` | Warning | Operator           | The `spec.flinkVersion` is not supported by this operator release (`Flink version <version> is not supported by this operator version`). See [Compatibility Guarantees]({{< ref "docs/deployment/compatibility" >}}).                                                    |
 | `IngressManagement`       | Warning | Operator           | The resource defines `spec.ingress` but ingress management is disabled in the operator (`kubernetes.operator.ingress.manage`). The ingress section is ignored (`Ingress management is turned off but ingress set in spec`).                                              |
 | `CleanupFailed`           | Warning | Operator, Snapshot | Resource cleanup could not complete. Common causes: a session `FlinkDeployment` still has child `FlinkSessionJob` or non-terminated jobs, a job cancellation timed out, or a savepoint required during cleanup failed. |
+| `CleanupTimeout`          | Warning | Snapshot           | A `FlinkStateSnapshot` being deleted could not be cleaned up within `kubernetes.operator.snapshot.cleanup.timeout`. The resource was released and the savepoint named in the message may be left behind. |
 
 ## Autoscaler Events
 

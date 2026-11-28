@@ -78,6 +78,7 @@ public class FlinkOperatorConfiguration {
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
     boolean snapshotResourcesEnabled;
+    Duration snapshotCleanupTimeout;
     Duration slowRequestThreshold;
     int reportedExceptionEventsMaxCount;
     int reportedExceptionEventsMaxStackTraceLength;
@@ -203,6 +204,9 @@ public class FlinkOperatorConfiguration {
         boolean snapshotResourcesEnabled =
                 operatorConfig.get(KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED);
 
+        Duration snapshotCleanupTimeout =
+                operatorConfig.get(KubernetesOperatorConfigOptions.SNAPSHOT_CLEANUP_TIMEOUT);
+
         Duration slowRequestThreshold =
                 operatorConfig.get(OPERATOR_KUBERNETES_SLOW_REQUEST_THRESHOLD);
 
@@ -263,6 +267,7 @@ public class FlinkOperatorConfiguration {
                 getLeaderElectionConfig(operatorConfig),
                 deletionPropagation,
                 snapshotResourcesEnabled,
+                snapshotCleanupTimeout,
                 slowRequestThreshold,
                 reportedExceptionEventsMaxCount,
                 reportedExceptionEventsMaxStackTraceLength,

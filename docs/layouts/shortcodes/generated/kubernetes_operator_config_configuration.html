@@ -483,6 +483,12 @@
             <td>Block FlinkDeployment deletion if unmanaged jobs (jobs not managed by FlinkSessionJob resources) are running in the session cluster. Example: Jobs submitted via CLI.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.snapshot.cleanup.timeout</h5></td>
+            <td style="word-wrap: break-word;">1 h</td>
+            <td>Duration</td>
+            <td>Maximum time the operator keeps trying to clean up a FlinkStateSnapshot after its deletion was requested, measured from the deletion timestamp. While the savepoint is still in progress or its disposal keeps failing, the cleanup is retried once per reconcile interval. Past the timeout the resource is released anyway and a CleanupTimeout warning event names the savepoint path that may be left behind. Zero disables the limit.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>

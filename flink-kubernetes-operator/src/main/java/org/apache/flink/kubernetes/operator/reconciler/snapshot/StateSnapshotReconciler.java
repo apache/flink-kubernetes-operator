@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.snapshot;
 
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -37,6 +38,8 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
@@ -96,6 +99,45 @@ public class StateSnapshotReconciler {
     }
 
     public DeleteControl cleanup(FlinkStateSnapshotContext ctx) throws Exception {
+        var deleteControl = tryCleanup(ctx);
+        if (!deleteControl.isRemoveFinalizer() && cleanupTimedOut(ctx)) {
+            giveUpCleanup(ctx);
+            return DeleteControl.defaultDelete();
+        }
+        return deleteControl;
+    }
+
+    private boolean cleanupTimedOut(FlinkStateSnapshotContext ctx) {
+        Duration timeout = ctx.getOperatorConfig().getSnapshotCleanupTimeout();
+        var deletionTimestamp = ctx.getResource().getMetadata().getDeletionTimestamp();
+        if (timeout.isZero() || timeout.isNegative() || deletionTimestamp == null) {
+            return false;
+        }
+        return Instant.now()
+                .isAfter(DateTimeUtils.parseKubernetes(deletionTimestamp).plus(timeout));
+    }
+
+    private void giveUpCleanup(FlinkStateSnapshotContext ctx) {
+        var resource = ctx.getResource();
+        var path = resource.getStatus().getPath();
+        var message =
+                String.format(
+                        "Giving up on the cleanup of snapshot %s after %s in state %s%s",
+                        resource.getMetadata().getName(),
+                        ctx.getOperatorConfig().getSnapshotCleanupTimeout(),
+                        resource.getStatus().getState(),
+                        path == null ? "" : ", savepoint " + path + " may be left behind");
+        LOG.warn(message);
+        eventRecorder.triggerSnapshotEvent(
+                resource,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.CleanupTimeout,
+                EventRecorder.Component.Snapshot,
+                message,
+                ctx.getKubernetesClient());
+    }
+
+    private DeleteControl tryCleanup(FlinkStateSnapshotContext ctx) {
         var resource = ctx.getResource();
         var state = resource.getStatus().getState();
         var resourceName = resource.getMetadata().getName();
@@ -112,28 +154,26 @@ public class StateSnapshotReconciler {
             return DeleteControl.defaultDelete();
         }
 
-        switch (state) {
-            case IN_PROGRESS:
+        return switch (state) {
+            case IN_PROGRESS -> {
                 LOG.info(
                         "Cannot delete resource {} yet as savepoint is still in progress...",
                         resourceName);
-                return DeleteControl.noFinalizerRemoval()
+                yield DeleteControl.noFinalizerRemoval()
                         .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
-            case COMPLETED:
+            }
+            case COMPLETED -> {
                 var flinkDeployment = getFlinkDeployment(ctx);
-                return handleSnapshotCleanup(resource, flinkDeployment, ctx);
-            case FAILED:
-            case TRIGGER_PENDING:
-            case ABANDONED:
+                yield handleSnapshotCleanup(resource, flinkDeployment, ctx);
+            }
+            case FAILED, TRIGGER_PENDING, ABANDONED -> {
                 LOG.info(
                         "Savepoint state is {}, cleaning up resource {} without disposal...",
                         state.name(),
                         resourceName);
-                return DeleteControl.defaultDelete();
-            default:
-                LOG.warn("Unknown savepoint state for {}: {}", resourceName, state);
-                return DeleteControl.defaultDelete();
-        }
+                yield DeleteControl.defaultDelete();
+            }
+        };
     }
 
     private FlinkDeployment getFlinkDeployment(FlinkStateSnapshotContext ctx) {

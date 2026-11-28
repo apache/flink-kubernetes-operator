@@ -192,6 +192,8 @@ With a maximum age set, operator-created `FlinkStateSnapshot` resources of savep
 
 To also dispose of the savepoint data during cleanup, `kubernetes.operator.savepoint.dispose-on-delete: true` sets `spec.savepoint.disposeOnDelete` on every snapshot resource the operator creates for upgrade, periodic, and nonce-triggered savepoints. Automatic savepoint cleanup is disabled entirely with `kubernetes.operator.savepoint.cleanup.enabled: false`.
 
+Deleting a snapshot resource whose savepoint is still in progress, or whose disposal fails, is retried once per reconcile interval. `kubernetes.operator.snapshot.cleanup.timeout` (default 1 hour, measured from the deletion request) bounds those retries: past the timeout the resource is released anyway and a `CleanupTimeout` warning event names the savepoint path that may be left behind. Zero disables the limit.
+
 ### Checkpoints
 
 Operator-created `FlinkStateSnapshot` resources of checkpoint type are always cleaned up, a maximum age cannot be set for them. The number of retained checkpoint resources follows the Flink configuration `state.checkpoints.num-retained`.
