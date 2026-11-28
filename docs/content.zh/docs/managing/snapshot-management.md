@@ -188,7 +188,7 @@ kubernetes.operator.savepoint.history.max.age: 24h
 kubernetes.operator.savepoint.history.max.count: 5
 ```
 
-With a maximum age set, operator-created `FlinkStateSnapshot` resources of savepoint type are cleaned up based on their `metadata.creationTimestamp`. Snapshots are cleaned up regardless of their status, but the operator always retains at least one completed snapshot for every job.
+With a maximum age set, operator-created `FlinkStateSnapshot` resources of savepoint type are cleaned up based on their `metadata.creationTimestamp`. The maximum age applies to snapshots in any state, and a snapshot that is still pending or in progress after that age counts as stale and is removed as well. The maximum count only considers finished snapshots (`COMPLETED`, `FAILED`, and `ABANDONED`). Pending and in-progress snapshots don't count towards it and are never removed by it. The newest completed snapshot of a job is always retained.
 
 To also dispose of the savepoint data during cleanup, `kubernetes.operator.savepoint.dispose-on-delete: true` sets `spec.savepoint.disposeOnDelete` on every snapshot resource the operator creates for upgrade, periodic, and nonce-triggered savepoints. Automatic savepoint cleanup is disabled entirely with `kubernetes.operator.savepoint.cleanup.enabled: false`.
 
