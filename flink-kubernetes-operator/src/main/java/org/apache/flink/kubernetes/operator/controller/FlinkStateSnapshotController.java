@@ -101,6 +101,7 @@ public class FlinkStateSnapshotController
         }
         var ctx = ctxFactory.getFlinkStateSnapshotContext(flinkStateSnapshot, josdkContext);
         try {
+            observer.observeBeforeCleanup(ctx);
             metricManager.onRemove(flinkStateSnapshot);
             return reconciler.cleanup(ctx);
         } catch (Exception e) {

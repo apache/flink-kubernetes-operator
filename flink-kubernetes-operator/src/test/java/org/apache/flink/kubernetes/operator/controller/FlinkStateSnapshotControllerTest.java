@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -62,6 +63,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -79,6 +81,7 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshot
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_CLEANUP_TIMEOUT;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkStateSnapshotMetricsUtils.assertSnapshotMetrics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -422,6 +425,131 @@ public class FlinkStateSnapshotControllerTest {
         assertThat(flinkService.getDisposedSavepoints())
                 .hasSize(1)
                 .allSatisfy(s -> assertThat(s).isEqualTo(SAVEPOINT_PATH));
+    }
+
+    @Test
+    public void testCleanupObservesInProgressSavepoint() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        controller.reconcile(snapshot, context);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(IN_PROGRESS);
+
+        // The first fetch is still pending in TestingFlinkService
+        assertDeleteControl(
+                controller.cleanup(snapshot, context),
+                false,
+                configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
+        assertThat(snapshot.getStatus().getState()).isEqualTo(IN_PROGRESS);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+
+        // The second fetch completes, the savepoint is disposed and the resource released
+        assertDeleteControl(controller.cleanup(snapshot, context), true, null);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(COMPLETED);
+        assertThat(flinkService.getDisposedSavepoints()).containsExactly("savepoint_0");
+    }
+
+    @Test
+    public void testCleanupOfInProgressSavepointThatFailed() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        controller.reconcile(snapshot, context);
+        flinkService.setSavepointFetchError("savepoint failed");
+
+        // Nothing to dispose, the resource is released right away
+        assertDeleteControl(controller.cleanup(snapshot, context), true, null);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(FAILED);
+        assertThat(snapshot.getStatus().getError()).contains("savepoint failed");
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+    }
+
+    @Test
+    public void testCleanupOfInProgressSavepointWithoutJob() {
+        var deployment = createDeployment();
+        var snapshot = createSavepoint(deployment);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        controller.reconcile(snapshot, TestUtils.createSnapshotContext(client, deployment));
+
+        // The referenced job is gone, nothing can be observed or disposed any more
+        assertDeleteControl(
+                controller.cleanup(snapshot, TestUtils.createSnapshotContext(client, null)),
+                true,
+                null);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(ABANDONED);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+    }
+
+    @Test
+    public void testCleanupGivesUpOnPendingSavepointAfterTimeout() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        controller.reconcile(snapshot, context);
+        // Deleted longer ago than the default one hour timeout, the savepoint is still pending
+        snapshot.getMetadata()
+                .setDeletionTimestamp(
+                        DateTimeUtils.kubernetes(Instant.now().minus(Duration.ofHours(2))));
+
+        assertDeleteControl(controller.cleanup(snapshot, context), true, null);
+        assertThat(snapshot.getStatus().getState()).isEqualTo(IN_PROGRESS);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+        assertThat(flinkStateSnapshotEventCollector.events.getLast().getReason())
+                .isEqualTo(EventRecorder.Reason.CleanupTimeout.name());
+    }
+
+    @Test
+    public void testCleanupGivesUpOnFailingDisposalAfterTimeout() {
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.setStatus(new FlinkStateSnapshotStatus());
+        snapshot.getStatus().setState(COMPLETED);
+        snapshot.getStatus().setPath(SAVEPOINT_PATH);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        flinkService.setDisposeSavepointFailure(true);
+
+        // Within the timeout the disposal keeps being retried
+        snapshot.getMetadata().setDeletionTimestamp(DateTimeUtils.kubernetes(Instant.now()));
+        assertDeleteControl(
+                controller.cleanup(snapshot, context),
+                false,
+                configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
+
+        // Past it the resource is released and the event names the savepoint left behind
+        snapshot.getMetadata()
+                .setDeletionTimestamp(
+                        DateTimeUtils.kubernetes(Instant.now().minus(Duration.ofHours(2))));
+        assertDeleteControl(controller.cleanup(snapshot, context), true, null);
+        assertThat(flinkService.getDisposedSavepoints()).isEmpty();
+        var event = flinkStateSnapshotEventCollector.events.getLast();
+        assertThat(event.getReason()).isEqualTo(EventRecorder.Reason.CleanupTimeout.name());
+        assertThat(event.getMessage()).contains(SAVEPOINT_PATH);
+    }
+
+    @Test
+    public void testCleanupTimeoutDisabled() {
+        configManager.updateDefaultConfig(
+                new Configuration().set(SNAPSHOT_CLEANUP_TIMEOUT, Duration.ZERO));
+        var deployment = createDeployment();
+        context = TestUtils.createSnapshotContext(client, deployment);
+        var snapshot = createSavepoint(deployment);
+        snapshot.getSpec().getSavepoint().setDisposeOnDelete(true);
+        controller.reconcile(snapshot, context);
+        snapshot.getMetadata()
+                .setDeletionTimestamp(
+                        DateTimeUtils.kubernetes(Instant.now().minus(Duration.ofDays(30))));
+
+        // Still pending, still waiting, no limit applies
+        assertDeleteControl(
+                controller.cleanup(snapshot, context),
+                false,
+                configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
+        assertThat(flinkStateSnapshotEventCollector.events)
+                .noneMatch(e -> EventRecorder.Reason.CleanupTimeout.name().equals(e.getReason()));
     }
 
     private void assertDeleteControl(

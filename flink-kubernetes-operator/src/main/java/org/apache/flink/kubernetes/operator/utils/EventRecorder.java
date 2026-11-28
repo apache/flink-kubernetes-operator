@@ -409,6 +409,7 @@ public class EventRecorder {
         CheckpointError,
         Cleanup,
         CleanupFailed,
+        CleanupTimeout,
         Missing,
         ValidationError,
         RecoverDeployment,

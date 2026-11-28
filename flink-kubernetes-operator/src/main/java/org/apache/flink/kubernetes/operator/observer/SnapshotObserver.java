@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -46,14 +47,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.configuration.CheckpointingOptions.MAX_RETAINED_CHECKPOINTS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
@@ -70,6 +73,8 @@ public class SnapshotObserver<
             s -> DateTimeUtils.parseKubernetes(s.getMetadata().getCreationTimestamp());
     private static final Set<SnapshotTriggerType> CLEAN_UP_SNAPSHOT_TRIGGER_TYPES =
             Set.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE);
+    private static final Set<FlinkStateSnapshotStatus.State> TERMINAL_SNAPSHOT_STATES =
+            EnumSet.of(COMPLETED, FAILED, ABANDONED);
 
     private final EventRecorder eventRecorder;
 
@@ -261,7 +266,10 @@ public class SnapshotObserver<
 
     /**
      * Returns a list of FlinkStateSnapshot resources that should be cleaned up based on age/count
-     * policies.
+     * policies. The age policy applies to snapshots in any state, a snapshot that is still pending
+     * or in progress after the maximum age is stale. The count policy only considers snapshots in a
+     * terminal state, pending and in-progress ones neither count towards the maximum nor get
+     * evicted by it. The newest completed snapshot is always retained.
      *
      * @param snapshots list of all snapshots
      * @param observeConfig observe config
@@ -275,51 +283,51 @@ public class SnapshotObserver<
             Configuration observeConfig,
             FlinkOperatorConfiguration operatorConfig,
             SnapshotType snapshotType) {
-        var snapshotList =
+        var candidates =
                 snapshots.stream()
                         .filter(s -> !s.isMarkedForDeletion())
                         .filter(
                                 s ->
                                         CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
                                                 FlinkStateSnapshotUtils.getSnapshotTriggerType(s)))
-                        .filter(s -> (s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT)))
+                        .filter(s -> s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT))
                         .sorted(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
-                        .collect(Collectors.toList());
-
-        var lastCompleteSnapshot =
-                snapshotList.stream()
-                        .filter(
-                                s ->
-                                        s.getStatus() != null
-                                                && COMPLETED.equals(s.getStatus().getState()))
-                        .max(Comparator.comparing(EXTRACT_SNAPSHOT_TIME))
-                        .orElse(null);
-
-        var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
-        var maxTms = getMinAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
+                        .toList();
         var result = new HashSet<FlinkStateSnapshot>();
-
-        if (snapshotList.size() < 2) {
+        if (candidates.size() < 2) {
             return result;
         }
 
-        for (var snapshot : snapshotList) {
-            if (snapshot.equals(lastCompleteSnapshot)) {
-                continue;
-            }
+        // The newest completed snapshot is always retained, the newest one if none completed
+        var retained =
+                candidates.stream()
+                        .filter(s -> COMPLETED.equals(stateOf(s)))
+                        .reduce((older, newer) -> newer)
+                        .orElse(candidates.get(candidates.size() - 1));
 
-            // We should keep the last snapshot, even if not complete.
-            if (result.size() == snapshotList.size() - 1) {
-                break;
-            }
+        // Age rule, any state
+        var minTimestamp = getMinAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        candidates.stream()
+                .filter(s -> s != retained)
+                .filter(s -> EXTRACT_SNAPSHOT_TIME.apply(s).toEpochMilli() < minTimestamp)
+                .forEach(result::add);
 
-            var ts = EXTRACT_SNAPSHOT_TIME.apply(snapshot).toEpochMilli();
-            if (snapshotList.size() - result.size() > maxCount || ts < maxTms) {
-                result.add(snapshot);
-            }
-        }
-
+        // Count rule, terminal states only, oldest first
+        var terminal =
+                candidates.stream()
+                        .filter(s -> !result.contains(s))
+                        .filter(s -> TERMINAL_SNAPSHOT_STATES.contains(stateOf(s)))
+                        .toList();
+        var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        terminal.stream()
+                .filter(s -> s != retained)
+                .limit(Math.max(0, terminal.size() - maxCount))
+                .forEach(result::add);
         return result;
+    }
+
+    private static FlinkStateSnapshotStatus.State stateOf(FlinkStateSnapshot snapshot) {
+        return snapshot.getStatus() == null ? null : snapshot.getStatus().getState();
     }
 
     /**

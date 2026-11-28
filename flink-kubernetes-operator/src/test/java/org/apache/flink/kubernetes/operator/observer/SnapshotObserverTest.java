@@ -38,6 +38,7 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
@@ -51,6 +52,7 @@ import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshot
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.TRIGGER_PENDING;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.MANUAL;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.PERIODIC;
 import static org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType.UPGRADE;
@@ -256,6 +258,96 @@ public class SnapshotObserverTest extends OperatorTestBase {
                         testDataCheckpoints.get(5),
                         testDataCheckpoints.get(4),
                         testDataCheckpoints.get(3));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = FlinkStateSnapshotStatus.State.class,
+            names = {"TRIGGER_PENDING", "IN_PROGRESS"})
+    public void testInFlightSnapshotIsNotEvictedByCount(
+            FlinkStateSnapshotStatus.State inFlightState) {
+        // FLINK-40384: with one retained completed snapshot, the count rule used to evict the
+        // periodic snapshot that had just been created
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+        var completed = createSnapshot(SAVEPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED);
+        var inFlight = createSnapshot(SAVEPOINT, Long.MAX_VALUE - 1, PERIODIC, inFlightState);
+
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                List.of(completed, inFlight), conf, operatorConfig, SAVEPOINT))
+                .isEmpty();
+
+        // Once the new snapshot completes, the older completed one goes
+        inFlight.getStatus().setState(COMPLETED);
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                List.of(completed, inFlight), conf, operatorConfig, SAVEPOINT))
+                .containsExactly(completed);
+    }
+
+    @Test
+    public void testSnapshotWithoutStatusIsNotEvictedByCount() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+        var completed = createSnapshot(SAVEPOINT, Long.MAX_VALUE - 2, PERIODIC, COMPLETED);
+        var created = createSnapshot(SAVEPOINT, Long.MAX_VALUE - 1, PERIODIC, COMPLETED);
+        created.setStatus(null);
+
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                List.of(completed, created), conf, operatorConfig, SAVEPOINT))
+                .isEmpty();
+    }
+
+    @Test
+    public void testInFlightSnapshotsDoNotCountTowardsMaxCount() {
+        var conf = new Configuration().set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 2);
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+        var snapshots =
+                List.of(
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 4, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 3, PERIODIC, COMPLETED),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 2, PERIODIC, IN_PROGRESS),
+                        createSnapshot(SAVEPOINT, Long.MAX_VALUE - 1, PERIODIC, TRIGGER_PENDING));
+
+        // Two completed snapshots fit the maximum, the in-flight ones are not counted
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                snapshots, conf, operatorConfig, SAVEPOINT))
+                .isEmpty();
+
+        conf.set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1);
+        operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                snapshots, conf, operatorConfig, SAVEPOINT))
+                .containsExactly(snapshots.get(0));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = FlinkStateSnapshotStatus.State.class,
+            names = {"TRIGGER_PENDING", "IN_PROGRESS"})
+    public void testStaleInFlightSnapshotIsRemovedByAge(
+            FlinkStateSnapshotStatus.State inFlightState) {
+        var conf =
+                new Configuration()
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 10000)
+                        .set(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE, Duration.ofMillis(5));
+        var operatorConfig = FlinkOperatorConfiguration.fromConfiguration(conf);
+        // Stale, but the newest completed snapshot is always retained
+        var completed = createSnapshot(SAVEPOINT, 0, PERIODIC, COMPLETED);
+        var staleInFlight = createSnapshot(SAVEPOINT, 1, PERIODIC, inFlightState);
+        var freshInFlight = createSnapshot(SAVEPOINT, Long.MAX_VALUE, PERIODIC, inFlightState);
+
+        assertThat(
+                        observer.getFlinkStateSnapshotsToCleanUp(
+                                List.of(completed, staleInFlight, freshInFlight),
+                                conf,
+                                operatorConfig,
+                                SAVEPOINT))
+                .containsExactly(staleInFlight);
     }
 
     private static FlinkStateSnapshot createSnapshot(

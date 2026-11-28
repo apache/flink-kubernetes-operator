@@ -33,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.flink.configuration.WebOptions.CHECKPOINTS_HISTORY_SIZE;
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.FAILED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 
 /** The observer of {@link org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot}. */
@@ -50,6 +51,23 @@ public class StateSnapshotObserver {
 
         if (IN_PROGRESS.equals(savepointState)) {
             observeSnapshotState(ctx);
+        }
+    }
+
+    public void observeBeforeCleanup(FlinkStateSnapshotContext ctx) {
+        var status = ctx.getResource().getStatus();
+        if (!IN_PROGRESS.equals(status.getState())) {
+            return;
+        }
+        try {
+            observeSnapshotState(ctx);
+        } catch (ReconciliationException e) {
+            LOG.warn(
+                    "Snapshot {} failed while being deleted, cleaning it up without disposal",
+                    ctx.getResource().getMetadata().getName(),
+                    e);
+            status.setError(e.getMessage());
+            status.setState(FAILED);
         }
     }
 
